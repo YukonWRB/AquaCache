@@ -4,13 +4,29 @@ Version: 0.0.0.9000
 Authors@R: 
     person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185"))
-Description: Set of functions for the initial creation and ongling maintenance of WRB's local database. This local database is a combination of the Water Survey of Canada real-time and historical data and WRB data held in Aquarius; in addition, multiple parameters are calculated to facilitate reporting and graphically representing data.
+Description: Set of functions for the initial creation and ongoing
+    maintenance of WRB's local database. This local database is a
+    combination of the Water Survey of Canada real-time and historical
+    data and WRB data held in Aquarius; in addition, multiple parameters
+    are calculated to facilitate reporting and graphically representing
+    data.
 License: AGPL (>= 3)
+Imports:
+    DBI,
+    dplyr,
+    lubridate,
+    magrittr,
+    RSQLite,
+    stats,
+    tidyhydat,
+    tidyhydat.ws,
+    WRBtools
 Suggests: 
     testthat (>= 3.0.0)
+Remotes:
+    github::bcgov/tidyhydat.ws,
+    github::YukonWRB/WRBtools
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.1
-Imports: 
-    magrittr

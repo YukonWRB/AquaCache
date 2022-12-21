@@ -21,25 +21,25 @@ initial_create <- function(path) {
 
   # Create the tables for WSC data first
   # level realtime table
-  DBI::dbCreateTable(hydro, "WSC_level_realtime", fields = c(location = NA, datetime_UTC = NA, level = NA, approval = NA, percent_max_historic = NA))
+  DBI::dbCreateTable(hydro, "WSC_level_realtime", fields = c(location = NA, datetime_UTC = NA, level = NA, approval = NA, percent_historic_range = NA))
   # flow realtime table
-  DBI::dbCreateTable(hydro, "WSC_flow_realtime", fields = c(location = NA, datetime_UTC = NA, flow = NA, approval = NA, percent_max_historic = NA))
+  DBI::dbCreateTable(hydro, "WSC_flow_realtime", fields = c(location = NA, datetime_UTC = NA, flow = NA, approval = NA, percent_historic_range = NA))
   # level historic table
-  DBI::dbCreateTable(hydro, "WSC_level_daily", fields = c(location = NA, date = NA, level = NA, approval = NA,percent_max_historic = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WSC_level_daily", fields = c(location = NA, date = NA, level = NA, approval = NA,percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
   # flow historic table
-  DBI::dbCreateTable(hydro, "WSC_flow_daily", fields = c(location = NA, date = NA, flow = NA, approval =NA, percent_max_historic = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WSC_flow_daily", fields = c(location = NA, date = NA, flow = NA, approval =NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
 
   # Now add tables for data held solely by the WRB
   # snow pillow data
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_realtime", fields = c(location = NA, datetime_UTC = NA, SWE = NA, grade = NA, approval = NA, percent_max_historic = NA))
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_daily", fields = c(location= NA, date = NA, SWE = NA,  grade = NA, approval = NA, percent_max_historic = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_realtime", field = c(location = NA, datetime_UTC = NA, depth = NA, grade = NA, approval = NA, percent_max_historic = NA))
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_daily", fields = c(location= NA, date = NA, depth = NA, percent_max_historic = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_realtime", fields = c(location = NA, datetime_UTC = NA, SWE = NA, grade = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_daily", fields = c(location= NA, date = NA, SWE = NA,  grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_realtime", field = c(location = NA, datetime_UTC = NA, depth = NA, grade = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_daily", fields = c(location= NA, date = NA, depth = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
   # small stream network data
-  DBI::dbCreateTable(hydro, "WRB_flow_realtime", fields = c(location = NA, datetime_UTC = NA, flow = NA, grade = NA, approval = NA, percent_max_historic = NA))
-  DBI::dbCreateTable(hydro, "WRB_level_realtime", fields = c(location = NA, datetime_UTC = NA, level = NA, percent_max_historic = NA))
-  DBI::dbCreateTable(hydro, "WRB_flow_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, flow = NA, grade = NA, approval = NA, percent_max_historic = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbCreateTable(hydro, "WRB_level_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, level = NA, grade = NA, approval = NA, percent_max_historic = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WRB_flow_realtime", fields = c(location = NA, datetime_UTC = NA, flow = NA, grade = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbCreateTable(hydro, "WRB_level_realtime", fields = c(location = NA, datetime_UTC = NA, level = NA, percent_historic_range = NA))
+  DBI::dbCreateTable(hydro, "WRB_flow_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, flow = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WRB_level_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, level = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
 
   # And lastly a table that holds metadata for all locations
   DBI::dbCreateTable(hydro, "datum_conversions", fields = c(location = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA))
@@ -56,4 +56,30 @@ initial_create <- function(path) {
   settings <- data.frame(parameter = c("WSC level preliminary visible", "WSC flow preliminary visible", "WRB level preliminary visible", "WRB flow prelininary visible", "WRB level min grade", "WRB flow min grade", "WRB snow pillow preliminary visible", "WRB snow pillow min grade"), value = c(TRUE, TRUE, TRUE, TRUE, "C", "C", TRUE, "C"))
   RSQLite::dbWriteTable(hydro, "settings", settings, overwrite = TRUE)
 
+
+  #Populate datum_list table
+  #Check hydat version, update if needed.
+  tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
+  local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
+  }, error = function(e) {hydat_path <- NULL})
+
+  new_hydat <- FALSE
+  if (!is.null(hydat_path) & exists("local_hydat")){ #If hydat already exists, compare version numbers
+    local_hydat <- gsub("-", "", as.character(local_hydat))
+    remote_hydat <- tidyhydat::hy_remote()
+    if (local_hydat != remote_hydat){ #if remote version is more recent, download new version
+      tidyhydat::download_hydat(ask=FALSE)
+      hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
+    }
+  } else if (is.null(hydat_path) | !exists("local_hydat")) {# if hydat does not already exist, download fresh to the default location
+    tidyhydat::download_hydat(ask=FALSE)
+    hydat_path <- tidyhydat::hy_downloaded_db()
+  }
+
+  hydat <- DBI::dbConnect(RSQLite::SQLite(), hydat_path)
+  on.exit(DBI::dbDisconnect(hydat))
+
+  datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
+  names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
+  RSQLite::dbWriteTable(hydro, "datum_list", datum_list, overwrite = TRUE)
 }
