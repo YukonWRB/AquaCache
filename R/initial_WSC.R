@@ -64,10 +64,10 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
   # Download data from AQ
   aqFlow <- list()
   aqLevel <- list()
-  for (i in WSCstns){
+  for (i in wsc_stns){
     try(aqLevel[[i]] <- WRBtools::aq_download(i, "Stage.Preliminary")$timeseries[,c(1,2)], server = server)
   }
-  for (i in WSCstns){
+  for (i in wsc_stns){
     try(aqFlow[[i]] <- WRBtools::aq_download(i, "Discharge.Preliminary")$timeseries[,c(1,2)], server = server)
   }
 
@@ -93,7 +93,7 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
   #Refresh the last 18 months with realtime data in case there were changes
   new_realtime <- list(flow = list(), level = list())
   library(tidyhydat.ws) #necessary because internal data is not properly specified
-  for (i in WSCstns){
+  for (i in wsc_stns){
     token <- tidyhydat.ws::token_ws(username = Sys.getenv("WS_USRNM"), password = Sys.getenv("WS_PWD"))
     try(new_realtime$flow[[i]] <- tidyhydat.ws::realtime_ws(i, 47, start_date = Sys.Date()-577, end_date = Sys.Date(), token = token))
     try(new_realtime$level[[i]] <- tidyhydat.ws::realtime_ws(i, 46, start_date = Sys.Date()-577, end_date = Sys.Date(), token = token))
@@ -139,7 +139,7 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
 
 
   #Now deal with historical "HYDAT" information, inserting into measurement tables and adding entry to locations table
-  for (i in WSCstns){
+  for (i in wsc_stns){
     tryCatch({
       level <- tidyhydat::hy_daily_levels(i)[,-c(3,5)]
       colnames(level) <- c("location", "date", "level")

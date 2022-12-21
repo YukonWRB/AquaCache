@@ -446,61 +446,72 @@ hydro_update_daily <- function(path, stage = "Stage.Publish", discharge = "Disch
     operator <- locations$operator[i]
 
     last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM ", operator, "_", table_name, "_daily WHERE location = '", loc, "'"))[1,]
+    last_day_historic <- as.character(as.Date(last_day_historic) - 2) #recalculate last two days in case realtime data hasn't yet come in. This will also wipe the stats for those two days just in case.
     gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", operator, "_", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC BETWEEN '", last_day_historic, " 23:59:59.99' AND '", .POSIXct(Sys.time(), "UTC"), "'"))
-    gap_realtime <- gap_realtime %>%
-      dplyr::group_by(lubridate::year(.data$datetime_UTC), lubridate::yday(.data$datetime_UTC)) %>%
-      dplyr::summarize(date = mean(lubridate::date(.data$datetime_UTC)),
-                       value = mean(.data[[type]]),
-                       .groups = "drop")
-    gap_realtime <- gap_realtime[,c(3,4)]
-    names(gap_realtime) <- c("date", type)
-    gap_realtime$approval <- "preliminary"
-    gap_realtime$location <- loc
-    gap_realtime$date <- as.character(gap_realtime$date)
-    DBI::dbAppendTable(hydro, paste0(operator, "_", table_name, "_daily"), gap_realtime)
+    if (nrow(gap_realtime) > 0){
+      gap_realtime <- gap_realtime %>%
+        dplyr::group_by(lubridate::year(.data$datetime_UTC), lubridate::yday(.data$datetime_UTC)) %>%
+        dplyr::summarize(date = mean(lubridate::date(.data$datetime_UTC)),
+                         value = mean(.data[[type]]),
+                         .groups = "drop")
+      gap_realtime <- gap_realtime[,c(3,4)]
+      names(gap_realtime) <- c("date", type)
+      gap_realtime$approval <- "preliminary"
+      gap_realtime$location <- loc
+      gap_realtime$date <- as.character(gap_realtime$date)
+      DBI::dbExecute(hydro, paste0("DELETE FROM ", operator, "_", table_name, "_daily WHERE date > '", last_day_historic, "'"))
+      DBI::dbAppendTable(hydro, paste0(operator, "_", table_name, "_daily"), gap_realtime)
+    }
 
-    # now calculate stats where they are missing
+    # Now calculate stats where they are missing
     missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", operator, "_", table_name, "_daily WHERE location = '", loc, "' AND max IS NULL"))
-    all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", operator, "_", table_name, "_daily WHERE location = '", loc, "'"))
+    all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, ", type, " FROM ", operator, "_", table_name, "_daily WHERE location = '", loc, "'"))
     # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the daily table without replacing it.
     feb_29 <- missing_stats[(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
     missing_stats <- missing_stats[!(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
     all_stats <- all_stats[!(lubridate::month(all_stats$date) == "2" & lubridate::mday(all_stats$date) == "29"), , drop = FALSE]
-    #Create a dayofyear column that pretends Feb 29 doesn't exist; all years have 365 days
+    # Create a dayofyear column that pretends Feb 29 doesn't exist; all years have 365 days
     missing_stats <- missing_stats %>% dplyr::mutate(dayofyear = ifelse(lubridate::year(.data$date) %in% leap_list,
                                                                         ifelse(lubridate::month(.data$date) <= 2,
                                                                                lubridate::yday(.data$date),
                                                                                lubridate::yday(.data$date) - 1),
                                                                         lubridate::yday(.data$date)))
     all_stats <- all_stats %>% dplyr::mutate(dayofyear = ifelse(lubridate::year(.data$date) %in% leap_list,
-                                                                        ifelse(lubridate::month(.data$date) <= 2,
-                                                                               lubridate::yday(.data$date),
-                                                                               lubridate::yday(.data$date) - 1),
-                                                                        lubridate::yday(.data$date)))
+                                                                ifelse(lubridate::month(.data$date) <= 2,
+                                                                       lubridate::yday(.data$date),
+                                                                       lubridate::yday(.data$date) - 1),
+                                                                lubridate::yday(.data$date)))
+
+    #selects only records beginning with the second dayofyear in all_stats (those for which stats can be calculated)
+    missing_stats <- missing_stats[order(missing_stats[ , "date"]) , ]
+    all_stats <- all_stats[order(all_stats[ , "date"]) , ]
+    duplicated <- all_stats[duplicated(all_stats$dayofyear),]
+    missing_stats <- missing_stats[missing_stats$date %in% duplicated$date , ]
+
     if (nrow(missing_stats) > 0){
-      for (j in 1:nrow(missing_stats)){
-        if (!is.na(missing_stats[[type]][j])){
-          date <- missing_stats$date[j]
-          doy <- missing_stats$dayofyear[j]
-          current <- missing_stats[[type]][j]
-          past <- all_stats[all_stats$dayofyear == doy & all_stats$date < date , ][[type]] #Importantly, does NOT include the current measurement. A flow greater than past maximum will rank > 100%
-          past <- past[!is.na(past)]
-          if (length(past) > 1){
-            missing_stats$max[j] <- max(past)
-            missing_stats$min[j] <- min(past)
-            missing_stats$QP90[j] <- stats::quantile(past, 0.90)
-            missing_stats$QP75[j] <- stats::quantile(past, 0.75)
-            missing_stats$QP50[j] <- stats::quantile(past, 0.50)
-            missing_stats$QP25[j] <- stats::quantile(past, 0.25)
-            missing_stats$QP10[j] <- stats::quantile(past, 0.10)
-            missing_stats$percent_historic_range[j] <- ((current - min(past)) / (max(past) - min(past))) * 100
-          }
+    for (j in 1:nrow(missing_stats)){
+      date <- missing_stats$date[j]
+      doy <- missing_stats$dayofyear[j]
+      current <- missing_stats[[type]][j]
+      past <- all_stats[all_stats$dayofyear == doy & all_stats$date < date , ][[type]] #Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
+      past <- past[!is.na(past)]
+      if (length(past) >= 1){
+        missing_stats$max[j] <- max(past) #again, NOT including current measurement
+        missing_stats$min[j] <- min(past)
+        missing_stats$QP90[j] <- stats::quantile(past, 0.90)
+        missing_stats$QP75[j] <- stats::quantile(past, 0.75)
+        missing_stats$QP50[j] <- stats::quantile(past, 0.50)
+        missing_stats$QP25[j] <- stats::quantile(past, 0.25)
+        missing_stats$QP10[j] <- stats::quantile(past, 0.10)
+        if (length(past) > 1 & !is.na(current)){ #need at least 2 measurements to calculate a percent historic!
+          missing_stats$percent_historic_range[j] <- ((current - min(past)) / (max(past) - min(past))) * 100
         }
       }
-      missing_stats <- subset(missing_stats, select=-c(dayofyear)) #remove column not in database table
+    }
+    missing_stats <- subset(missing_stats, select=-c(dayofyear)) #remove column not in database table
 
-      #Assign values to Feb 29 that are between Feb 28 and March 1
-      if (nrow(feb_29) > 0) {
+      #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st.
+      if (nrow(feb_29) > 0 & !(substr(as.character(as.Date(.POSIXct(Sys.time(), "UTC"))), 6, 10) %in% c("02-29", "03-01,", "03-02"))) {
         for (k in 1:nrow(feb_29)){
           date <- as.Date(feb_29$date[k])
           before <- missing_stats[missing_stats$date == date - 1 , ]
