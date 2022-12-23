@@ -7,26 +7,33 @@
 #' Uses two functions under the hood that require some set-up of the .Renviron file: tidyhydat.ws::realtime_ws and WRBtools::aq_download. See respective help files for setup information.
 #'
 #' @param path The path to the local hydro SQLite database, with extension.
-#' @param wsc_stns The WSC stations you wish to pull information for. In the event that these stations are mirrored in your Aquarius database the function will attempt to fetch that information. Otherwise, only information from the HYDAT database and from real-time WSC data will be incorporated.
-#' @param stage The name of the stage(level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All wsc_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.
-#' @param discharge The name of the discharge(flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All wsc_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.
+#' @param WSC_stns The WSC stations you wish to pull information for. In the event that these stations are mirrored in your Aquarius database the function will attempt to fetch that information. Otherwise, only information from the HYDAT database and from real-time WSC data will be incorporated. The default, "yukon" is a preset list of 77 stations in or relevant to Yukon.
+#' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next three parameters. FALSE will only populate with WSC data.
+#' @param stage The name of the stage(level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All WSC_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.
+#' @param discharge The name of the discharge(flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All WSC_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return Updated tables in the database, including WSC real-time and daily tables and locations table
 #' @export
 #'
 
-initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS") {
+initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
-  #Yukon and Liard WSC locations
-  # wsc_stns <- c("08AA003","08AA005","08AA007","08AA008","08AA009","08AA010","08AA011","08AA012","08AB001","08AC001","08AC002","09AA001","09AA004","09AA012","09AA013","09AA017","09AB001","09AB004","09AB010","09AC001","09AC007","09AD002","09AE002","09AE003","09AE006","09AG001","09AG002","09AH001","09AH003","09AH004","09AH005","09BA001","09BB001","09BC001","09BC002","09BC004","09CA001","09CA002",'09CA004',"09CA006","09CB001","09CD001","09DA001","09DB001","09DC005","09DC006","09DD003","09DD004","09EA003","09EA004","09EA005","09EA006","09EB001","09EB003","09EB004","09FA001","09FB002","09FB003","09FC001","09FD002","09FD003","10AA001","10AA004","10AA005","10AA006","10AB001","10AC005","10AD002","10BD001","10DB001","10MA001","10MA002","10MA003","10MB003","10MB004","10MD001","10MD002")
+  {
+
+  if (tolower(WSC_stns) == "yukon"){
+    #Yukon and Liard WSC locations
+    WSC_stns <- c("08AA003","08AA005","08AA007","08AA008","08AA009","08AA010","08AA011","08AA012","08AB001","08AC001","08AC002","09AA001","09AA004","09AA012","09AA013","09AA017","09AB001","09AB004","09AB010","09AC001","09AC007","09AD002","09AE002","09AE003","09AE006","09AG001","09AG002","09AH001","09AH003","09AH004","09AH005","09BA001","09BB001","09BC001","09BC002","09BC004","09CA001","09CA002",'09CA004',"09CA006","09CB001","09CD001","09DA001","09DB001","09DC005","09DC006","09DD003","09DD004","09EA003","09EA004","09EA005","09EA006","09EB001","09EB003","09EB004","09FA001","09FB002","09FB003","09FC001","09FD002","09FD003","10AA001","10AA004","10AA005","10AA006","10AB001","10AC005","10AD002","10BD001","10DB001","10MA001","10MA002","10MA003","10MB003","10MB004","10MD001","10MD002")
+  }
 
   #Initial checks
-  if (is.null(Sys.getenv("AQPASS"))){
-    stop("Your Aquarius password must be available in the .Renviron file in the form AQPASS='yourpassword'")
-  }
-  if (is.null(Sys.getenv("AQUSER"))){
-    stop("Your Aquarius user name must be available in the .Renviron file in the form AQUSER='yourusername'")
+  if (aquarius){
+    if (is.null(Sys.getenv("AQPASS"))){
+      stop("Your Aquarius password must be available in the .Renviron file in the form AQPASS='yourpassword'")
+    }
+    if (is.null(Sys.getenv("AQUSER"))){
+      stop("Your Aquarius user name must be available in the .Renviron file in the form AQUSER='yourusername'")
+    }
   }
   if (is.null(Sys.getenv("WS_USRNM"))){
     stop("Your WSC user name must be available in the .Renviron file in the form WS_USRNM='yourusername'")
@@ -48,52 +55,67 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
       tidyhydat::download_hydat(ask=FALSE)
       hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
       new_hydat <- TRUE
+      print("The local WSC HYDAT database was updated.")
+    } else {
+      print("The local copy of the WSC HYDAT database is up to date.")
     }
   } else if (is.null(hydat_path) | !exists("local_hydat")) {# if hydat does not already exist, download fresh to the default location
     tidyhydat::download_hydat(ask=FALSE)
     hydat_path <- tidyhydat::hy_downloaded_db()
     new_hydat <- TRUE
+    print("A local copy of the WSC HYDAT database was installed.")
   }
 
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
 
+  if (aquarius){
+    tryCatch({
+      #Add the realtime data held in Aquarius to the database
+      # Download data from AQ
+      aqFlow <- list()
+      aqLevel <- list()
+      for (i in WSC_stns){
+        try(aqLevel[[i]] <- WRBtools::aq_download(loc_id = i, ts_name ="Stage.Preliminary", server = server))
+      }
+      for (i in WSC_stns){
+        try(aqFlow[[i]] <- WRBtools::aq_download(i, "Discharge.Preliminary", server = server))
+      }
 
-  #Add the realtime data held in Aquarius to the database
-  # Download data from AQ
-  aqFlow <- list()
-  aqLevel <- list()
-  for (i in wsc_stns){
-    try(aqLevel[[i]] <- WRBtools::aq_download(i, "Stage.Preliminary")$timeseries[,c(1,2)], server = server)
-  }
-  for (i in wsc_stns){
-    try(aqFlow[[i]] <- WRBtools::aq_download(i, "Discharge.Preliminary")$timeseries[,c(1,2)], server = server)
-  }
+      level_rt <- data.frame()
+      for (i in names(aqLevel)){
+        timeseries <- aqLevel[[i]]$timeseries[c(1,2)]
+        timeseries$location <- i
+        level_rt <- rbind(level_rt, timeseries)
+      }
+      names(level_rt) <- c("datetime_UTC", "value", "location")
+      level_rt$approval <- "preliminary"
+      level_rt$units <- "m"
+      level_rt$datetime_UTC <- as.character(level_rt$datetime_UTC)
 
-  for (i in names(aqLevel)){
-    aqLevel[[i]]$location <- i
-    names(aqLevel[[i]]) <- c("datetime_UTC", "level", "location")
-    aqLevel[[i]]$datetime_UTC <- as.character(aqLevel[[i]]$datetime_UTC)
-  }
-  for (i in names(aqFlow)){
-    aqFlow[[i]]$location <- i
-    names(aqFlow[[i]]) <- c("datetime_UTC", "flow", "location")
-    aqFlow[[i]]$datetime_UTC <- as.character(aqFlow[[i]]$datetime_UTC)
-  }
+      flow_rt <- data.frame()
+      for (i in names(aqFlow)){
+        timeseries <- aqFlow[[i]]$timeseries[c(1,2)]
+        timeseries$location <- i
+        flow_rt <- rbind(flow_rt, timeseries)
+      }
+      names(flow_rt) <- c("datetime_UTC", "value", "location")
+      flow_rt$approval <- "preliminary"
+      flow_rt$units <- "m3/s"
+      flow_rt$datetime_UTC <- as.character(flow_rt$datetime_UTC)
 
-  flow_rt <- do.call("rbind", aqFlow)
-  rownames(flow_rt) <- NULL
-  level_rt <- do.call("rbind", aqLevel)
-  rownames(level_rt) <- NULL
-
-  DBI::dbAppendTable(hydro, "WSC_level_realtime", level_rt)
-  DBI::dbAppendTable(hydro, "WSC_flow_realtime", flow_rt)
+      DBI::dbAppendTable(hydro, "WSC_level_realtime", level_rt)
+      DBI::dbAppendTable(hydro, "WSC_flow_realtime", flow_rt)
+      print("Timeseries existing in Aquarius have been downloaded and appended to the local database.")
+    }, error = function(e) {
+    })
+  }
 
   #Refresh the last 18 months with realtime data in case there were changes
   new_realtime <- list(flow = list(), level = list())
   library(tidyhydat.ws) #necessary because internal data is not properly specified
-  for (i in wsc_stns){
+  for (i in WSC_stns){
     token <- tidyhydat.ws::token_ws(username = Sys.getenv("WS_USRNM"), password = Sys.getenv("WS_PWD"))
     try(new_realtime$flow[[i]] <- tidyhydat.ws::realtime_ws(i, 47, start_date = Sys.Date()-577, end_date = Sys.Date(), token = token))
     try(new_realtime$level[[i]] <- tidyhydat.ws::realtime_ws(i, 46, start_date = Sys.Date()-577, end_date = Sys.Date(), token = token))
@@ -103,7 +125,9 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
   #keep only what's necessary from the raw download (drop columns) and format columns; at the same time, make entries in the locations table
   for (i in names(new_realtime$flow)){
     new_realtime$flow[[i]] <- new_realtime$flow[[i]][,c(2,4,1)]
-    names(new_realtime$flow[[i]]) <- c("datetime_UTC", "flow", "location")
+    names(new_realtime$flow[[i]]) <- c("datetime_UTC", "value", "location")
+    new_realtime$flow[[i]]$approval <- "preliminary"
+    new_realtime$flow[[i]]$units <- "m3/s"
     new_realtime$flow[[i]]$datetime_UTC <- as.character(new_realtime$flow[[i]]$datetime_UTC)
     start_AQ <- min(aqFlow[[i]]$datetime_UTC)
     start_ws <- min(new_realtime$flow[[i]]$datetime_UTC)
@@ -114,7 +138,9 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
 
   for (i in names(new_realtime$level)){
     new_realtime$level[[i]] <- new_realtime$level[[i]][,c(2,4,1)]
-    names(new_realtime$level[[i]]) <- c("datetime_UTC", "level", "location")
+    names(new_realtime$level[[i]]) <- c("datetime_UTC", "value", "location")
+    new_realtime$level[[i]]$approval <- "preliminary"
+    new_realtime$level[[i]]$units <- "m"
     new_realtime$level[[i]]$datetime_UTC <- as.character(new_realtime$level[[i]]$datetime_UTC)
     start_AQ <- min(aqLevel[[i]]$datetime_UTC)
     start_ws <- min(new_realtime$level[[i]]$datetime_UTC)
@@ -136,14 +162,16 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
   delete_bracket <- c(min(new_level_rt$datetime_UTC), max(new_level_rt$datetime_UTC))
   DBI::dbExecute(hydro, paste0("DELETE FROM WSC_level_realtime WHERE datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'")) #NOTE: SQL BETWEEN is inclusive
   DBI::dbAppendTable(hydro, "WSC_level_realtime", new_level_rt)
+  print("Timeseries existing in the WSC real-time database have been downloaded and appended to the local database.")
 
 
   #Now deal with historical "HYDAT" information, inserting into measurement tables and adding entry to locations table
-  for (i in wsc_stns){
+  for (i in WSC_stns){
     tryCatch({
       level <- tidyhydat::hy_daily_levels(i)[,-c(3,5)]
-      colnames(level) <- c("location", "date", "level")
+      colnames(level) <- c("location", "date", "value")
       level$approval <- "approved"
+      level$units <- "m"
       level$date <- as.character(level$date)
       DBI::dbAppendTable(hydro, "WSC_level_daily", level)
 
@@ -166,8 +194,9 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
     )
     tryCatch ({
       flow <- tidyhydat::hy_daily_flows(i)[,-c(3,5)]
-      colnames(flow) <- c("location", "date", "flow")
+      colnames(flow) <- c("location", "date", "value")
       flow$approval <- "approved"
+      flow$units <- "m3/s"
       flow$date <- as.character(flow$date)
       DBI::dbAppendTable(hydro, "WSC_flow_daily", flow)
 
@@ -189,5 +218,6 @@ initial_WSC <- function(path, wsc_stns, stage = "Stage.Preliminary", discharge =
     }
     )
   } #End of for loop adding historical WSC data
+  print("Timeseries existing in the WSC historical database (HYDAT) have been appended to the local database.")
 
 } #End of function

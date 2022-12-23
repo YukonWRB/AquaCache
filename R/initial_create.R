@@ -11,6 +11,7 @@
 initial_create <- function(path) {
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout = 10000")
   on.exit(DBI::dbDisconnect(hydro))
 
   for (i in DBI::dbListTables(hydro)){
@@ -21,33 +22,59 @@ initial_create <- function(path) {
 
   # Create the tables for WSC data first
   # level realtime table
-  DBI::dbCreateTable(hydro, "WSC_level_realtime", fields = c(location = NA, datetime_UTC = NA, level = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbCreateTable(hydro, "WSC_level_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WSC_level_minute_index ON WSC_level_realtime (datetime_UTC, location);")
   # flow realtime table
-  DBI::dbCreateTable(hydro, "WSC_flow_realtime", fields = c(location = NA, datetime_UTC = NA, flow = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbCreateTable(hydro, "WSC_flow_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WXC_flow_minute_index ON WSC_flow_realtime (datetime_UTC, location);")
   # level historic table
-  DBI::dbCreateTable(hydro, "WSC_level_daily", fields = c(location = NA, date = NA, level = NA, approval = NA,percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WSC_level_daily", fields = c(location = NA, date = NA, value = NA, units = NA, approval = NA,percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WSC_level_daily_index ON WSC_level_daily (date, location);")
   # flow historic table
-  DBI::dbCreateTable(hydro, "WSC_flow_daily", fields = c(location = NA, date = NA, flow = NA, approval =NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WSC_flow_daily", fields = c(location = NA, date = NA, value = NA, units = NA, approval =NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WSC_flow_daily_index ON WSC_flow_daily (date, location);")
 
   # Now add tables for data held solely by the WRB
   # snow pillow data
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_realtime", fields = c(location = NA, datetime_UTC = NA, SWE = NA, grade = NA, approval = NA, percent_historic_range = NA))
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_daily", fields = c(location= NA, date = NA, SWE = NA,  grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_realtime", field = c(location = NA, datetime_UTC = NA, depth = NA, grade = NA, approval = NA, percent_historic_range = NA))
-  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_daily", fields = c(location= NA, date = NA, depth = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_SWE_minute_index ON WRB_snow_pillow_SWE_realtime (datetime_UTC, location);")
+
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_SWE_daily", fields = c(location= NA, date = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_SWE_daily_index ON WRB_snow_pillow_SWE_daily (date, location);")
+
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_realtime", field = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_depth_minute_index ON WRB_snow_pillow_depth_realtime (datetime_UTC, location);")
+
+  DBI::dbCreateTable(hydro, "WRB_snow_pillow_depth_daily", fields = c(location= NA, date = NA, value = NA, units = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_depth_daily_index ON WRB_snow_pillow_depth_daily (date, location);")
+
   # small stream network data
-  DBI::dbCreateTable(hydro, "WRB_flow_realtime", fields = c(location = NA, datetime_UTC = NA, flow = NA, grade = NA, approval = NA, percent_historic_range = NA))
-  DBI::dbCreateTable(hydro, "WRB_level_realtime", fields = c(location = NA, datetime_UTC = NA, level = NA, percent_historic_range = NA))
-  DBI::dbCreateTable(hydro, "WRB_flow_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, flow = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbCreateTable(hydro, "WRB_level_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, level = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbCreateTable(hydro, "WRB_flow_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_flow_minute_index ON WRB_flow_realtime (datetime_UTC, location);")
+
+  DBI::dbCreateTable(hydro, "WRB_level_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_level_minute_index ON WRB_level_realtime (datetime_UTC, location);")
+
+  DBI::dbCreateTable(hydro, "WRB_flow_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_flow_daily_index ON WRB_flow_daily (date, location);")
+
+  DBI::dbCreateTable(hydro, "WRB_level_daily", fields = c(location = NA, date = NA, year = NA, dayofyear = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX WRB_level_daily_index ON WRB_level_daily (date, location);")
+
 
   # And lastly a table that holds metadata for all locations
   DBI::dbCreateTable(hydro, "datum_conversions", fields = c(location = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_conversions_index ON datum_conversions (location, datum_id_from, datum_id_to);")
+
   DBI::dbCreateTable(hydro, "datum_list", fields = c(datum_id = NA, datum_name_en = NA, datum_name_fr = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_list_index ON datum_list (datum_id);")
+
   DBI::dbCreateTable(hydro, "locations", fields = c(location = NA, data_type = NA, start_datetime = NA, end_datetime = NA, latitude = NA, longitude = NA, operator = NA, network = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX locations_index ON locations (location, data_type);")
 
   # And a table to hold value pairs to control timeseries visibility
   DBI::dbCreateTable(hydro, "settings", fields = c(parameter = NA, value = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX settings_index ON settings (parameter);")
 
   # And check your tables to make sure everything is good
   DBI::dbListTables(hydro)
@@ -82,4 +109,5 @@ initial_create <- function(path) {
   datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
   names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
   RSQLite::dbWriteTable(hydro, "datum_list", datum_list, overwrite = TRUE)
+  print(paste0("The database was successfully created at ", path, "."))
 }
