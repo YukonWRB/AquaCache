@@ -13,6 +13,7 @@
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return Updated entries in the hydro database.
+#' @import tidyhydat.ws
 #' @export
 #'
 

@@ -14,6 +14,7 @@
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return Updated tables in the database, including WSC real-time and daily tables and locations table
+#' @import tidyhydat.ws
 #' @export
 #'
 

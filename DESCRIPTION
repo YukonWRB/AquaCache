@@ -21,7 +21,6 @@ Imports:
     RSQLite,
     stats,
     tidyhydat,
-    tidyhydat.ws,
     WRBtools
 Depends:
     tidyhydat.ws
