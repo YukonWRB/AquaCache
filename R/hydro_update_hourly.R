@@ -38,68 +38,40 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Publish", 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
 
-  #update from Aquarius
-  if (aquarius){
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations")
+  for (i in 1:nrow(locations)){
+    loc <- locations$location[i]
+    type <- locations$data_type[i]
+    table_name <- if (type == "SWE") "snow_pillow_SWE" else if (type == "depth") "snow_pillow_depth" else type
+    operator <- locations$operator[i]
+    units <- if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "level") "m" else if (type == "flow") "m3/s"
     tryCatch({
+      if (operator == "WRB" & aquarius){
+        data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = SWE, start = locations$end_datetime[i], server = server)
+        ts <- data.frame("location" = locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
-      aq_flow <- DBI::dbGetQuery(hydro, "SELECT * FROM WRB_flow_realtime WHERE MAX(datetime_UTC) GROUP BY location")
-      if (nrow(aq_flow) > 0){
-        aq_flow_data <- data.frame()
-        for (i in 1:nrow(aq_flow)){
-          last_time <- aq_flow$datetime_UTC[i]
-          data <- WRBtools::aq_download(aq_flow$location[i], aq_flow$datetime_UTC[i])$timeseries[c(1,2)]
-          data$location <- aq_flow$location[i]
-          names(data) <- c("datetime_UTC", "flow", "location")
-          data()$approval <- "preliminary"
-          data$datetime_UTC <- as.character(data$datetime_UTC)
-
-
-          #remove last_time if present from the downloaded data
-          aq_flow_data <- rbind(aq_flow_data, data)
-          DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", max(data$datetime_UTC), "' WHERE location = '", aq_flow$location[i], "' AND data_type = 'flow'"))
-        }
+      } else if (operator == "WSC"){
+        token <- suppressMessages(tidyhydat.ws::token_ws())
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (type == "flow") 47 else if (type == "level") 46, start_date = locations$end_datetime[i], end_date = Sys.time(),  token = token))
+        data <- data[,c(2,4,1)]
+        names(data) <- c("datetime_UTC", "value", "location")
+        data$datetime_UTC <- as.character(data$datetime_UTC)
+        data$approval <- "preliminary"
+        data$units <- units
+        ts <- data
       }
 
-      aq_level <- DBI::dbGetQuery(hydro, "SELECT * FROM WRB_level_realtime")
-      if (nrow(aq_level) > 0){
-
-      }
-
-      aq_depth <- DBI::dbGetQuery(hydro, "SELECT * FROM WRB_snow_pillow_depth_realtime")
-      for (i in aq_depth){
-
-      }
-      aq_SWE <- DBI::dbGetQuery(hydro, "SELECT * FROM WRB_snow_pillow_SWE_realtime")
-      for (i in aq_SWE){
-
+      if (nrow(ts) > 0){
+        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_realtime WHERE datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
+        DBI::dbAppendTable(hydro, paste0(table_name, "_realtime"), ts)
+        #make the new entry into table locations
+        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))
       }
     }, error = function(e) {
-      warning("New information from Aquarius may not have been properly downloaded. Try again later.")
+      print(paste0("Hydro_update_hourly failed on location ", locations$location[i], " and data type ", locations$data_type[i], ". The station may not currently be reporting."))
     }
     )
   }
-
-
-  #update from WSC
-  library(tidyhydat.ws)
-  on.exit(detach("package:tidyhydat.ws", unload = TRUE))
-
-  tryCatch({
-    WSC_flow <- DBI::dbGetQuery(hydro, "SELECT * FROM WSC_flow_realtime WHERE MAX(datetime_UTC) GROUP BY location")
-    for (i in WSC_flow){
-      last_time <- WSC_flow$datetime_UTC
-      tidyhydat.ws::realtime_ws(i, 47, start_date = last_time, end_date = .POSIXct(Sys.time(), "UTC"))
-    }
-    WSC_level <- DBI::dbGetQuery(hydro, "SELECT * FROM WSC_level_realtime")
-    for (i in WSC_level){
-
-    }
-
-  }, error = function(e) {
-    warning("New information from the WSC may not have been properly downloaded. Try again later.")
-  }
-  )
-
 
 } #End of function
 

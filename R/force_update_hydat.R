@@ -28,8 +28,6 @@ force_update_hydat <- function(path)
       hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
       new_hydat <- TRUE
       print("The local WSC HYDAT database was updated.")
-    } else {
-      print("The local copy of the WSC HYDAT database is up to date.")
     }
   } else if (is.null(hydat_path) | !exists("local_hydat")) {# if hydat does not already exist, download fresh to the default location
     tidyhydat::download_hydat(ask=FALSE)
@@ -52,8 +50,8 @@ force_update_hydat <- function(path)
       flow_historical$units <- "m3/s"
       flow_historical$date <- as.character(flow_historical$date)
       delete_bracket <- c(min(flow_historical$date), max(flow_historical$date))
-      DBI::dbExecute(hydro, paste0("DELETE FROM WSC_flow_daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
-      DBI::dbAppendTable(hydro, "WSC_flow_daily", flow_historical)
+      DBI::dbExecute(hydro, paste0("DELETE FROM flow_daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
+      DBI::dbAppendTable(hydro, "flow_daily", flow_historical)
       #check if it already exists in locations table
       ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", locations$location[i], "' AND data_type = 'flow'"))
       if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to locations table from scratch
@@ -86,8 +84,8 @@ force_update_hydat <- function(path)
       level$historical$units <- "m"
       level_historical$date <- as.character(level_historical$date)
       delete_bracket <- c(min(level_historical$date), max(level_historical$date))
-      DBI::dbExecute(hydro, paste0("DELETE FROM WSC_level_daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
-      DBI::dbAppendTable(hydro, "WSC_level_daily", level_historical)
+      DBI::dbExecute(hydro, paste0("DELETE FROM level_daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
+      DBI::dbAppendTable(hydro, "level_daily", level_historical)
       #check if it already exists in locations table
       ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", locations$location[i], "' AND data_type = 'level'"))
       if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to locations table from scratch

@@ -105,22 +105,20 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       flow_rt$units <- "m3/s"
       flow_rt$datetime_UTC <- as.character(flow_rt$datetime_UTC)
 
-      DBI::dbAppendTable(hydro, "WSC_level_realtime", level_rt)
-      DBI::dbAppendTable(hydro, "WSC_flow_realtime", flow_rt)
+      DBI::dbAppendTable(hydro, "level_realtime", level_rt)
+      DBI::dbAppendTable(hydro, "flow_realtime", flow_rt)
       print("Timeseries existing in Aquarius have been downloaded and appended to the local database.")
     }, error = function(e) {
     })
   }
 
-  #Refresh the last 18 months with realtime data in case there were changes
+  #Refresh the last 18 months with realtime data in case there were changes, or to incorporate new stations
   new_realtime <- list(flow = list(), level = list())
-  library(tidyhydat.ws) #necessary because internal data is not properly specified
   for (i in WSC_stns){
     token <- tidyhydat.ws::token_ws(username = Sys.getenv("WS_USRNM"), password = Sys.getenv("WS_PWD"))
     try(new_realtime$flow[[i]] <- tidyhydat.ws::realtime_ws(i, 47, start_date = Sys.Date()-577, end_date = Sys.Date(), token = token))
     try(new_realtime$level[[i]] <- tidyhydat.ws::realtime_ws(i, 46, start_date = Sys.Date()-577, end_date = Sys.Date(), token = token))
   }
-  detach("package:tidyhydat.ws", unload = TRUE)
 
   #keep only what's necessary from the raw download (drop columns) and format columns; at the same time, make entries in the locations table
   for (i in names(new_realtime$flow)){
@@ -129,11 +127,16 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
     new_realtime$flow[[i]]$approval <- "preliminary"
     new_realtime$flow[[i]]$units <- "m3/s"
     new_realtime$flow[[i]]$datetime_UTC <- as.character(new_realtime$flow[[i]]$datetime_UTC)
-    start_AQ <- min(aqFlow[[i]]$datetime_UTC)
+    start_AQ <- as.character(min(aqFlow[[i]]$timeseries$timestamp_UTC))
     start_ws <- min(new_realtime$flow[[i]]$datetime_UTC)
-    start_datetime <- min(c(start_AQ, start_ws))
-    location_info <- data.frame("location" = i, "data_type" = "flow", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$flow[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
-    DBI::dbAppendTable(hydro, "locations", location_info)
+    start_datetime <- hablar::rationalize(min(c(start_AQ, start_ws)))
+    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND data_type = 'flow'"))
+    if (nrow(existing) == 0){
+      location_info <- data.frame("location" = i, "data_type" = "flow", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$flow[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
+      DBI::dbAppendTable(hydro, "locations", location_info)
+    } else {
+      DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", max(new_realtime$flow[[i]]$datetime_UTC), "' WHERE location = '", i, "' AND data_type = 'flow'"))
+    }
   }
 
   for (i in names(new_realtime$level)){
@@ -142,11 +145,16 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
     new_realtime$level[[i]]$approval <- "preliminary"
     new_realtime$level[[i]]$units <- "m"
     new_realtime$level[[i]]$datetime_UTC <- as.character(new_realtime$level[[i]]$datetime_UTC)
-    start_AQ <- min(aqLevel[[i]]$datetime_UTC)
+    start_AQ <- as.character(min(aqLevel[[i]]$timeseries$timestamp_UTC))
     start_ws <- min(new_realtime$level[[i]]$datetime_UTC)
-    start_datetime <- min(c(start_AQ, start_ws))
-    location_info <- data.frame("location" = i, "data_type" = "level", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$level[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
-    DBI::dbAppendTable(hydro, "locations", location_info)
+    start_datetime <- hablar::rationalize(min(c(start_AQ, start_ws)))
+    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND data_type = 'level'"))
+    if (nrow(existing) == 0){
+      location_info <- data.frame("location" = i, "data_type" = "level", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$level[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
+      DBI::dbAppendTable(hydro, "locations", location_info)
+    } else {
+      DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", max(new_realtime$level[[i]]$datetime_UTC), "' WHERE location = '", i, "' AND data_type = 'level'"))
+    }
   }
 
   new_flow_rt <- do.call("rbind", new_realtime$flow)
@@ -156,12 +164,12 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
 
   #Delete the entries and then append the new data into the database. This has the added bonus of adding new rows as well as replacing existing rows
   delete_bracket <- c(min(new_flow_rt$datetime_UTC), max(new_flow_rt$datetime_UTC))
-  DBI::dbExecute(hydro, paste0("DELETE FROM WSC_flow_realtime WHERE datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'")) #NOTE: SQL BETWEEN is inclusive
-  DBI::dbAppendTable(hydro, "WSC_flow_realtime", new_flow_rt)
+  DBI::dbExecute(hydro, paste0("DELETE FROM flow_realtime WHERE datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'")) #NOTE: SQL BETWEEN is inclusive
+  DBI::dbAppendTable(hydro, "flow_realtime", new_flow_rt)
 
   delete_bracket <- c(min(new_level_rt$datetime_UTC), max(new_level_rt$datetime_UTC))
-  DBI::dbExecute(hydro, paste0("DELETE FROM WSC_level_realtime WHERE datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'")) #NOTE: SQL BETWEEN is inclusive
-  DBI::dbAppendTable(hydro, "WSC_level_realtime", new_level_rt)
+  DBI::dbExecute(hydro, paste0("DELETE FROM level_realtime WHERE datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'")) #NOTE: SQL BETWEEN is inclusive
+  DBI::dbAppendTable(hydro, "level_realtime", new_level_rt)
   print("Timeseries existing in the WSC real-time database have been downloaded and appended to the local database.")
 
 
@@ -173,7 +181,7 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       level$approval <- "approved"
       level$units <- "m"
       level$date <- as.character(level$date)
-      DBI::dbAppendTable(hydro, "WSC_level_daily", level)
+      DBI::dbAppendTable(hydro, "level_daily", level)
 
       start_datetime <- paste0(min(level$date), " 00:00:00")
       existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND data_type = 'level'"))
@@ -198,7 +206,7 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       flow$approval <- "approved"
       flow$units <- "m3/s"
       flow$date <- as.character(flow$date)
-      DBI::dbAppendTable(hydro, "WSC_flow_daily", flow)
+      DBI::dbAppendTable(hydro, "flow_daily", flow)
 
       start_datetime <- paste0(min(flow$date), " 00:00:00")
       existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND data_type = 'flow'"))

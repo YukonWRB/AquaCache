@@ -1,6 +1,6 @@
-Package: database
-Title: WRB hydro database creation and maintenance
-Version: 0.0.0.9000
+Package: WRBdatabase
+Title: Hydrological database creation and maintenance
+Version: 1.0.0-0
 Authors@R: 
     person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185"))
@@ -10,10 +10,12 @@ Description: Set of functions for the initial creation and ongoing
     data and WRB data held in Aquarius; in addition, multiple parameters
     are calculated to facilitate reporting and graphically representing
     data.
-License: AGPL (>= 3)
+License: AGPL (>= 3) + file LICENSE
 Imports:
     DBI,
     dplyr,
+    hablar,
+    fasstr,
     lubridate,
     magrittr,
     RSQLite,
@@ -21,6 +23,8 @@ Imports:
     tidyhydat,
     tidyhydat.ws,
     WRBtools
+Depends:
+    tidyhydat.ws
 Suggests: 
     testthat (>= 3.0.0)
 Remotes:
