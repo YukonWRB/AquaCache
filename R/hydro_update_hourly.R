@@ -21,6 +21,9 @@
 hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Publish", discharge = "Discharge.Publish", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
 {
+  library(tidyhydat.ws) #This needs to be removed once tidyhydat.ws is updated with properly formated package data. Same for "require" call in Description and @import in function headers.
+  on.exit(detach("package:tidyhydat.ws", unload= TRUE))
+
   if (aquarius){
     if (is.null(Sys.getenv("AQPASS"))){
       stop("Your Aquarius password must be available in the .Renviron file in the form AQPASS='yourpassword'")
