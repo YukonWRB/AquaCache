@@ -78,7 +78,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
       }
 
       if (nrow(ts) > 0){
-        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_realtime WHERE datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
+        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
         DBI::dbAppendTable(hydro, paste0(table_name, "_realtime"), ts)
         #make the new entry into table locations
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))

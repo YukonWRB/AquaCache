@@ -51,12 +51,12 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Publish", 
     units <- if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "level") "m" else if (type == "flow") "m3/s"
     tryCatch({
       if (operator == "WRB" & aquarius){
-        data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = SWE, start = locations$end_datetime[i], server = server)
+        data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = SWE, start = as.POSIXct(locations$end_datetime[i]) + 1, server = server)
         ts <- data.frame("location" = locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (type == "flow") 47 else if (type == "level") 46, start_date = locations$end_datetime[i], end_date = Sys.time(),  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (type == "flow") 47 else if (type == "level") 46, start_date = as.POSIXct(locations$end_datetime[i]) + 1, end_date = Sys.time(),  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$datetime_UTC <- as.character(data$datetime_UTC)
@@ -66,13 +66,13 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Publish", 
       }
 
       if (nrow(ts) > 0){
-        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_realtime WHERE datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
+        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
         DBI::dbAppendTable(hydro, paste0(table_name, "_realtime"), ts)
         #make the new entry into table locations
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))
       }
     }, error = function(e) {
-      print(paste0("Hydro_update_hourly failed on location ", locations$location[i], " and data type ", locations$data_type[i], ". The station may not currently be reporting."))
+      print(paste0("Hydro_update_hourly failed on location ", locations$location[i], " and data type ", locations$data_type[i], ". The station may seasonally or permanently deactivated, or there is no new data yet."))
     }
     )
   }
