@@ -49,7 +49,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
 
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
   print("Getting realtime information up to date with hydro_update_hourly...")
+  hourly_start <- Sys.time()
   hydro_update_hourly(path = path, aquarius = aquarius, stage = stage, discharge = discharge, SWE = SWE, depth = depth, server = server)
+  hourly_duration <- Sys.time() - hourly_start
+  print(paste0("Hydro_update_hourly executed in ", round(hourly_duration[[1]], 2), " ", units(hourly_duration), "."))
 
   #Check hydat version, update if needed.
   tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
@@ -562,9 +565,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
       DBI::dbAppendTable(hydro, paste0(table_name, "_daily"), missing_stats)
     }
   } # End of for loop calculating means and stats for each station in locations table
+
   stats_diff <- Sys.time() - stat_start
   total_diff <- Sys.time() - function_start
+  print(paste0("Daily means and statistics calculated in ", round(stats_diff[[1]], 2), " ", units(stats_diff)))
+  print(paste0("Total elapsed time for hydro_update_daily: ", round(total_diff[[1]], 2), " ", units(total_diff), ". End of function."))
 
-  print(paste0("Daily means and statistics calculated in ", round(stats_diff, 2), " minutes."))
-  print(paste0("Total elapsed time for hydro_update_hourly: ", round(total_diff, 2), " minutes."))
 } #End of function
