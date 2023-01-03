@@ -38,6 +38,7 @@ force_update_hydat <- function(path)
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=10000")
 
   ### Now update historical HYDAT timeseries. At the same time check for new flow or level entries at existing stations, and update the locations table if needed.
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations")

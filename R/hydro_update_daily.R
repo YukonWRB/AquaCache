@@ -16,6 +16,7 @@
 #' @param discharge The name of the discharge(flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names. !This DOES NOT apply to WSC stations mirrored in Aquarius.
 #' @param SWE The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.
 #' @param depth The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.
+#' #' @param distance The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same names. Usually used for distance from bridge girders to water surface.
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return The database is updated in-place.
@@ -24,7 +25,7 @@
 #'
 #'
 
-hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", discharge = "Discharge.Publish", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
+hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", discharge = "Discharge.Publish", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
 {
   library(tidyhydat.ws) #This needs to be removed once tidyhydat.ws is updated with properly formated package data. Same for "require" call in Description and @import in function headers.
@@ -54,6 +55,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
   hourly_duration <- Sys.time() - hourly_start
   print(paste0("Hydro_update_hourly executed in ", round(hourly_duration[[1]], 2), " ", units(hourly_duration), "."))
 
+  print("Checking the local HYDAT database...")
   #Check hydat version, update if needed.
   tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
   local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
@@ -78,7 +80,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=10000")
 
+  print("Checking tables to see if there are new entries...")
   #location cross-check to catch new entries
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations")
   #realtime stations
@@ -103,7 +107,12 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
     snow_pillow_SWE_stns$data_type <- "SWE"
     existing_locations <- rbind(existing_locations, snow_pillow_SWE_stns)
   }
-  #daily WSC stations (snow pillow stations invariable have a real-time equivalent)
+  bridge_distance_stns <- DBI::dbGetQuery(hydro, "SELECT DISTINCT location FROM bridge_distance_realtime")
+  if (nrow(bridge_distance_stns) > 0){
+    bridge_distance_stns$data_type <- "distance"
+    existing_locations <- rbind(existing_locations, bridge_distance_stns)
+  }
+  #daily WSC stations (snow pillow and bridge distance stations invariable have a real-time equivalent)
  daily_flow_stns <- DBI::dbGetQuery(hydro, "SELECT DISTINCT location FROM flow_daily")
   if (nrow(daily_flow_stns) > 0){
     daily_flow_stns$data_type <- "flow"
@@ -140,6 +149,14 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
           DBI::dbAppendTable(hydro, "snow_pillow_depth_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'meteorology' WHERE location = '", new$location[i], "' AND data_type = 'depth'"))
+
+        } else if (new$data_type[i] == "distance" & aquarius){ #only option is an aquarius station
+          data <- WRBtools::aq_download(loc_id = new$location[i], ts_name = distance, server = server)
+          #add new information to the realtime table
+          ts <- data.frame("location" = new$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = "m", "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+          DBI::dbAppendTable(hydro, "bridge_distance_realtime", ts)
+          #make the new entry into table locations
+          DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'highways' WHERE location = '", new$location[i], "' AND data_type = 'distance'"))
 
         } else if(new$data_type[i] == "flow"){#check for a WSC station first, then an Aquarius station
           WSC_fail <- TRUE
@@ -324,6 +341,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
   if (new_hydat){
     hydat <- DBI::dbConnect(RSQLite::SQLite(), hydat_path)
     on.exit(DBI::dbDisconnect(hydat))
+    DBI::dbExecute(hydat, "PRAGMA busy_timeout=10000")
     datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
     names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
     RSQLite::dbWriteTable(hydro, "datum_list", datum_list, overwrite = TRUE)
@@ -359,7 +377,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
       for (i in 1:length(unique(locations_WRB$location))){
         #find a corresponding entry in table locations to pick a data_type
         data_type <- DBI::dbGetQuery(hydro, paste0("SELECT data_type FROM locations WHERE location = '", unique(locations_WRB$location)[i], "'"))[1,] #only used to get the station metadata, need a valid timeseries.
-        ts_name <- if (data_type == "SWE") SWE else if (data_type == "depth") depth else if (data_type == "flow") discharge else if (data_type == "level") stage
+        ts_name <- if (data_type == "SWE") SWE else if (data_type == "depth") depth else if (data_type == "flow") discharge else if (data_type == "level") stage else if (data_type == "distance") distance
         conversion <- WRBtools::aq_download(loc_id = unique(locations_WRB$location)[i], ts_name = ts_name, start = Sys.Date()-1, server = server)$metadata
         conversion <- conversion[7,2]
         all_datums[i, ] <- c(unique(locations_WRB$location)[i], datum_id_from = 10, datum_id_to = 110, conversion_m = conversion, current = TRUE)
@@ -462,7 +480,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
     type <- locations$data_type[i]
-    table_name <- if (type == "SWE") "snow_pillow_SWE" else if (type == "depth") "snow_pillow_depth" else type
+    table_name <- if (type == "SWE") "snow_pillow_SWE" else if (type == "depth") "snow_pillow_depth" else if (type == "distance") "bridge_distance" else type
     operator <- locations$operator[i]
 
     last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM ", table_name, "_daily WHERE location = '", loc, "'"))[1,]
@@ -487,7 +505,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
       gap_realtime <- gap_realtime[,c(3:6)]
       names(gap_realtime) <- c("date", "value", "grade", "approval")
       gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE)
-      gap_realtime$units <- if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "SWE") "mm SWE" else if (type == "depth") "cm"
+      gap_realtime$units <- if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "distance") "m"
       gap_realtime$location <- loc
       gap_realtime$date <- as.character(gap_realtime$date)
       DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_daily WHERE date >= '", min(gap_realtime$date), "' AND location = '", loc, "'"))
