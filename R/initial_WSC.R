@@ -74,7 +74,6 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
   on.exit(DBI::dbDisconnect(hydro))
 
   if (aquarius){
-    tryCatch({
       #Add the realtime data held in Aquarius to the database
       # Download data from AQ
       aqFlow <- list()
@@ -88,9 +87,11 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
 
       level_rt <- data.frame()
       for (i in names(aqLevel)){
-        timeseries <- aqLevel[[i]]$timeseries[c(1,2)]
-        timeseries$location <- i
-        level_rt <- rbind(level_rt, timeseries)
+        if (nrow(aqLevel[[i]]$timeseries) > 0){
+          timeseries <- aqLevel[[i]]$timeseries[c(1,2)]
+          timeseries$location <- i
+          level_rt <- rbind(level_rt, timeseries)
+        }
       }
       names(level_rt) <- c("datetime_UTC", "value", "location")
       level_rt$approval <- "preliminary"
@@ -99,9 +100,11 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
 
       flow_rt <- data.frame()
       for (i in names(aqFlow)){
-        timeseries <- aqFlow[[i]]$timeseries[c(1,2)]
-        timeseries$location <- i
-        flow_rt <- rbind(flow_rt, timeseries)
+        if (nrow(aqFlow[[i]]$timeseries) > 0){
+          timeseries <- aqFlow[[i]]$timeseries[c(1,2)]
+          timeseries$location <- i
+          flow_rt <- rbind(flow_rt, timeseries)
+        }
       }
       names(flow_rt) <- c("datetime_UTC", "value", "location")
       flow_rt$approval <- "preliminary"
@@ -111,8 +114,6 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       DBI::dbAppendTable(hydro, "level_realtime", level_rt)
       DBI::dbAppendTable(hydro, "flow_realtime", flow_rt)
       print("Timeseries existing in Aquarius have been downloaded and appended to the local database.")
-    }, error = function(e) {
-    })
   }
 
   #Refresh the last 18 months with realtime data in case there were changes, or to incorporate new stations

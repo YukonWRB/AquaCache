@@ -11,7 +11,6 @@
 initial_create <- function(path) {
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout = 10000")
   on.exit(DBI::dbDisconnect(hydro))
 
   for (i in DBI::dbListTables(hydro)){
@@ -46,6 +45,13 @@ initial_create <- function(path) {
 
   DBI::dbCreateTable(hydro, "snow_pillow_depth_daily",  fields = c(location= NA, date = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
   DBI::dbExecute(hydro, "CREATE UNIQUE INDEX snow_pillow_depth_daily_index ON snow_pillow_depth_daily (date, location);")
+
+  # Bridge radar data
+  DBI::dbCreateTable(hydro, "bridge_distance_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX bridge_distance_minute_index ON bridge_distance_realtime (datetime_UTC, location);")
+
+  DBI::dbCreateTable(hydro, "bridge_distance_daily", fields = c(location= NA, date = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX bridge_distance_daily_index ON bridge_distance_daily (date, location);")
 
 
   # And lastly a table that holds metadata for all locations
