@@ -1,6 +1,6 @@
 #' Weekly update of hydro database
 #'
-#' The weekly update function pulls and replaces a large tranche of Water Survey of Canada and Aquarius data to ensure incorporation of any edits. By default, all real-time water survey data currently available online is replaced, as is any Aquarius data not previously labelled as "approved". Daily means and statistics are recalculated for any potentially affected days in the daily tables.
+#' The weekly update function pulls and replaces a large tranche of Water Survey of Canada and Aquarius data to ensure incorporation of any edits. By default, all real-time water survey data currently available online is replaced, as is any Aquarius data not previously labelled as "approved". Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 #'
 #' @param path The path to the local hydro SQLite database, with extension.
 #' @param WSC_range The starting date from which to pull real-time WSC data from the web and replace in the local database. Default is max possible days.

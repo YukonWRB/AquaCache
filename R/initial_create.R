@@ -61,7 +61,7 @@ initial_create <- function(path) {
   DBI::dbCreateTable(hydro, "datum_list", fields = c(datum_id = NA, datum_name_en = NA, datum_name_fr = NA))
   DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_list_index ON datum_list (datum_id);")
 
-  DBI::dbCreateTable(hydro, "locations", fields = c(location = NA, data_type = NA, start_datetime = NA, end_datetime = NA, latitude = NA, longitude = NA, operator = NA, network = NA))
+  DBI::dbCreateTable(hydro, "locations", fields = c(location = NA, name = NA, data_type = NA, start_datetime = NA, end_datetime = NA, latitude = NA, longitude = NA, operator = NA, network = NA))
   DBI::dbExecute(hydro, "CREATE UNIQUE INDEX locations_index ON locations (location, data_type);")
 
   # And a table to hold value pairs to control timeseries visibility

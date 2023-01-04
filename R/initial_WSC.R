@@ -116,7 +116,7 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       print("Timeseries existing in Aquarius have been downloaded and appended to the local database.")
   }
 
-  #Refresh the last 18 months with realtime data in case there were changes, or to incorporate new stations
+  #Refresh the last 18 months with realtime data in case there were changes, or to incorporate new stations. At the same time get the station name from tidyhydat.
   new_realtime <- list(flow = list(), level = list())
   for (i in WSC_stns){
     token <- tidyhydat.ws::token_ws(username = Sys.getenv("WS_USRNM"), password = Sys.getenv("WS_PWD"))
@@ -134,9 +134,10 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
     start_AQ <- as.character(min(aqFlow[[i]]$timeseries$timestamp_UTC))
     start_ws <- min(new_realtime$flow[[i]]$datetime_UTC)
     start_datetime <- hablar::rationalize(min(c(start_AQ, start_ws)))
-    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND data_type = 'flow'"))
+    existing <- DBI::dbGetQuery(hydro, paste0("SELECT value FROM locations WHERE location = '", i, "' AND data_type = 'flow'"))
+    name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
     if (nrow(existing) == 0){
-      location_info <- data.frame("location" = i, "data_type" = "flow", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$flow[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
+      location_info <- data.frame("location" = i, "name" = name, "data_type" = "flow", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$flow[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
       DBI::dbAppendTable(hydro, "locations", location_info)
     } else {
       DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", max(new_realtime$flow[[i]]$datetime_UTC), "' WHERE location = '", i, "' AND data_type = 'flow'"))
@@ -152,9 +153,10 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
     start_AQ <- as.character(min(aqLevel[[i]]$timeseries$timestamp_UTC))
     start_ws <- min(new_realtime$level[[i]]$datetime_UTC)
     start_datetime <- hablar::rationalize(min(c(start_AQ, start_ws)))
-    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND data_type = 'level'"))
+    existing <- DBI::dbGetQuery(hydro, paste0("SELECT value FROM locations WHERE location = '", i, "' AND data_type = 'level'"))
+    name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
     if (nrow(existing) == 0){
-      location_info <- data.frame("location" = i, "data_type" = "level", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$level[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
+      location_info <- data.frame("location" = i, "name" = name, "data_type" = "level", "start_datetime" = start_datetime, "end_datetime" = max(new_realtime$level[[i]]$datetime_UTC), "latitude" = tidyhydat::hy_stations(i)$LATITUDE, "longitude" = tidyhydat::hy_stations(i)$LONGITUDE, operator = "WSC", network = "Canada Yukon Hydrometric Network")
       DBI::dbAppendTable(hydro, "locations", location_info)
     } else {
       DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", max(new_realtime$level[[i]]$datetime_UTC), "' WHERE location = '", i, "' AND data_type = 'level'"))
@@ -193,7 +195,8 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
         end_datetime <- paste0(max(level$date), " 00:00:00")
         latitude <- tidyhydat::hy_stations(i)$LATITUDE
         longitude <- tidyhydat::hy_stations(i)$LONGITUDE
-        DBI::dbExecute(hydro, paste0("INSERT INTO locations (location, data_type, start_datetime, end_datetime, latitude, longitude, operator, network) VALUES ('", i, "', 'level', '", start_datetime, "', '", end_datetime, "', '", latitude, "', '", longitude, "', 'WSC', 'Canada Yukon Hydrometric Network')"))
+        name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
+        DBI::dbExecute(hydro, paste0("INSERT INTO locations (location, name, data_type, start_datetime, end_datetime, latitude, longitude, operator, network) VALUES ('", i, "', '", name, "', 'level', '", start_datetime, "', '", end_datetime, "', '", latitude, "', '", longitude, "', 'WSC', 'Canada Yukon Hydrometric Network')"))
       } else if (is.null(existing$end_datetime)) {
         end_datetime <- paste0(max(level$date), " 00:00:00")
         DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "' WHERE location = '", i, "' AND data_type = 'level'"))

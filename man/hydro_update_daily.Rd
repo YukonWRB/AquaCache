@@ -11,6 +11,7 @@ hydro_update_daily(
   discharge = "Discharge.Publish",
   SWE = "SWE.Corrected",
   depth = "Snow Depth.TempCompensated.Corrected",
+  distance = "Distance.Corrected",
   server = "https://yukon.aquaticinformatics.net/AQUARIUS"
 )
 }
@@ -25,7 +26,8 @@ hydro_update_daily(
 
 \item{SWE}{The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.}
 
-\item{depth}{The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.}
+\item{depth}{The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.
+#' @param distance The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same names. Usually used for distance from bridge girders to water surface.}
 
 \item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
 }

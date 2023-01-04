@@ -11,7 +11,7 @@ add_location(path, location, type)
 
 \item{location}{The location identifier, exactly as per the WSC or as written in Aquarius. Case sensitive. Specify as a character vector of length 1 or more.}
 
-\item{type}{The type of data for this location, matched 1:1 to the locations vector. One of "level", "flow", "SWE", "depth" (for snow depth).}
+\item{type}{The type of data for this location, matched 1:1 to the locations vector. One of "level", "flow", "SWE", "depth" (for snow depth) or "distance". The later is typically used for distances from bridge girders to water surface, but could be used for other distances.}
 }
 \value{
 One or more new entries are created in the table locations.
