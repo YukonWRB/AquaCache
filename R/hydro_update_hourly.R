@@ -55,12 +55,12 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Publish", 
     tryCatch({
       if (operator == "WRB" & aquarius){
         ts_name <- if(type == "SWE") SWE else if (type=="depth") depth else if (type == "level") stage else if (type == "flow") discharge else if (type == "distance") distance
-        data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = as.POSIXct(locations$end_datetime[i]) + 1, server = server)
+        data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = as.POSIXct(locations$end_datetime[i], tz= "UTC") + 1, server = server)
         ts <- data.frame("location" = locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (type == "flow") 47 else if (type == "level") 46, start_date = as.POSIXct(locations$end_datetime[i]) + 1, end_date = Sys.time(),  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (type == "flow") 47 else if (type == "level") 46, start_date = as.POSIXct(locations$end_datetime[i], tz="UTC") + 1, end_date = .POSIXct(Sys.time(), "UTC"),  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$datetime_UTC <- as.character(data$datetime_UTC)
