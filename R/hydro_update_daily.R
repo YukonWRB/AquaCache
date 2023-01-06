@@ -80,7 +80,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Publish", d
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=10000")
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
 
   print("Checking tables to see if there are new entries...")
   #location cross-check to catch new entries

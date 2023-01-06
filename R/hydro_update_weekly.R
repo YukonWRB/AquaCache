@@ -46,7 +46,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=10000")
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
 
   recalculate <- data.frame()
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations")

@@ -42,8 +42,9 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Publish", 
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=10000")
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
 
+  count <- 0 #counter for number of successful stations
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations")
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
@@ -74,12 +75,12 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Publish", 
         DBI::dbAppendTable(hydro, paste0(table_name, "_realtime"), ts)
         #make the new entry into table locations
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))
+        count <- count + 1
       }
-    }, error = function(e) {
-      print(paste0("Hydro_update_hourly failed on location ", locations$location[i], " and data type ", locations$data_type[i], ". The station may be seasonally or permanently deactivated, or there is no new data yet."))
-    }
+    }, error = function(e) {}
     )
   }
+  print(paste0(count, " out of ", nrow(locations), " stations were updated."))
 
 } #End of function
 
