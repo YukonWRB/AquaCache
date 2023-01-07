@@ -56,7 +56,7 @@ initial_create <- function(path) {
 
   # And lastly a table that holds metadata for all locations
   DBI::dbCreateTable(hydro, "datum_conversions", fields = c(location = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_conversions_index ON datum_conversions (location, datum_id_from, datum_id_to);")
+  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_conversions_index ON datum_conversions (location, datum_id_from, datum_id_to, current);")
 
   DBI::dbCreateTable(hydro, "datum_list", fields = c(datum_id = NA, datum_name_en = NA, datum_name_fr = NA))
   DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_list_index ON datum_list (datum_id);")
@@ -72,7 +72,7 @@ initial_create <- function(path) {
   DBI::dbListTables(hydro)
 
   #Populate the 'settings' table with defaults
-  settings <- data.frame(parameter = c("WSC level preliminary visible", "WSC flow preliminary visible", "WRB level preliminary visible", "WRB flow prelininary visible", "WRB level min grade", "WRB flow min grade", "WRB snow pillow preliminary visible", "WRB snow pillow min grade"), value = c(TRUE, TRUE, TRUE, TRUE, "C", "C", TRUE, "C"))
+  settings <- data.frame(parameter = c("level unapproved visible", "flow unapproved visible", "snow unapproved visible", "bridge distance unapproved visible", "level min grade", "flow min grade", "snow min grade", "bridge distance min grade"), value = c(TRUE, TRUE, TRUE, TRUE, "C", "C", "C", "C"))
   RSQLite::dbWriteTable(hydro, "settings", settings, overwrite = TRUE)
 
 

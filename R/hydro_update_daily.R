@@ -80,12 +80,14 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
 
   print("Checking tables to see if there are new entries...")
+  new_stns <- FALSE
   new_locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE start_datetime IS NULL AND name IS NOT 'FAILED'")
   if (nrow(new_locations) > 0){ #if TRUE, some new station or data type for an existing station has been added to the locations table
     print("New station(s) detected in locations table.")
+    locations_check_before <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED'")
     #find the new station
     for (i in 1:nrow(new_locations)){
-      print(paste0("Attempting to add station ", new_locations$location[i], " for type ", new_locations$data_type[i], ". Locations table as well as measurement tables will be populated."))
+      print(paste0("Attempting to add location ", new_locations$location[i], " for type ", new_locations$data_type[i], ". Locations table as well as measurement tables will be populated if successful."))
       tryCatch({
         if (new_locations$data_type[i] == "SWE" & aquarius){ #only option is an aquarius station
           data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = SWE, server = server)
@@ -286,10 +288,12 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         print(paste0("Successfully added station ", new_locations$location[i], " for type ", new_locations$data_type[i], "."))
       }, error = function(e) {
         DBI::dbExecute(hydro, paste0("UPDATE locations SET name = 'FAILED' WHERE location = '", new_locations$location[i], "' AND data_type = '", new_locations$data_type[i], "'"))
+        print(paste0("Failed to retrieve data from location ", new_locations$location[i], " for type ", new_locations$data_type[i], ". The location was flagged as 'FAILED' in the locations table, clear this flag to try again."))
       })
     } #End of for loop that works on every new station
-    locations_check <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED'")
-    if (nrow(locations_check) < nrow(new_locations)){
+    locations_check_after <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED'")
+    new_failed <- nrow(locations_check_after) - nrow(locations_check_before)
+    if (new_failed < nrow(new_locations)){
       new_stns <- TRUE
     }
   } #End of if loop to deal with new stations
@@ -346,8 +350,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         conversion <- WRBtools::aq_download(loc_id = unique(locations_WRB$location)[i], ts_name = ts_name, start = Sys.Date()-1, server = server)$metadata
         conversion <- conversion[7,2]
         all_datums[i, ] <- c(unique(locations_WRB$location)[i], datum_id_from = 10, datum_id_to = 110, conversion_m = conversion, current = TRUE)
-        datum_conversions <- rbind(datum_conversions, all_datums)
       }
+      datum_conversions <- rbind(datum_conversions, all_datums)
     }
     RSQLite::dbWriteTable(hydro, "datum_conversions", datum_conversions, overwrite=TRUE)
     print("Table datum_conversions was updated because of either a new copy of HYDAT, addition of new stations, or detection of datums missing from a/some stations.")
