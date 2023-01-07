@@ -7,8 +7,8 @@
 hydro_update_hourly(
   path,
   aquarius = TRUE,
-  stage = "Stage.Publish",
-  discharge = "Discharge.Publish",
+  stage = "Stage.Corrected",
+  discharge = "Discharge.Master",
   SWE = "SWE.Corrected",
   depth = "Snow Depth.TempCompensated.Corrected",
   distance = "Distance.Corrected",
@@ -20,15 +20,15 @@ hydro_update_hourly(
 
 \item{aquarius}{TRUE if you are fetching data from Aquarius, in which case you should also check the next five parameters. FALSE will only populate with WSC data.}
 
-\item{stage}{The name of the stage(level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names. !This DOES NOT apply to WSC stations mirrored in Aquarius.}
+\item{stage}{The name of the stage (level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.}
 
-\item{discharge}{The name of the discharge(flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names. !This DOES NOT apply to WSC stations mirrored in Aquarius.}
+\item{discharge}{The name of the discharge (flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.}
 
-\item{SWE}{The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.}
+\item{SWE}{The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.}
 
-\item{depth}{The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.}
+\item{depth}{The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.}
 
-\item{distance}{The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same names. Usually used for distance from bridge girders to water surface.}
+\item{distance}{The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.}
 
 \item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
 }

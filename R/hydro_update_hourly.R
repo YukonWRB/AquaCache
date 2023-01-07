@@ -8,11 +8,11 @@
 #'
 #' @param path The path to the local hydro SQLite database, with extension.
 #' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next five parameters. FALSE will only populate with WSC data.
-#' @param stage The name of the stage(level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names. !This DOES NOT apply to WSC stations mirrored in Aquarius.
-#' @param discharge The name of the discharge(flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names. !This DOES NOT apply to WSC stations mirrored in Aquarius.
-#' @param SWE The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.
-#' @param depth The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same names.
-#' @param distance The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same names. Usually used for distance from bridge girders to water surface.
+#' @param stage The name of the stage (level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.
+#' @param discharge The name of the discharge (flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.
+#' @param SWE The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.
+#' @param depth The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.
+#' @param distance The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return The database is updated in-place.
@@ -22,8 +22,6 @@
 hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
 {
-  library(tidyhydat.ws) #This needs to be removed once tidyhydat.ws is updated with properly formatted package data. Same for "require" call in Description and @import in function headers.
-  on.exit(detach("package:tidyhydat.ws", unload= TRUE))
 
   if (aquarius){
     if (is.null(Sys.getenv("AQPASS"))){
@@ -34,7 +32,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
     }
   }
   if (is.null(Sys.getenv("WS_USRNM"))){
-    stop("Your WSC user name must be available in the .Renviron file in the form WS_USRNM='yourusername'")
+   stop("Your WSC user name must be available in the .Renviron file in the form WS_USRNM='yourusername'")
   }
   if (is.null(Sys.getenv("WS_PWD"))){
     stop("Your WSC password must be available in the .Renviron file in the form WS_PWD='yourpassword'")
@@ -45,7 +43,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
   DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
 
   count <- 0 #counter for number of successful stations
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
     type <- locations$data_type[i]
@@ -80,7 +78,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
     }, error = function(e) {}
     )
   }
-  print(paste0(count, " out of ", nrow(locations), " stations were updated."))
+  print(paste0(count, " out of ", nrow(locations), " locations were updated."))
 
 } #End of function
 

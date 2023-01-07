@@ -21,8 +21,6 @@
 initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
   {
-  library(tidyhydat.ws) #This needs to be removed once tidyhydat.ws is updated with properly formated package data. Same for "require" call in Description and @import in function headers.
-  on.exit(detach("package:tidyhydat.ws", unload= TRUE))
 
   if (tolower(WSC_stns) == "yukon"){
     #Yukon and Liard WSC locations
