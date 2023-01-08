@@ -121,6 +121,9 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
                            .groups = "drop")
         gap_realtime <- gap_realtime[,c(3:6)]
         names(gap_realtime) <- c("date", "value", "grade", "approval")
+        if (min(gap_realtime$date) >= last_day_historic){ #Makes a data point if there is no data for that day, this way stats will be calculated for that day later.
+          gap_realtime <- rbind(gap_realtime, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA))
+        }
         gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE)
         gap_realtime$units <- if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "distance") "m"
         gap_realtime$location <- loc
@@ -149,12 +152,16 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
                                                                          lubridate::yday(.data$date) - 1),
                                                                   lubridate::yday(.data$date)))
 
-      #selects only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated)
+      #selects only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated). Selects valid rows even if there is no current value, ensuring complete plotting parameters.
       missing_stats <- missing_stats[order(missing_stats[ , "date"]) , ]
       all_stats <- all_stats[order(all_stats[ , "date"]) , ]
-      all_stats <- all_stats[!(is.na(all_stats$value)), ]
-      duplicated <- all_stats[duplicated(all_stats$dayofyear),]
-      missing_stats <- missing_stats[missing_stats$date %in% duplicated$date , ]
+      temp <- data.frame()
+      for (i in unique(missing_stats$dayofyear)){
+        earliest <- all_stats[all_stats$dayofyear == i & !is.na(all_stats$value), ]$date[2]
+        missing <- missing_stats[missing_stats$dayofyear == i & missing_stats$date > earliest , ]
+        temp <- rbind(temp, missing)
+      }
+      missing_stats <- temp
 
       if (nrow(missing_stats) > 0){
         for (j in 1:nrow(missing_stats)){

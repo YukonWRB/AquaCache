@@ -455,6 +455,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     operator <- locations$operator[i]
 
     last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM ", table_name, "_daily WHERE location = '", loc, "'"))[1,]
+    #TODO: the step below is slow, needs to querry a very large table. Can it be done another way?
     earliest_day_realtime <- as.character(as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM ", table_name, "_realtime WHERE location = '", loc, "'"))[1,]))
     if (!is.na(last_day_historic) & !is.na(earliest_day_realtime)){
       if (last_day_historic > as.character(as.Date(earliest_day_realtime) + 2)) {
@@ -475,13 +476,17 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
                          .groups = "drop")
       gap_realtime <- gap_realtime[,c(3:6)]
       names(gap_realtime) <- c("date", "value", "grade", "approval")
-      gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE)
+      if (min(gap_realtime$date) >= last_day_historic){ #Makes a data point if there is no data for that day, this way stats will be calculated for that day later.
+        gap_realtime <- rbind(gap_realtime, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA))
+      }
+      gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
       gap_realtime$units <- if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "distance") "m"
       gap_realtime$location <- loc
       gap_realtime$date <- as.character(gap_realtime$date)
       DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_daily WHERE date >= '", min(gap_realtime$date), "' AND location = '", loc, "'"))
       DBI::dbAppendTable(hydro, paste0(table_name, "_daily"), gap_realtime)
     }
+    #TODO: surely there's a way to remove the DELETE and APPEND operations above, and only do it once after stats are calculated?
 
     # Now calculate stats where they are missing
     all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM ", table_name, "_daily WHERE location = '", loc, "'"))
@@ -503,12 +508,16 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
                                                                        lubridate::yday(.data$date) - 1),
                                                                 lubridate::yday(.data$date)))
 
-    #selects only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated)
+    #selects only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated). Selects valid rows even if there is no current value, ensuring complete plotting parameters.
     missing_stats <- missing_stats[order(missing_stats[ , "date"]) , ]
     all_stats <- all_stats[order(all_stats[ , "date"]) , ]
-    all_stats <- all_stats[!(is.na(all_stats$value)), ]
-    duplicated <- all_stats[duplicated(all_stats$dayofyear),]
-    missing_stats <- missing_stats[missing_stats$date %in% duplicated$date , ]
+    temp <- data.frame()
+    for (i in unique(missing_stats$dayofyear)){
+      earliest <- all_stats[all_stats$dayofyear == i & !is.na(all_stats$value), ]$date[2]
+      missing <- missing_stats[missing_stats$dayofyear == i & missing_stats$date > earliest , ]
+      temp <- rbind(temp, missing)
+    }
+    missing_stats <- temp
 
     if (nrow(missing_stats) > 0){
     for (j in 1:nrow(missing_stats)){
