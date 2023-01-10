@@ -48,7 +48,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
   print("Getting realtime information up to date with hydro_update_hourly...")
   hourly_start <- Sys.time()
-  hydro_update_hourly(path = path, aquarius = aquarius, stage = stage, discharge = discharge, SWE = SWE, depth = depth, server = server)
+  success <- hydro_update_hourly(path = path, aquarius = aquarius, stage = stage, discharge = discharge, SWE = SWE, depth = depth, server = server)
   hourly_duration <- Sys.time() - hourly_start
   print(paste0("Hydro_update_hourly executed in ", round(hourly_duration[[1]], 2), " ", units(hourly_duration), "."))
 
@@ -97,6 +97,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           DBI::dbAppendTable(hydro, "snow_pillow_SWE_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'meteorology' WHERE location = '", new_locations$location[i], "' AND data_type = 'SWE'"))
+          operator <- "WRB"
+          table_name <- "snow_pillow_SWE"
 
         } else if (new_locations$data_type[i] == "depth" & aquarius){ #only option is an aquarius station
           data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = depth, server = server)
@@ -106,6 +108,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           DBI::dbAppendTable(hydro, "snow_pillow_depth_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'meteorology' WHERE location = '", new_locations$location[i], "' AND data_type = 'depth'"))
+          operator <- "WRB"
+          table_name <- "snow_pillow_depth"
 
         } else if (new_locations$data_type[i] == "distance" & aquarius){ #only option is an aquarius station
           data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = distance, server = server)
@@ -115,6 +119,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           DBI::dbAppendTable(hydro, "bridge_distance_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'highways' WHERE location = '", new_locations$location[i], "' AND data_type = 'distance'"))
+          operator <- "WRB"
+          table_name <- "bridge_distance"
 
         } else if(new_locations$data_type[i] == "flow"){#check for a WSC station first, then an Aquarius station
           WSC_fail <- TRUE
@@ -186,6 +192,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
 
             DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "' longitude = '", longitude, "' operator = 'WSC', network = 'Canada Yukon Hydrometric Network'"))
+            operator <- "WSC"
+            table_name <- "flow"
 
           }, error= function(e) {
             data_realtime <- NULL
@@ -200,6 +208,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             #make the new entry into table locations
             DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'Small Stream Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'flow'"))
           }
+          operator <- "WRB"
+          table_name <- "flow"
 
         } else if (new_locations$data_type[i] == "level") {#check for a WSC station first, then an Aquarius station
           WSC_fail <- TRUE
@@ -271,6 +281,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
 
             DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "' longitude = '", longitude, "' operator = 'WSC', network = 'Canada Yukon Hydrometric Network'"))
+            operator <- "WSC"
+            table_name <- "level"
 
           }, error= function(e) {
             data_realtime <- NULL
@@ -283,9 +295,12 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             DBI::dbAppendTable(hydro, "level_realtime", ts)
             #make the new entry into table locations
             DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'Small Stream Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'level'"))
+            operator <- "WRB"
+            table_name <- "level"
           }
         }
         print(paste0("Successfully added station ", new_locations$location[i], " for type ", new_locations$data_type[i], "."))
+        success <- rbind(success, data.frame("location" = new_locations$location[i], "data_type" = new_locations$data_type[i], "table_name" = table_name, "operator" = operator))
       }, error = function(e) {
         DBI::dbExecute(hydro, paste0("UPDATE locations SET name = 'FAILED' WHERE location = '", new_locations$location[i], "' AND data_type = '", new_locations$data_type[i], "'"))
         print(paste0("Failed to retrieve data from location ", new_locations$location[i], " for type ", new_locations$data_type[i], ". The location was flagged as 'FAILED' in the locations table, clear this flag to try again."))
@@ -433,10 +448,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           end_datetime <- max(c(end_datetime_realtime, end_datetime_historical))
           DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "' WHERE location = '", i, "' AND data_type = 'level'"))
         }
-
       }, error = function(e){}
       )
-
     } #End of for loop updating information contained in HYDAT
   } #End of section updating information contained in HYDAT if HYDAT is new
 
@@ -445,7 +458,11 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   #Get list of locations again in case it's changed.
   print("Calculating daily means and statistics...")
   stat_start <- Sys.time()
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
+  if (new_hydat){ #recalculate for all stations, as there might be new data
+    locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
+  } else { #only recalculate for necessary stations
+    locations <- success
+  }
   #calculate daily means for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
   for (i in 1:nrow(locations)){
@@ -476,7 +493,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
                          .groups = "drop")
       gap_realtime <- gap_realtime[,c(3:6)]
       names(gap_realtime) <- c("date", "value", "grade", "approval")
-      if (min(gap_realtime$date) >= last_day_historic){ #Makes a data point if there is no data for that day, this way stats will be calculated for that day later.
+      if (min(gap_realtime$date) >= last_day_historic){ #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
         gap_realtime <- rbind(gap_realtime, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA))
       }
       gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
@@ -491,6 +508,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     # Now calculate stats where they are missing
     all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM ", table_name, "_daily WHERE location = '", loc, "'"))
     missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", table_name, "_daily WHERE location = '", loc, "' AND max IS NULL"))
+    #TODO: the step above selects rows that get dropped later, and does this each time. How about just working with gap_realtime from above?
 
     # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the daily table without replacing it.
     feb_29 <- missing_stats[(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
@@ -512,30 +530,32 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     missing_stats <- missing_stats[order(missing_stats[ , "date"]) , ]
     all_stats <- all_stats[order(all_stats[ , "date"]) , ]
     temp <- data.frame()
-    for (i in unique(missing_stats$dayofyear)){
-      earliest <- all_stats[all_stats$dayofyear == i & !is.na(all_stats$value), ]$date[2]
-      missing <- missing_stats[missing_stats$dayofyear == i & missing_stats$date > earliest , ]
-      temp <- rbind(temp, missing)
+    for (j in unique(missing_stats$dayofyear)){
+      earliest <- all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]$date[2]
+      if (!is.na(earliest)){
+        missing <- missing_stats[missing_stats$dayofyear == j & missing_stats$date > earliest , ]
+        temp <- rbind(temp, missing)
+      }
     }
     missing_stats <- temp
 
     if (nrow(missing_stats) > 0){
-    for (j in 1:nrow(missing_stats)){
-      date <- missing_stats$date[j]
-      doy <- missing_stats$dayofyear[j]
-      current <- missing_stats$value[j]
+    for (k in 1:nrow(missing_stats)){
+      date <- missing_stats$date[k]
+      doy <- missing_stats$dayofyear[k]
+      current <- missing_stats$value[k]
       past <- all_stats[all_stats$dayofyear == doy & all_stats$date < date , ]$value #Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
       past <- past[!is.na(past)]
       if (length(past) >= 1){
-        missing_stats$max[j] <- max(past) #again, NOT including current measurement
-        missing_stats$min[j] <- min(past)
-        missing_stats$QP90[j] <- stats::quantile(past, 0.90)
-        missing_stats$QP75[j] <- stats::quantile(past, 0.75)
-        missing_stats$QP50[j] <- stats::quantile(past, 0.50)
-        missing_stats$QP25[j] <- stats::quantile(past, 0.25)
-        missing_stats$QP10[j] <- stats::quantile(past, 0.10)
+        missing_stats$max[k] <- max(past) #again, NOT including current measurement
+        missing_stats$min[k] <- min(past)
+        missing_stats$QP90[k] <- stats::quantile(past, 0.90)
+        missing_stats$QP75[k] <- stats::quantile(past, 0.75)
+        missing_stats$QP50[k] <- stats::quantile(past, 0.50)
+        missing_stats$QP25[k] <- stats::quantile(past, 0.25)
+        missing_stats$QP10[k] <- stats::quantile(past, 0.10)
         if (length(past) > 1 & !is.na(current)){ #need at least 2 measurements to calculate a percent historic!
-          missing_stats$percent_historic_range[j] <- ((current - min(past)) / (max(past) - min(past))) * 100
+          missing_stats$percent_historic_range[k] <- ((current - min(past)) / (max(past) - min(past))) * 100
         }
       }
     }
@@ -543,18 +563,18 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
 
       #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st. Unfortunately this means that initial setups done on those days will not calculate Feb 29!
       if (nrow(feb_29) > 0 & !(substr(as.character(as.Date(.POSIXct(Sys.time(), "UTC"))), 6, 10) %in% c("02-29", "03-01,", "03-02"))) {
-        for (k in 1:nrow(feb_29)){
-          date <- as.Date(feb_29$date[k])
+        for (l in 1:nrow(feb_29)){
+          date <- as.Date(feb_29$date[l])
           before <- missing_stats[missing_stats$date == date - 1 , ]
           after <- missing_stats[missing_stats$date == date + 1 , ]
-          feb_29$percent_historic_range[k] <- mean(c(before$percent_historic_range, after$percent_historic_range))
-          feb_29$max[k] <- mean(c(before$max, after$max))
-          feb_29$min[k] <- mean(c(before$min, after$min))
-          feb_29$QP90[k] <- mean(c(before$QP90, after$QP90))
-          feb_29$QP75[k] <- mean(c(before$QP75, after$QP75))
-          feb_29$QP50[k] <- mean(c(before$QP50, after$QP50))
-          feb_29$QP25[k] <- mean(c(before$QP25, after$QP25))
-          feb_29$QP10[k] <- mean(c(before$QP10, after$QP10))
+          feb_29$percent_historic_range[l] <- mean(c(before$percent_historic_range, after$percent_historic_range))
+          feb_29$max[l] <- mean(c(before$max, after$max))
+          feb_29$min[l] <- mean(c(before$min, after$min))
+          feb_29$QP90[l] <- mean(c(before$QP90, after$QP90))
+          feb_29$QP75[l] <- mean(c(before$QP75, after$QP75))
+          feb_29$QP50[l] <- mean(c(before$QP50, after$QP50))
+          feb_29$QP25[l] <- mean(c(before$QP25, after$QP25))
+          feb_29$QP10[l] <- mean(c(before$QP10, after$QP10))
         }
       }
       missing_stats <- rbind(missing_stats, feb_29)
