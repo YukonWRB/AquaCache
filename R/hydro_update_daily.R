@@ -77,7 +77,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   print("Checking tables to see if there are new entries...")
   new_stns <- FALSE
@@ -126,6 +126,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           WSC_fail <- TRUE
           tryCatch({
           #add new information to the realtime table
+            data_realtime <- NULL
           tryCatch({
             token <- suppressMessages(tidyhydat.ws::token_ws())
             data_realtime <- NULL
@@ -143,6 +144,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           )
 
           #Add new information to the historical table if possible
+          data_historical <- NULL
           tryCatch({
             data_historical <- tidyhydat::hy_daily_flows(new_locations$location[i])[,-c(3,5)]
             colnames(data_historical) <- c("location", "date", "value")
@@ -199,7 +201,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             data_realtime <- NULL
           })
 
-          if ((WSC_fail| is.null(nrow(data_realtime))) & aquarius){ #try for a WRB station
+          if ((WSC_fail | is.null(nrow(data_realtime))) & aquarius){ #try for a WRB station
             data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = discharge, server = server)
             name <- data$metadata[1,2]
             #add new information to the realtime table
@@ -215,6 +217,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           WSC_fail <- TRUE
           tryCatch({
             #add new information to the realtime table if possible
+            data_realtime <- NULL
             tryCatch({
               token <- suppressMessages(tidyhydat.ws::token_ws())
               data_realtime <- NULL
@@ -232,6 +235,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             )
 
             #add new information to the historical table if possible
+            data_historical <- NULL
             tryCatch({
               data_historical <- tidyhydat::hy_daily_levels(new_locations$location[i])[,-c(3,5)]
               colnames(data_historical) <- c("location", "date", "value")
@@ -456,7 +460,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
 
   ### Calculate new daily means from realtime data, followed by stats
   #Get list of locations again in case it's changed.
-  print("Calculating daily means and statistics...")
+  print("Calculating daily means and statistics on updated locations...")
   stat_start <- Sys.time()
   if (new_hydat){ #recalculate for all stations, as there might be new data
     locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
@@ -479,10 +483,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         last_day_historic <- as.character(as.Date(last_day_historic) - 2) #if the two days before last-day_historic are in the realtime data, recalculate last two days in case realtime data hadn't yet come in. This will also wipe the stats for those two days just in case.
       }
     } else if (is.na(last_day_historic) & !is.na(earliest_day_realtime)){
-      last_day_historic <- as.character(as.Date(earliest_day_realtime) - 1)
+      last_day_historic <- as.character(as.Date(earliest_day_realtime) - 2)
     }
 
-    gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC BETWEEN '", last_day_historic, " 23:59:59.99' AND '", .POSIXct(Sys.time(), "UTC"), "'"))
+    gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC BETWEEN '", last_day_historic, " 00:00:00' AND '", .POSIXct(Sys.time(), "UTC"), "'"))
     if (nrow(gap_realtime) > 0){
       gap_realtime <- gap_realtime %>%
         dplyr::group_by(lubridate::year(.data$datetime_UTC), lubridate::yday(.data$datetime_UTC)) %>%
@@ -493,7 +497,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
                          .groups = "drop")
       gap_realtime <- gap_realtime[,c(3:6)]
       names(gap_realtime) <- c("date", "value", "grade", "approval")
-      if (min(gap_realtime$date) >= last_day_historic){ #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
+      if (min(gap_realtime$date) > last_day_historic){ #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
         gap_realtime <- rbind(gap_realtime, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA))
       }
       gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
@@ -533,7 +537,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     for (j in unique(missing_stats$dayofyear)){
       earliest <- all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]$date[2]
       if (!is.na(earliest)){
-        missing <- missing_stats[missing_stats$dayofyear == j & missing_stats$date > earliest , ]
+        missing <- missing_stats[missing_stats$dayofyear == j & missing_stats$date >= earliest , ]
         temp <- rbind(temp, missing)
       }
     }

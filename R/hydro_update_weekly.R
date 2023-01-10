@@ -44,7 +44,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   recalculate <- data.frame()
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
@@ -57,8 +57,8 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
     tryCatch({
       if (operator == "WRB" & aquarius){
+        ts_name <- if(type == "SWE") SWE else if (type=="depth") depth else if (type == "level") stage else if (type == "flow") discharge else if (type == "distance") distance
         if (aquarius_range == "unapproved"){
-          ts_name <- if(type == "SWE") SWE else if (type=="depth") depth else if (type == "level") stage else if (type == "flow") discharge else if (type == "distance") distance
           first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM ", table_name, "_realtime WHERE location = '", locations$location[i], "' AND NOT approval = 'approved'"))[1,]
           data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = first_unapproved, server = server)
         } else if (aquarius_range == "all"){
@@ -163,7 +163,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
       for (j in unique(missing_stats$dayofyear)){
         earliest <- all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]$date[2]
         if (!is.na(earliest)){
-          missing <- missing_stats[missing_stats$dayofyear == j & missing_stats$date > earliest , ]
+          missing <- missing_stats[missing_stats$dayofyear == j & missing_stats$date >= earliest , ]
           temp <- rbind(temp, missing)
         }
       }

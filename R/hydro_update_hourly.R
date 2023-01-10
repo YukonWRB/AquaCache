@@ -40,7 +40,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   count <- 0 #counter for number of successful stations
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
@@ -75,7 +75,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
         #make the new entry into table locations
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))
         count <- count + 1
-        success <- rbind(success, data.frame("location" = loc, "date_type" = type, "table_name" = table_name, "operator" = operator))
+        success <- rbind(success, data.frame("location" = loc, "data_type" = type, "table_name" = table_name, "operator" = operator))
       }
     }, error = function(e) {}
     )
