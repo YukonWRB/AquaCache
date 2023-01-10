@@ -15,7 +15,7 @@
 #' @param distance The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
-#' @return The database is updated in-place.
+#' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @import tidyhydat.ws
 #' @export
 
@@ -40,10 +40,11 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=60000")
+  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   count <- 0 #counter for number of successful stations
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
+  success <- data.frame()
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
     type <- locations$data_type[i]
@@ -74,11 +75,12 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
         #make the new entry into table locations
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))
         count <- count + 1
+        success <- rbind(success, data.frame("location" = loc, "data_type" = type, "table_name" = table_name, "operator" = operator))
       }
     }, error = function(e) {}
     )
   }
   print(paste0(count, " out of ", nrow(locations), " locations were updated."))
-
+  return(success)
 } #End of function
 
