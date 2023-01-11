@@ -94,7 +94,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           name <- data$metadata[1,2]
           #add new information to the realtime table
           ts <- data.frame("location" = new_locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = "mm SWE", "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
-          DBI::dbAppendTable(hydro, "snow_pillow_SWE_realtime", ts)
+          DBI::dbAppendTable(hydro, "snow_SWE_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'meteorology' WHERE location = '", new_locations$location[i], "' AND data_type = 'SWE'"))
 
@@ -103,7 +103,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           name <- data$metadata[1,2]
           #add new information to the realtime table
           ts <- data.frame("location" = new_locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = "cm", "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
-          DBI::dbAppendTable(hydro, "snow_pillow_depth_realtime", ts)
+          DBI::dbAppendTable(hydro, "snow_depth_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'meteorology' WHERE location = '", new_locations$location[i], "' AND data_type = 'depth'"))
 
@@ -112,7 +112,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           name <- data$metadata[1,2]
           #add new information to the realtime table
           ts <- data.frame("location" = new_locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = "m", "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
-          DBI::dbAppendTable(hydro, "bridge_distance_realtime", ts)
+          DBI::dbAppendTable(hydro, "distance_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'highways' WHERE location = '", new_locations$location[i], "' AND data_type = 'distance'"))
 
@@ -453,7 +453,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
     type <- locations$data_type[i]
-    table_name <- if (type == "SWE") "snow_pillow_SWE" else if (type == "depth") "snow_pillow_depth" else if (type == "distance") "bridge_distance" else type
+    table_name <- if (type == "SWE") "snow_SWE" else if (type == "depth") "snow_depth" else if (type == "distance") "distance" else type
     operator <- locations$operator[i]
 
     last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM ", table_name, "_daily WHERE location = '", loc, "'"))[1,]
