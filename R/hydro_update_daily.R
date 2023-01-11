@@ -97,8 +97,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           DBI::dbAppendTable(hydro, "snow_pillow_SWE_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'meteorology' WHERE location = '", new_locations$location[i], "' AND data_type = 'SWE'"))
-          operator <- "WRB"
-          table_name <- "snow_pillow_SWE"
 
         } else if (new_locations$data_type[i] == "depth" & aquarius){ #only option is an aquarius station
           data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = depth, server = server)
@@ -108,8 +106,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           DBI::dbAppendTable(hydro, "snow_pillow_depth_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'meteorology' WHERE location = '", new_locations$location[i], "' AND data_type = 'depth'"))
-          operator <- "WRB"
-          table_name <- "snow_pillow_depth"
 
         } else if (new_locations$data_type[i] == "distance" & aquarius){ #only option is an aquarius station
           data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = distance, server = server)
@@ -119,44 +115,42 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
           DBI::dbAppendTable(hydro, "bridge_distance_realtime", ts)
           #make the new entry into table locations
           DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'highways' WHERE location = '", new_locations$location[i], "' AND data_type = 'distance'"))
-          operator <- "WRB"
-          table_name <- "bridge_distance"
 
         } else if(new_locations$data_type[i] == "flow"){#check for a WSC station first, then an Aquarius station
           WSC_fail <- TRUE
           tryCatch({
-          #add new information to the realtime table
+            #add new information to the realtime table
             data_realtime <- NULL
-          tryCatch({
-            token <- suppressMessages(tidyhydat.ws::token_ws())
-            data_realtime <- NULL
-            data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_locations$location[i], 47, start_date = Sys.Date()-577, token = token))
-            data_realtime <- data_realtime[,c(2,4,1)]
-            names(data_realtime) <- c("datetime_UTC", "value", "location")
-            data_realtime$datetime_UTC <- as.character(data_realtime$datetime_UTC)
-            data_realtime$approval <- "preliminary"
-            data_realtime$units <- "m3/s"
-            DBI::dbAppendTable(hydro, "flow_realtime", data_realtime)
-            WSC_fail <- FALSE
-          }, error = function(e) {
-            data_realtime <- NULL
-          }
-          )
+            tryCatch({
+              token <- suppressMessages(tidyhydat.ws::token_ws())
+              data_realtime <- NULL
+              data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_locations$location[i], 47, start_date = Sys.Date()-577, token = token))
+              data_realtime <- data_realtime[,c(2,4,1)]
+              names(data_realtime) <- c("datetime_UTC", "value", "location")
+              data_realtime$datetime_UTC <- as.character(data_realtime$datetime_UTC)
+              data_realtime$approval <- "preliminary"
+              data_realtime$units <- "m3/s"
+              DBI::dbAppendTable(hydro, "flow_realtime", data_realtime)
+              WSC_fail <- FALSE
+            }, error = function(e) {
+              data_realtime <- NULL
+            }
+            )
 
-          #Add new information to the historical table if possible
-          data_historical <- NULL
-          tryCatch({
-            data_historical <- tidyhydat::hy_daily_flows(new_locations$location[i])[,-c(3,5)]
-            colnames(data_historical) <- c("location", "date", "value")
-            data_historical$approval <- "approved"
-            data_historical$units <- "m3/s"
-            data_historical$date <- as.character(data_historical$date)
-            DBI::dbAppendTable(hydro, "flow_daily", data_historical)
-            WSC_fail <- FALSE
-          }, error = function(e){
+            #Add new information to the historical table if possible
             data_historical <- NULL
-          }
-          )
+            tryCatch({
+              data_historical <- tidyhydat::hy_daily_flows(new_locations$location[i])[,-c(3,5)]
+              colnames(data_historical) <- c("location", "date", "value")
+              data_historical$approval <- "approved"
+              data_historical$units <- "m3/s"
+              data_historical$date <- as.character(data_historical$date)
+              DBI::dbAppendTable(hydro, "flow_daily", data_historical)
+              WSC_fail <- FALSE
+            }, error = function(e){
+              data_historical <- NULL
+            }
+            )
 
             #make the new entry into the locations table if possible
             if (!is.null(data_realtime)){
@@ -191,17 +185,14 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             if(length(latitude) < 1) {latitude <- NULL}
             tryCatch({longitude <- tidyhydat::hy_stations(new_locations$location[i])$LONGITUDE}, error = function(e) {longitude <- NULL})
             if(length(longitude) < 1) {longitude <- NULL}
-            name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
+            name <- stringr::str_to_title(tidyhydat::hy_stations(new_locations$location[i])$STATION_NAME)
 
-            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "' longitude = '", longitude, "' operator = 'WSC', network = 'Canada Yukon Hydrometric Network'"))
-            operator <- "WSC"
-            table_name <- "flow"
+            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "', longitude = '", longitude, "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'flow'"))
 
           }, error= function(e) {
-            data_realtime <- NULL
           })
 
-          if ((WSC_fail | is.null(nrow(data_realtime))) & aquarius){ #try for a WRB station
+          if (WSC_fail & aquarius){ #try for a WRB station
             data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = discharge, server = server)
             name <- data$metadata[1,2]
             #add new information to the realtime table
@@ -210,8 +201,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             #make the new entry into table locations
             DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'Small Stream Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'flow'"))
           }
-          operator <- "WRB"
-          table_name <- "flow"
 
         } else if (new_locations$data_type[i] == "level") {#check for a WSC station first, then an Aquarius station
           WSC_fail <- TRUE
@@ -284,14 +273,12 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             if(length(longitude) < 1) {longitude <- NULL}
             name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
 
-            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "' longitude = '", longitude, "' operator = 'WSC', network = 'Canada Yukon Hydrometric Network'"))
-            operator <- "WSC"
-            table_name <- "level"
+            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "', longitude = '", longitude, "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'level'"))
 
           }, error= function(e) {
-            data_realtime <- NULL
           })
-          if ((WSC_fail | is.null(nrow(data_realtime))) & aquarius){ #try for a WRB station
+
+          if (WSC_fail & aquarius){ #try for a WRB station
             data <- WRBtools::aq_download(loc_id = new_locations$location[i], ts_name = stage, server = server)
             name <- data$metadata[1,2]
             #add new information to the realtime table
@@ -299,12 +286,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             DBI::dbAppendTable(hydro, "level_realtime", ts)
             #make the new entry into table locations
             DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime = '", as.character(max(data$timeseries$timestamp_UTC)),"', latitude = ", data$metadata$value[5], ", longitude = ", data$metadata$value[6], ", operator = 'WRB', network = 'Small Stream Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'level'"))
-            operator <- "WRB"
-            table_name <- "level"
           }
         }
         print(paste0("Successfully added station ", new_locations$location[i], " for type ", new_locations$data_type[i], "."))
-        success <- rbind(success, data.frame("location" = new_locations$location[i], "data_type" = new_locations$data_type[i], "table_name" = table_name, "operator" = operator))
       }, error = function(e) {
         DBI::dbExecute(hydro, paste0("UPDATE locations SET name = 'FAILED' WHERE location = '", new_locations$location[i], "' AND data_type = '", new_locations$data_type[i], "'"))
         print(paste0("Failed to retrieve data from location ", new_locations$location[i], " for type ", new_locations$data_type[i], ". The location was flagged as 'FAILED' in the locations table, clear this flag to try again."))
@@ -460,13 +444,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
 
   ### Calculate new daily means from realtime data, followed by stats
   #Get list of locations again in case it's changed.
-  print("Calculating daily means and statistics on updated locations...")
+  print("Calculating daily means and statistics...")
   stat_start <- Sys.time()
-  if (new_hydat){ #recalculate for all stations, as there might be new data
-    locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
-  } else { #only recalculate for necessary stations
-    locations <- success
-  }
+  #TODO: sadly, the removed code above cannot work if hydro_update_hourly is called by itself, outside of this function. One possible fix is to add a column somewhere that contains information about when stats were last calculated; if this datetime is younger than the most recent data available, then recalculate, otherwise do nothing
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
   #calculate daily means for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
   for (i in 1:nrow(locations)){
