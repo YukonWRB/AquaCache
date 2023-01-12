@@ -23,184 +23,186 @@ initial_create <- function(path) {
   # level realtime table
 
   DBI::dbExecute(hydro, "CREATE TABLE level_realtime (
-                 location,
-                 datetime_UTC,
-                 value,
-                 units,
-                 grade,
-                 approval,
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
   # flow realtime table
   DBI::dbExecute(hydro, "CREATE TABLE flow_realtime (
-                 location,
-                 datetime_UTC,
-                 value,
-                 units,
-                 grade,
-                 approval,
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
   # level daily table
   DBI::dbExecute(hydro, "CREATE TABLE level_daily (
-                 location,
-                 date,
-                 value,
-                 units,
-                 grade,
-                 approval,
-                 percent_historic_range,
-                 max,
-                 min,
-                 QP90,
-                 QP75,
-                 QP50,
-                 QP25,
-                 QP10,
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
 
   # flow daily table
   DBI::dbExecute(hydro, "CREATE TABLE flow_daily (
-                 location,
-                 date,
-                 value,
-                 units,
-                 grade,
-                 approval,
-                 percent_historic_range,
-                 max,
-                 min,
-                 QP90,
-                 QP75,
-                 QP50,
-                 QP25,
-                 QP10,
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
 
   # snow pillow data
   DBI::dbExecute(hydro, "CREATE TABLE snow_SWE_realtime (
-                 location,
-                 datetime_UTC,
-                 value,
-                 units,
-                 grade,
-                 approval,
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade NUMERIC,
+                 approval NUMERIC,
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
   DBI::dbExecute(hydro, "CREATE TABLE snow_SWE_daily (
-                 location,
-                 date,
-                 value,
-                 units,
-                 grade,
-                 approval,
-                 percent_historic_range,
-                 max,
-                 min,
-                 QP90,
-                 QP75,
-                 QP50,
-                 QP25,
-                 QP10,
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
 
   #snow depth data
   DBI::dbExecute(hydro, "CREATE TABLE snow_depth_realtime (
-                 location,
-                 datetime_UTC,
-                 value,
-                 units,
-                 grade,
-                 approval,
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
   DBI::dbExecute(hydro, "CREATE TABLE snow_depth_daily (
-                 location,
-                 date,
-                 value,
-                 units,
-                 grade,
-                 approval,
-                 percent_historic_range,
-                 max,
-                 min,
-                 QP90,
-                 QP75,
-                 QP50,
-                 QP25,
-                 QP10,
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value, NUMERIC
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
 
   # Distance data
   DBI::dbExecute(hydro, "CREATE TABLE distance_realtime (
-                 location,
-                 datetime_UTC,
-                 value,
-                 units,
-                 grade,
-                 approval,
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
   DBI::dbExecute(hydro, "CREATE TABLE distance_daily (
-                 location,
-                 date,
-                 value,
-                 units,
-                 grade,
-                 approval,
-                 percent_historic_range,
-                 max,
-                 min,
-                 QP90,
-                 QP75,
-                 QP50,
-                 QP25,
-                 QP10,
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
 
   # And tables that hold metadata for all locations
   DBI::dbExecute(hydro, "CREATE TABLE datum_conversions (
-                 location,
-                 datum_id_from,
-                 datum_id_to,
-                 current,
+                 location TEXT NOT NULL,
+                 datum_id_from INTEGER NOT NULL,
+                 datum_id_to INTEGER NOT NULL,
+                 conversion_m NUMERIC NOT NULL,
+                 current BOOLEAN NOT NULL,
                  PRIMARY KEY (location, datum_id_to))
                  WITHOUT ROWID")
 
   DBI::dbExecute(hydro, "CREATE TABLE datum_list (
-                 datum_id,
-                 datum_name_en,
-                 datum_name_fr,
+                 datum_id INTEGER NOT NULL,
+                 datum_name_en TEXT NOT NULL,
+                 datum_name_fr TEXT NOT NULL,
                  PRIMARY KEY (datum_id))
                  WITHOUT ROWID")
 
   DBI::dbExecute(hydro, "CREATE TABLE locations (
-                 location,
-                 name,
-                 data_type,
-                 start_datetime,
-                 end_datetime,
-                 latitude,
-                 longitude,
-                 operator,
-                 network,
+                 location TEXT NOT NULL,
+                 name TEXT,
+                 data_type TEXT NOT NULL,
+                 start_datetime TEXT,
+                 end_datetime TEXT,
+                 latitude NUMERIC,
+                 longitude NUMERIC,
+                 operator TEXT,
+                 network TEXT,
                  PRIMARY KEY (location, data_type))
                  WITHOUT ROWID")
+  #Note for locations table: many columns are not NOT NULL because they have to accept null values for intial creation. This is not an oversight.
 
   # And a table to hold value pairs to control timeseries visibility
   DBI::dbExecute(hydro, "CREATE TABLE settings (
-                 parameter,
-                 value,
+                 parameter TEXT NOT NULL,
+                 value TEXT,
                  PRIMARY KEY (parameter))
                  WITHOUT ROWID")
 

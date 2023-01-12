@@ -76,7 +76,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   }
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
-  on.exit(DBI::dbDisconnect(hydro))
+  # on.exit(DBI::dbExecute(hydro, "PRAGMA analysis_limit=10000")) #Sets the number of rows on which PRAGMA optimize runs
+  # on.exit(DBI::dbExecute(hydro, "PRAGMA optimize"), add=TRUE) #Builds/rebuilds internal tables that speed up later queries
+  on.exit(DBI::dbDisconnect(hydro), add=TRUE)
   DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   print("Checking tables to see if there are new entries...")
@@ -187,7 +189,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             if(length(longitude) < 1) {longitude <- NULL}
             name <- stringr::str_to_title(tidyhydat::hy_stations(new_locations$location[i])$STATION_NAME)
 
-            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "', longitude = '", longitude, "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'flow'"))
+            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = ", latitude, ", longitude = ", longitude, ", operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'flow'"))
 
           }, error= function(e) {
           })
@@ -273,7 +275,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             if(length(longitude) < 1) {longitude <- NULL}
             name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
 
-            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = '", latitude, "', longitude = '", longitude, "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'level'"))
+            DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "', latitude = ", latitude, ", longitude = ", longitude, ", operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_locations$location[i], "' AND data_type = 'level'"))
 
           }, error= function(e) {
           })
@@ -461,7 +463,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     earliest_day_realtime <- as.character(as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM ", table_name, "_realtime WHERE location = '", loc, "'"))[1,]))
     if (!is.na(last_day_historic) & !is.na(earliest_day_realtime)){
       if (last_day_historic > as.character(as.Date(earliest_day_realtime) + 2)) {
-        last_day_historic <- as.character(as.Date(last_day_historic) - 2) #if the two days before last-day_historic are in the realtime data, recalculate last two days in case realtime data hadn't yet come in. This will also wipe the stats for those two days just in case.
+        last_day_historic <- as.character(as.Date(last_day_historic) - 2) #if the two days before last_day_historic are in the realtime data, recalculate last two days in case realtime data hadn't yet come in. This will also wipe the stats for those two days just in case.
       }
     } else if (is.na(last_day_historic) & !is.na(earliest_day_realtime)){
       last_day_historic <- as.character(as.Date(earliest_day_realtime) - 2)

@@ -21,6 +21,7 @@
 initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
   {
+  #NOTE: be careful with SQL statements and additions/updates to rows. Values that are in 'single quotes' are entered as character (text) values, even if the value is only numbers. To have numbers as numeric values, leave the single quote out. This is done automatically when appending a data.frame based on the column type, so long as the column type is what you need!
 
   if (tolower(WSC_stns) == "yukon"){
     #Yukon and Liard WSC locations
@@ -195,7 +196,7 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
         latitude <- tidyhydat::hy_stations(i)$LATITUDE
         longitude <- tidyhydat::hy_stations(i)$LONGITUDE
         name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
-        DBI::dbExecute(hydro, paste0("INSERT INTO locations (location, name, data_type, start_datetime, end_datetime, latitude, longitude, operator, network) VALUES ('", i, "', '", name, "', 'level', '", start_datetime, "', '", end_datetime, "', '", latitude, "', '", longitude, "', 'WSC', 'Canada Yukon Hydrometric Network')"))
+        DBI::dbExecute(hydro, paste0("INSERT INTO locations (location, name, data_type, start_datetime, end_datetime, latitude, longitude, operator, network) VALUES ('", i, "', '", name, "', 'level', '", start_datetime, "', '", end_datetime, "', ", latitude, ", ", longitude, ", 'WSC', 'Canada Yukon Hydrometric Network')"))
       } else if (is.null(existing$end_datetime)) {
         end_datetime <- paste0(max(level$date), " 00:00:00")
         DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "' WHERE location = '", i, "' AND data_type = 'level'"))
