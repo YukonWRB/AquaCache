@@ -87,8 +87,8 @@ initial_create <- function(path) {
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
                  units TEXT,
-                 grade NUMERIC,
-                 approval NUMERIC,
+                 grade TEXT,
+                 approval TEXT,
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
@@ -124,7 +124,7 @@ initial_create <- function(path) {
   DBI::dbExecute(hydro, "CREATE TABLE snow_depth_daily (
                  location TEXT NOT NULL,
                  date TEXT NOT NULL,
-                 value, NUMERIC
+                 value NUMERIC,
                  units TEXT,
                  grade TEXT,
                  approval TEXT,
