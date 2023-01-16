@@ -1,6 +1,6 @@
 #' Initial hydro database creation.
 #'
-#' Creates an SQLite database or replaces an existing database. Established pre-set table structure and populates defaults in the "settings" table.
+#' Creates an SQLite database or replaces an existing database. Established pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and data_type, location and datetime_UTC, or location and date columns.
 #'
 #' @param path The path to the local hydro SQLite database or the location where it should be created, with extension.
 #'
@@ -21,59 +21,197 @@ initial_create <- function(path) {
 
   # Create the tables for WSC data first
   # level realtime table
-  DBI::dbCreateTable(hydro, "level_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX level_minute_index ON level_realtime (datetime_UTC, location);")
+
+  DBI::dbExecute(hydro, "CREATE TABLE level_realtime (
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 PRIMARY KEY (location, datetime_UTC))
+                 WITHOUT ROWID")
+
   # flow realtime table
-  DBI::dbCreateTable(hydro, "flow_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX flow_minute_index ON flow_realtime (datetime_UTC, location);")
-  # level historic table
-  DBI::dbCreateTable(hydro, "level_daily", fields = c(location = NA, date = NA, value = NA, units = NA, grade = NA, approval = NA,percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX level_daily_index ON level_daily (date, location);")
-  # flow historic table
-  DBI::dbCreateTable(hydro, "flow_daily", fields = c(location = NA, date = NA, value = NA, units = NA, grade = NA, approval =NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX flow_daily_index ON flow_daily (date, location);")
+  DBI::dbExecute(hydro, "CREATE TABLE flow_realtime (
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 PRIMARY KEY (location, datetime_UTC))
+                 WITHOUT ROWID")
+
+  # level daily table
+  DBI::dbExecute(hydro, "CREATE TABLE level_daily (
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
+                 PRIMARY KEY (location, date))
+                 WITHOUT ROWID")
+
+  # flow daily table
+  DBI::dbExecute(hydro, "CREATE TABLE flow_daily (
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
+                 PRIMARY KEY (location, date))
+                 WITHOUT ROWID")
 
   # snow pillow data
-  DBI::dbCreateTable(hydro, "snow_pillow_SWE_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX snow_pillow_SWE_minute_index ON snow_pillow_SWE_realtime (datetime_UTC, location);")
+  DBI::dbExecute(hydro, "CREATE TABLE snow_SWE_realtime (
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 PRIMARY KEY (location, datetime_UTC))
+                 WITHOUT ROWID")
 
-  DBI::dbCreateTable(hydro, "snow_pillow_SWE_daily", fields = c(location= NA, date = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX snow_pillow_SWE_daily_index ON snow_pillow_SWE_daily (date, location);")
+  DBI::dbExecute(hydro, "CREATE TABLE snow_SWE_daily (
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
+                 PRIMARY KEY (location, date))
+                 WITHOUT ROWID")
 
-  DBI::dbCreateTable(hydro, "snow_pillow_depth_realtime", field = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX snow_pillow_depth_minute_index ON snow_pillow_depth_realtime (datetime_UTC, location);")
+  #snow depth data
+  DBI::dbExecute(hydro, "CREATE TABLE snow_depth_realtime (
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 PRIMARY KEY (location, datetime_UTC))
+                 WITHOUT ROWID")
 
-  DBI::dbCreateTable(hydro, "snow_pillow_depth_daily",  fields = c(location= NA, date = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX snow_pillow_depth_daily_index ON snow_pillow_depth_daily (date, location);")
+  DBI::dbExecute(hydro, "CREATE TABLE snow_depth_daily (
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
+                 PRIMARY KEY (location, date))
+                 WITHOUT ROWID")
 
-  # Bridge radar data
-  DBI::dbCreateTable(hydro, "bridge_distance_realtime", fields = c(location = NA, datetime_UTC = NA, value = NA, units = NA, grade = NA, approval = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX bridge_distance_minute_index ON bridge_distance_realtime (datetime_UTC, location);")
+  # Distance data
+  DBI::dbExecute(hydro, "CREATE TABLE distance_realtime (
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 PRIMARY KEY (location, datetime_UTC))
+                 WITHOUT ROWID")
 
-  DBI::dbCreateTable(hydro, "bridge_distance_daily", fields = c(location= NA, date = NA, value = NA, units = NA, grade = NA, approval = NA, percent_historic_range = NA, max = NA, min = NA, QP90 = NA, QP75 = NA, QP50 = NA, QP25 = NA, QP10 = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX bridge_distance_daily_index ON bridge_distance_daily (date, location);")
+  DBI::dbExecute(hydro, "CREATE TABLE distance_daily (
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 grade TEXT,
+                 approval TEXT,
+                 percent_historic_range NUMERIC,
+                 max NUMERIC,
+                 min NUMERIC,
+                 QP90 NUMERIC,
+                 QP75 NUMERIC,
+                 QP50 NUMERIC,
+                 QP25 NUMERIC,
+                 QP10 NUMERIC,
+                 PRIMARY KEY (location, date))
+                 WITHOUT ROWID")
 
+  # And tables that hold metadata for all locations
+  DBI::dbExecute(hydro, "CREATE TABLE datum_conversions (
+                 location TEXT NOT NULL,
+                 datum_id_from INTEGER NOT NULL,
+                 datum_id_to INTEGER NOT NULL,
+                 conversion_m NUMERIC NOT NULL,
+                 current BOOLEAN NOT NULL,
+                 PRIMARY KEY (location, datum_id_to))
+                 WITHOUT ROWID")
 
-  # And lastly a table that holds metadata for all locations
-  DBI::dbCreateTable(hydro, "datum_conversions", fields = c(location = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_conversions_index ON datum_conversions (location, datum_id_from, datum_id_to, current);")
+  DBI::dbExecute(hydro, "CREATE TABLE datum_list (
+                 datum_id INTEGER NOT NULL,
+                 datum_name_en TEXT NOT NULL,
+                 datum_name_fr TEXT NOT NULL,
+                 PRIMARY KEY (datum_id))
+                 WITHOUT ROWID")
 
-  DBI::dbCreateTable(hydro, "datum_list", fields = c(datum_id = NA, datum_name_en = NA, datum_name_fr = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX datum_list_index ON datum_list (datum_id);")
-
-  DBI::dbCreateTable(hydro, "locations", fields = c(location = NA, name = NA, data_type = NA, start_datetime = NA, end_datetime = NA, latitude = NA, longitude = NA, operator = NA, network = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX locations_index ON locations (location, data_type);")
+  DBI::dbExecute(hydro, "CREATE TABLE locations (
+                 location TEXT NOT NULL,
+                 name TEXT,
+                 data_type TEXT NOT NULL,
+                 start_datetime TEXT,
+                 end_datetime TEXT,
+                 latitude NUMERIC,
+                 longitude NUMERIC,
+                 operator TEXT,
+                 network TEXT,
+                 PRIMARY KEY (location, data_type))
+                 WITHOUT ROWID")
+  #Note for locations table: many columns are not NOT NULL because they have to accept null values for intial creation. This is not an oversight.
 
   # And a table to hold value pairs to control timeseries visibility
-  DBI::dbCreateTable(hydro, "settings", fields = c(parameter = NA, value = NA))
-  DBI::dbExecute(hydro, "CREATE UNIQUE INDEX settings_index ON settings (parameter);")
+  DBI::dbExecute(hydro, "CREATE TABLE settings (
+                 parameter TEXT NOT NULL,
+                 value TEXT,
+                 PRIMARY KEY (parameter))
+                 WITHOUT ROWID")
 
   # And check your tables to make sure everything is good
   DBI::dbListTables(hydro)
 
   #Populate the 'settings' table with defaults
   settings <- data.frame(parameter = c("level unapproved visible", "flow unapproved visible", "snow unapproved visible", "bridge distance unapproved visible", "level min grade", "flow min grade", "snow min grade", "bridge distance min grade"), value = c(TRUE, TRUE, TRUE, TRUE, "C", "C", "C", "C"))
-  RSQLite::dbWriteTable(hydro, "settings", settings, overwrite = TRUE)
+  DBI::dbAppendTable(hydro, "settings", settings)
 
 
   #Populate datum_list table
@@ -100,6 +238,6 @@ initial_create <- function(path) {
 
   datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
   names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
-  RSQLite::dbWriteTable(hydro, "datum_list", datum_list, overwrite = TRUE)
+  DBI::dbAppendTable(hydro, "datum_list", datum_list)
   print(paste0("The database was successfully created at ", path, "."))
 }

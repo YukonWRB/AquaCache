@@ -13,5 +13,5 @@ initial_create(path)
 An SQLite database in the folder location specified by 'path'.
 }
 \description{
-Creates an SQLite database or replaces an existing database. Established pre-set table structure and populates defaults in the "settings" table.
+Creates an SQLite database or replaces an existing database. Established pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and data_type, location and datetime_UTC, or location and date columns.
 }

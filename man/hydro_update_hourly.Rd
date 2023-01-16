@@ -33,7 +33,7 @@ hydro_update_hourly(
 \item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
 }
 \value{
-The database is updated in-place.
+The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
 Retrieves new real-time data from WSC and Aquarius, starting from the last data point in the local database. Also updates the location_data_range table. Only works on stations that are ALREADY in the realtime tables; refer to function hydro_update_daily for how to add new stations.
