@@ -3,26 +3,30 @@
 #' Creates an SQLite database or replaces an existing database. Established pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and data_type, location and datetime_UTC, or location and date columns.
 #'
 #' @param path The path to the local hydro SQLite database or the location where it should be created, with extension.
+#' @param extras The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course measurements precipitation rasters (forecast and reanalysis products), still images, forecast values (level and flow) and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "images", "forecasts", "snow courses", "watersheds", or leave NULL for nothing.
+#' @param overwrite TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
 #' @return An SQLite database in the folder location specified by 'path'.
 #' @export
 #'
 
-initial_create <- function(path) {
+initial_create <- function(path, extras = NULL, overwrite = FALSE) {
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(hydro))
 
-  for (i in DBI::dbListTables(hydro)){
-    DBI::dbExecute(hydro, paste0("DROP TABLE ", i))
+  if (overwrite){
+    for (i in DBI::dbListTables(hydro)){
+      DBI::dbExecute(hydro, paste0("DROP TABLE ", i))
+    }
+    # The DB will still be taking up space after deleting the tables. VACUUM removes empty space from database if you want to reclaim space. Otherwise, simply deleting tables preserves the "empty" space for future database use:
+    DBI::dbExecute(hydro, "VACUUM")
   }
-  # The DB will still be taking up space after deleting the tables. VACUUM removes empty space from database if you want to reclaim space. Otherwise, simply deleting tables preserves the "empty" space for future database use:
-  DBI::dbExecute(hydro, "VACUUM")
 
   # Create the tables for WSC data first
   # level realtime table
 
-  DBI::dbExecute(hydro, "CREATE TABLE level_realtime (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists level_realtime (
                  location TEXT NOT NULL,
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
@@ -33,7 +37,7 @@ initial_create <- function(path) {
                  WITHOUT ROWID")
 
   # flow realtime table
-  DBI::dbExecute(hydro, "CREATE TABLE flow_realtime (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists flow_realtime (
                  location TEXT NOT NULL,
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
@@ -44,7 +48,7 @@ initial_create <- function(path) {
                  WITHOUT ROWID")
 
   # level daily table
-  DBI::dbExecute(hydro, "CREATE TABLE level_daily (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists level_daily (
                  location TEXT NOT NULL,
                  date TEXT NOT NULL,
                  value NUMERIC,
@@ -63,7 +67,7 @@ initial_create <- function(path) {
                  WITHOUT ROWID")
 
   # flow daily table
-  DBI::dbExecute(hydro, "CREATE TABLE flow_daily (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists flow_daily (
                  location TEXT NOT NULL,
                  date TEXT NOT NULL,
                  value NUMERIC,
@@ -82,7 +86,8 @@ initial_create <- function(path) {
                  WITHOUT ROWID")
 
   # snow pillow data
-  DBI::dbExecute(hydro, "CREATE TABLE snow_SWE_realtime (
+  if (extras %in% c("all", "snow pillows")) {
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_SWE_realtime (
                  location TEXT NOT NULL,
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
@@ -92,7 +97,7 @@ initial_create <- function(path) {
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
-  DBI::dbExecute(hydro, "CREATE TABLE snow_SWE_daily (
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_SWE_daily (
                  location TEXT NOT NULL,
                  date TEXT NOT NULL,
                  value NUMERIC,
@@ -110,8 +115,8 @@ initial_create <- function(path) {
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
 
-  #snow depth data
-  DBI::dbExecute(hydro, "CREATE TABLE snow_depth_realtime (
+    #snow depth data
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_depth_realtime (
                  location TEXT NOT NULL,
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
@@ -121,7 +126,7 @@ initial_create <- function(path) {
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
-  DBI::dbExecute(hydro, "CREATE TABLE snow_depth_daily (
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_depth_daily (
                  location TEXT NOT NULL,
                  date TEXT NOT NULL,
                  value NUMERIC,
@@ -138,9 +143,11 @@ initial_create <- function(path) {
                  QP10 NUMERIC,
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
+  }
 
   # Distance data
-  DBI::dbExecute(hydro, "CREATE TABLE distance_realtime (
+  if (extras %in% c("all", "distance")) {
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists distance_realtime (
                  location TEXT NOT NULL,
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
@@ -150,7 +157,7 @@ initial_create <- function(path) {
                  PRIMARY KEY (location, datetime_UTC))
                  WITHOUT ROWID")
 
-  DBI::dbExecute(hydro, "CREATE TABLE distance_daily (
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists distance_daily (
                  location TEXT NOT NULL,
                  date TEXT NOT NULL,
                  value NUMERIC,
@@ -167,9 +174,59 @@ initial_create <- function(path) {
                  QP10 NUMERIC,
                  PRIMARY KEY (location, date))
                  WITHOUT ROWID")
+  }
+
+  if (extras %in% c("all", "rasters")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists rasters (
+                 type TEXT NOT NULL,
+                 units TEXT NOT NULL,
+                 valid_from TEXT NOT NULL,
+                 valid_to TEXT NOT NULL,
+                 file TEXT NOT NULL,
+                 PRIMARY KEY (type, valid_from, valid_to))
+                 WITHOUT ROWID")
+    #NOTE: the files are not stored in the DB, only the file path. The script will enter the file path in the DB after putting the file in a folder, located in the same directory as the database.
+  }
+
+  if (extras %in% c("all", "images")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists images (
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 file TEXT NOT NULL,
+                 PRIMARY KEY (location, datetime_UTC))
+                 WITHOUT ROWID")
+  }
+
+  if (extras %in% c("all", "forecast")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists forecast (
+                 location TEXT NOT NULL,
+                 datetime_UTC TEXT NOT NULL,
+                 value NUMERIC,
+                 units TEXT,
+                 PRIMARY KEY (location, datetime_UTC))
+                 WITHOUT ROWID")
+  }
+
+  if (extras %in% c("all", "snow_courses", "snow courses")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_course (
+                 location TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 value NUMERIC,
+                 PRIMARY KEY (location, date))
+                 WITHOUT ROWID")
+  }
+
+  if (extras %in% c("all", "watersheds")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists watersheds (
+                   location TEXT NOT NULL,
+                   folder TEXT NOT NULL,
+                   PRIMARY KEY (location, folder))
+                   WITHOUT ROWID")
+  }
+
 
   # And tables that hold metadata for all locations
-  DBI::dbExecute(hydro, "CREATE TABLE datum_conversions (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists datum_conversions (
                  location TEXT NOT NULL,
                  datum_id_from INTEGER NOT NULL,
                  datum_id_to INTEGER NOT NULL,
@@ -178,14 +235,14 @@ initial_create <- function(path) {
                  PRIMARY KEY (location, datum_id_to))
                  WITHOUT ROWID")
 
-  DBI::dbExecute(hydro, "CREATE TABLE datum_list (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists datum_list (
                  datum_id INTEGER NOT NULL,
                  datum_name_en TEXT NOT NULL,
                  datum_name_fr TEXT NOT NULL,
                  PRIMARY KEY (datum_id))
                  WITHOUT ROWID")
 
-  DBI::dbExecute(hydro, "CREATE TABLE locations (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists locations (
                  location TEXT NOT NULL,
                  name TEXT,
                  data_type TEXT NOT NULL,
@@ -197,21 +254,14 @@ initial_create <- function(path) {
                  network TEXT,
                  PRIMARY KEY (location, data_type))
                  WITHOUT ROWID")
-  #Note for locations table: many columns are not NOT NULL because they have to accept null values for intial creation. This is not an oversight.
+  #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
 
   # And a table to hold value pairs to control timeseries visibility
-  DBI::dbExecute(hydro, "CREATE TABLE settings (
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists settings (
                  parameter TEXT NOT NULL,
                  value TEXT,
                  PRIMARY KEY (parameter))
                  WITHOUT ROWID")
-
-  # And check your tables to make sure everything is good
-  DBI::dbListTables(hydro)
-
-  #Populate the 'settings' table with defaults
-  settings <- data.frame(parameter = c("level unapproved visible", "flow unapproved visible", "snow unapproved visible", "bridge distance unapproved visible", "level min grade", "flow min grade", "snow min grade", "bridge distance min grade"), value = c(TRUE, TRUE, TRUE, TRUE, "C", "C", "C", "C"))
-  DBI::dbAppendTable(hydro, "settings", settings)
 
 
   #Populate datum_list table

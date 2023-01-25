@@ -448,7 +448,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   #Get list of locations again in case it's changed.
   print("Calculating daily means and statistics...")
   stat_start <- Sys.time()
-  #TODO: sadly, the removed code above cannot work if hydro_update_hourly is called by itself, outside of this function. One possible fix is to add a column somewhere that contains information about when stats were last calculated; if this datetime is younger than the most recent data available, then recalculate, otherwise do nothing
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
   #calculate daily means for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
