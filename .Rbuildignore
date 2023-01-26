@@ -1,5 +1,5 @@
 ^LICENSE\.md$
-^database\.Rproj$
+^WRBdatabase\.Rproj$
 ^\.Rproj\.user$
 ^README\.Rmd$
 ^cran-comments\.md$

@@ -4,10 +4,14 @@
 \alias{initial_create}
 \title{Initial hydro database creation.}
 \usage{
-initial_create(path)
+initial_create(path, extras = NULL, overwrite = FALSE)
 }
 \arguments{
 \item{path}{The path to the local hydro SQLite database or the location where it should be created, with extension.}
+
+\item{extras}{The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course measurements precipitation rasters (forecast and reanalysis products), still images, forecast values (level and flow) and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "images", "forecasts", "snow courses", "watersheds", or leave NULL for nothing.}
+
+\item{overwrite}{TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.}
 }
 \value{
 An SQLite database in the folder location specified by 'path'.

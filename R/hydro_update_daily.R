@@ -18,14 +18,14 @@
 #' @param depth The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.
 #' @param distance The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
+#' @param snow_db_path The path to the snow survey database.
 #'
 #' @return The database is updated in-place.
 #' @import tidyhydat.ws
 #' @export
 #'
-#'
 
-hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
+hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS", snow_db_path = "X:/Snow/DB/SnowDB.mdb")
 
 {
   function_start <- Sys.time()
@@ -76,10 +76,17 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   }
 
   hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
-  # on.exit(DBI::dbExecute(hydro, "PRAGMA analysis_limit=10000")) #Sets the number of rows on which PRAGMA optimize runs
-  # on.exit(DBI::dbExecute(hydro, "PRAGMA optimize"), add=TRUE) #Builds/rebuilds internal tables that speed up later queries
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
   DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
+
+  # Get updated snow course measurements if in season, only if the table exists
+  if((1 < lubridate::month(Sys.Date())) & (lubridate::month(Sys.Date()) < 7)){ #only from Feb to June inclusively
+    tables <- DBI::dbListTables(hydro)
+    if ("snow_courses" %in% tables) {#Doesn't run if not there!
+      print("Looking for new snow course data...")
+      getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = FALSE)
+    }
+  }
 
   print("Checking tables to see if there are new entries...")
   new_stns <- FALSE
@@ -295,6 +302,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         DBI::dbExecute(hydro, paste0("UPDATE locations SET name = 'FAILED' WHERE location = '", new_locations$location[i], "' AND data_type = '", new_locations$data_type[i], "'"))
         print(paste0("Failed to retrieve data from location ", new_locations$location[i], " for type ", new_locations$data_type[i], ". The location was flagged as 'FAILED' in the locations table, clear this flag to try again."))
       })
+
+      try(getWatersheds(locations = new_locations$location[i], path = path)) #Add a watershed polygon to the polygons table if possible
+
     } #End of for loop that works on every new station
     locations_check_after <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED'")
     new_failed <- nrow(locations_check_after) - nrow(locations_check_before)

@@ -12,7 +12,8 @@ hydro_update_daily(
   SWE = "SWE.Corrected",
   depth = "Snow Depth.TempCompensated.Corrected",
   distance = "Distance.Corrected",
-  server = "https://yukon.aquaticinformatics.net/AQUARIUS"
+  server = "https://yukon.aquaticinformatics.net/AQUARIUS",
+  snow_db_path = "X:/Snow/DB/SnowDB.mdb"
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ hydro_update_daily(
 \item{distance}{The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.}
 
 \item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
+
+\item{snow_db_path}{The path to the snow survey database.}
 }
 \value{
 The database is updated in-place.

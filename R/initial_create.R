@@ -208,11 +208,14 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
   }
 
   if (extras %in% c("all", "snow_courses", "snow courses")){
-    DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_course (
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_courses (
                  location TEXT NOT NULL,
-                 date TEXT NOT NULL,
-                 value NUMERIC,
-                 PRIMARY KEY (location, date))
+                 target_date TEXT NOT NULL,
+                 survey_date TEXT NOT NULL,
+                 type TEXT NOT NULL,
+                 value NUMERIC NOT NULL,
+                 units TEXT NOT NULL,
+                 PRIMARY KEY (location, survey_date, type))
                  WITHOUT ROWID")
   }
 

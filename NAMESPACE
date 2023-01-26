@@ -3,6 +3,8 @@
 export("%>%")
 export(add_location)
 export(force_update_hydat)
+export(getSnowCourse)
+export(getWatersheds)
 export(hydro_update_daily)
 export(hydro_update_hourly)
 export(hydro_update_weekly)
