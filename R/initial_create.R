@@ -197,13 +197,15 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  WITHOUT ROWID")
   }
 
-  if (extras %in% c("all", "forecast")){
-    DBI::dbExecute(hydro, "CREATE TABLE if not exists forecast (
+  if (extras %in% c("all", "forecasts", "forecast")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists forecasts (
                  location TEXT NOT NULL,
+                 data_type TEXT NOT NULL,
+                 issue_time_UTC TEXT,
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
                  units TEXT,
-                 PRIMARY KEY (location, datetime_UTC))
+                 PRIMARY KEY (location, data_type, datetime_UTC))
                  WITHOUT ROWID")
   }
 

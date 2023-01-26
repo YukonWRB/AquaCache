@@ -46,7 +46,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
   DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   recalculate <- data.frame()
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
     type <- locations$data_type[i]

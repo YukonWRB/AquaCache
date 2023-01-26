@@ -43,7 +43,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
   DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   count <- 0 #counter for number of successful stations
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")
   success <- data.frame()
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]

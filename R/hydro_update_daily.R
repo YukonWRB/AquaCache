@@ -90,10 +90,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
 
   print("Checking tables to see if there are new entries...")
   new_stns <- FALSE
-  new_locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE start_datetime IS NULL AND name IS NOT 'FAILED'")
+  new_locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE start_datetime IS NULL AND name IS NOT 'FAILED' AND data_type IN ('flow', 'level', 'SWE', 'depth', 'distance')")
   if (nrow(new_locations) > 0){ #if TRUE, some new station or data type for an existing station has been added to the locations table
     print("New station(s) detected in locations table.")
-    locations_check_before <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED'")
+    locations_check_before <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")
     #find the new station
     for (i in 1:nrow(new_locations)){
       print(paste0("Attempting to add location ", new_locations$location[i], " for type ", new_locations$data_type[i], ". Locations table as well as measurement tables will be populated if successful."))
@@ -306,7 +306,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       try(getWatersheds(locations = new_locations$location[i], path = path)) #Add a watershed polygon to the polygons table if possible
 
     } #End of for loop that works on every new station
-    locations_check_after <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED'")
+    locations_check_after <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")
     new_failed <- nrow(locations_check_after) - nrow(locations_check_before)
     if (new_failed < nrow(new_locations)){
       new_stns <- TRUE
@@ -317,7 +317,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   print("Checking datum tables...")
   ### Now deal with datums if hydat is updated or if stations were added, or if entries are missing
   datums <- DBI::dbGetQuery(hydro, "SELECT location FROM datum_conversions") #pull the existing datums
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'") #refresh of locations in case any where added
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')") #refresh of locations in case any where added
   missing_datums <- setdiff(unique(locations$location), datums$location)
   if (length(missing_datums) > 1) missing_datums <- TRUE else missing_datums <- FALSE
 
@@ -458,7 +458,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   #Get list of locations again in case it's changed.
   print("Calculating daily means and statistics...")
   stat_start <- Sys.time()
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED'")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' and data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")
   #calculate daily means for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
   for (i in 1:nrow(locations)){

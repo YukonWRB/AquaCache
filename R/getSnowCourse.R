@@ -31,6 +31,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb",
     #get new measurements
     if (overwrite){
       DBI::dbExecute(hydro, paste0("DELETE FROM snow_courses WHERE location = '", data$locations$location_ID[i], "'"))
+      DBI::dbExecute(hydro, paste0("DELETE FROM locations WHERE location = '", data$locations$location_ID[i], "'"))
     }
     df <- data$measurements[data$measurements$SNOW_COURSE_ID == data$locations$location_ID[i] , ]
     existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM snow_courses WHERE location = '", data$locations$location_ID[i], "'"))
