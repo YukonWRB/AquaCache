@@ -3,7 +3,7 @@
 #' Creates an SQLite database or replaces an existing database. Established pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and data_type, location and datetime_UTC, or location and date columns.
 #'
 #' @param path The path to the local hydro SQLite database or the location where it should be created, with extension.
-#' @param extras The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course measurements precipitation rasters (forecast and reanalysis products), still images, forecast values (level and flow) and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "images", "forecasts", "snow courses", "watersheds", or leave NULL for nothing.
+#' @param extras The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course measurements precipitation rasters (forecast and reanalysis products), automatic still images at monitoring locations, forecast values (level and flow) and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "atuo_images", "forecasts", "snow courses", "watersheds", or leave NULL for nothing.
 #' @param overwrite TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
 #' @return An SQLite database in the folder location specified by 'path'.
@@ -33,7 +33,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  units TEXT,
                  grade TEXT,
                  approval TEXT,
-                 PRIMARY KEY (location, datetime_UTC))
+                 PRIMARY KEY (location, datetime_UTC),
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
   # flow realtime table
@@ -44,7 +45,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  units TEXT,
                  grade TEXT,
                  approval TEXT,
-                 PRIMARY KEY (location, datetime_UTC))
+                 PRIMARY KEY (location, datetime_UTC)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
   # level daily table
@@ -63,7 +65,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  QP50 NUMERIC,
                  QP25 NUMERIC,
                  QP10 NUMERIC,
-                 PRIMARY KEY (location, date))
+                 PRIMARY KEY (location, date)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
   # flow daily table
@@ -82,7 +85,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  QP50 NUMERIC,
                  QP25 NUMERIC,
                  QP10 NUMERIC,
-                 PRIMARY KEY (location, date))
+                 PRIMARY KEY (location, date)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
   # snow pillow data
@@ -94,7 +98,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  units TEXT,
                  grade TEXT,
                  approval TEXT,
-                 PRIMARY KEY (location, datetime_UTC))
+                 PRIMARY KEY (location, datetime_UTC)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
     DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_SWE_daily (
@@ -112,7 +117,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  QP50 NUMERIC,
                  QP25 NUMERIC,
                  QP10 NUMERIC,
-                 PRIMARY KEY (location, date))
+                 PRIMARY KEY (location, date)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
     #snow depth data
@@ -123,7 +129,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  units TEXT,
                  grade TEXT,
                  approval TEXT,
-                 PRIMARY KEY (location, datetime_UTC))
+                 PRIMARY KEY (location, datetime_UTC)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
     DBI::dbExecute(hydro, "CREATE TABLE if not exists snow_depth_daily (
@@ -141,7 +148,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  QP50 NUMERIC,
                  QP25 NUMERIC,
                  QP10 NUMERIC,
-                 PRIMARY KEY (location, date))
+                 PRIMARY KEY (location, date)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
   }
 
@@ -154,7 +162,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  units TEXT,
                  grade TEXT,
                  approval TEXT,
-                 PRIMARY KEY (location, datetime_UTC))
+                 PRIMARY KEY (location, datetime_UTC)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
     DBI::dbExecute(hydro, "CREATE TABLE if not exists distance_daily (
@@ -172,7 +181,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  QP50 NUMERIC,
                  QP25 NUMERIC,
                  QP10 NUMERIC,
-                 PRIMARY KEY (location, date))
+                 PRIMARY KEY (location, date)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
   }
 
@@ -188,12 +198,13 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
     #NOTE: the files are not stored in the DB, only the file path. The script will enter the file path in the DB after putting the file in a folder, located in the same directory as the database.
   }
 
-  if (extras %in% c("all", "images")){
-    DBI::dbExecute(hydro, "CREATE TABLE if not exists images (
+  if (extras %in% c("all", "auto_images", "auto images")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists auto_images (
                  location TEXT NOT NULL,
                  datetime_UTC TEXT NOT NULL,
                  file TEXT NOT NULL,
-                 PRIMARY KEY (location, datetime_UTC))
+                 PRIMARY KEY (location, datetime_UTC)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
   }
 
@@ -205,7 +216,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
                  units TEXT,
-                 PRIMARY KEY (location, data_type, datetime_UTC))
+                 PRIMARY KEY (location, data_type, datetime_UTC)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
   }
 
@@ -217,7 +229,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  type TEXT NOT NULL,
                  value NUMERIC NOT NULL,
                  units TEXT NOT NULL,
-                 PRIMARY KEY (location, survey_date, type))
+                 PRIMARY KEY (location, survey_date, type)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
   }
 
@@ -225,7 +238,8 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
     DBI::dbExecute(hydro, "CREATE TABLE if not exists watersheds (
                    location TEXT NOT NULL,
                    folder TEXT NOT NULL,
-                   PRIMARY KEY (location, folder))
+                   PRIMARY KEY (location, folder),
+                   FOREIGN KEY (location) REFERENCES locations(location))
                    WITHOUT ROWID")
   }
 
@@ -237,7 +251,10 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
                  datum_id_to INTEGER NOT NULL,
                  conversion_m NUMERIC NOT NULL,
                  current BOOLEAN NOT NULL,
-                 PRIMARY KEY (location, datum_id_to))
+                 PRIMARY KEY (location, datum_id_to),
+                 FOREIGN KEY (location) REFERENCES locations(location),
+                 FOREIGN KEY (datum_id_from) REFERENCES datum_list(datum_id)
+                 FOREIGN KEY (datum_id_to) REFERENCES datum_list(datum_id))
                  WITHOUT ROWID")
 
   DBI::dbExecute(hydro, "CREATE TABLE if not exists datum_list (
@@ -291,8 +308,11 @@ initial_create <- function(path, extras = NULL, overwrite = FALSE) {
   hydat <- DBI::dbConnect(RSQLite::SQLite(), hydat_path)
   on.exit(DBI::dbDisconnect(hydat))
 
-  datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
-  names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
-  DBI::dbAppendTable(hydro, "datum_list", datum_list)
+  datums_existing <- DBI::dbGetQuery(hydro, "SELECT datum_id FROM datum_list")
+  if (nrow(datums_existing) == 0){
+    datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
+    names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
+    DBI::dbAppendTable(hydro, "datum_list", datum_list)
+  }
   print(paste0("The database was successfully created at ", path, "."))
 }

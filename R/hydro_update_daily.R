@@ -84,7 +84,11 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     tables <- DBI::dbListTables(hydro)
     if ("snow_courses" %in% tables) {#Doesn't run if not there!
       print("Looking for new snow course data...")
-      getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = FALSE)
+      if (lubridate::day(Sys.Date()) %in% c(1, 15)){ #overwrite twice a month to capture any changes
+        getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = TRUE)
+      } else {
+        getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = FALSE)
+      }
     }
   }
 

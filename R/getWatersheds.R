@@ -40,8 +40,8 @@ getWatersheds <- function(locations = "WSC", path){
 
   if (!dir.exists(paste0(path, "/watersheds"))){ # create folder if does not exist yet
     dir.create(paste0(path, "/watersheds"))
-    watersheds_folder <- paste0(path, "/watersheds")
   }
+  watersheds_folder <- paste0(path, "/watersheds")
 
   old_files <- list.files(tempdir(),  full.names = TRUE) #clean out the tempdir
   suppressWarnings(file.remove(old_files))
@@ -59,8 +59,11 @@ getWatersheds <- function(locations = "WSC", path){
   }
 
   count <- 0
-  poly <- NULL
-  poly <- sf::st_read(dsn = watersheds_folder, layer = "watershed_polygons") #if there is an existing shapefile, add to it.
+  if (file.exists(paste0(watersheds_folder, "/watershed_polygons.shp"))){
+    poly <- sf::st_read(dsn = watersheds_folder, layer = "watershed_polygons") #if there is an existing shapefile, add to it.
+  } else {
+    poly <- NULL
+  }
   for (i in locations){ #Get the shapefile-containing folder from the temp directory, put it in the path/watersheds folder. Make corresponding entry to the "watersheds" table.
     tryCatch({
       fs::dir_copy(paste0(tempdir(), "/drainages/", i), paste0(watersheds_folder, "/", i), overwrite = TRUE)

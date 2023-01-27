@@ -21,7 +21,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb",
 
   tables <- DBI::dbListTables(hydro)
   if (!("snow_courses" %in% tables)){
-    warning("The table 'snow_courses' is being created in the database using function initial_create.")
+    print("The table 'snow_courses' is being created in the database using function initial_create.")
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
@@ -50,9 +50,10 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb",
         # update locations table
         start <- as.character(min(df$target_date))
         end <- as.character(max(df$target_date))
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, data_type, start_datetime, end_datetime, latitude, longitude, operator, network) VALUES ('", data$locations$location_ID[i], "', '", data$locations$location_name[i], "', 'manual snow survey', '", start, "', '", end, "', ", data$locations$latitude[i], ", ", data$locations$longitude[i], ", 'WRB', 'Snow Survey Network')"))
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, data_type, start_datetime, end_datetime, latitude, longitude, operator, network) VALUES ('", data$locations$location_ID[i], "', '", gsub("'", "", data$locations$location_name[i]), "', 'manual snow survey', '", start, "', '", end, "', ", data$locations$latitude[i], ", ", data$locations$longitude[i], ", 'WRB', 'Snow Survey Network')"))
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", end, "' WHERE location = '", data$locations$location_ID[i], "'"))
       }
     }
   }
+  print("Snow course survey data is updated in the database.")
 }

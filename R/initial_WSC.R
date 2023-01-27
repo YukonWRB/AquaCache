@@ -23,7 +23,7 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
   {
   #NOTE: be careful with SQL statements and additions/updates to rows. Values that are in 'single quotes' are entered as character (text) values, even if the value is only numbers. To have numbers as numeric values, leave the single quote out. This is done automatically when appending a data.frame based on the column type, so long as the column type is what you need!
 
-  if (tolower(WSC_stns) == "yukon"){
+  if (tolower(WSC_stns)[1] == "yukon"){
     #Yukon and Liard WSC locations
     WSC_stns <- c("08AA003","08AA005","08AA007","08AA008","08AA009","08AA010","08AA011","08AA012","08AB001","08AC001","08AC002","09AA001","09AA004","09AA012","09AA013","09AA017","09AB001","09AB004","09AB010","09AC001","09AC007","09AD002","09AE002","09AE003","09AE006","09AG001","09AG002","09AH001","09AH003","09AH004","09AH005","09BA001","09BB001","09BC001","09BC002","09BC004","09CA001","09CA002",'09CA004',"09CA006","09CB001","09CD001","09DA001","09DB001","09DC005","09DC006","09DD003","09DD004","09EA003","09EA004","09EA005","09EA006","09EB001","09EB003","09EB004","09FA001","09FB002","09FB003","09FC001","09FD002","09FD003","10AA001","10AA004","10AA005","10AA006","10AB001","10AC005","10AD002","10BD001","10DB001","10MA001","10MA002","10MA003","10MB003","10MB004","10MD001","10MD002", "09AB008")
   }
