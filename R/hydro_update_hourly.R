@@ -38,9 +38,8 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
     stop("Your WSC password must be available in the .Renviron file in the form WS_PWD='yourpassword'")
   }
 
-  hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+  hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   count <- 0 #counter for number of successful stations
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")

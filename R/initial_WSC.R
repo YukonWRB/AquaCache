@@ -69,9 +69,8 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
   }
 
 
-  hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+  hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   if (aquarius){
       #Add the realtime data held in Aquarius to the database

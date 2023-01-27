@@ -12,9 +12,8 @@
 
 add_location <- function(path, location, type){
 
-  hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+  hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=10000")
 
   add <- data.frame(location = location, data_type = type)
 

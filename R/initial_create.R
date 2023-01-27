@@ -12,7 +12,7 @@
 
 initial_create <- function(path, extras = NULL, overwrite = FALSE) {
 
-  hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+  hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
 
   if (overwrite){

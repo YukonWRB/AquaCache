@@ -75,9 +75,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     print("A local copy of the WSC HYDAT database was installed.")
   }
 
-  hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+  hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   # Get updated snow course measurements if in season, only if the table exists
   if((1 < lubridate::month(Sys.Date())) & (lubridate::month(Sys.Date()) < 7)){ #only from Feb to June inclusively

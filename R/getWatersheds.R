@@ -23,7 +23,7 @@ getWatersheds <- function(locations = "WSC", path){
   }
 
   #Connect to the DB
-  hydro <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
 
   tables <- DBI::dbListTables(hydro)

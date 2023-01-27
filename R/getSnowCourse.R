@@ -15,9 +15,8 @@
 getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
 
-  hydro <- DBI::dbConnect(RSQLite::SQLite(), hydro_db_path)
+  hydro <- WRBtools::hydroConnect(path = hydro_db_path)
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
-  DBI::dbExecute(hydro, "PRAGMA busy_timeout=100000")
 
   tables <- DBI::dbListTables(hydro)
   if (!("snow_courses" %in% tables)){
