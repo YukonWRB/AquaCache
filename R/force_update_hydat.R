@@ -40,23 +40,24 @@ force_update_hydat <- function(path)
   on.exit(DBI::dbDisconnect(hydro))
 
   ### Now update historical HYDAT timeseries. At the same time check for new flow or level entries at existing stations, and update the locations table if needed.
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE operator = 'WSC'")
   for (i in 1:nrow(locations)) { #working with object locations here and not one containing new stations because the new stations will already be up to date.
     #Deal with flows
     tryCatch({
-      flow_historical <- tidyhydat::hy_daily_flows(locations$location[1])[,-c(3,5)]
+      flow_historical <- tidyhydat::hy_daily_flows(locations$location[i])[,-c(3,5)]
       colnames(flow_historical) <- c("location", "date", "value")
       flow_historical$approval <- "approved"
       flow_historical$units <- "m3/s"
+      flow_historical$parameter <- "flow"
       flow_historical$date <- as.character(flow_historical$date)
       delete_bracket <- c(min(flow_historical$date), max(flow_historical$date))
-      DBI::dbExecute(hydro, paste0("DELETE FROM flow_daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
-      DBI::dbAppendTable(hydro, "flow_daily", flow_historical)
+      DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = 'flow' AND date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
+      DBI::dbAppendTable(hydro, "daily", flow_historical)
       #check if it already exists in locations table
-      ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", locations$location[i], "' AND data_type = 'flow'"))
+      ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", locations$location[i], "' AND parameter = 'flow' AND type = 'continuous'"))
       if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to locations table from scratch
         info <- locations[i,]
-        info$data_type <- "flow"
+        info$parameter <- "flow"
         info$start_datetime <- paste0(min(flow_historical$date), " 00:00:00")
         info$end_datetime <- paste0(max(flow_historical$date), " 00:00:00")
         tryCatch({latitude <- tidyhydat::hy_stations(locations$location[i])$LATITUDE}, error = function(e) {latitude <- NULL})
@@ -73,24 +74,25 @@ force_update_hydat <- function(path)
         end_datetime_historical <- paste0(max(flow_historical$date), " 00:00:00")
         end_datetime_realtime <- ts$end_datetime
         end_datetime <- max(c(end_datetime_realtime, end_datetime_historical))
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "' WHERE location = '", locations$location[i], "' AND data_type = 'flow'"))
+        DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "' WHERE location = '", locations$location[i], "' AND parameter = 'flow' AND type = 'continuous'"))
       }
     }, error = function(e){}
     )
     tryCatch({
-      level_historical <- tidyhydat::hy_daily_levels(locations$location[1])[,-c(3,5)]
+      level_historical <- tidyhydat::hy_daily_levels(locations$location[i])[,-c(3,5)]
       colnames(level_historical) <- c("location", "date", "value")
       level_historical$approval <- "approved"
-      level$historical$units <- "m"
+      level_historical$units <- "m"
+      level_historical$parameter <- "level"
       level_historical$date <- as.character(level_historical$date)
       delete_bracket <- c(min(level_historical$date), max(level_historical$date))
-      DBI::dbExecute(hydro, paste0("DELETE FROM level_daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
-      DBI::dbAppendTable(hydro, "level_daily", level_historical)
+      DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = 'level' AND date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", locations$location[i], "'"))
+      DBI::dbAppendTable(hydro, "daily", level_historical)
       #check if it already exists in locations table
-      ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", locations$location[i], "' AND data_type = 'level'"))
+      ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", locations$location[i], "' AND parameter = 'level' AND type = 'continuous'"))
       if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to locations table from scratch
         info <- locations[i,]
-        info$data_type <- "level"
+        info$parameter <- "level"
         info$start_datetime <- paste0(min(level_historical$date), " 00:00:00")
         info$end_datetime <- paste0(max(level_historical$date), " 00:00:00")
         tryCatch({latitude <- tidyhydat::hy_stations(locations$location[i])$LATITUDE}, error = function(e) {latitude <- NULL})
@@ -107,7 +109,7 @@ force_update_hydat <- function(path)
         end_datetime_historical <- paste0(max(level_historical$date), " 00:00:00")
         end_datetime_realtime <- ts$end_datetime
         end_datetime <- max(c(end_datetime_realtime, end_datetime_historical))
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime = '", start_datetime, "', end_datetime = '", end_datetime, "' WHERE location = '", locations$location[i], "' AND data_type = 'level'"))
+        DBI::dbExecute(hydro, paste0("UPDATE locations SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "' WHERE location = '", locations$location[i], "' AND parameter = 'level' AND type = 'continuous'"))
       }
 
     }, error = function(e){

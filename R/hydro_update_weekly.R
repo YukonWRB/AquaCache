@@ -45,30 +45,30 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
   on.exit(DBI::dbDisconnect(hydro))
 
   recalculate <- data.frame()
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
-    type <- locations$data_type[i]
-    table_name <- if (type == "SWE") "snow_SWE" else if (type == "depth") "snow_depth" else if (type == "distance") "distance" else type
+    parameter <- locations$parameter[i]
     operator <- locations$operator[i]
-    units <- if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "distance") "m"
+    units <- if (parameter == "SWE") "mm SWE" else if (parameter == "depth") "cm" else if (parameter == "level") "m" else if (parameter == "flow") "m3/s" else if (parameter == "distance") "m"
 
     tryCatch({
       if (operator == "WRB" & aquarius){
-        ts_name <- if(type == "SWE") SWE else if (type=="depth") depth else if (type == "level") stage else if (type == "flow") discharge else if (type == "distance") distance
+        ts_name <- if(parameter == "SWE") SWE else if (parameter=="snow depth") depth else if (parameter == "level") stage else if (parameter == "flow") discharge else if (parameter == "distance") distance
         if (aquarius_range == "unapproved"){
-          first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM ", table_name, "_realtime WHERE location = '", locations$location[i], "' AND NOT approval = 'approved'"))[1,]
+          first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", locations$location[i], "' AND NOT approval = 'approved'"))[1,]
           data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = first_unapproved, server = server)
         } else if (aquarius_range == "all"){
           data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, server = server)
         }
-        ts <- data.frame("location" = locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+        ts <- data.frame("location" = locations$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (type == "flow") 47 else if (type == "level") 46, start_date = WSC_range,  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = WSC_range,  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
+        data$parameter <- parameter
         data$datetime_UTC <- as.character(data$datetime_UTC)
         data$approval <- "preliminary"
         data$units <- units
@@ -77,16 +77,16 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
       if (nrow(ts) > 0){
         #TODO: the current delete + append locks the database for far too long. Should look at replacing only rows where necessary instead. Could be done by pulling the data, comparing, and using UPDATE.
-        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
+        DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
         DBI::dbAppendTable(hydro, paste0(table_name, "_realtime"), ts)
         #make the new entry into table locations
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))
+        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
 
-        recalc <- data.frame("start" = substr(min(ts$datetime_UTC), 1, 10), "end" = substr(max(ts$datetime_UTC), 1, 10), "location" = locations$location[i], "data_type" = locations$data_type[i], "operator" = operator)
+        recalc <- data.frame("start" = substr(min(ts$datetime_UTC), 1, 10), "end" = substr(max(ts$datetime_UTC), 1, 10), "location" = locations$location[i], "parameter" = locations$parameter[i], "operator" = operator)
         recalculate <- rbind(recalculate, recalc)
       }
     }, error = function(e) {
-      print(paste0("Failed on location ", locations$location[i], " and data type ", locations$data_type[i]))
+      print(paste0("Failed on location ", locations$location[i], " and parameter ", locations$parameter[i]))
     }
     )
   }
@@ -95,15 +95,14 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
     leap_list <- (seq(1800, 2100, by = 4))
     for (i in 1:nrow(recalculate)){
       loc <- recalculate$location[i]
-      type <- recalculate$data_type[i]
-      table_name <- if (type == "SWE") "snow_SWE" else if (type == "depth") "snow_depth" else if (type == "distance") "distance" else type
+      parameter <- recalculate$parameter[i]
       operator <- recalculate$operator[i]
       if (operator == "WSC"){
         hy_max <- NULL
         tryCatch({
-          if (type == "level"){
+          if (parameter == "level"){
             hy_max <- max(tidyhydat::hy_daily_levels(loc)$Date) + 1
-          } else if (type == "flow"){
+          } else if (parameter == "flow"){
             hy_max <- max(tidyhydat::hy_daily_flows(loc)$Date) + 1
           }
           start <- substr(as.character(max(c(hy_max, recalculate$start[i]))), 1, 10)
@@ -114,7 +113,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
         start <- substr(recalculate$start[i], 1, 10)
       }
 
-      gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC > '", start, " 00:00:00'")) #an end is not specified just in case hydro_update_hourly appended new data since the download step.
+      gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC > '", start, " 00:00:00'")) #an end is not specified just in case hydro_update_hourly appended new data since the download step.
       if (nrow(gap_realtime) > 0){
         gap_realtime <- gap_realtime %>%
           dplyr::group_by(lubridate::year(.data$datetime_UTC), lubridate::yday(.data$datetime_UTC)) %>%
@@ -127,16 +126,17 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
         names(gap_realtime) <- c("date", "value", "grade", "approval")
 
         gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE)
-        gap_realtime$units <- if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "distance") "m"
+        gap_realtime$units <- if (parameter == "level") "m" else if (parameter == "flow") "m3/s" else if (parameter == "SWE") "mm SWE" else if (parameter == "depth") "cm" else if (parameter == "distance") "m"
         gap_realtime$location <- loc
+        gap_realtime$parameter <- parameter
         gap_realtime$date <- as.character(gap_realtime$date)
-        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_daily WHERE date BETWEEN '", min(gap_realtime$date), "' AND '", max(gap_realtime$date), "' AND location = '", loc, "'")) #NOTE: SQL BETWEEN is inclusive
-        DBI::dbAppendTable(hydro, paste0(table_name, "_daily"), gap_realtime)
+        DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND date BETWEEN '", min(gap_realtime$date), "' AND '", max(gap_realtime$date), "' AND location = '", loc, "'")) #NOTE: SQL BETWEEN is inclusive
+        DBI::dbAppendTable(hydro, "daily", gap_realtime)
       }
 
       # Now calculate stats where they are missing
-      all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM ", table_name, "_daily WHERE location = '", loc, "'"))
-      missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM ", table_name, "_daily WHERE location = '", loc, "' AND max IS NULL"))
+      all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))
+      missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND max IS NULL"))
 
       # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the daily table without replacing it.
       feb_29 <- missing_stats[(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
@@ -207,8 +207,8 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
         }
         missing_stats <- rbind(missing_stats, feb_29)
 
-        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_daily WHERE location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
-        DBI::dbAppendTable(hydro, paste0(table_name, "_daily"), missing_stats)
+        DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
+        DBI::dbAppendTable(hydro, "daily", missing_stats)
       }
     } # End of for loop calculating means and stats for each station in locations table
 
