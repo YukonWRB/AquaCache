@@ -28,6 +28,8 @@
 hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS", snow_db_path = "X:/Snow/DB/SnowDB.mdb")
 
 {
+
+  #TODO: This entire function needs to be adapted to work with to-be-defined parameters, like temperature or precip. right now lots of steps rely on hard-coded parameter names, but this could be more flexible. Two options: get new parameter names from the 'locations' table when new entries are made, or have a single list of defined parameters and associated units here.
   function_start <- Sys.time()
 
   if (aquarius){
@@ -53,20 +55,27 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   print(paste0("Hydro_update_hourly executed in ", round(hourly_duration[[1]], 2), " ", units(hourly_duration), "."))
 
   print("Checking the local HYDAT database...")
+  #TODO: checking and updating hydat should probably be made into a WRBtools function...
   #Check hydat version, update if needed.
   tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
-  local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
   }, error = function(e) {hydat_path <- NULL})
 
   new_hydat <- FALSE
   if (!is.null(hydat_path) & exists("local_hydat")){ #If hydat already exists, compare version numbers
+    local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
     local_hydat <- gsub("-", "", as.character(local_hydat))
     remote_hydat <- tidyhydat::hy_remote()
     if (local_hydat != remote_hydat){ #if remote version is more recent, download new version
-      tidyhydat::download_hydat(ask=FALSE)
+      try(tidyhydat::download_hydat(ask=FALSE))
       hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
-      new_hydat <- TRUE
-      print("The local WSC HYDAT database was updated.")
+      local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date) #check the HYDAT version again just in case. It can fail to update without actually creating an error and stoping.
+      local_hydat <- gsub("-", "", as.character(local_hydat))
+      if (local_hydat == remote_hydat){
+        new_hydat <- TRUE
+        print("The local WSC HYDAT database was updated.")
+      } else {
+        print("Failed to update the local HYDAT database. There is probably an active connection to the database preventing an overwrite, this function will try again at next run.")
+      }
     }
   } else if (is.null(hydat_path) | !exists("local_hydat")) {# if hydat does not already exist, download fresh to the default location
     tidyhydat::download_hydat(ask=FALSE)
@@ -74,9 +83,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     new_hydat <- TRUE
     print("A local copy of the WSC HYDAT database was installed.")
   }
-
-  hydro <- WRBtools::hydroConnect(path = path)
-  on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   # Get updated snow course measurements if in season, only if the table exists
   if ((1 < lubridate::month(Sys.Date())) & (lubridate::month(Sys.Date()) < 7)){ #only from Feb to June inclusively
@@ -91,6 +97,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     }
   }
 
+  hydro <- WRBtools::hydroConnect(path = path) #Connect to the hydro database
+  on.exit(DBI::dbDisconnect(hydro), add=TRUE)
+
+  #TODO: This next step, checking for new entries, needs to be simplified. In particular it needs to work with yet-to-be defined parameters, like temperature, precip, etc.
   print("Checking tables to see if there are new entries of type 'continuous'...")
   new_stns <- FALSE
   new_locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE start_datetime_UTC IS NULL AND name IS NOT 'FAILED' AND parameter IN ('flow', 'level', 'SWE', 'snow depth', 'distance') AND type = 'continuous'")
@@ -346,6 +356,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     datum_conversions <- data.frame()
     locations_WSC <- dplyr::filter(locations, operator == "WSC")
     locations_WRB <- dplyr::filter(locations, operator == "WRB")
+    locations_WRB <- locations_WRB[!(locations_WRB$location %in% locations_WSC$locations) , ] #There are rare instances where a WSC location and infrastructure is used to report information for the WRB network. This selection avoids having two locations with different datums, one from WSC and one from Aquarius.
     if (nrow(locations_WSC) > 0){
       all_datums <- dplyr::filter(DBI::dbReadTable(hydat, "STN_DATUM_CONVERSION"), STATION_NUMBER %in% locations_WSC$location)
       all_datums$current <- NA
@@ -383,10 +394,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
 
   #TODO: This next portion and force_update_hydat should probably be one and the same. Also, stats should be calculated for each station just before every DELETE/INSERT to minimize time with blank tables.
 
-  ### Now update historical HYDAT timeseries if new_hydat == TRUE. At the same time check for new flow or level entries at existing stations.
+  #Now update historical HYDAT timeseries if new_hydat == TRUE. At the same time check for new flow or level entries at existing stations.
   if (new_hydat){
     print("Updating historical information in HYDAT due to new database...")
-    for (i in unique(locations_WSC$location)) { #This loop is run for flow and level for each station, even if one is not currently in the database. This allows for new data streams to be incorporated seamlessly.
+    for (i in unique(locations_WSC$location)) { #This loop is run for flow and level for each station, even if one is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting or because a flow/level only station is reportion the other param.
       #Deal with flows
       tryCatch({
         flow_historical <- tidyhydat::hy_daily_flows(i)[,-c(3,5)]
@@ -395,14 +406,36 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         flow_historical$approval <- "approved"
         flow_historical$units <- "m3/s"
         flow_historical$date <- as.character(flow_historical$date)
-        delete_bracket <- c(min(flow_historical$date), max(flow_historical$date))
-        DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", i, "' AND parameter = 'flow'"))
-        DBI::dbAppendTable(hydro, "daily", flow_historical)
+
+
+        existing <- DBI::dbGetQuery(hydro, paste0("SELECT datetime_UTC, value FROM daily WHERE location = '", i, "' AND parameter = 'flow'"))
+        if (nrow(existing) > 0){
+          mismatch <- FALSE
+          while (!mismatch){
+            for (j in 1:nrow(flow_historical)){
+              if (!((flow_historical$value[j] == existing$value[j]) & (flow_historical$date[j] == existing$date[j]))){
+                new_hydat_start <- flow_historical$date[j]
+                mismatch <- TRUE
+              }
+            }
+          }
+          if (mismatch){ #only need to append new if mismatch == TRUE, otherwise the TS was not yet updated in HYDAT.
+            flow_historical <- flow_historical[flow_historical$date >= new_hydat_start , ]
+            delete_from <- min(flow_historical$date)
+            DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", delete_from, "' AND location = '", i, "' AND parameter = 'flow'")) #Deletes everything after the first HDAT entry that is not in or different from the database.
+            DBI::dbAppendTable(hydro, "daily", flow_historical)
+          }
+        } else {
+          DBI::dbAppendTable(hydro, "daily", flow_historical)
+        }
+
         #check if it already exists in locations table
         ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
         if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to locations table from scratch
-          info <- locations[i,]
+          info <- locations[locations$location == i ,]
+          info <- info[1,]
           info$parameter <- "flow"
+          info$type <- "continuous"
           info$start_datetime <- paste0(min(flow_historical$date), " 00:00:00")
           info$end_datetime <- paste0(max(flow_historical$date), " 00:00:00")
           tryCatch({latitude <- tidyhydat::hy_stations(i)$LATITUDE}, error = function(e) {latitude <- NULL})
@@ -431,14 +464,34 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         level_historical$approval <- "approved"
         level_historical$units <- "m"
         level_historical$date <- as.character(level_historical$date)
-        delete_bracket <- c(min(level_historical$date), max(level_historical$date))
-        DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND location = '", i, "' AND parameter = 'level'"))
-        DBI::dbAppendTable(hydro, "daily", level_historical)
+
+        existing <- DBI::dbGetQuery(hydro, paste0("SELECT datetime_UTC, value FROM daily WHERE location = '", i, "' AND parameter = 'level'"))
+        if (nrow(existing) > 0){
+          mismatch <- FALSE
+          while (!mismatch){
+            for (j in 1:nrow(level_historical)){
+              if (!((level_historical$value[j] == existing$value[j]) & (level_historical$date[j] == existing$date[j]))){
+                new_hydat_start <- level_historical$date[j]
+                mismatch <- TRUE
+              }
+            }
+          }
+          if (mismatch){ #only need to append new if mismatch == TRUE, otherwise the TS was not yet updated in HYDAT.
+            level_historical <- level_historical[level_historical$date <= new_hydat_start , ]
+            delete_from <- min(level_historical$date)
+            DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", delete_from, "' AND location = '", i, "' AND parameter = 'level'"))
+            DBI::dbAppendTable(hydro, "daily", level_historical)
+          }
+        } else {
+          DBI::dbAppendTable(hydro, "daily", level_historical)
+        }
         #check if it already exists in locations table
         ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM locations WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
         if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to locations table from scratch
-          info <- locations[i,]
+          info <- locations[locations$location == i ,]
+          info <- info[1,]
           info$parameter <- "level"
+          info$type <- "continuous"
           info$start_datetime <- paste0(min(level_historical$date), " 00:00:00")
           info$end_datetime <- paste0(max(level_historical$date), " 00:00:00")
           tryCatch({latitude <- tidyhydat::hy_stations(i)$LATITUDE}, error = function(e) {latitude <- NULL})
@@ -462,6 +515,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       )
     } #End of for loop updating information contained in HYDAT
   } #End of section updating information contained in HYDAT if HYDAT is new
+  #TODO:
 
 
   ### Calculate new daily means from realtime data, followed by stats
@@ -477,7 +531,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     operator <- locations$operator[i]
 
     last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM daily WHERE parameter = '", type, "' AND location = '", loc, "'"))[1,]
-    #TODO: the step below is slow, needs to querry a very large table. Can it be done another way?
+    #TODO: the step below is slow, needs to query a very large table. Can it be done another way?
     earliest_day_realtime <- as.character(as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", type, "' AND location = '", loc, "'"))[1,]))
     if (!is.na(last_day_historic) & !is.na(earliest_day_realtime)){
       if (last_day_historic > as.character(as.Date(earliest_day_realtime) + 2)) {

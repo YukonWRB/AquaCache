@@ -16,18 +16,24 @@ force_update_hydat <- function(path)
 
   #Check hydat version, update if needed.
   tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
-  local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
   }, error = function(e) {hydat_path <- NULL})
 
   new_hydat <- FALSE
   if (!is.null(hydat_path) & exists("local_hydat")){ #If hydat already exists, compare version numbers
+    local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
     local_hydat <- gsub("-", "", as.character(local_hydat))
     remote_hydat <- tidyhydat::hy_remote()
     if (local_hydat != remote_hydat){ #if remote version is more recent, download new version
-      tidyhydat::download_hydat(ask=FALSE)
+      try(tidyhydat::download_hydat(ask=FALSE))
       hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
-      new_hydat <- TRUE
-      print("The local WSC HYDAT database was updated.")
+      local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date) #check the hydat version again just in case
+      local_hydat <- gsub("-", "", as.character(local_hydat))
+      if (local_hydat == remote_hydat){
+        new_hydat <- TRUE
+        print("The local WSC HYDAT database was updated.")
+      } else {
+        print("Failed to update the local HYDAT database. There is probably an active connection to the database preventing an overwrite, this function will try again at next run.")
+      }
     }
   } else if (is.null(hydat_path) | !exists("local_hydat")) {# if hydat does not already exist, download fresh to the default location
     tidyhydat::download_hydat(ask=FALSE)
