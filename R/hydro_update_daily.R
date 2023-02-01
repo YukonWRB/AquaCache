@@ -581,6 +581,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       gap_realtime$date <- as.character(gap_realtime$date)
       DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND date >= '", min(gap_realtime$date), "' AND location = '", loc, "'"))
       DBI::dbAppendTable(hydro, "daily", gap_realtime)
+      DBI::dbExecute(hydro, paste0("UPDATE locations SET last_daily_calculation_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
     }
     #TODO: surely there's a way to remove the DELETE and APPEND operations above, and only do it once after stats are calculated?
 
@@ -661,7 +662,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       #TODO: line below needs to become an UPDATE instead
       DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
       DBI::dbAppendTable(hydro, "daily", missing_stats)
-      DBI::dbExecute(hydro, paste0("UPDATE locations SET last_daily_calculation_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
     }
   } # End of for loop calculating means and stats for each station in locations table
 
