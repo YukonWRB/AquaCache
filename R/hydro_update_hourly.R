@@ -75,11 +75,13 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
         count <- count + 1
         success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "operator" = operator))
+        DBI::dbExecute(hydro, paste0("UPDATE locations SET last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
       }
     }, error = function(e) {}
     )
   }
   print(paste0(count, " out of ", nrow(locations), " locations were updated."))
+  DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_realtime'"))
   return(success)
 } #End of function
 

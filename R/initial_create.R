@@ -148,6 +148,8 @@ initial_create <- function(path, extras = "none", overwrite = FALSE) {
                  type TEXT NOT NULL,
                  start_datetime_UTC TEXT,
                  end_datetime_UTC TEXT,
+                 last_new_data_UTC TEXT,
+                 last_daily_calculation_UTC TEXT,
                  latitude NUMERIC,
                  longitude NUMERIC,
                  operator TEXT,
@@ -155,6 +157,16 @@ initial_create <- function(path, extras = "none", overwrite = FALSE) {
                  PRIMARY KEY (location, parameter, type))
                  WITHOUT ROWID")
   #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
+
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists internal_status (
+                 event TEXT NOT NULL,
+                 value,
+                 PRIMARY KEY (event))
+                 WITHOUT ROWID")
+
+  internal_status <- data.frame("event" = c("HYDAT_version", "last_update_realtime", "last_update_daily", "last_update_weekly", "last_update_snow_courses", "last_update_watersheds", "last_update_rasters"),
+                                "value" = NA)
+  DBI::dbAppendTable(hydro, "internal_status", internal_status)
 
   # And a table to hold value pairs to control timeseries visibility
   DBI::dbExecute(hydro, "CREATE TABLE if not exists settings (

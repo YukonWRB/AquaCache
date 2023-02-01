@@ -56,5 +56,6 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb",
       }
     }
   }
+  DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_snow_courses'"))
   print("Snow course survey data is updated in the database.")
 }

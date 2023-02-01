@@ -211,5 +211,6 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
         DBI::dbAppendTable(hydro, "daily", missing_stats)
       }
     } # End of for loop calculating means and stats for each station in locations table
+    DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_weekly'"))
 
 } #End of function

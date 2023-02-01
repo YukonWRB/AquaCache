@@ -86,4 +86,6 @@ getWatersheds <- function(locations = "WSC", path){
 
   old_files <- list.files(tempdir(),  full.names = TRUE) #clean out the tempdir
   fs::dir_delete(old_files)
+  DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_watersheds'"))
+
 }
