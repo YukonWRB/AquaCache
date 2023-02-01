@@ -47,6 +47,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     stop("Your WSC password must be available in the .Renviron file in the form WS_PWD='yourpassword'")
   }
 
+  hydro <- WRBtools::hydroConnect(path = path) #Connect to the hydro database
+  on.exit(DBI::dbDisconnect(hydro), add=TRUE)
+
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
   print("Getting realtime information up to date with hydro_update_hourly...")
   hourly_start <- Sys.time()
@@ -68,7 +71,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     if (local_hydat != remote_hydat){ #if remote version is more recent, download new version
       try(tidyhydat::download_hydat(ask=FALSE))
       hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
-      local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date) #check the HYDAT version again just in case. It can fail to update without actually creating an error and stoping.
+      local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date) #check the HYDAT version again just in case. It can fail to update without actually creating an error and stopping.
       local_hydat <- gsub("-", "", as.character(local_hydat))
       if (local_hydat == remote_hydat){
         new_hydat <- TRUE
@@ -81,7 +84,17 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     tidyhydat::download_hydat(ask=FALSE)
     hydat_path <- tidyhydat::hy_downloaded_db()
     new_hydat <- TRUE
+    local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
+    local_hydat <- gsub("-", "", as.character(local_hydat))
     print("A local copy of the WSC HYDAT database was installed.")
+  }
+
+  #Check if HYDAT has been updated outside of this function.
+  local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
+  local_hydat <- gsub("-", "", as.character(local_hydat))
+  DB_hydat <- as.character(DBI::dbGetQuery(hydro, "SELECT value FROM internal_status WHERE event = 'HYDAT_version'"))
+  if (DB_hydat != local_hydat){
+    new_hydat <- TRUE
   }
 
   # Get updated snow course measurements if in season, only if the table exists
@@ -96,9 +109,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       }
     }
   }
-
-  hydro <- WRBtools::hydroConnect(path = path) #Connect to the hydro database
-  on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   #TODO: This next step, checking for new entries, needs to be simplified. In particular it needs to work with yet-to-be defined parameters, like temperature, precip, etc.
   print("Checking tables to see if there are new entries of type 'continuous'...")
@@ -342,7 +352,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   #Update datum table
   if (new_hydat){
     hydat <- DBI::dbConnect(RSQLite::SQLite(), hydat_path)
-    on.exit(DBI::dbDisconnect(hydat))
+    on.exit(DBI::dbDisconnect(hydat), add = TRUE)
     DBI::dbExecute(hydat, "PRAGMA busy_timeout=10000")
     datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
     names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
@@ -352,7 +362,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   #Update datum conversions
   if (new_hydat | new_stns | missing_datums){
     hydat <- DBI::dbConnect(RSQLite::SQLite(), hydat_path)
-    on.exit(DBI::dbDisconnect(hydat))
+    on.exit(DBI::dbDisconnect(hydat), add = TRUE)
     datum_conversions <- data.frame()
     locations_WSC <- dplyr::filter(locations, operator == "WSC")
     locations_WRB <- dplyr::filter(locations, operator == "WRB")
@@ -424,6 +434,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             delete_from <- min(flow_historical$date)
             DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", delete_from, "' AND location = '", i, "' AND parameter = 'flow'")) #Deletes everything after the first HDAT entry that is not in or different from the database.
             DBI::dbAppendTable(hydro, "daily", flow_historical)
+            DBI::dbExecute(hydro, paste0("UPDATE locations SET last_daily_calculation = 'NULL' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous' AND operator = 'WSC'"))
           }
         } else {
           DBI::dbAppendTable(hydro, "daily", flow_historical)
@@ -481,6 +492,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             delete_from <- min(level_historical$date)
             DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", delete_from, "' AND location = '", i, "' AND parameter = 'level'"))
             DBI::dbAppendTable(hydro, "daily", level_historical)
+            DBI::dbExecute(hydro, paste0("UPDATE locations SET last_daily_calculation = 'NULL' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous' AND operator = 'WSC'"))
           }
         } else {
           DBI::dbAppendTable(hydro, "daily", level_historical)
@@ -515,24 +527,31 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       )
     } #End of for loop updating information contained in HYDAT
   } #End of section updating information contained in HYDAT if HYDAT is new
-  #TODO:
 
 
   ### Calculate new daily means from realtime data, followed by stats
   #Get list of locations again in case it's changed.
   print("Calculating daily means and statistics...")
   stat_start <- Sys.time()
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' and parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
+    no_calc <- locations[is.na(locations$last_daily_calculation_UTC) , ] #All of these need a new calculation.
+    has_last_new_data <- locations[!is.na(locations$last_new_data_UTC) & !is.na(locations$last_daily_calculation_UTC) , ] #only a subset of these need new calculation. Those that have a calculation and don't have an entry for new data don't need calculations.
+    if (nrow(has_last_new_data) > 0){
+      needs_new_calc <- has_last_new_data[(as.POSIXct(has_last_new_data$last_new_data_UTC) + 6*60*60) > as.POSIXct(has_last_new_data$last_daily_calculation_UTC) , ]
+      no_calc <- rbind(no_calc, needs_new_calc)
+    }
+    locations <- no_calc
+
   #calculate daily means for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
-    type <- locations$parameter[i]
+    parameter <- locations$parameter[i]
     operator <- locations$operator[i]
 
-    last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM daily WHERE parameter = '", type, "' AND location = '", loc, "'"))[1,]
+    last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
     #TODO: the step below is slow, needs to query a very large table. Can it be done another way?
-    earliest_day_realtime <- as.character(as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", type, "' AND location = '", loc, "'"))[1,]))
+    earliest_day_realtime <- as.character(as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]))
     if (!is.na(last_day_historic) & !is.na(earliest_day_realtime)){
       if (last_day_historic > as.character(as.Date(earliest_day_realtime) + 2)) {
         last_day_historic <- as.character(as.Date(last_day_historic) - 2) #if the two days before last_day_historic are in the realtime data, recalculate last two days in case realtime data hadn't yet come in. This will also wipe the stats for those two days just in case.
@@ -541,7 +560,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       last_day_historic <- as.character(as.Date(earliest_day_realtime) - 2)
     }
 
-    gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", type, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", last_day_historic, " 00:00:00' AND '", .POSIXct(Sys.time(), "UTC"), "'"))
+    gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", last_day_historic, " 00:00:00' AND '", .POSIXct(Sys.time(), "UTC"), "'"))
     if (nrow(gap_realtime) > 0){
       gap_realtime <- gap_realtime %>%
         dplyr::group_by(lubridate::year(.data$datetime_UTC), lubridate::yday(.data$datetime_UTC)) %>%
@@ -556,18 +575,18 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         gap_realtime <- rbind(gap_realtime, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA))
       }
       gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
-      gap_realtime$units <- if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "SWE") "mm SWE" else if (type == "snow depth") "cm" else if (type == "distance") "m"
+      gap_realtime$units <- if (parameter == "level") "m" else if (parameter == "flow") "m3/s" else if (parameter == "SWE") "mm SWE" else if (parameter == "snow depth") "cm" else if (parameter == "distance") "m"
       gap_realtime$location <- loc
-      gap_realtime$parameter <- type
+      gap_realtime$parameter <- parameter
       gap_realtime$date <- as.character(gap_realtime$date)
-      DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", type, "' AND date >= '", min(gap_realtime$date), "' AND location = '", loc, "'"))
+      DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND date >= '", min(gap_realtime$date), "' AND location = '", loc, "'"))
       DBI::dbAppendTable(hydro, "daily", gap_realtime)
     }
     #TODO: surely there's a way to remove the DELETE and APPEND operations above, and only do it once after stats are calculated?
 
     # Now calculate stats where they are missing
-    all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM daily WHERE parameter = '", type, "' AND location = '", loc, "'"))
-    missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM daily WHERE parameter = '", type, "' AND location = '", loc, "' AND max IS NULL"))
+    all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))
+    missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND max IS NULL"))
     #TODO: the step above selects rows that get dropped later, and does this each time. How about just working with gap_realtime from above?
 
     # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the daily table without replacing it.
@@ -640,14 +659,20 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
       missing_stats <- rbind(missing_stats, feb_29)
 
       #TODO: line below needs to become an UPDATE instead
-      DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", type, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
+      DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
       DBI::dbAppendTable(hydro, "daily", missing_stats)
+      DBI::dbExecute(hydro, paste0("UPDATE locations SET last_daily_calculation_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
     }
   } # End of for loop calculating means and stats for each station in locations table
+
+  if (new_hydat){
+    DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", local_hydat, "' WHERE event = 'HYDAT_version'")) #new_hydat was set during the HYDAT checks above, but the value in the table is only changed here in case something did not run in the script.
+  }
 
   stats_diff <- Sys.time() - stat_start
   total_diff <- Sys.time() - function_start
   print(paste0("Daily means and statistics calculated in ", round(stats_diff[[1]], 2), " ", units(stats_diff)))
+  DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_daily'"))
   print(paste0("Total elapsed time for hydro_update_daily: ", round(total_diff[[1]], 2), " ", units(total_diff), ". End of function."))
 
 } #End of function
