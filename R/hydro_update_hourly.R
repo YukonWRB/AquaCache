@@ -42,44 +42,46 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
   on.exit(DBI::dbDisconnect(hydro))
 
   count <- 0 #counter for number of successful stations
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND data_type IN ('level', 'flow', 'distance', 'SWE', 'depth')")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
   success <- data.frame()
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
-    type <- locations$data_type[i]
-    table_name <- if (type == "SWE") "snow_SWE" else if (type == "depth") "snow_depth" else if (type == "distance") "distance" else type
+    parameter <- locations$parameter[i]
     operator <- locations$operator[i]
-    units <- if (type == "SWE") "mm SWE" else if (type == "depth") "cm" else if (type == "level") "m" else if (type == "flow") "m3/s" else if (type == "distance") "m"
+    units <- if (parameter == "SWE") "mm SWE" else if (parameter == "snow depth") "cm" else if (parameter == "level") "m" else if (parameter == "flow") "m3/s" else if (parameter == "distance") "m"
 
     tryCatch({
       if (operator == "WRB" & aquarius){
-        ts_name <- if(type == "SWE") SWE else if (type=="depth") depth else if (type == "level") stage else if (type == "flow") discharge else if (type == "distance") distance
+        ts_name <- if(parameter == "SWE") SWE else if (parameter =="snow depth") depth else if (parameter == "level") stage else if (parameter == "flow") discharge else if (parameter == "distance") distance
         data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = as.POSIXct(locations$end_datetime[i], tz= "UTC") + 1, server = server)
-        ts <- data.frame("location" = locations$location[i], "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+        ts <- data.frame("location" = locations$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (type == "flow") 47 else if (type == "level") 46, start_date = as.POSIXct(locations$end_datetime[i], tz="UTC") + 1, end_date = .POSIXct(Sys.time(), "UTC"),  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(locations$end_datetime[i], tz="UTC") + 1, end_date = .POSIXct(Sys.time(), "UTC"),  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$datetime_UTC <- as.character(data$datetime_UTC)
         data$approval <- "preliminary"
+        data$parameter <- parameter
         data$units <- units
         ts <- data
       }
 
       if (nrow(ts) > 0){
-        DBI::dbExecute(hydro, paste0("DELETE FROM ", table_name, "_realtime WHERE location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
-        DBI::dbAppendTable(hydro, paste0(table_name, "_realtime"), ts)
+        DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
+        DBI::dbAppendTable(hydro, "realtime", ts)
         #make the new entry into table locations
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND data_type = '", type, "'"))
+        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
         count <- count + 1
-        success <- rbind(success, data.frame("location" = loc, "data_type" = type, "table_name" = table_name, "operator" = operator))
+        success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "operator" = operator))
+        DBI::dbExecute(hydro, paste0("UPDATE locations SET last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
       }
     }, error = function(e) {}
     )
   }
   print(paste0(count, " out of ", nrow(locations), " locations were updated."))
+  DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_realtime'"))
   return(success)
 } #End of function
 
