@@ -4,14 +4,16 @@
 \alias{add_location}
 \title{Add location(s) to database}
 \usage{
-add_location(path, location, type)
+add_location(path, location, parameter, type)
 }
 \arguments{
 \item{path}{The path to the local database, with extension.}
 
 \item{location}{The location identifier, exactly as per the WSC or as written in Aquarius. Case sensitive. Specify as a character vector of length 1 or more.}
 
-\item{type}{The type of data for this location, matched 1:1 to the locations vector. One of "level", "flow", "SWE", "depth" (for snow depth) or "distance". The later is typically used for distances from bridge girders to water surface, but could be used for other distances.}
+\item{parameter}{The parameter for this location, matched 1:1 to the locations vector. One of "level", "flow", "SWE", "snow depth", or "distance". The later is typically used for distances from bridge girders to water surface, but could be used for other distances.}
+
+\item{type}{Continuous or discrete, matched to the locations and parameter vectors 1:1.}
 }
 \value{
 One or more new entries are created in the table locations.

@@ -64,7 +64,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   }, error = function(e) {hydat_path <- NULL})
 
   new_hydat <- FALSE
-  if (!is.null(hydat_path) & exists("local_hydat")){ #If hydat already exists, compare version numbers
+  if (!is.null(hydat_path)){ #If hydat already exists, compare version numbers
     local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
     local_hydat <- gsub("-", "", as.character(local_hydat))
     remote_hydat <- tidyhydat::hy_remote()
@@ -254,6 +254,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
               DBI::dbAppendTable(hydro, "realtime", data_realtime)
               WSC_fail <- FALSE
             }, error = function(e){
+              print(paste0("No WSC realtime data for ", new_locations$location[i]))
               data_realtime <- NULL
             }
             )
@@ -270,6 +271,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
               DBI::dbAppendTable(hydro, "daily", data_historical)
               WSC_fail <- FALSE
             }, error = function(e){
+              print(paste0("No WSC historical data for ", new_locations$location[i]))
               data_historical <- NULL
             }
             )
@@ -307,7 +309,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
             if(length(latitude) < 1) {latitude <- NULL}
             tryCatch({longitude <- tidyhydat::hy_stations(new_locations$location[i])$LONGITUDE}, error = function(e) {longitude <- NULL})
             if(length(longitude) < 1) {longitude <- NULL}
-            name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
+            name <- stringr::str_to_title(tidyhydat::hy_stations(new_locations$location[i])$STATION_NAME)
 
             DBI::dbExecute(hydro, paste0("UPDATE locations SET name = '", name, "', start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "', latitude = ", latitude, ", longitude = ", longitude, ", operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_locations$location[i], "' AND parameter = 'level' AND type = 'continuous'"))
 

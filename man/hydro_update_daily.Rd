@@ -39,7 +39,7 @@ hydro_update_daily(
 The database is updated in-place.
 }
 \description{
-Daily update of hydro database, with multiple aims: 1. Any station and data_type added to table 'locations' is added to its relevant table, and table 'locations' is filled out; 2. Updating of datum tables if a new HYDAT database version exists or if new stations are added; 3. Calculation of daily means from realtime data and addition to relevant daily tables; 4. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update.
+Daily update of hydro database, with multiple aims: 1. Any station and parameter added to table 'locations' is added to its relevant table, and table 'locations' is filled out; 2. Updating of datum tables if a new HYDAT database version exists or if new stations are added; 3. Calculation of daily means from realtime data and addition to relevant daily tables; 4. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update.
 }
 \details{
 The function checks for an existing HYDAT database, and will download it if it is missing or can be updated.
