@@ -13,7 +13,7 @@ hydro_update_daily(
   depth = "Snow Depth.TempCompensated.Corrected",
   distance = "Distance.Corrected",
   server = "https://yukon.aquaticinformatics.net/AQUARIUS",
-  snow_db_path = "X:/Snow/DB/SnowDB.mdb"
+  snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb"
 )
 }
 \arguments{
@@ -39,10 +39,10 @@ hydro_update_daily(
 The database is updated in-place.
 }
 \description{
-Daily update of hydro database, with multiple aims: 1. Any station and parameter added to table 'locations' is added to its relevant table, and table 'locations' is filled out; 2. Updating of datum tables if a new HYDAT database version exists or if new stations are added; 3. Calculation of daily means from realtime data and addition to relevant daily tables; 4. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update.
+Daily update of hydro database, with multiple aims: 1. Incorporation of new realtime information; 2. Any station and parameter added to table 'locations' is added to its relevant table, and table 'locations' is filled out; 3. Updating of datum tables and related data if a new HYDAT database version exists or if new stations are added; 4. Calculation of daily means from realtime data and addition to relevant daily tables; 5. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update. In addition, if tables already exist for watershed polygons or discrete snow survey measurements, these will be populated upon addition of new WSC locations or, for snow surveys, updated twice a month during the winter season with new data.
 }
 \details{
-The function checks for an existing HYDAT database, and will download it if it is missing or can be updated.
+The function checks for an existing HYDAT database, and will download it if it is missing or can be updated. At the same time any affected daily timeseries are recalculated (using HYDAT daily means and calculated means) starting from the first day where the new HYDAT information diverges from the existing daily means.
 
 Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 

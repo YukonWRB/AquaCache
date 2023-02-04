@@ -1,8 +1,8 @@
 #' Daily update of hydro database
 #'
-#' Daily update of hydro database, with multiple aims: 1. Any station and parameter added to table 'locations' is added to its relevant table, and table 'locations' is filled out; 2. Updating of datum tables if a new HYDAT database version exists or if new stations are added; 3. Calculation of daily means from realtime data and addition to relevant daily tables; 4. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update.
+#' Daily update of hydro database, with multiple aims: 1. Incorporation of new realtime information; 2. Any station and parameter added to table 'locations' is added to its relevant table, and table 'locations' is filled out; 3. Updating of datum tables and related data if a new HYDAT database version exists or if new stations are added; 4. Calculation of daily means from realtime data and addition to relevant daily tables; 5. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update. In addition, if tables already exist for watershed polygons or discrete snow survey measurements, these will be populated upon addition of new WSC locations or, for snow surveys, updated twice a month during the winter season with new data.
 #'
-#' The function checks for an existing HYDAT database, and will download it if it is missing or can be updated.
+#' The function checks for an existing HYDAT database, and will download it if it is missing or can be updated. At the same time any affected daily timeseries are recalculated (using HYDAT daily means and calculated means) starting from the first day where the new HYDAT information diverges from the existing daily means.
 #'
 #' Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 #'
@@ -25,7 +25,7 @@
 #' @export
 #'
 
-hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS", snow_db_path = "X:/Snow/DB/SnowDB.mdb")
+hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS", snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")
 
 {
 
@@ -57,18 +57,35 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
   hourly_duration <- Sys.time() - hourly_start
   print(paste0("Hydro_update_hourly executed in ", round(hourly_duration[[1]], 2), " ", units(hourly_duration), "."))
 
+  # Get updated snow course measurements if in season, only if the table exists
+  tables <- DBI::dbListTables(hydro)
+  if ("discrete" %in% tables) { #Doesn't run if not there!
+    if ((1 < lubridate::month(Sys.Date())) & (lubridate::month(Sys.Date()) < 7)){ #only from Feb to June inclusively
+      tryCatch({
+        print("Looking for new discrete measurements...")
+        if (lubridate::day(Sys.Date()) %in% c(1, 15)){ #overwrite twice a month to capture any changes
+          getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = TRUE)
+        } else {
+          getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = FALSE)
+        }
+      }, error = function(e) {
+        print("Failed to get new snow survey measurements.")
+      })
+    }
+  }
+
   print("Checking the local HYDAT database...")
   #TODO: checking and updating hydat should probably be made into a WRBtools function...
+  #TODO: Current code results in changes to the HYDAT-affected daily means whenever HYDAT is updated, even if the database was last updated with the most recent version of HYDAT by another machine. Should instead compare last used version of HYDAT in table internal_status and only update if more recent, while still updating the machine if new hydat.
   #Check hydat version, update if needed.
   tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
   }, error = function(e) {hydat_path <- NULL})
-
   new_hydat <- FALSE
   if (!is.null(hydat_path)){ #If hydat already exists, compare version numbers
     local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
     local_hydat <- gsub("-", "", as.character(local_hydat))
     remote_hydat <- tidyhydat::hy_remote()
-    if (local_hydat != remote_hydat){ #if remote version is more recent, download new version
+    if (local_hydat != remote_hydat){ #if remote version is not the same, download new version
       try(tidyhydat::download_hydat(ask=FALSE))
       hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
       local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date) #check the HYDAT version again just in case. It can fail to update without actually creating an error and stopping.
@@ -80,7 +97,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         print("Failed to update the local HYDAT database. There is probably an active connection to the database preventing an overwrite, this function will try again at next run.")
       }
     }
-  } else if (is.null(hydat_path) | !exists("local_hydat")) {# if hydat does not already exist, download fresh to the default location
+  } else if (is.null(hydat_path)) {# if hydat does not already exist, download fresh to the default location
     tidyhydat::download_hydat(ask=FALSE)
     hydat_path <- tidyhydat::hy_downloaded_db()
     new_hydat <- TRUE
@@ -88,26 +105,12 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     local_hydat <- gsub("-", "", as.character(local_hydat))
     print("A local copy of the WSC HYDAT database was installed.")
   }
-
   #Check if HYDAT has been updated outside of this function.
   local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
   local_hydat <- gsub("-", "", as.character(local_hydat))
   DB_hydat <- as.character(DBI::dbGetQuery(hydro, "SELECT value FROM internal_status WHERE event = 'HYDAT_version'"))
   if (DB_hydat != local_hydat){
     new_hydat <- TRUE
-  }
-
-  # Get updated snow course measurements if in season, only if the table exists
-  if ((1 < lubridate::month(Sys.Date())) & (lubridate::month(Sys.Date()) < 7)){ #only from Feb to June inclusively
-    tables <- DBI::dbListTables(hydro)
-    if ("discrete" %in% tables) {#Doesn't run if not there!
-      print("Looking for new discrete measurements...")
-      if (lubridate::day(Sys.Date()) %in% c(1, 15)){ #overwrite twice a month to capture any changes
-        getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = TRUE)
-      } else {
-        getSnowCourse(hydro_db_path = path, snow_db_path = snow_db_path, inactive = FALSE, overwrite = FALSE)
-      }
-    }
   }
 
   #TODO: This next step, checking for new entries, needs to be simplified. In particular it needs to work with yet-to-be defined parameters, like temperature, precip, etc.
@@ -331,11 +334,8 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
         DBI::dbExecute(hydro, paste0("UPDATE locations SET name = 'FAILED' WHERE location = '", new_locations$location[i], "' AND parameter = '", new_locations$parameter[i], "' AND type = 'continuous'"))
         print(paste0("Failed to retrieve data from location ", new_locations$location[i], " for parameter ", new_locations$parameter[i], ". The location was flagged as 'FAILED' in the locations table, clear this flag to try again."))
       })
-
-      #TODO: line below currently runs on each and every location starting with 01-11, even if they're WRB stations. Needs to run only if operator == WSC for this to be viable.
-      #try(getWatersheds(locations = new_locations$location[i], path = path)) #Add a watershed polygon to the polygons table if possible
-
-    } #End of for loop that works on every new station
+    }
+    #End of for loop that works on every new station
     locations_check_after <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name = 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
     new_failed <- nrow(locations_check_after) - nrow(locations_check_before)
     if (new_failed < nrow(new_locations)){
@@ -343,6 +343,15 @@ hydro_update_daily <- function(path, aquarius = TRUE, stage = "Stage.Corrected",
     }
   } #End of if loop to deal with new stations
 
+  if (new_stns){
+    new_watersheds <- DBI::dbGetQuery(hydro, "SELECT location FROM locations WHERE operator = 'WSC' AND name IS NOT 'FAILED'")$location
+    tryCatch({
+      getWatersheds(locations = "WSC", path = path) #Add a watershed polygon to the polygons table if possible
+      print("Added watershed polygons for new stations and replaced existing polygons.")
+    }, error = function(e) {
+      print("Failed to add new waterwheds after adding new locations. You could troubleshoot using function getWatersheds in isolation.")
+    })
+    }
 
   print("Checking datum tables...")
   ### Now deal with datums if hydat is updated or if stations were added, or if entries are missing

@@ -32,9 +32,9 @@ getWatersheds <- function(locations = "WSC", path){
     initial_create(path = db_path, extras = "watersheds", overwrite = FALSE)
   }
 
-  if (locations == "WSC"){ #Get all the WSC locations in the database
+  if (locations[1] == "WSC"){ #Get all the WSC locations in the database
     from_table <- DBI::dbGetQuery(hydro, "SELECT location FROM locations WHERE operator = 'WSC'")
-    locations <- unlist(as.vector(unique(from_table)))
+    locations <- from_table$location
   }
   drainages <- unique(substr(locations, 1, 2)) #Gets the first two digits so as to DL WSC polygon zipped files
 

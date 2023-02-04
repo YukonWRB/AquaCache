@@ -5,15 +5,21 @@
 #' @param path The path to the local hydro SQLite database or the location where it should be created, with extension.
 #' @param extras The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course or other discrete measurements, precipitation rasters (forecast and reanalysis products), automatic still images at monitoring locations, forecast values (level and flow), and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "atuo_images", "forecasts", "discrete", "watersheds", or leave "none" for nothing.
 #' @param overwrite TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.
+#' @param new Allows you to create a new SQLite database. By default, the connection to the database path checks for an existing database. You can create a new DB at 'path' if 'path' does not point to an existing database. Creates an SQLite database.
 #'
 #' @return An SQLite database in the folder location specified by 'path'.
 #' @export
 #'
 
-initial_create <- function(path, extras = "none", overwrite = FALSE) {
+initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE) {
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  if (!new){
+    hydro <- WRBtools::hydroConnect(path = path)
+  } else {
+    hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+  }
   on.exit(DBI::dbDisconnect(hydro))
+
 
   if (overwrite){
     for (i in DBI::dbListTables(hydro)){

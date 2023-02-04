@@ -12,7 +12,7 @@
 #' @export
 #'
 
-getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
+getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
 
   hydro <- WRBtools::hydroConnect(path = hydro_db_path)
@@ -24,6 +24,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb",
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
+  #TODO: Get data straight from the database, don't use snowInfo. This way snowInfo can use the hydro DB, which means it doesn't need to change once this stupid snowDB gets changed in a year or two.
   data <- WRBtools::snowInfo(db_path = snow_db_path, locations = "all", inactive = inactive, save_path = NULL, stats = FALSE, plots = FALSE, quiet = TRUE)
 
   for (i in 1:nrow(data$locations)){
