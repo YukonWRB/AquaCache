@@ -44,16 +44,16 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
   hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
 
-  recalculate <- data.frame()
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
     parameter <- locations$parameter[i]
     operator <- locations$operator[i]
-    units <- if (parameter == "SWE") "mm SWE" else if (parameter == "depth") "cm" else if (parameter == "level") "m" else if (parameter == "flow") "m3/s" else if (parameter == "distance") "m"
+    units <- DBI::dbGetQuery(hydro, paste0("SELECT DISTINCT units FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
 
     tryCatch({
       if (operator == "WRB" & aquarius){
+        #need to figure out a way to seamlessly incorporate new parameters.
         ts_name <- if(parameter == "SWE") SWE else if (parameter=="snow depth") depth else if (parameter == "level") stage else if (parameter == "flow") discharge else if (parameter == "distance") distance
         if (aquarius_range == "unapproved"){
           first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", locations$location[i], "' AND NOT approval = 'approved'"))[1,]
@@ -82,8 +82,12 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
         #make the new entry into table locations
         DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
 
-        recalc <- data.frame("start" = substr(min(ts$datetime_UTC), 1, 10), "end" = substr(max(ts$datetime_UTC), 1, 10), "location" = locations$location[i], "parameter" = locations$parameter[i], "operator" = operator)
-        recalculate <- rbind(recalculate, recalc)
+        #Recalculate daily means and statistics
+        calculate_stats(locations = data.frame("location" = loc,
+                                               "parameter" = parameter),
+                        path = path)
+
+        units <- DBI::dbGetQuery(hydro, paste0("SELECT DISTINCT units FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
       }
     }, error = function(e) {
       print(paste0("Failed on location ", locations$location[i], " and parameter ", locations$parameter[i]))
@@ -91,126 +95,6 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
     )
   }
 
-  #TODO: recalculate does not need to be in a separate loop, incorporate in loop above.
-    leap_list <- (seq(1800, 2100, by = 4))
-    for (i in 1:nrow(recalculate)){
-      loc <- recalculate$location[i]
-      parameter <- recalculate$parameter[i]
-      operator <- recalculate$operator[i]
-      if (operator == "WSC"){
-        hy_max <- NULL
-        tryCatch({
-          if (parameter == "level"){
-            hy_max <- max(tidyhydat::hy_daily_levels(loc)$Date) + 1
-          } else if (parameter == "flow"){
-            hy_max <- max(tidyhydat::hy_daily_flows(loc)$Date) + 1
-          }
-          start <- substr(as.character(max(c(hy_max, recalculate$start[i]))), 1, 10)
-        }, error = function(e) {
-          start <- substr(recalculate$start[i], 1, 10)
-        })
-      } else {
-        start <- substr(recalculate$start[i], 1, 10)
-      }
-
-      gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC > '", start, " 00:00:00'")) #an end is not specified just in case hydro_update_hourly appended new data since the download step.
-      if (nrow(gap_realtime) > 0){
-        gap_realtime <- gap_realtime %>%
-          dplyr::group_by(lubridate::year(.data$datetime_UTC), lubridate::yday(.data$datetime_UTC)) %>%
-          dplyr::summarize(date = mean(lubridate::date(.data$datetime_UTC)),
-                           value = mean(.data$value),
-                           grade = sort(.data$grade,decreasing=TRUE)[1],
-                           approval = sort(.data$approval, decreasing=TRUE)[1],
-                           .groups = "drop")
-        gap_realtime <- gap_realtime[,c(3:6)]
-        names(gap_realtime) <- c("date", "value", "grade", "approval")
-
-        gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE)
-        gap_realtime$units <- if (parameter == "level") "m" else if (parameter == "flow") "m3/s" else if (parameter == "SWE") "mm SWE" else if (parameter == "depth") "cm" else if (parameter == "distance") "m"
-        gap_realtime$location <- loc
-        gap_realtime$parameter <- parameter
-        gap_realtime$date <- as.character(gap_realtime$date)
-        DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND date BETWEEN '", min(gap_realtime$date), "' AND '", max(gap_realtime$date), "' AND location = '", loc, "'")) #NOTE: SQL BETWEEN is inclusive
-        DBI::dbAppendTable(hydro, "daily", gap_realtime)
-      }
-
-      # Now calculate stats where they are missing
-      all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))
-      missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND max IS NULL"))
-
-      # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the daily table without replacing it.
-      feb_29 <- missing_stats[(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
-      missing_stats <- missing_stats[!(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
-      all_stats <- all_stats[!(lubridate::month(all_stats$date) == "2" & lubridate::mday(all_stats$date) == "29"), , drop = FALSE]
-      # Create a dayofyear column that pretends Feb 29 doesn't exist; all years have 365 days
-      missing_stats <- missing_stats %>% dplyr::mutate(dayofyear = ifelse(lubridate::year(.data$date) %in% leap_list,
-                                                                          ifelse(lubridate::month(.data$date) <= 2,
-                                                                                 lubridate::yday(.data$date),
-                                                                                 lubridate::yday(.data$date) - 1),
-                                                                          lubridate::yday(.data$date)))
-      all_stats <- all_stats %>% dplyr::mutate(dayofyear = ifelse(lubridate::year(.data$date) %in% leap_list,
-                                                                  ifelse(lubridate::month(.data$date) <= 2,
-                                                                         lubridate::yday(.data$date),
-                                                                         lubridate::yday(.data$date) - 1),
-                                                                  lubridate::yday(.data$date)))
-
-      #selects only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated). Selects valid rows even if there is no current value, ensuring complete plotting parameters.
-      missing_stats <- missing_stats[order(missing_stats[ , "date"]) , ]
-      all_stats <- all_stats[order(all_stats[ , "date"]) , ]
-      temp <- data.frame()
-      for (j in unique(missing_stats$dayofyear)){
-        earliest <- all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]$date[2]
-        if (!is.na(earliest)){
-          missing <- missing_stats[missing_stats$dayofyear == j & missing_stats$date >= earliest , ]
-          temp <- rbind(temp, missing)
-        }
-      }
-      missing_stats <- temp
-
-      if (nrow(missing_stats) > 0){
-        for (k in 1:nrow(missing_stats)){
-          date <- missing_stats$date[k]
-          doy <- missing_stats$dayofyear[k]
-          current <- missing_stats$value[k]
-          past <- all_stats[all_stats$dayofyear == doy & all_stats$date < date , ]$value #Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
-          past <- past[!is.na(past)]
-          if (length(past) >= 1){
-            missing_stats$max[k] <- max(past) #again, NOT including current measurement
-            missing_stats$min[k] <- min(past)
-            missing_stats$QP90[k] <- stats::quantile(past, 0.90)
-            missing_stats$QP75[k] <- stats::quantile(past, 0.75)
-            missing_stats$QP50[k] <- stats::quantile(past, 0.50)
-            missing_stats$QP25[k] <- stats::quantile(past, 0.25)
-            missing_stats$QP10[k] <- stats::quantile(past, 0.10)
-            if (length(past) > 1 & !is.na(current)){ #need at least 2 measurements to calculate a percent historic!
-              missing_stats$percent_historic_range[k] <- ((current - min(past)) / (max(past) - min(past))) * 100
-            }
-          }
-        }
-        missing_stats <- subset(missing_stats, select=-c(dayofyear)) #remove column not in database table
-
-        #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st. Unfortunately this means that initial setups done on those days will not calculate Feb 29!
-        if (nrow(feb_29) > 0 & !(substr(as.character(as.Date(.POSIXct(Sys.time(), "UTC"))), 6, 10) %in% c("02-29", "03-01,", "03-02"))) {
-          for (l in 1:nrow(feb_29)){
-            date <- as.Date(feb_29$date[l])
-            before <- missing_stats[missing_stats$date == date - 1 , ]
-            after <- missing_stats[missing_stats$date == date + 1 , ]
-            feb_29$percent_historic_range[l] <- mean(c(before$percent_historic_range, after$percent_historic_range))
-            feb_29$max[l] <- mean(c(before$max, after$max))
-            feb_29$min[l] <- mean(c(before$min, after$min))
-            feb_29$QP90[l] <- mean(c(before$QP90, after$QP90))
-            feb_29$QP75[l] <- mean(c(before$QP75, after$QP75))
-            feb_29$QP50[l] <- mean(c(before$QP50, after$QP50))
-            feb_29$QP25[l] <- mean(c(before$QP25, after$QP25))
-            feb_29$QP10[l] <- mean(c(before$QP10, after$QP10))
-          }
-        }
-        missing_stats <- rbind(missing_stats, feb_29)
-
-        DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
-        DBI::dbAppendTable(hydro, "daily", missing_stats)
-      }
-    } # End of for loop calculating means and stats for each station in locations table
     DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_weekly'"))
 
 } #End of function

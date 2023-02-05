@@ -174,13 +174,16 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                                 "value" = NA)
   DBI::dbAppendTable(hydro, "internal_status", internal_status)
 
-  # And a table to hold value pairs to control timeseries visibility
+  # And a table to hold value pairs to control timeseries visibility and Aquarius TS names
   DBI::dbExecute(hydro, "CREATE TABLE if not exists settings (
                  parameter TEXT NOT NULL,
                  value TEXT,
                  PRIMARY KEY (parameter))
                  WITHOUT ROWID")
 
+  params <- data.frame("parameter" = c("level", "flow", "SWE", "snow depth", "distance"),
+                       "value" = c("Stage.Corrected", "Discharge.Master", "SWE.Corrected", "Snow Depth.TempCompensated.Corrected", "Distance.Corrected"))
+  DBI::dbAppendTable(hydro, "settings", params)
 
   #Populate datum_list table
   #Check hydat version, update if needed.
