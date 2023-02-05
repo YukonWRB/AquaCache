@@ -10,7 +10,7 @@
 calculate_stats <- function(locations = NULL, path = NULL) {
 
   if (is.null(locations) | is.null(path)){
-    stop("You must specify locations and a database path.")
+    stop("You must specify parameter locations and path.")
   }
 
   hydro <- WRBtools::hydroConnect(path = path)

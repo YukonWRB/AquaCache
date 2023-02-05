@@ -44,6 +44,8 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
   hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
 
+  aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+
   locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
@@ -54,7 +56,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
     tryCatch({
       if (operator == "WRB" & aquarius){
         #need to figure out a way to seamlessly incorporate new parameters.
-        ts_name <- if(parameter == "SWE") SWE else if (parameter=="snow depth") depth else if (parameter == "level") stage else if (parameter == "flow") discharge else if (parameter == "distance") distance
+        ts_name <- aq_names[aq_names$parameter == parameter, 2]
         if (aquarius_range == "unapproved"){
           first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", locations$location[i], "' AND NOT approval = 'approved'"))[1,]
           data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = first_unapproved, server = server)

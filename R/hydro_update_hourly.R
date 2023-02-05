@@ -8,18 +8,13 @@
 #'
 #' @param path The path to the local hydro SQLite database, with extension.
 #' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next five parameters. FALSE will only populate with WSC data.
-#' @param stage The name of the stage (level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.
-#' @param discharge The name of the discharge (flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.
-#' @param SWE The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.
-#' @param depth The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.
-#' @param distance The name of the distance timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @import tidyhydat.ws
 #' @export
 
-hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
+hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
 {
 
@@ -41,18 +36,20 @@ hydro_update_hourly <- function(path, aquarius = TRUE, stage = "Stage.Corrected"
   hydro <- WRBtools::hydroConnect(path = path)
   on.exit(DBI::dbDisconnect(hydro))
 
+  aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+
   count <- 0 #counter for number of successful stations
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
+  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND type = 'continuous'")
   success <- data.frame()
   for (i in 1:nrow(locations)){
     loc <- locations$location[i]
     parameter <- locations$parameter[i]
     operator <- locations$operator[i]
-    units <- if (parameter == "SWE") "mm SWE" else if (parameter == "snow depth") "cm" else if (parameter == "level") "m" else if (parameter == "flow") "m3/s" else if (parameter == "distance") "m"
+    units <-  DBI::dbGetQuery(hydro, paste0("SELECT DISTINCT units FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
 
     tryCatch({
       if (operator == "WRB" & aquarius){
-        ts_name <- if(parameter == "SWE") SWE else if (parameter =="snow depth") depth else if (parameter == "level") stage else if (parameter == "flow") discharge else if (parameter == "distance") distance
+        ts_name <- aq_names[aq_names$parameter == parameter , 2]
         data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = as.POSIXct(locations$end_datetime[i], tz= "UTC") + 1, server = server)
         ts <- data.frame("location" = locations$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
