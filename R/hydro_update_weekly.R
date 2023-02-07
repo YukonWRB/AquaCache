@@ -46,53 +46,49 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
   aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
 
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND parameter IN ('level', 'flow', 'distance', 'SWE', 'snow depth') AND type = 'continuous'")
-  for (i in 1:nrow(locations)){
-    loc <- locations$location[i]
-    parameter <- locations$parameter[i]
-    operator <- locations$operator[i]
-    units <- DBI::dbGetQuery(hydro, paste0("SELECT DISTINCT units FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
+  timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+  for (i in 1:nrow(timeseries)){
+    loc <- timeseries$location[i]
+    parameter <- timeseries$parameter[i]
+    operator <- timeseries$operator[i]
 
     tryCatch({
       if (operator == "WRB" & aquarius){
         #need to figure out a way to seamlessly incorporate new parameters.
         ts_name <- aq_names[aq_names$parameter == parameter, 2]
         if (aquarius_range == "unapproved"){
-          first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", locations$location[i], "' AND NOT approval = 'approved'"))[1,]
-          data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = first_unapproved, server = server)
+          first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "' AND NOT approval = 'approved'"))[1,]
+          data <- WRBtools::aq_download(loc_id = timeseries$location[i], ts_name = ts_name, start = first_unapproved, server = server)
         } else if (aquarius_range == "all"){
-          data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, server = server)
+          data <- WRBtools::aq_download(loc_id = timeseries$location[i], ts_name = ts_name, server = server)
         }
-        ts <- data.frame("location" = locations$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+        ts <- data.frame("location" = timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = WSC_range,  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = WSC_range,  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$parameter <- parameter
         data$datetime_UTC <- as.character(data$datetime_UTC)
         data$approval <- "preliminary"
-        data$units <- units
         ts <- data
       }
 
       if (nrow(ts) > 0){
         #TODO: the current delete + append locks the database for far too long. Should look at replacing only rows where necessary instead. Could be done by pulling the data, comparing, and using UPDATE.
         DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
-        DBI::dbAppendTable(hydro, paste0(table_name, "_realtime"), ts)
-        #make the new entry into table locations
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+        DBI::dbAppendTable(hydro, "realtime", ts)
+        #make the new entry into table timeseries
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
 
         #Recalculate daily means and statistics
-        calculate_stats(locations = data.frame("location" = loc,
+        calculate_stats(timeseries = data.frame("location" = loc,
                                                "parameter" = parameter),
                         path = path)
-
-        units <- DBI::dbGetQuery(hydro, paste0("SELECT DISTINCT units FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
       }
     }, error = function(e) {
-      print(paste0("Failed on location ", locations$location[i], " and parameter ", locations$parameter[i]))
+      print(paste0("Failed on location ", timeseries$location[i], " and parameter ", timeseries$parameter[i]))
     }
     )
   }

@@ -17,6 +17,7 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
     hydro <- WRBtools::hydroConnect(path = path)
   } else {
     hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
+    overwrite <- FALSE
   }
   on.exit(DBI::dbDisconnect(hydro))
 
@@ -51,7 +52,6 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  parameter TEXT NOT NULL,
                  date TEXT NOT NULL,
                  value NUMERIC,
-                 units TEXT,
                  grade TEXT,
                  approval TEXT,
                  percent_historic_range NUMERIC,
@@ -70,12 +70,13 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
 
   if (extras %in% c("all", "rasters")){
     DBI::dbExecute(hydro, "CREATE TABLE if not exists rasters (
-                 parameter TEXT NOT NULL,
-                 units TEXT NOT NULL,
-                 valid_from TEXT NOT NULL,
-                 valid_to TEXT NOT NULL,
-                 file TEXT NOT NULL,
-                 PRIMARY KEY (parameter, valid_from, valid_to))
+                 description TEXT NOT NULL,
+                 parameter TEXT,
+                 units TEXT,
+                 valid_from,
+                 valid_to,
+                 file_path TEXT NOT NULL UNIQUE,
+                 PRIMARY KEY (description, parameter, file_path))
                  WITHOUT ROWID")
     #NOTE: the files are not stored in the DB, only the file path. The script will enter the file path in the DB after putting the file in a folder, located in the same directory as the database.
   }
@@ -110,18 +111,19 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  target_date TEXT,
                  sample_date TEXT NOT NULL,
                  value NUMERIC NOT NULL,
-                 units TEXT NOT NULL,
                  PRIMARY KEY (location, parameter, sample_date)
                  FOREIGN KEY (location) REFERENCES locations(location)
                  FOREIGN KEY (parameter) REFERENCES locations(parameter))
                  WITHOUT ROWID")
   }
 
-  if (extras %in% c("all", "watersheds")){
-    DBI::dbExecute(hydro, "CREATE TABLE if not exists watersheds (
-                   location TEXT NOT NULL,
-                   folder TEXT NOT NULL,
-                   PRIMARY KEY (location, folder),
+  if (extras %in% c("all", "watersheds", "polygons")){
+    DBI::dbExecute(hydro, "CREATE TABLE if not exists polygons (
+                   description TEXT NOT NULL,
+                   parameter TEXT,
+                   file_path TEXT NOT NULL UNIQUE,
+                   location TEXT,
+                   PRIMARY KEY (description, file_path),
                    FOREIGN KEY (location) REFERENCES locations(location))
                    WITHOUT ROWID")
   }
@@ -150,18 +152,25 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
   DBI::dbExecute(hydro, "CREATE TABLE if not exists locations (
                  location TEXT NOT NULL,
                  name TEXT,
+                 latitude NUMERIC,
+                 longitude NUMERIC,
+                 PRIMARY KEY (location))
+                 WITHOUT ROWID")
+
+  DBI::dbExecute(hydro, "CREATE TABLE if not exists timeseries (
+                 location TEXT NOT NULL,
                  parameter TEXT NOT NULL,
+                 units TEXT NOT NULL,
                  type TEXT NOT NULL,
                  start_datetime_UTC TEXT,
                  end_datetime_UTC TEXT,
                  last_new_data_UTC TEXT,
                  last_daily_calculation_UTC TEXT,
-                 latitude NUMERIC,
-                 longitude NUMERIC,
                  operator TEXT,
                  network TEXT,
                  PRIMARY KEY (location, parameter, type))
                  WITHOUT ROWID")
+
   #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
 
   DBI::dbExecute(hydro, "CREATE TABLE if not exists internal_status (
@@ -183,9 +192,9 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  WITHOUT ROWID")
 
   params <- data.frame("application" = "aquarius",
-                       "parameter" = c("level", "flow", "SWE", "snow depth", "distance"),
-                       "value" = c("Stage.Corrected", "Discharge.Master", "SWE.Corrected", "Snow Depth.TempCompensated.Corrected", "Distance.Corrected"))
-  DBI::dbAppendTable(hydro, "settings", params)
+                       "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
+                       "value" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
+  try(DBI::dbAppendTable(hydro, "settings", params))
 
   #Populate datum_list table
   #Check hydat version, update if needed.

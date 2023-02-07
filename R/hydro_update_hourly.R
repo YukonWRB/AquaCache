@@ -39,45 +39,48 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
   aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
 
   count <- 0 #counter for number of successful stations
-  locations <- DBI::dbGetQuery(hydro, "SELECT * FROM locations WHERE name IS NOT 'FAILED' AND type = 'continuous'")
+  timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
   success <- data.frame()
-  for (i in 1:nrow(locations)){
-    loc <- locations$location[i]
-    parameter <- locations$parameter[i]
-    operator <- locations$operator[i]
-    units <-  DBI::dbGetQuery(hydro, paste0("SELECT DISTINCT units FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
+  token_time <- Sys.time()-1
+  for (i in 1:nrow(timeseries)){
+    loc <- timeseries$location[i]
+    parameter <- timeseries$parameter[i]
+    operator <- timeseries$operator[i]
 
     tryCatch({
       if (operator == "WRB" & aquarius){
         ts_name <- aq_names[aq_names$parameter == parameter , 2]
-        data <- WRBtools::aq_download(loc_id = locations$location[i], ts_name = ts_name, start = as.POSIXct(locations$end_datetime[i], tz= "UTC") + 1, server = server)
-        ts <- data.frame("location" = locations$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "units" = units, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+        data <- WRBtools::aq_download(loc_id = timeseries$location[i], ts_name = ts_name, start = as.POSIXct(timeseries$end_datetime[i], tz= "UTC") + 1, server = server)
+        ts <- data.frame("location" = timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
+        if (token_time < Sys.time()){
+          token <- suppressMessages(tidyhydat.ws::token_ws())
+          token_time <- Sys.time() + 60*9 #make valid for 9 minutes (max is 10 minutes)
+        }
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(locations$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(locations$end_datetime[i], tz="UTC") + 1, end_date = .POSIXct(Sys.time(), "UTC"),  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(timeseries$end_datetime[i], tz="UTC") + 1, end_date = .POSIXct(Sys.time(), "UTC"),  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$datetime_UTC <- as.character(data$datetime_UTC)
         data$approval <- "preliminary"
         data$parameter <- parameter
-        data$units <- units
         ts <- data
       }
 
       if (nrow(ts) > 0){
         DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
         DBI::dbAppendTable(hydro, "realtime", ts)
-        #make the new entry into table locations
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", locations$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+        #make the new entry into table timeseries
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
         count <- count + 1
         success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "operator" = operator))
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
       }
     }, error = function(e) {}
     )
   }
-  print(paste0(count, " out of ", nrow(locations), " locations were updated."))
+  print(paste0(count, " out of ", nrow(timeseries), " timeseries were updated."))
   DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_realtime'"))
   return(success)
 } #End of function

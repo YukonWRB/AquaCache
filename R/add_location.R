@@ -1,6 +1,6 @@
 #' Add location(s) to database
 #'
-#' This function facilitates the addition of one or multiple stations to the database by adding entries to the locations table. The locations table and matching measurement tables will be populated during the next run of hydro_update_daily. If specifying level or flow, incorporation will first be attempted for a WSC location. Failure triggers an attempt to add a station from Aquarius.
+#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries table. The locations table and matching measurement tables will be populated during the next run of hydro_update_daily. If specifying level or flow, incorporation will first be attempted for a WSC location. Failure triggers an attempt to add a station from Aquarius.
 #'
 #' @param path The path to the local database, with extension.
 #' @param location The location identifier, exactly as per the WSC or as written in Aquarius. Case sensitive. Specify as a character vector of length 1 or more.
@@ -20,6 +20,6 @@ add_location <- function(path, location, parameter, units, type, network){
 
   add <- data.frame(location = location, parameter = parameter, units = units, type = type, network = network)
 
-  DBI::dbAppendTable(hydro, "locations", add)
+  DBI::dbAppendTable(hydro, "timeseries", add)
 
 }

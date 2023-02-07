@@ -4,18 +4,18 @@
 \alias{update_hydat}
 \title{Update HYDAT-related timeseries}
 \usage{
-update_hydat(locations = NULL, path = NULL, force_update = FALSE)
+update_hydat(timeseries, path, force_update = FALSE)
 }
 \arguments{
-\item{locations}{Character vector of locations for which to look for updates.}
+\item{timeseries}{Character vector of timeseries for which to look for updates.}
 
 \item{path}{The path to the hydrometric database, passed to WRBtools::hydroConnect.}
 
 \item{force_update}{Set TRUE if you want to force a check of each location against the local copy of HYDAT.}
 }
 \value{
-Updated daily means where HYDAT values exist, and a boolean indicating if the HYDAT database was in fact updated.
+Updated daily means where HYDAT values exist, and a boolean indicating if the HYDAT database was in fact updated. Note: if force_update is TRUE but there is no new HYDAT database, FALSE will be returned even though database timeseries are updated.
 }
 \description{
-First checks and updates the local version of HYDAT if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC locations in the WRB hydro database are in locations, will also update the internal_status table with the HYDAT version used for the update.
+First checks and updates the local version of HYDAT if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in timeseries, will also update the internal_status table with the HYDAT version used for the update.
 }

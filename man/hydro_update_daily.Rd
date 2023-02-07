@@ -7,11 +7,6 @@
 hydro_update_daily(
   path,
   aquarius = TRUE,
-  stage = "Stage.Corrected",
-  discharge = "Discharge.Master",
-  SWE = "SWE.Corrected",
-  depth = "Snow Depth.TempCompensated.Corrected",
-  distance = "Distance.Corrected",
   server = "https://yukon.aquaticinformatics.net/AQUARIUS",
   snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb"
 )
@@ -19,17 +14,7 @@ hydro_update_daily(
 \arguments{
 \item{path}{The path to the local hydro SQLite database, with extension.}
 
-\item{aquarius}{TRUE if you are fetching new realtime data from Aquarius, in which case you should also check the next five parameters. FALSE will only populate with WSC station data.}
-
-\item{stage}{The name of the stage (level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.}
-
-\item{discharge}{The name of the discharge (flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.}
-
-\item{SWE}{The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.}
-
-\item{depth}{The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.}
-
-\item{distance}{The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.}
+\item{aquarius}{TRUE if you are fetching new realtime data from Aquarius. FALSE will only populate with WSC station data. Any newly added location will try to pull from Aquarius regardless of this parameter.}
 
 \item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
 
@@ -39,7 +24,7 @@ hydro_update_daily(
 The database is updated in-place.
 }
 \description{
-Daily update of hydro database, with multiple aims: 1. Incorporation of new realtime information; 2. Any station and parameter added to table 'locations' is added to its relevant table, and table 'locations' is filled out; 3. Updating of datum tables and related data if a new HYDAT database version exists or if new stations are added; 4. Calculation of daily means from realtime data and addition to relevant daily tables; 5. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update. In addition, if tables already exist for watershed polygons or discrete snow survey measurements, these will be populated upon addition of new WSC locations or, for snow surveys, updated twice a month during the winter season with new data.
+Daily update of hydro database, with multiple aims: 1. Incorporation of new realtime information; 2. Any station and parameter added to table 'timeseries' is added to its relevant table, and table 'timeseries' is filled out; 3. Updating of datum tables and related data if a new HYDAT database version exists or if new stations are added; 4. Calculation of daily means from realtime data and addition to relevant daily tables; 5. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update. In addition, if tables already exist for watershed polygons or discrete snow survey measurements, these will be populated upon addition of new WSC timeseries or, for snow surveys, updated twice a month during the winter season with new data.
 }
 \details{
 The function checks for an existing HYDAT database, and will download it if it is missing or can be updated. At the same time any affected daily timeseries are recalculated (using HYDAT daily means and calculated means) starting from the first day where the new HYDAT information diverges from the existing daily means.
@@ -48,5 +33,5 @@ Calculating daily statistics for February 29 is complicated: due to a paucity of
 
 Timeseries that have an identical location name in WSC real-time/historical data and Aquarius will only pull from WSC information. For initial setup incorporating mirrored stations in Aquarius, see function 'initial_WSC'.
 
-Note that this function calls hydro_update_hourly to update the realtime tables; stations that were added to the table 'locations' since the last run are initialized using a separate process.
+Note that this function calls hydro_update_hourly to update the realtime tables; stations that were added to the table 'timeseries' since the last run are initialized using a separate process.
 }

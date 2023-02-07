@@ -4,10 +4,10 @@
 \alias{calculate_stats}
 \title{Calculate daily means and statistics}
 \usage{
-calculate_stats(locations = NULL, path = NULL)
+calculate_stats(timeseries = NULL, path = NULL)
 }
 \arguments{
-\item{locations}{A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.}
+\item{timeseries}{A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.}
 
 \item{path}{The path to the hydrometric database, passed to WRBtools::hydroConnect.}
 }
@@ -15,5 +15,5 @@ calculate_stats(locations = NULL, path = NULL)
 Updated entries in the 'daily' table
 }
 \description{
-Calculate daily means and statistics
+This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation. It \emph{must} be used with a database created by this package, or one with identical table and column names.
 }

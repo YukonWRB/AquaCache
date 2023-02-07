@@ -1,16 +1,18 @@
 #' Calculate daily means and statistics
 #'
-#' @param locations A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.
+#' This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation. It *must* be used with a database created by this package, or one with identical table and column names.
+#'
+#' @param timeseries A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.
 #' @param path The path to the hydrometric database, passed to WRBtools::hydroConnect.
 #'
 #' @return Updated entries in the 'daily' table
 #' @export
 #'
 
-calculate_stats <- function(locations = NULL, path = NULL) {
+calculate_stats <- function(timeseries = NULL, path = NULL) {
 
-  if (is.null(locations) | is.null(path)){
-    stop("You must specify parameter locations and path.")
+  if (is.null(timeseries) | is.null(path)){
+    stop("You must specify parameters 'timeseries' and 'path.'")
   }
 
   hydro <- WRBtools::hydroConnect(path = path)
@@ -18,10 +20,10 @@ calculate_stats <- function(locations = NULL, path = NULL) {
 
   #calculate daily means for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
-  for (i in 1:nrow(locations)){
-    loc <- locations$location[i]
-    parameter <- locations$parameter[i]
-    units <- DBI::dbGetQuery(hydro, paste0("SELECT DISTINCT units FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
+  for (i in 1:nrow(timeseries)){
+    loc <- timeseries$location[i]
+    parameter <- timeseries$parameter[i]
+    units <- DBI::dbGetQuery(hydro, paste0("SELECT units FROM timeseries WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
 
     last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
     #TODO: the step below is slow, needs to query a very large table. Can it be done another way?
@@ -49,13 +51,12 @@ calculate_stats <- function(locations = NULL, path = NULL) {
         gap_realtime <- rbind(gap_realtime, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA))
       }
       gap_realtime <- fasstr::fill_missing_dates(gap_realtime, "date", pad_ends = FALSE) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
-      gap_realtime$units <- units
       gap_realtime$location <- loc
       gap_realtime$parameter <- parameter
       gap_realtime$date <- as.character(gap_realtime$date)
       DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND date >= '", min(gap_realtime$date), "' AND location = '", loc, "'"))
       DBI::dbAppendTable(hydro, "daily", gap_realtime)
-      DBI::dbExecute(hydro, paste0("UPDATE locations SET last_daily_calculation_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+      DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
     }
     #TODO: surely there's a way to remove the DELETE and APPEND operations above, and only do it once after stats are calculated?
 
@@ -137,5 +138,5 @@ calculate_stats <- function(locations = NULL, path = NULL) {
       DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
       DBI::dbAppendTable(hydro, "daily", missing_stats)
     }
-  } # End of for loop calculating means and stats for each station in locations table
+  } # End of for loop calculating means and stats for each station in timeseries table
 }
