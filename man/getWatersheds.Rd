@@ -12,7 +12,7 @@ getWatersheds(locations = "WSC", path)
 \item{path}{The path to he database. A new folder will be created at the same level as the database to hold the drainage polygon shapefiles.}
 }
 \value{
-The database table 'watersheds' is populated or re-populated with links to shapefiles of polygons, pour points, and station points.
+The database table 'polygons' is populated or re-populated with links to shapefiles of polygons, pour points, and station points.
 }
 \description{
 Add watershed polygons to the database, stored in a separate folder alongside the database itself. Currently works only with WSC stations, as uses existing watershed polygons created by the WSC. Each watershed gets a folder containing the polygon, the associated pour point, and the monitoring location itself. In addition, a single shapefile is created containing only the watershed polygons.

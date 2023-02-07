@@ -5,7 +5,7 @@
 #' @param locations The locations for which you want to add or update polygons. Default "WSC" will get polygons for all WSC stations in the 'locations' table, or specify a vector of location IDs (must all be present in table 'locations'. Currently only supports addition of WSC polygons.
 #' @param path The path to he database. A new folder will be created at the same level as the database to hold the drainage polygon shapefiles.
 #'
-#' @return The database table 'watersheds' is populated or re-populated with links to shapefiles of polygons, pour points, and station points.
+#' @return The database table 'polygons' is populated or re-populated with links to shapefiles of polygons, pour points, and station points.
 #' @export
 #'
 
@@ -27,21 +27,16 @@ getWatersheds <- function(locations = "WSC", path){
   on.exit(DBI::dbDisconnect(hydro))
 
   tables <- DBI::dbListTables(hydro)
-  if (!("watersheds" %in% tables)){
-    warning("The table 'watersheds' is being created in the database using function initial_create.")
-    initial_create(path = db_path, extras = "watersheds", overwrite = FALSE)
+  if (!("polygons" %in% tables)){
+    warning("The table 'polygons' is being created in the database using function initial_create.")
+    initial_create(path = db_path, extras = "polygons", overwrite = FALSE)
   }
 
-  if (locations == "WSC"){ #Get all the WSC locations in the database
-    from_table <- DBI::dbGetQuery(hydro, "SELECT location FROM locations WHERE operator = 'WSC'")
-    locations <- unlist(as.vector(unique(from_table)))
+  if (!dir.exists(paste0(path, "/polygons/watersheds"))){ # create folder if does not exist yet
+    dir.create(paste0(path, "/polygons"))
+    dir.create(paste0(path, "/polygons/watersheds"))
   }
-  drainages <- unique(substr(locations, 1, 2)) #Gets the first two digits so as to DL WSC polygon zipped files
-
-  if (!dir.exists(paste0(path, "/watersheds"))){ # create folder if does not exist yet
-    dir.create(paste0(path, "/watersheds"))
-  }
-  watersheds_folder <- paste0(path, "/watersheds")
+  watersheds_folder <- paste0(path, "/polygons/watersheds")
 
   old_files <- list.files(tempdir(),  full.names = TRUE) #clean out the tempdir
   suppressWarnings(file.remove(old_files))
@@ -49,6 +44,12 @@ getWatersheds <- function(locations = "WSC", path){
   old_timeout <- getOption('timeout') #The default file download timeout is 60 seconds, and this isn't quite enough sometimes. Increase it for success, reset after.
   on.exit(options(timeout = old_timeout))
   options(timeout = 600) #10 minutes
+
+  if (locations[1] == "WSC"){ #Get all the WSC locations in the database
+    from_table <- DBI::dbGetQuery(hydro, "SELECT DISTINCT location FROM timeseries WHERE operator = 'WSC'")
+    locations <- from_table$location
+  }
+  drainages <- unique(substr(locations, 1, 2)) #Gets the first two digits so as to DL WSC polygon zipped files
 
   for (i in drainages){ #Download the zipped files and extract them to a temp directory.
     if (sub("0", "", i) %in% c(1:11)){
@@ -59,16 +60,19 @@ getWatersheds <- function(locations = "WSC", path){
   }
 
   count <- 0
-  if (file.exists(paste0(watersheds_folder, "/watershed_polygons.shp"))){
-    poly <- sf::st_read(dsn = watersheds_folder, layer = "watershed_polygons") #if there is an existing shapefile, add to it.
+  if (file.exists(paste0(watersheds_folder, "/all_basins.shp"))){
+    poly <- sf::st_read(dsn = watersheds_folder, layer = "all_basins") #if there is an existing shapefile, add to it.
   } else {
     poly <- NULL
   }
-  for (i in locations){ #Get the shapefile-containing folder from the temp directory, put it in the path/watersheds folder. Make corresponding entry to the "watersheds" table.
+  for (i in locations){ #Get the shapefile-containing folder from the temp directory, put it in the path/polygons folder. Make corresponding entry to the "polygons" table.
     tryCatch({
       fs::dir_copy(paste0(tempdir(), "/drainages/", i), paste0(watersheds_folder, "/", i), overwrite = TRUE)
-      DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO watersheds (location, folder) VALUES('", i, "', '", paste0(watersheds_folder, "/", i), "')"))
-      DBI::dbExecute(hydro, paste0("UPDATE watersheds SET folder = '", paste0(watersheds_folder, "/", i), "' WHERE location = '", i, "'"))
+      basin <- list.files(paste0(watersheds_folder, "/", i), pattern = "*.+Drainage.+.shp$", full.names = TRUE)
+
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO polygons (description, location, file_path) VALUES ('drainage_basin', '", i, "', '", basin, "')"))
+        DBI::dbExecute(hydro, paste0("UPDATE polygons SET file_path = '", basin, "' WHERE location = '", i, "'"))
+
       if (is.null(poly)){
         if (count == 0){
           poly <- sf::st_zm(sf::read_sf(dsn=paste0(watersheds_folder, "/", i), layer=paste0(i, "_DrainageBasin_BassinDeDrainage"))) #st_zm is there because doing rbind on many polygons sometimes causes an error where it is looking for a z-dimension. No idea why.
@@ -82,7 +86,9 @@ getWatersheds <- function(locations = "WSC", path){
       print(paste0("Could not find a watershed polygon for location ", i))
     })
   }
-  suppressMessages(sf::write_sf(poly, dsn = watersheds_folder, layer = "watershed_polygons", driver = "ESRI Shapefile"))
+  suppressMessages(sf::write_sf(poly, dsn = watersheds_folder, layer = "all_basins", driver = "ESRI Shapefile"))
+  DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO polygons (description, location, file_path) VALUES ('all_drainage_basins', 'all_locations', '", paste0(watersheds_folder, "/all_basins.shp"), "')"))
+  DBI::dbExecute(hydro, paste0("UPDATE polygons SET file_path = '", paste0(watersheds_folder, "/all_basins.shp"), "' WHERE location = 'all_locations'"))
 
   old_files <- list.files(tempdir(),  full.names = TRUE) #clean out the tempdir
   fs::dir_delete(old_files)

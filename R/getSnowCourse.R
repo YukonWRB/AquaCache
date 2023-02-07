@@ -12,7 +12,7 @@
 #' @export
 #'
 
-getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
+getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
 
   hydro <- WRBtools::hydroConnect(path = hydro_db_path)
@@ -24,20 +24,98 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb",
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
-  data <- WRBtools::snowInfo(db_path = snow_db_path, locations = "all", inactive = inactive, save_path = NULL, stats = FALSE, plots = FALSE, quiet = TRUE)
+  snowCon <- WRBtools::snowConnect(path = snow_db_path)
+  on.exit(DBI::dbDisconnect(snowCon))
 
-  for (i in 1:nrow(data$locations)){
+  #Get locations and measurements
+  locations <- DBI::dbReadTable(snowCon, "SNOW_COURSE")
+  meas <- DBI::dbGetQuery(snowCon, paste0("SELECT * FROM SNOW_SAMPLE WHERE SNOW_COURSE_ID IN ('", paste(locations$SNOW_COURSE_ID, collapse = "', '"), "')"))
+
+  #Manipulate/preprocess things a bit
+  meas <- meas[which(meas$EXCLUDE_FLG==0),] # OMIT VALUES OF EXCLUDEFLG=1, aka TRUE
+  meas$SAMPLE_DATE <- as.Date(meas$SAMPLE_DATE)
+  meas$year <- lubridate::year(meas$SAMPLE_DATE)
+  meas$month <- lubridate::month(meas$SAMPLE_DATE)
+  #Fix up the location metadata table
+  locations$LATITUDE_SEC[is.na(locations$LATITUDE_SEC)] <- as.numeric(0)
+  latitude <- locations$LATITUDE_DEG + locations$LATITUDE_MIN/60 + locations$LATITUDE_SEC/3600
+  locations$LONGITUDE_SEC[is.na(locations$LONGITUDE_SEC)] <- as.numeric(0)
+  longitude <- -1 * abs(locations$LONGITUDE_DEG + locations$LONGITUDE_MIN/60 + locations$LONGITUDE_SEC/3600) #currently all longitudes are not negative, but if it changes then -1*abs will ensure all are rendered negative regardless.
+  locations <- locations[ , c("SNOW_COURSE_ID", "SNOW_COURSE_NAME", "ACTIVE_FLG", "ELEVATION")]
+  locations <- cbind(locations, latitude, longitude)
+
+  #Deal with special cases - correction factors
+  # Special case (i) Twin Creeks: 09BA-SC02B will take precedence over A from 2016 onwards.
+  subset <- meas[meas$SNOW_COURSE_ID %in% c("09BA-SC02A", "09BA-SC02B"),]
+  duplicated <- data.frame(table(subset$SAMPLE_DATE))
+  duplicated <- duplicated[duplicated$Freq > 1 , ]
+  duplicated <- as.Date(as.vector(duplicated$Var1))
+  swe_factor <- NULL
+  for (i in 1:length(duplicated)){ # Calculate correction factors:
+    a <- subset[subset$SNOW_COURSE_ID == "09BA-SC02A" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
+    b <- subset[subset$SNOW_COURSE_ID == "09BA-SC02B" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
+    swe_factor[i] <- 1 + (b-a)/a
+  }
+  depth_factor <- NULL
+  for (i in 1:length(duplicated)){
+    a <- subset[subset$SNOW_COURSE_ID == "09BA-SC02A" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
+    b <- subset[subset$SNOW_COURSE_ID == "09BA-SC02B" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
+    depth_factor[i] <- 1 + (b-a)/a
+  }
+  swe_correction <- mean(swe_factor)
+  depth_correction <- mean(depth_factor)
+  meas <- meas[!(meas$SNOW_COURSE_ID=="09BA-SC02A" & meas$year >= 2016),] # Remove 09BA-SC02A values in 2016 and later.
+  meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="09BA-SC02A"] <- swe_correction*(meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="09BA-SC02A"]) # Multiply all 09BA-SC02A values by correction factors
+  meas$DEPTH[meas$SNOW_COURSE_ID=="09BA-SC02A"] <- depth_correction*(meas$DEPTH[meas$SNOW_COURSE_ID=="09BA-SC02A"])
+  meas$SNOW_COURSE_ID[meas$SNOW_COURSE_ID=="09BA-SC02A"] <- "09BA-SC02B" #Rename as 09BA-SC02B (A will no longer exist here)
+  locations <- locations[!(locations$SNOW_COURSE_ID == "09BA-SC02A") , ]
+
+  # Special case (ii) Hyland 10AD-SC01 and 10AD-SC01B. B will take precedence over (no letter) from 2018 onwards.
+  subset <- meas[meas$SNOW_COURSE_ID %in% c("10AD-SC01", "10AD-SC01B"),]
+  duplicated <- data.frame(table(subset$SAMPLE_DATE))
+  duplicated <- duplicated[duplicated$Freq > 1 , ]
+  duplicated <- as.Date(as.vector(duplicated$Var1))
+  swe_factor <- NULL
+  for (i in 1:length(duplicated)){ # Calculate correction factors
+    a <- subset[subset$SNOW_COURSE_ID == "10AD-SC01" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
+    b <- subset[subset$SNOW_COURSE_ID == "10AD-SC01B" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
+    swe_factor[i] <- 1 + (b-a)/a
+  }
+  depth_factor <- NULL
+  for (i in 1:length(duplicated)){
+    a <- subset[subset$SNOW_COURSE_ID == "10AD-SC01" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
+    b <- subset[subset$SNOW_COURSE_ID == "10AD-SC01B" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
+    depth_factor[i] <- 1 + (b-a)/a
+  }
+  swe_correction <- mean(swe_factor)
+  depth_correction <- mean(depth_factor)
+  meas <- meas[!(meas$SNOW_COURSE_ID=="10AD-SC01" & meas$year>=2018),] #Remove SC01 blank values in 2018 and later.
+  meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="10AD-SC01"] <- swe_correction*(meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="10AD-SC01"]) #Multiply all remaining SC01 values by correction factors
+  meas$DEPTH[meas$SNOW_COURSE_ID=="10AD-SC01"] <- depth_correction*(meas$DEPTH[meas$SNOW_COURSE_ID=="10AD-SC01"])
+  meas$SNOW_COURSE_ID[meas$SNOW_COURSE_ID=="10AD-SC01"] <- "10AD-SC01B" #Step 3: Rename as 010AD-SC01B (blank will no longer exist)
+  locations <- locations[!(locations$SNOW_COURSE_ID == "10AD-SC01") , ]
+
+  if (!inactive){ #Filter out the inactive stations if inactive is FALSE
+    remove <- locations[locations$ACTIVE_FLG==TRUE,]$SNOW_COURSE_ID
+    meas <- meas[meas$SNOW_COURSE_ID %in% remove , ]
+    locations <- locations[locations$ACTIVE_FLG == TRUE ,]
+  }
+
+
+  for (i in 1:nrow(locations)){
     #get new measurements
     if (overwrite){
-      DBI::dbExecute(hydro, paste0("DELETE FROM discrete WHERE parameter IN ('snow depth', 'SWE') AND location = '", data$locations$location_ID[i], "'"))
-      DBI::dbExecute(hydro, paste0("DELETE FROM locations WHERE parameter IN ('snow depth', 'SWE') AND type = 'discrete' AND location = '", data$locations$location_ID[i], "'"))
+      DBI::dbExecute(hydro, paste0("DELETE FROM discrete WHERE parameter IN ('snow depth', 'SWE') AND location = '", locations$SNOW_COURSE_ID[i], "'"))
+      DBI::dbExecute(hydro, paste0("DELETE FROM timeseries WHERE parameter IN ('snow depth', 'SWE') AND type = 'discrete' AND location = '", locations$SNOW_COURSE_ID[i], "'"))
+      DBI::dbExecute(hydro,  paste0("DELETE FROM locations WHERE location = '", locations$SNOW_COURSE_ID[i], "'"))
+      DBI::dbExecute(hydro, paste0("DELETE FROM datum_conversions WHERE location = '", locations$SNOW_COURSE_ID[i], "'"))
     }
-    df <- data$measurements[data$measurements$SNOW_COURSE_ID == data$locations$location_ID[i] , ]
-    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM discrete WHERE location = '", data$locations$location_ID[i], "'"))
-    df <-  df[!(as.character(df$SAMPLE_DATE) %in% existing$target_date) ,] #Retain only new survey dates
+    df <- meas[meas$SNOW_COURSE_ID == locations$SNOW_COURSE_ID[i] , ]
+    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM discrete WHERE location = '", locations$SNOW_COURSE_ID[i], "'"))
+    df <- df[!(as.character(df$SAMPLE_DATE) %in% existing$target_date) ,] #Retain only new survey dates
     if (nrow(df) > 0){
-      SWE <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "sample_date" = df$SURVEY_DATE, "value" = df$SNOW_WATER_EQUIV, "units" = "mm", "parameter" = "SWE")
-      depth <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "sample_date" = df$SURVEY_DATE, "value" = df$DEPTH, "units" = "cm", "parameter" = "snow depth")
+      SWE <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "sample_date" = df$SURVEY_DATE, "value" = df$SNOW_WATER_EQUIV, "parameter" = "SWE")
+      depth <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "sample_date" = df$SURVEY_DATE, "value" = df$DEPTH, "parameter" = "snow depth")
       df <- rbind(SWE, depth) #bring SWE and DEPTH back together in a 'long' format
       df[is.na(df$sample_date) , ]$sample_date <- df[is.na(df$sample_date), ]$target_date #sometimes no survey data is given, but there is a target date. Presumably no field visit was conducted because there was 100% chance of no snow.
       df <- df[!is.na(df$value), ] #remove rows where there is no measurement
@@ -46,13 +124,18 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "X:/Snow/DB/SnowDB.mdb",
         df$sample_date <- as.character(df$sample_date)
         # insert new measurements to the DB
         DBI::dbAppendTable(hydro, "discrete", df)
-        # update locations table
+        # update timeseries table
         start <- as.character(min(df$target_date))
         end <- as.character(max(df$target_date))
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, parameter, type, start_datetime_UTC, end_datetime_UTC, latitude, longitude, operator, network) VALUES ('", data$locations$location_ID[i], "', '", gsub("'", "", data$locations$location_name[i]), "', 'SWE', 'discrete', '", start, "', '", end, "', ", data$locations$latitude[i], ", ", data$locations$longitude[i], ", 'WRB', 'Snow Survey Network')"))
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", end, "' WHERE location = '", data$locations$location_ID[i], "' AND parameter = 'SWE' AND type = 'discrete'"))
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, parameter, type, start_datetime_UTC, end_datetime_UTC, latitude, longitude, operator, network) VALUES ('", data$locations$location_ID[i], "', '", gsub("'", "", data$locations$location_name[i]), "', 'snow depth', 'discrete', '", start, "', '", end, "', ", data$locations$latitude[i], ", ", data$locations$longitude[i], ", 'WRB', 'Snow Survey Network')"))
-        DBI::dbExecute(hydro, paste0("UPDATE locations SET end_datetime_UTC = '", end, "' WHERE location = '", data$locations$location_ID[i], "' AND parameter = 'snow depth' AND type = 'discrete'"))
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'SWE', 'cm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", locations$SNOW_COURSE_ID[i], "' AND parameter = 'SWE' AND type = 'discrete'"))
+
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'snow depth', 'cm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", locations$SNOW_COURSE_ID[i], "' AND parameter = 'snow depth' AND type = 'discrete'"))
+
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", locations$SNOW_COURSE_ID[i], "', '", gsub("'", "", locations$SNOW_COURSE_NAME[i]), "', '", locations$latitude[i], "', '", locations$longitude[i], "')"))
+
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO datum_conversions (location, datum_id_from, datum_id_to, conversion_m, current) VALUES ('", locations$SNOW_COURSE_ID[i], "', ' 10', '110', '", locations$ELEVATION[i], "', TRUE)"))
       }
     }
   }

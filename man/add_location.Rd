@@ -4,18 +4,24 @@
 \alias{add_location}
 \title{Add location(s) to database}
 \usage{
-add_location(path, location, type)
+add_location(path, location, parameter, units, type, network)
 }
 \arguments{
 \item{path}{The path to the local database, with extension.}
 
 \item{location}{The location identifier, exactly as per the WSC or as written in Aquarius. Case sensitive. Specify as a character vector of length 1 or more.}
 
-\item{type}{The type of data for this location, matched 1:1 to the locations vector. One of "level", "flow", "SWE", "depth" (for snow depth) or "distance". The later is typically used for distances from bridge girders to water surface, but could be used for other distances.}
+\item{parameter}{The parameter for this location, matched 1:1 to the other vectors. If at all possible match existing parameters, such as "level", "flow", "SWE", "snow depth", or "distance", or "temperature".}
+
+\item{units}{The measurement units for this new location, matched 1:1 to the other vectors. If at all possible try to match an existing unit.}
+
+\item{type}{Continuous or discrete, matched to the other vectors 1:1.}
+
+\item{network}{The name of the network. Again, try to match existing network names.}
 }
 \value{
 One or more new entries are created in the table locations.
 }
 \description{
-This function facilitates the addition of one or multiple stations to the database by adding entries to the locations table. The locations table and matching measurement tables will be populated during the next run of hydro_update_daily. If specifying level or flow, incorporation will first be attempted for a WSC location. Failure triggers an attempt to add a station from Aquarius.
+This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries table. The locations table and matching measurement tables will be populated during the next run of hydro_update_daily. If specifying level or flow, incorporation will first be attempted for a WSC location. Failure triggers an attempt to add a station from Aquarius.
 }

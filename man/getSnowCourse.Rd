@@ -6,7 +6,7 @@
 \usage{
 getSnowCourse(
   hydro_db_path,
-  snow_db_path = "X:/Snow/DB/SnowDB.mdb",
+  snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb",
   inactive = FALSE,
   overwrite = FALSE
 )
