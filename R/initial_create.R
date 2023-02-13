@@ -184,7 +184,7 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
 
   # And a table to hold value pairs to control timeseries visibility and Aquarius TS names
   DBI::dbExecute(hydro, "CREATE TABLE if not exists settings (
-  application TEXT NOT NULL,
+                 application TEXT NOT NULL,
                  parameter TEXT NOT NULL,
                  value TEXT,
                  PRIMARY KEY (parameter))

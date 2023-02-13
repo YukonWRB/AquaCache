@@ -80,10 +80,11 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
           for (j in 1:nrow(ts)){
             datetime <- ts$datetime_UTC[i]
             if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime
-              if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"]))
+              if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"])){
                 mismatch <- TRUE
-            } else {
-              mismatch <- TRUE
+              } else {
+                mismatch <- TRUE
+              }
             }
           }
         }
