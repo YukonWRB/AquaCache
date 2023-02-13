@@ -75,7 +75,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   new_hydat <- update_hydat(timeseries = timeseries_WSC$location, path = path, force_update = FALSE) #This function is run for flow and level for each station, even if one is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting or because a flow/level only station is reporting the other param.
 
 
-  #TODO: This next step, checking for new entries, needs to be simplified. In particular it needs to work with yet-to-be defined parameters, like temperature, precip, etc.
   print("Checking tables to see if there are new entries of type 'continuous'...")
   new_stns <- FALSE
   new_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE start_datetime_UTC IS NULL AND type = 'continuous'")
@@ -211,7 +210,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
     }
   } #End of if loop to deal with new stations
 
-  #TODO: only get new polygons for locations what have just been added.
+  #TODO: only get new polygons for locations that have just been added.
   #TODO: Add polygons for WRB stations here too, though these will have to be created first.
   if (new_stns){
     tryCatch({

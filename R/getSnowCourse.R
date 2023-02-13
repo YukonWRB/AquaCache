@@ -127,7 +127,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
         # update timeseries table
         start <- as.character(min(df$target_date))
         end <- as.character(max(df$target_date))
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'SWE', 'cm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'SWE', 'mm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
         DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", locations$SNOW_COURSE_ID[i], "' AND parameter = 'SWE' AND type = 'discrete'"))
 
         DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'snow depth', 'cm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))

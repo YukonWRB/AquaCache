@@ -6,11 +6,6 @@
 #' @param WSC_range The starting date from which to pull real-time WSC data from the web and replace in the local database. Default is max possible days.
 #' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next six parameters. FALSE will only populate with WSC data.
 #' @param aquarius_range Should only unapproved (locked) data be replaced, or all available data? Select from "all" or "unapproved". Default is "unapproved".
-#' @param stage The name of the stage (level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.
-#' @param discharge The name of the discharge (flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label. !This DOES NOT apply to WSC stations mirrored in Aquarius.
-#' @param SWE The name of the snow water equivalent timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.
-#' @param depth The name of the snow depth timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All stations must have the same parameter and label.
-#' @param distance The name of the distance timeseries as it appears in Aquarius if it exists, in the form Parameter.Label. All stations must have the same parameter and label. Usually used for distance from bridge girders to water surface.
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return Updated entries in the hydro database.
@@ -19,7 +14,7 @@
 #'
 
 
-hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRUE, aquarius_range = "unapproved", stage = "Stage.Corrected", discharge = "Discharge.Master", SWE = "SWE.Corrected", depth = "Snow Depth.TempCompensated.Corrected", distance = "Distance.Corrected", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
+hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRUE, aquarius_range = "unapproved", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 {
 
   if (!(aquarius_range %in% c("all", "unapproved"))){
@@ -54,17 +49,20 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
     tryCatch({
       if (operator == "WRB" & aquarius){
-        #need to figure out a way to seamlessly incorporate new parameters.
         ts_name <- aq_names[aq_names$parameter == parameter, 2]
+
         if (aquarius_range == "unapproved"){
-          first_unapproved <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "' AND NOT approval = 'approved'"))[1,]
+          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "' AND NOT approval = 'approved'"))
+          first_unapproved <- min(realtime$datetime_UTC)
           data <- WRBtools::aq_download(loc_id = timeseries$location[i], ts_name = ts_name, start = first_unapproved, server = server)
         } else if (aquarius_range == "all"){
+          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "'"))
           data <- WRBtools::aq_download(loc_id = timeseries$location[i], ts_name = ts_name, server = server)
         }
         ts <- data.frame("location" = timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
+        realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "' AND datetime_UTC > '", start_range, "'"))
         token <- suppressMessages(tidyhydat.ws::token_ws())
         data <- suppressMessages(tidyhydat.ws::realtime_ws(timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = WSC_range,  token = token))
         data <- data[,c(2,4,1)]
@@ -76,16 +74,35 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
       }
 
       if (nrow(ts) > 0){
-        #TODO: the current delete + append locks the database for far too long. Should look at replacing only rows where necessary instead. Could be done by pulling the data, comparing, and using UPDATE.
-        DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
-        DBI::dbAppendTable(hydro, "realtime", ts)
-        #make the new entry into table timeseries
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+        #TODO: work through lines 78 to 105 to ensure proper function!
+        mismatch <- FALSE
+        while (!mismatch){
+          for (j in 1:nrow(ts)){
+            datetime <- ts$datetime_UTC[i]
+            if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime
+              if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"]))
+                mismatch <- TRUE
+            } else {
+              mismatch <- TRUE
+            }
+          }
+        }
+        if (mismatch){
+          ts <- ts[ts$datetime_UTC >= datetime ,]
+          DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
+          DBI::dbAppendTable(hydro, "realtime", ts)
+          DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date >= '", substr(min(ts$datetime_UTC, 1, 10)), "'"))
+          DBI::dbAppendTable(hydro, "realtime", ts)
+          #make the new entry into table timeseries
+          end <- max(max(realtime$datetime_UTC), ts$datetime_UTC)
+          DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "' WHERE location = '", timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
 
-        #Recalculate daily means and statistics
-        calculate_stats(timeseries = data.frame("location" = loc,
-                                               "parameter" = parameter),
-                        path = path)
+          #Recalculate daily means and statistics
+          calculate_stats(timeseries = data.frame("location" = loc,
+                                                  "parameter" = parameter),
+                          path = path,
+                          start_recalc = substr(datetime, 1, 10))
+        }
       }
     }, error = function(e) {
       print(paste0("Failed on location ", timeseries$location[i], " and parameter ", timeseries$parameter[i]))
