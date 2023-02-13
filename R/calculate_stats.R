@@ -4,15 +4,22 @@
 #'
 #' @param timeseries A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.
 #' @param path The path to the hydrometric database, passed to WRBtools::hydroConnect.
+#' @param start_recalc The day on which to start daily calculations, one vector element per row of the dataset passed as argument to timeseries. If NULL will only recalculate necessary days.
 #'
 #' @return Updated entries in the 'daily' table
 #' @export
 #'
 
-calculate_stats <- function(timeseries = NULL, path = NULL) {
+calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL) {
 
   if (is.null(timeseries) | is.null(path)){
     stop("You must specify parameters 'timeseries' and 'path.'")
+  }
+
+  if (!is.null(start_recalc)){
+    if (nrow(timeseries) != length(start_recalc)){
+      stop("It looks like you're trying to specify a start date for recalculations, but there isn't exactly one vector element per row in the parameter timeseries.")
+    }
   }
 
   hydro <- WRBtools::hydroConnect(path = path)
@@ -34,6 +41,9 @@ calculate_stats <- function(timeseries = NULL, path = NULL) {
       }
     } else if (is.na(last_day_historic) & !is.na(earliest_day_realtime)){
       last_day_historic <- as.character(as.Date(earliest_day_realtime) - 2)
+    }
+    if (!is.null(start_recalc)){
+      last_day_historic <- min(last_day_historic, start_recalc[i])
     }
 
     gap_realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", last_day_historic, " 00:00:00' AND '", .POSIXct(Sys.time(), "UTC"), "'"))
