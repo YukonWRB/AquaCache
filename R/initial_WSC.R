@@ -21,7 +21,6 @@
 initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
   {
-  #NOTE: be careful with SQL statements and additions/updates to rows. Values that are in 'single quotes' are entered as character (text) values, even if the value is only numbers. To have numbers as numeric values, leave the single quote out. This is done automatically when appending a data.frame based on the column type, so long as the column type is what you need!
 
   if (tolower(WSC_stns)[1] == "yukon"){
     #Yukon and Liard WSC timeseries

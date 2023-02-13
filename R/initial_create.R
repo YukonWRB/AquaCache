@@ -78,7 +78,6 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  file_path TEXT NOT NULL UNIQUE,
                  PRIMARY KEY (description, parameter, file_path))
                  WITHOUT ROWID")
-    #NOTE: the files are not stored in the DB, only the file path. The script will enter the file path in the DB after putting the file in a folder, located in the same directory as the database.
   }
 
   if (extras %in% c("all", "auto_images", "auto images")){
