@@ -4,12 +4,14 @@
 \alias{calculate_stats}
 \title{Calculate daily means and statistics}
 \usage{
-calculate_stats(timeseries = NULL, path = NULL)
+calculate_stats(timeseries = NULL, path = NULL, start_recalc = NULL)
 }
 \arguments{
 \item{timeseries}{A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.}
 
 \item{path}{The path to the hydrometric database, passed to WRBtools::hydroConnect.}
+
+\item{start_recalc}{The day on which to start daily calculations, one vector element per row of the dataset passed as argument to timeseries. If NULL will only recalculate necessary days.}
 }
 \value{
 Updated entries in the 'daily' table

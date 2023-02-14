@@ -21,8 +21,5 @@ hydro_update_hourly(
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-Retrieves new real-time data from WSC and Aquarius, starting from the last data point in the local database. Also updates the location_data_range table. Only works on stations that are ALREADY in the realtime tables; refer to function hydro_update_daily for how to add new stations.
-}
-\details{
-Timeseries that have an identical location name in WSC real-time data and Aquarius will only pull from WSC information.
+Retrieves new real-time data from WSC and Aquarius, starting from the last data point in the local database. Also updates the location_data_range table. Only works on stations that are ALREADY in the realtime tables; refer to function hydro_update_daily for how to add new stations. Timeseries that have an identical location name in WSC real-time data and Aquarius will only pull from WSC information.
 }

@@ -41,30 +41,30 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
   aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
 
-  timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
-  for (i in 1:nrow(timeseries)){
-    loc <- timeseries$location[i]
-    parameter <- timeseries$parameter[i]
-    operator <- timeseries$operator[i]
+  all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+  for (i in 1:nrow(all_timeseries)){
+    loc <- all_timeseries$location[i]
+    parameter <- all_timeseries$parameter[i]
+    operator <- all_timeseries$operator[i]
 
     tryCatch({
       if (operator == "WRB" & aquarius){
         ts_name <- aq_names[aq_names$parameter == parameter, 2]
 
         if (aquarius_range == "unapproved"){
-          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "' AND NOT approval = 'approved'"))
+          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND NOT approval = 'approved'"))
           first_unapproved <- min(realtime$datetime_UTC)
-          data <- WRBtools::aq_download(loc_id = timeseries$location[i], ts_name = ts_name, start = first_unapproved, server = server)
+          data <- WRBtools::aq_download(loc_id = all_timeseries$location[i], ts_name = ts_name, start = first_unapproved, server = server)
         } else if (aquarius_range == "all"){
-          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "'"))
-          data <- WRBtools::aq_download(loc_id = timeseries$location[i], ts_name = ts_name, server = server)
+          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND datetime_UTC >= '", first_unapproved, "'"))
+          data <- WRBtools::aq_download(loc_id = all_timeseries$location[i], ts_name = ts_name, server = server)
         }
-        ts <- data.frame("location" = timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+        ts <- data.frame("location" = all_timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
-        realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", timeseries$location[i], "' AND datetime_UTC > '", start_range, "'"))
+        realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND datetime_UTC >= '", WSC_range, "'"))
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = WSC_range,  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(all_timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = WSC_range,  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$parameter <- parameter
@@ -74,17 +74,20 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
       }
 
       if (nrow(ts) > 0){
-        #TODO: work through lines 78 to 105 to ensure proper function!
         mismatch <- FALSE
-        while (!mismatch){
+        done <- FALSE
+        while (!mismatch & !done){
           for (j in 1:nrow(ts)){
             datetime <- ts$datetime_UTC[i]
-            if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime
+            if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime. If not, mismatch is TRUE
               if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"])){
                 mismatch <- TRUE
-              } else {
-                mismatch <- TRUE
               }
+            } else {
+              mismatch <- TRUE
+            }
+            if (j == nrow(ts)){
+              done <- TRUE
             }
           }
         }
@@ -92,11 +95,11 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
           ts <- ts[ts$datetime_UTC >= datetime ,]
           DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
           DBI::dbAppendTable(hydro, "realtime", ts)
-          DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date >= '", substr(min(ts$datetime_UTC, 1, 10)), "'"))
+          DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date >= '", substr(min(ts$datetime_UTC), 1, 10), "'"))
           DBI::dbAppendTable(hydro, "realtime", ts)
           #make the new entry into table timeseries
           end <- max(max(realtime$datetime_UTC), ts$datetime_UTC)
-          DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "' WHERE location = '", timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+          DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "' WHERE location = '", all_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
 
           #Recalculate daily means and statistics
           calculate_stats(timeseries = data.frame("location" = loc,
@@ -106,7 +109,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
         }
       }
     }, error = function(e) {
-      print(paste0("Failed on location ", timeseries$location[i], " and parameter ", timeseries$parameter[i]))
+      print(paste0("Failed on location ", all_timeseries$location[i], " and parameter ", all_timeseries$parameter[i]))
     }
     )
   }
