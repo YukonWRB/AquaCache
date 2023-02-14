@@ -21,7 +21,6 @@
 initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
   {
-  #NOTE: be careful with SQL statements and additions/updates to rows. Values that are in 'single quotes' are entered as character (text) values, even if the value is only numbers. To have numbers as numeric values, leave the single quote out. This is done automatically when appending a data.frame based on the column type, so long as the column type is what you need!
 
   if (tolower(WSC_stns)[1] == "yukon"){
     #Yukon and Liard WSC timeseries
@@ -179,11 +178,11 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
 
   #Delete the entries and then append the new data into the database. This has the added bonus of adding new rows as well as replacing existing rows
   delete_bracket <- c(min(new_flow_rt$datetime_UTC), max(new_flow_rt$datetime_UTC))
-  DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = 'flow' AND datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'")) #NOTE: SQL BETWEEN is inclusive
+  DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = 'flow' AND datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'"))
   DBI::dbAppendTable(hydro, "realtime", new_flow_rt)
 
   delete_bracket <- c(min(new_level_rt$datetime_UTC), max(new_level_rt$datetime_UTC))
-  DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = 'level' AND datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'")) #NOTE: SQL BETWEEN is inclusive
+  DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = 'level' AND datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'"))
   DBI::dbAppendTable(hydro, "realtime", new_level_rt)
   print("Timeseries existing in the WSC real-time database have been downloaded and appended to the local database.")
 

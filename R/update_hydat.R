@@ -52,18 +52,25 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
         existing <- DBI::dbGetQuery(hydro, paste0("SELECT datetime_UTC, value FROM daily WHERE location = '", i, "' AND parameter = 'flow'"))
         if (nrow(existing) > 0){
           mismatch <- FALSE
-          while (!mismatch){
+          done <- FALSE
+          while (!mismatch & !done){
             for (j in 1:nrow(flow_historical)){
-              if (!((flow_historical$value[j] == existing$value[j]) & (flow_historical$date[j] == existing$date[j]))){
-                new_hydat_start <- flow_historical$date[j]
+              date <- flow_historical$date[i]
+              if (date %in% existing$date){ # check that the corresponding date exists in existing. If not, mismatch is TRUE
+                if (!(flow_historical[flow_historical$date == date, "value"] == existing[existing$date == date, "value"])){
+                  mismatch <- TRUE
+                }
+              } else {
                 mismatch <- TRUE
+              }
+              if (j == nrow(ts)){
+                done <- TRUE
               }
             }
           }
           if (mismatch){ #only need to append new if mismatch == TRUE, otherwise the TS was not yet updated in HYDAT.
             flow_historical <- flow_historical[flow_historical$date >= new_hydat_start , ]
-            delete_from <- min(flow_historical$date)
-            DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", delete_from, "' AND location = '", i, "' AND parameter = 'flow'")) #Deletes everything after the first HDAT entry that is not in or different from the database.
+            DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", min(flow_historical$date), "' AND location = '", i, "' AND parameter = 'flow'")) #Deletes everything after the first HYDAT entry that is not in or different from the database.
             DBI::dbAppendTable(hydro, "daily", flow_historical)
             DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation = NULL WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous' AND operator = 'WSC'"))
           }
@@ -123,18 +130,25 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
         existing <- DBI::dbGetQuery(hydro, paste0("SELECT datetime_UTC, value FROM daily WHERE location = '", i, "' AND parameter = 'level'"))
         if (nrow(existing) > 0){
           mismatch <- FALSE
-          while (!mismatch){
+          done <- FALSE
+          while (!mismatch & !done){
             for (j in 1:nrow(level_historical)){
-              if (!((level_historical$value[j] == existing$value[j]) & (level_historical$date[j] == existing$date[j]))){
-                new_hydat_start <- level_historical$date[j]
+              date <- level_historical$date[i]
+              if (date %in% existing$date){ # check that the corresponding date exists in existing. If not, mismatch is TRUE
+                if (!(level_historical[level_historical$date == date, "value"] == existing[existing$date == date, "value"])){
+                  mismatch <- TRUE
+                }
+              } else {
                 mismatch <- TRUE
+              }
+              if (j == nrow(ts)){
+                done <- TRUE
               }
             }
           }
           if (mismatch){ #only need to append new if mismatch == TRUE, otherwise the TS was not yet updated in HYDAT.
-            level_historical <- level_historical[level_historical$date <= new_hydat_start , ]
-            delete_from <- min(level_historical$date)
-            DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", delete_from, "' AND location = '", i, "' AND parameter = 'level'"))
+            level_historical <- level_historical[level_historical$date >= new_hydat_start , ]
+            DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", min(level_historical$date), "' AND location = '", i, "' AND parameter = 'level'"))
             DBI::dbAppendTable(hydro, "daily", level_historical)
             DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation = 'NULL' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous' AND operator = 'WSC'"))
           }
