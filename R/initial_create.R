@@ -14,7 +14,7 @@
 initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE) {
 
   if (!new){
-    hydro <- WRBtools::hydroConnect(path = path)
+    hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   } else {
     hydro <- DBI::dbConnect(RSQLite::SQLite(), path)
     overwrite <- FALSE

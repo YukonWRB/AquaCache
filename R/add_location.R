@@ -15,7 +15,7 @@
 
 add_location <- function(path, location, parameter, units, type, network){
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   add <- data.frame(location = location, parameter = parameter, units = units, type = type, network = network)

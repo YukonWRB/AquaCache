@@ -29,7 +29,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
     stop("Your WSC password must be available in the .Renviron file in the form WS_PWD='yourpassword'")
   }
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")

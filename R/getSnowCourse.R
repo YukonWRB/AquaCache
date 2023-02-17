@@ -15,7 +15,7 @@
 getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
 
-  hydro <- WRBtools::hydroConnect(path = hydro_db_path)
+  hydro <- WRBtools::hydroConnect(path = hydro_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   tables <- DBI::dbListTables(hydro)
@@ -24,7 +24,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
-  snowCon <- WRBtools::snowConnect(path = snow_db_path)
+  snowCon <- WRBtools::snowConnect(path = snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon))
 
   #Get locations and measurements
