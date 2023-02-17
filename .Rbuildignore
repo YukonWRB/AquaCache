@@ -3,5 +3,3 @@
 ^\.Rproj\.user$
 ^README\.Rmd$
 ^cran-comments\.md$
-^data/Hydat\.sqlite3$
-^data/hydro\.sqlite$
