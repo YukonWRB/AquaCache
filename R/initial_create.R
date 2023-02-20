@@ -76,8 +76,7 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  valid_from,
                  valid_to,
                  file_path TEXT NOT NULL UNIQUE,
-                 PRIMARY KEY (description, parameter, file_path))
-                 WITHOUT ROWID")
+                 PRIMARY KEY (description, parameter, file_path))")
   }
 
   if (extras %in% c("all", "auto_images", "auto images")){
@@ -123,8 +122,7 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                    file_path TEXT NOT NULL UNIQUE,
                    location TEXT,
                    PRIMARY KEY (description, file_path),
-                   FOREIGN KEY (location) REFERENCES locations(location))
-                   WITHOUT ROWID")
+                   FOREIGN KEY (location) REFERENCES locations(location))")
   }
 
 
