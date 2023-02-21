@@ -43,7 +43,7 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  approval TEXT,
                  PRIMARY KEY (location, parameter, datetime_UTC)
                  FOREIGN KEY (location) REFERENCES locations(location)
-                 FOREIGN KEY (parameter) REFERENCES locations(parameter))
+                 FOREIGN KEY (parameter) REFERENCES timeseries(parameter))
                  WITHOUT ROWID")
 
   # daily table
@@ -64,7 +64,7 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  QP10 NUMERIC,
                  PRIMARY KEY (location, parameter, date)
                  FOREIGN KEY (location) REFERENCES locations(location)
-                 FOREIGN KEY (parameter) REFERENCES locations(parameter))
+                 FOREIGN KEY (parameter) REFERENCES timeseries(parameter))
                  WITHOUT ROWID")
 
 
@@ -98,7 +98,8 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  value NUMERIC,
                  units TEXT,
                  PRIMARY KEY (location, parameter, datetime_UTC)
-                 FOREIGN KEY (location) REFERENCES locations(location))
+                 FOREIGN KEY (location) REFERENCES locations(location)
+                 FOREIGN KEY (parameter) REFERENCES timeseries(parameter))
                  WITHOUT ROWID")
   }
 
@@ -111,7 +112,7 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  value NUMERIC NOT NULL,
                  PRIMARY KEY (location, parameter, sample_date)
                  FOREIGN KEY (location) REFERENCES locations(location)
-                 FOREIGN KEY (parameter) REFERENCES locations(parameter))
+                 FOREIGN KEY (parameter) REFERENCES timeseries(parameter))
                  WITHOUT ROWID")
   }
 
@@ -125,15 +126,14 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                    FOREIGN KEY (location) REFERENCES locations(location))")
   }
 
-
   # And tables that hold metadata for all locations
   DBI::dbExecute(hydro, "CREATE TABLE if not exists datum_conversions (
                  location TEXT NOT NULL,
                  datum_id_from INTEGER NOT NULL,
                  datum_id_to INTEGER NOT NULL,
                  conversion_m NUMERIC NOT NULL,
-                 current BOOLEAN NOT NULL,
-                 PRIMARY KEY (location, datum_id_to)
+                 current TEXT NOT NULL,
+                 PRIMARY KEY (location, datum_id_to, current)
                  FOREIGN KEY (location) REFERENCES locations(location)
                  FOREIGN KEY (datum_id_from) REFERENCES datum_list(datum_id)
                  FOREIGN KEY (datum_id_to) REFERENCES datum_list(datum_id))
@@ -165,7 +165,8 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  last_daily_calculation_UTC TEXT,
                  operator TEXT,
                  network TEXT,
-                 PRIMARY KEY (location, parameter, type))
+                 PRIMARY KEY (location, parameter, type)
+                 FOREIGN KEY (location) REFERENCES locations(location))
                  WITHOUT ROWID")
 
   #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
