@@ -29,7 +29,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
     stop("Your WSC password must be available in the .Renviron file in the form WS_PWD='yourpassword'")
   }
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
@@ -46,8 +46,8 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
     tryCatch({
       if (operator == "WRB" & aquarius){
         ts_name <- aq_names[aq_names$parameter == parameter , 2]
-        data <- WRBtools::aq_download(loc_id = all_timeseries$location[i], ts_name = ts_name, start = as.POSIXct(all_timeseries$end_datetime[i], tz= "UTC") + 1, server = server)
-        ts <- data.frame("location" = all_timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+        data <- WRBtools::aq_download(loc_id = loc, ts_name = ts_name, start = as.POSIXct(all_timeseries$end_datetime[i], tz= "UTC") + 1, server = server)
+        ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
         if (token_time < Sys.time()){
@@ -55,7 +55,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
           token_time <- Sys.time() + 60*9 #make valid for 9 minutes (max is 10 minutes)
         }
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(all_timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(all_timeseries$end_datetime[i], tz="UTC") + 1, end_date = .POSIXct(Sys.time(), "UTC"),  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(loc, if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(all_timeseries$end_datetime[i], tz="UTC") + 1, end_date = .POSIXct(Sys.time(), "UTC"),  token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$datetime_UTC <- as.character(data$datetime_UTC)
@@ -68,7 +68,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
         DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
         DBI::dbAppendTable(hydro, "realtime", ts)
         #make the new entry into table timeseries
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", all_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", as.character(max(ts$datetime_UTC)),"' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
         count <- count + 1
         success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "operator" = operator))
         DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))

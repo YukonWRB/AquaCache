@@ -1,22 +1,25 @@
 Package: WRBdatabase
 Title: Hydrological database creation and maintenance
-Version: 3.0.1-0
+Version: 3.0.1-2
 Authors@R: 
     person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185"))
 Description: Set of functions for the initial creation and ongoing
     maintenance of WRB's local database. This local database is a
     combination of the Water Survey of Canada real-time and historical
-    data and WRB data held in Aquarius; in addition, multiple parameters
-    are calculated to facilitate reporting and graphically representing
-    data.
+    data and WRB data held in Aquarius. Supports flow and level parameters
+    from WSC and any consistently-named timeseries from Aquarius. Multiple
+    parameters are calculated to facilitate reporting and graphically
+    representing data.
 License: AGPL (>= 3) + file LICENSE
+Depends:
+    tidyhydat.ws
 Imports:
     DBI,
     dplyr,
-    hablar,
     fasstr,
     fs,
+    hablar,
     lubridate,
     magrittr,
     RSQLite,
@@ -25,8 +28,6 @@ Imports:
     stringr,
     tidyhydat,
     WRBtools
-Depends:
-    tidyhydat.ws
 Suggests: 
     testthat (>= 3.0.0)
 Remotes:

@@ -15,7 +15,7 @@
 getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
 
-  hydro <- WRBtools::hydroConnect(path = hydro_db_path)
+  hydro <- WRBtools::hydroConnect(path = hydro_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   tables <- DBI::dbListTables(hydro)
@@ -24,7 +24,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
-  snowCon <- WRBtools::snowConnect(path = snow_db_path)
+  snowCon <- WRBtools::snowConnect(path = snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon))
 
   #Get locations and measurements
@@ -135,7 +135,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
 
         DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", locations$SNOW_COURSE_ID[i], "', '", gsub("'", "", locations$SNOW_COURSE_NAME[i]), "', '", locations$latitude[i], "', '", locations$longitude[i], "')"))
 
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO datum_conversions (location, datum_id_from, datum_id_to, conversion_m, current) VALUES ('", locations$SNOW_COURSE_ID[i], "', ' 10', '110', '", locations$ELEVATION[i], "', TRUE)"))
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO datum_conversions (location, datum_id_from, datum_id_to, conversion_m, current) VALUES ('", locations$SNOW_COURSE_ID[i], "', ' 10', '110', '", locations$ELEVATION[i], "', 'TRUE')"))
       }
     }
   }

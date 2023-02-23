@@ -22,7 +22,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
     }
   }
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   #calculate daily means for any days without them

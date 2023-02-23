@@ -12,7 +12,7 @@
 
 update_hydat <- function(timeseries, path, force_update = FALSE){
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   #Check if the local copy of HYDAT needs an update

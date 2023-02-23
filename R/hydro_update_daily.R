@@ -40,7 +40,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
     stop("Your WSC password must be available in the .Renviron file in the form WS_PWD='yourpassword'")
   }
 
-  hydro <- WRBtools::hydroConnect(path = path) #Connect to the hydro database
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE) #Connect to the hydro database
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
@@ -72,7 +72,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   #Check for a new version of HYDAT, update timeseries in the database if needed.
   print("Checking for new HYDAT database...")
   timeseries_WSC <- DBI::dbGetQuery(hydro, "SELECT DISTINCT location FROM timeseries WHERE operator = 'WSC'")
-  new_hydat <- update_hydat(timeseries = timeseries_WSC$location, path = path, force_update = FALSE) #This function is run for flow and level for each station, even if one is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting or because a flow/level only station is reporting the other param.
+  new_hydat <- update_hydat(timeseries = timeseries_WSC$location, path = path, force_update = FALSE) #This function is run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
 
 
   print("Checking tables to see if there are new entries of type 'continuous'...")

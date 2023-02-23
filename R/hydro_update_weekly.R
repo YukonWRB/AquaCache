@@ -36,7 +36,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
     stop("Your WSC password must be available in the .Renviron file in the form WS_PWD='yourpassword'")
   }
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
@@ -48,9 +48,9 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
     operator <- all_timeseries$operator[i]
 
     tryCatch({
+      ts <- data.frame() #Make empty df here so that if (nrow(ts) > 0) works as intended later.
       if (operator == "WRB" & aquarius){
         ts_name <- aq_names[aq_names$parameter == parameter, 2]
-
         if (aquarius_range == "unapproved"){
           realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND NOT approval = 'approved'"))
           first_unapproved <- min(realtime$datetime_UTC)
@@ -76,19 +76,26 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
       if (nrow(ts) > 0){
         mismatch <- FALSE
         done <- FALSE
+        row <- 1
         while (!mismatch & !done){
-          for (j in 1:nrow(ts)){
-            datetime <- ts$datetime_UTC[i]
-            if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime. If not, mismatch is TRUE
-              if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"])){
-                mismatch <- TRUE
+          datetime <- ts$datetime_UTC[row]
+          if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime. If not, mismatch is TRUE
+            if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"])){ #check that values are the same
+              mismatch <- TRUE
+              if (row > 1) { #Go back to the last known good point if not the first row
+                datetime <- ts$datetime_UTC[row-100]
               }
             } else {
-              mismatch <- TRUE
+              row <- row + 100 #Go up by increments of 100 for the sake of speed
             }
-            if (j == nrow(ts)){
-              done <- TRUE
+          } else {
+            mismatch <- TRUE
+            if (row > 1) { #Go back to the last known good point if not the first row
+              datetime <- ts$datetime_UTC[row-100]
             }
+          }
+          if (row == nrow(ts)){
+            done <- TRUE
           }
         }
         if (mismatch){
@@ -96,7 +103,6 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
           DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
           DBI::dbAppendTable(hydro, "realtime", ts)
           DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date >= '", substr(min(ts$datetime_UTC), 1, 10), "'"))
-          DBI::dbAppendTable(hydro, "realtime", ts)
           #make the new entry into table timeseries
           end <- max(max(realtime$datetime_UTC), ts$datetime_UTC)
           DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "' WHERE location = '", all_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
@@ -114,6 +120,6 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
     )
   }
 
-    DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_weekly'"))
+  DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_weekly'"))
 
 } #End of function

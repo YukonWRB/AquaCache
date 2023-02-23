@@ -46,7 +46,7 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
   #Check hydat version, update if needed.
   WRBtools::hydat_check()
 
-  hydro <- WRBtools::hydroConnect(path = path)
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   if (aquarius){

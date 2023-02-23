@@ -23,7 +23,7 @@ getWatersheds <- function(locations = "WSC", path){
   }
 
   #Connect to the DB
-  hydro <- WRBtools::hydroConnect(path = db_path)
+  hydro <- WRBtools::hydroConnect(path = db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   tables <- DBI::dbListTables(hydro)
@@ -69,7 +69,15 @@ getWatersheds <- function(locations = "WSC", path){
     tryCatch({
       fs::dir_copy(paste0(tempdir(), "/drainages/", i), paste0(watersheds_folder, "/", i), overwrite = TRUE)
       basin <- list.files(paste0(watersheds_folder, "/", i), pattern = "*.+Drainage.+.shp$", full.names = TRUE)
-
+      #Find existing entries for that location, check if file path valid. If not, delete entry.
+      existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM polygons WHERE location = '", i, "'"))
+      if (nrow(existing > 0)){ #check if the file paths are still valid
+        for (j in nrow(existing)){
+          if (!(file.exists(existing$file_path[j]))){
+            DBI::dbExecute(hydro, paste0("DELETE FROM polygons WHERE file_path = '", existing$file_path[j], "'"))
+          }
+        }
+      }
         DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO polygons (description, location, file_path) VALUES ('drainage_basin', '", i, "', '", basin, "')"))
         DBI::dbExecute(hydro, paste0("UPDATE polygons SET file_path = '", basin, "' WHERE location = '", i, "'"))
 
@@ -85,6 +93,16 @@ getWatersheds <- function(locations = "WSC", path){
     }, error = function(e) {
       print(paste0("Could not find a watershed polygon for location ", i))
     })
+  }
+
+  #check if file path valid. If not, delete entry.
+  existing <- DBI::dbGetQuery(hydro, "SELECT * FROM polygons WHERE location = 'all_locations'")
+  if (nrow(existing > 0)){ #check if the file paths are still valid
+    for (j in nrow(existing)){
+      if (!(file.exists(existing$file_path[j]))){
+        DBI::dbExecute(hydro, paste0("DELETE FROM polygons WHERE file_path = '", existing$file_path[j], "'"))
+      }
+    }
   }
   suppressMessages(sf::write_sf(poly, dsn = watersheds_folder, layer = "all_basins", driver = "ESRI Shapefile"))
   DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO polygons (description, location, file_path) VALUES ('all_drainage_basins', 'all_locations', '", paste0(watersheds_folder, "/all_basins.shp"), "')"))
