@@ -43,7 +43,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   hydro <- WRBtools::hydroConnect(path = path, silent = TRUE) #Connect to the hydro database
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
-  aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+  if (aquarius){
+    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'") #This loads the timeseries names for later
+  }
 
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
   print("Getting realtime information up to date with hydro_update_hourly...")
@@ -85,7 +87,6 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
     for (i in 1:nrow(new_timeseries)){
       loc <- new_timeseries$location[i]
       parameter <- new_timeseries$parameter[i]
-      units <- new_timeseries$units[i]
       network <- new_timeseries$network[i]
       print(paste0("Attempting to add location ", loc, " for parameter ", parameter, " and type continuous. Timeseries table, locations table, and measurement tables will be populated if successful."))
       tryCatch({
@@ -279,7 +280,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
     }
     for (i in 1:nrow(datum_conversions)){
       DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO datum_conversions (location, datum_id_from, datum_id_to, conversion_m, current) VALUES ('", datum_conversions$location[i], "', '", datum_conversions$datum_id_from[i], "', '", datum_conversions$datum_id_to[i], "', '", datum_conversions$conversion_m[i], "', '", datum_conversions$current[i], "')"))
-      DBI::dbExecute(hydro, paste0("UPDATE datum_conversions SET datum_id_from = '", datum_conversions$datum_id_from[i], "', datum_id_to = '", datum_conversions$datum_id_to[i], "', conversion_m = '", datum_conversions$conversion_m[i], "', current = '", datum_conversions$current[i], "' WHERE location = '", datum_conversions$location[i], "'"))
+      DBI::dbExecute(hydro, paste0("UPDATE datum_conversions SET current = '", datum_conversions$current[i], "' WHERE location = '", datum_conversions$location[i], "' AND datum_id_from = '", datum_conversions$datum_id_from[i], "' AND datum_id_to = '", datum_conversions$datum_id_to[i], "'"))
     }
     print("Table datum_conversions was updated because of either a new copy of HYDAT, addition of new stations, or detection of datums missing from a/some stations.")
   }

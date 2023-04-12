@@ -71,7 +71,6 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       }
       names(level_rt) <- c("datetime_UTC", "value", "location")
       level_rt$approval <- "preliminary"
-      level_rt$units <- "m"
       level_rt$parameter <- "level"
       level_rt$datetime_UTC <- as.character(level_rt$datetime_UTC)
 
@@ -85,7 +84,6 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       }
       names(flow_rt) <- c("datetime_UTC", "value", "location")
       flow_rt$approval <- "preliminary"
-      flow_rt$units <- "m3/s"
       flow_rt$parameter <- "flow"
       flow_rt$datetime_UTC <- as.character(flow_rt$datetime_UTC)
 
@@ -107,7 +105,6 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
     new_realtime$flow[[i]] <- new_realtime$flow[[i]][,c(2,4,1)]
     names(new_realtime$flow[[i]]) <- c("datetime_UTC", "value", "location")
     new_realtime$flow[[i]]$approval <- "preliminary"
-    new_realtime$flow[[i]]$units <- "m3/s"
     new_realtime$flow[[i]]$parameter <- "flow"
     new_realtime$flow[[i]]$datetime_UTC <- as.character(new_realtime$flow[[i]]$datetime_UTC)
     start_AQ <- as.character(min(aqFlow[[i]]$timeseries$timestamp_UTC))
@@ -141,7 +138,6 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
     new_realtime$level[[i]] <- new_realtime$level[[i]][,c(2,4,1)]
     names(new_realtime$level[[i]]) <- c("datetime_UTC", "value", "location")
     new_realtime$level[[i]]$approval <- "preliminary"
-    new_realtime$level[[i]]$units <- "m"
     new_realtime$level[[i]]$parameter <- "level"
     new_realtime$level[[i]]$datetime_UTC <- as.character(new_realtime$level[[i]]$datetime_UTC)
     start_AQ <- as.character(min(aqLevel[[i]]$timeseries$timestamp_UTC))

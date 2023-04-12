@@ -13,7 +13,7 @@ add_location(path, location, parameter, units, type, network)
 
 \item{parameter}{The parameter for this location, matched 1:1 to the other vectors. If at all possible match existing parameters, such as "level", "flow", "SWE", "snow depth", or "distance", or "temperature".}
 
-\item{units}{The measurement units for this new location, matched 1:1 to the other vectors. If at all possible try to match an existing unit.}
+\item{units}{The measurement units for this new location, matched 1:1 to the other vectors. If at all possible try to match an existing unit such as "m" for level or distance, "m3/s" for flow volumes, "mm" for mm SWE or precipitation, "cm" for snow depth.}
 
 \item{type}{Continuous or discrete, matched to the other vectors 1:1.}
 
@@ -24,4 +24,7 @@ One or more new entries are created in the table locations.
 }
 \description{
 This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries table. The locations table and matching measurement tables will be populated during the next run of hydro_update_daily. If specifying level or flow, incorporation will first be attempted for a WSC location. Failure triggers an attempt to add a station from Aquarius.
+}
+\seealso{
+\link[WRBtools:DB_browse_ts]{WRBtools::DB_browse_ts} to see what's in the timeseries table already and match parameters, units, types, networks.
 }

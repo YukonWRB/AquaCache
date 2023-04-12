@@ -1,6 +1,6 @@
 #' Initial hydro database creation.
 #'
-#' Creates an SQLite database or replaces an existing database. Established pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and parameter, location and datetime_UTC, or location and date columns.
+#' Creates an SQLite database or replaces an existing database. Establishsd pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and parameter, location and datetime_UTC, or location and date columns.
 #'
 #' @param path The path to the local hydro SQLite database or the location where it should be created, with extension.
 #' @param extras The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course or other discrete measurements, precipitation rasters (forecast and reanalysis products), automatic still images at monitoring locations, forecast values (level and flow), and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "atuo_images", "forecasts", "discrete", "watersheds", or leave "none" for nothing.
@@ -38,7 +38,6 @@ initial_create <- function(path, extras = "none", overwrite = FALSE, new = FALSE
                  parameter TEXT NOT NULL,
                  datetime_UTC TEXT NOT NULL,
                  value NUMERIC,
-                 units TEXT,
                  grade TEXT,
                  approval TEXT,
                  PRIMARY KEY (location, parameter, datetime_UTC)
