@@ -99,9 +99,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
               token <- suppressMessages(tidyhydat.ws::token_ws())
               data_realtime <- NULL
               if (parameter == "flow"){
-                data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_timeseries$location[i], 47, start_date = Sys.Date()-577, token = token))
+                data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_timeseries$location[i], 47, start_date = as.POSIXct(Sys.Date()-577), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
               } else if (parameter == "level"){
-                data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_timeseries$location[i], 46, start_date = Sys.Date()-577, token = token))
+                data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_timeseries$location[i], 46, start_date = as.POSIXct(Sys.Date()-577), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
               }
               data_realtime <- data_realtime[,c(2,4,1)]
               names(data_realtime) <- c("datetime_UTC", "value", "location")

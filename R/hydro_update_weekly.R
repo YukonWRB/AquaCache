@@ -3,9 +3,10 @@
 #' The weekly update function pulls and replaces a large tranche of Water Survey of Canada and Aquarius data to ensure incorporation of any edits. By default, all real-time water survey data currently available online is replaced, as is any Aquarius data not previously labelled as "approved". Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 #'
 #' @param path The path to the local hydro SQLite database, with extension.
+#' @param locations The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.
 #' @param WSC_range The starting date from which to pull real-time WSC data from the web and replace in the local database. Default is max possible days.
-#' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next six parameters. FALSE will only populate with WSC data.
-#' @param aquarius_range Should only unapproved (locked) data be replaced, or all available data? Select from "all" or "unapproved". Default is "unapproved".
+#' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next two parameters. FALSE will only replace WSC data.
+#' @param aquarius_range Should only unapproved (unlocked) data be replaced, or all available data? Select from "all" or "unapproved". Default is "unapproved".
 #' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
 #'
 #' @return Updated entries in the hydro database.
@@ -39,9 +40,16 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
   hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
-  aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+  if (aquarius){
+    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+  }
 
-  all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+  if (locations == "all"){
+    all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+  } else {
+    all_timeseries <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE type = 'continuous' AND location IN ('", paste(locations, collapse = "', '"), "')"))
+  }
+
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
@@ -64,7 +72,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
       } else if (operator == "WSC"){
         realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND datetime_UTC >= '", WSC_range, "'"))
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(all_timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = WSC_range,  token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(all_timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(WSC_range), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$parameter <- parameter
