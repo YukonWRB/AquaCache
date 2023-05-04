@@ -22,7 +22,6 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
     }
   }
 
-  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   #calculate daily means for any days without them
@@ -30,8 +29,8 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
   for (i in 1:nrow(timeseries)){
     loc <- timeseries$location[i]
     parameter <- timeseries$parameter[i]
+    hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
     units <- DBI::dbGetQuery(hydro, paste0("SELECT units FROM timeseries WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
-
     last_day_historic <- DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
     #TODO: the step below is slow, needs to query a very large table. Can it be done another way?
     earliest_day_realtime <- as.character(as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]))
@@ -73,6 +72,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
     # Now calculate stats where they are missing
     all_stats <- DBI::dbGetQuery(hydro, paste0("SELECT date, value FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))
     missing_stats <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND max IS NULL"))
+    DBI::dbDisconnect(hydro)
     #TODO: the step above selects rows that get dropped later, and does this each time. How about just working with gap_realtime from above?
 
     # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the daily table without replacing it.
@@ -145,8 +145,10 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
       missing_stats <- rbind(missing_stats, feb_29)
 
       #TODO: line below needs to become an UPDATE instead
+      hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
       DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "' AND max IS NULL")) #The AND max IS NULL part prevents deleting entries within the time range that have not been recalculated, as would happen if, say, a Feb 29 is calculated on March 3rd. Without that condition, March 1 and 2 would also be deleted but are not part of missing_stats due to initial selection criteria of missing_stats.
       DBI::dbAppendTable(hydro, "daily", missing_stats)
+      DBI::dbDisconnect(hydro)
     }
   } # End of for loop calculating means and stats for each station in timeseries table
 }

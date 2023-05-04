@@ -39,16 +39,15 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
 
   hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
-
   if (aquarius){
     aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
   }
-
   if (locations == "all"){
     all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
   } else {
     all_timeseries <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE type = 'continuous' AND location IN ('", paste(locations, collapse = "', '"), "')"))
   }
+  DBI::dbDisconnect(hydro)
 
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
@@ -59,6 +58,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
       ts <- data.frame() #Make empty df here so that if (nrow(ts) > 0) works as intended later.
       if (operator == "WRB" & aquarius){
         ts_name <- aq_names[aq_names$parameter == parameter, 2]
+        hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         if (aquarius_range == "unapproved"){
           realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND NOT approval = 'approved'"))
           first_unapproved <- min(realtime$datetime_UTC)
@@ -67,10 +67,13 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
           realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND datetime_UTC >= '", first_unapproved, "'"))
           data <- WRBtools::aq_download(loc_id = all_timeseries$location[i], ts_name = ts_name, server = server)
         }
+        DBI::dbDisconnect(hydro)
         ts <- data.frame("location" = all_timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
+        hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND datetime_UTC >= '", WSC_range, "'"))
+        DBI::dbDisconnect(hydro)
         token <- suppressMessages(tidyhydat.ws::token_ws())
         data <- suppressMessages(tidyhydat.ws::realtime_ws(all_timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(WSC_range), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
         data <- data[,c(2,4,1)]
@@ -108,12 +111,14 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
         }
         if (mismatch){
           ts <- ts[ts$datetime_UTC >= datetime ,]
+          hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
           DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
           DBI::dbAppendTable(hydro, "realtime", ts)
           DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date >= '", substr(min(ts$datetime_UTC), 1, 10), "'"))
           #make the new entry into table timeseries
           end <- max(max(realtime$datetime_UTC), ts$datetime_UTC)
           DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "' WHERE location = '", all_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+          DBI::dbDisconnect(hydro)
 
           #Recalculate daily means and statistics
           calculate_stats(timeseries = data.frame("location" = loc,
@@ -128,6 +133,8 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRU
     )
   }
 
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_weekly'"))
+  DBI::dbDisconnect(hydro)
 
 } #End of function

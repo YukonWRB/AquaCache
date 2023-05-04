@@ -31,11 +31,13 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
 
   hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
-
-  aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+  all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+  if (aquarius){
+    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+  }
+  DBI::dbDisconnect(hydro)
 
   count <- 0 #counter for number of successful stations
-  all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
   success <- data.frame()
   token_time <- Sys.time()-1
   for (i in 1:nrow(all_timeseries)){
@@ -65,6 +67,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
       }
 
       if (nrow(ts) > 0){
+        hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' AND datetime_UTC BETWEEN '", min(ts$datetime_UTC), "' AND '", max(ts$datetime_UTC), "'"))
         DBI::dbAppendTable(hydro, "realtime", ts)
         #make the new entry into table timeseries
@@ -72,12 +75,15 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
         count <- count + 1
         success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "operator" = operator))
         DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND operator = '", operator, "' AND type = 'continuous'"))
+        DBI::dbDisconnect(hydro)
       }
     }, error = function(e) {}
     ) #End of tryCatch
   } #End of iteration over each location + param
   print(paste0(count, " out of ", nrow(all_timeseries), " timeseries were updated."))
+  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_realtime'"))
+  DBI::dbDisconnect(hydro)
   return(success)
 } #End of function
 

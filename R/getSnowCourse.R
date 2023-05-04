@@ -19,17 +19,19 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   tables <- DBI::dbListTables(hydro)
+  DBI::dbDisconnect(hydro)
   if (!("discrete" %in% tables)){
     print("The table 'discrete' is being created in the database using function initial_create.")
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
   snowCon <- WRBtools::snowConnect(path = snow_db_path, silent = TRUE)
-  on.exit(DBI::dbDisconnect(snowCon))
+  on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
 
   #Get locations and measurements
   locations <- DBI::dbReadTable(snowCon, "SNOW_COURSE")
   meas <- DBI::dbGetQuery(snowCon, paste0("SELECT * FROM SNOW_SAMPLE WHERE SNOW_COURSE_ID IN ('", paste(locations$SNOW_COURSE_ID, collapse = "', '"), "')"))
+  DBI::dbDisconnect(snowCon)
 
   #Manipulate/preprocess things a bit
   meas <- meas[which(meas$EXCLUDE_FLG==0),] # OMIT VALUES OF EXCLUDEFLG=1, aka TRUE
@@ -101,7 +103,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     locations <- locations[locations$ACTIVE_FLG == TRUE ,]
   }
 
-
+  hydro <- WRBtools::hydroConnect(path = hydro_db_path, silent = TRUE)
   for (i in 1:nrow(locations)){
     #get new measurements
     if (overwrite){
@@ -140,5 +142,6 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     }
   }
   DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_snow_courses'"))
+  DBI::dbDisconnect(hydro)
   print("Snow course survey data is updated in the database.")
 }

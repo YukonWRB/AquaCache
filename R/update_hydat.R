@@ -12,7 +12,6 @@
 
 update_hydat <- function(timeseries, path, force_update = FALSE){
 
-  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   #Check if the local copy of HYDAT needs an update
@@ -23,7 +22,9 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
   if (!force_update){ #Check if HYDAT last used with the DB is older than the new hydat
     local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
     local_hydat <- gsub("-", "", as.character(local_hydat))
+    hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
     DB_hydat <- as.character(DBI::dbGetQuery(hydro, "SELECT value FROM internal_status WHERE event = 'HYDAT_version'"))
+    DBI::dbDisconnect(hydro)
     if (DB_hydat != local_hydat){
       new_hydat <- TRUE
     } else {
@@ -49,7 +50,9 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
         flow_historical$units <- "m3/s"
         flow_historical$date <- as.character(flow_historical$date)
 
+        hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         existing <- DBI::dbGetQuery(hydro, paste0("SELECT datetime_UTC, value FROM daily WHERE location = '", i, "' AND parameter = 'flow'"))
+        DBI::dbDisconnect(hydro)
         if (nrow(existing) > 0){
           mismatch <- FALSE
           done <- FALSE
@@ -70,15 +73,20 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
           }
           if (mismatch){ #only need to append new if mismatch == TRUE, otherwise the TS was not yet updated in HYDAT.
             flow_historical <- flow_historical[flow_historical$date >= new_hydat_start , ]
+            hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
             DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", min(flow_historical$date), "' AND location = '", i, "' AND parameter = 'flow'")) #Deletes everything after the first HYDAT entry that is not in or different from the database.
             DBI::dbAppendTable(hydro, "daily", flow_historical)
             DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation = NULL WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous' AND operator = 'WSC'"))
+            DBI::dbDisconnect(hydro)
           }
         } else {
+          hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
           DBI::dbAppendTable(hydro, "daily", flow_historical)
+          DBI::dbDisconnect(hydro)
         }
 
         #check if it already exists in timeseries table
+        hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
         if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to timeseries table from scratch
           timeseries_info <- data.frame("location" = i)
@@ -109,6 +117,7 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
           end_datetime <- max(c(end_datetime_realtime, end_datetime_historical))
           DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "' WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
         }
+        DBI::dbDisconnect(hydro)
 
         #Recalculate daily means and stats
         calculate_stats(timeseries = data.frame("location" = i,
@@ -127,7 +136,9 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
         level_historical$units <- "m"
         level_historical$date <- as.character(level_historical$date)
 
+        hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         existing <- DBI::dbGetQuery(hydro, paste0("SELECT datetime_UTC, value FROM daily WHERE location = '", i, "' AND parameter = 'level'"))
+        DBI::dbDisconnect(hydro)
         if (nrow(existing) > 0){
           mismatch <- FALSE
           done <- FALSE
@@ -147,15 +158,20 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
             }
           }
           if (mismatch){ #only need to append new if mismatch == TRUE, otherwise the TS was not yet updated in HYDAT.
+            hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
             level_historical <- level_historical[level_historical$date >= new_hydat_start , ]
             DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE date >= '", min(level_historical$date), "' AND location = '", i, "' AND parameter = 'level'"))
             DBI::dbAppendTable(hydro, "daily", level_historical)
             DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation = 'NULL' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous' AND operator = 'WSC'"))
+            DBI::dbDisconnect(hydro)
           }
         } else {
+          hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
           DBI::dbAppendTable(hydro, "daily", level_historical)
+          DBI::dbDisconnect(hydro)
         }
         #check if it already exists in timeseries table
+        hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         ts <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
         if (nrow(ts) == 0){ #It is a new TS at an existing location: add entry to timeseries table from scratch, update locations table
           timeseries_info <- data.frame("location" = i)
@@ -187,6 +203,7 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
           end_datetime <- max(c(end_datetime_realtime, end_datetime_historical))
           DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
         }
+        DBI::dbDisconnect(hydro)
         #Recalculate daily means and stats
         calculate_stats(timeseries = data.frame("location" = i,
                                                "parameter" = "level"),
@@ -196,10 +213,12 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
       ) #End of level section
     } #End of for loop updating information contained in HYDAT for each timeseries
 
+    hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
     timeseries_WSC <- DBI::dbGetQuery(hydro, "SELECT DISTINCT location FROM timeseries WHERE operator = 'WSC'")
     if (length(timeseries_WSC$location) == length(timeseries)){
       DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", local_hydat, "' WHERE event = 'HYDAT_version'"))
     }
+    DBI::dbDisconnect(hydro)
   } #End of section updating information contained in HYDAT if HYDAT is new
 
   return(new_hydat)
