@@ -7,6 +7,7 @@
 hydro_update_weekly(
   path,
   WSC_range = Sys.Date() - 577,
+  locations = "all",
   aquarius = TRUE,
   aquarius_range = "unapproved",
   server = "https://yukon.aquaticinformatics.net/AQUARIUS"
@@ -17,13 +18,13 @@ hydro_update_weekly(
 
 \item{WSC_range}{The starting date from which to pull real-time WSC data from the web and replace in the local database. Default is max possible days.}
 
+\item{locations}{The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.}
+
 \item{aquarius}{TRUE if you are fetching data from Aquarius, in which case you should also check the next two parameters. FALSE will only replace WSC data.}
 
 \item{aquarius_range}{Should only unapproved (unlocked) data be replaced, or all available data? Select from "all" or "unapproved". Default is "unapproved".}
 
 \item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
-
-\item{locations}{The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.}
 }
 \value{
 Updated entries in the hydro database.

@@ -15,7 +15,7 @@
 #'
 
 
-hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, aquarius = TRUE, aquarius_range = "unapproved", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
+hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "all", aquarius = TRUE, aquarius_range = "unapproved", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 {
 
   if (!(aquarius_range %in% c("all", "unapproved"))){
