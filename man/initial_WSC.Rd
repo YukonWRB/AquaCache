@@ -24,16 +24,17 @@ initial_WSC(
 
 \item{discharge}{The name of the discharge(flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All WSC_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.}
 
-\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
+\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}.}
 }
 \value{
 Updated tables in the database.
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
+
 Pulls data from Aquarius as well as from WSC to perform the initial creation of WSC-related tables. The incorporation of Aquarius data is done to fill the gap between the 18 months of real-time data and the published historical data (daily means), as well as to provide finer resolution data beyond the last 18 months. A local copy of the HYDAT database will be created or updated, if needed.
-}
-\details{
+
 WSC stations should be specified in a character vector of arbitrary length. The naming of WSC stations should follow the WSC convention, e.g. "09AB001". To successfully download from Aquarius these timeseries must be named IDENTICALLY in Aquarius. You must also specify the standard naming scheme for your stage (level) and discharge(flow) timeseries, in the form Parameter.Label.
 
-Uses two functions under the hood that require some set-up of the .Renviron file: tidyhydat.ws::realtime_ws and WRBtools::aq_download. See respective help files for setup information.
+Uses two functions under the hood that require some set-up of the .Renviron file: \code{\link[tidyhydat.ws:realtime_ws]{tidyhydat.ws::realtime_ws()}} and \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}. See respective help files for setup information.
 }

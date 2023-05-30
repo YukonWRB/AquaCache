@@ -1,13 +1,16 @@
 #' Weekly update of hydro database
 #'
+#' @description
+#' `r lifecycle::badge("stable")`
+#'
 #' The weekly update function pulls and replaces a large tranche of Water Survey of Canada and Aquarius data to ensure incorporation of any edits. By default, all real-time water survey data currently available online is replaced, as is any Aquarius data not previously labelled as "approved". Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 #'
-#' @param path The path to the local hydro SQLite database, with extension.
+#' @param path The path to the local hydro SQLite database, with extension. Passed to [WRBtools::hydroConnect()].
 #' @param locations The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.
 #' @param WSC_range The starting date from which to pull real-time WSC data from the web and replace in the local database. Default is max possible days.
 #' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next two parameters. FALSE will only replace WSC data.
 #' @param aquarius_range Should only unapproved (unlocked) data be replaced, or all available data? Select from "all" or "unapproved". Default is "unapproved".
-#' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
+#' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see [WRBtools::aq_download()].
 #'
 #' @return Updated entries in the hydro database.
 #' @import tidyhydat.ws

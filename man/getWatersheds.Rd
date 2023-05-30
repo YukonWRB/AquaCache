@@ -15,5 +15,9 @@ getWatersheds(locations = "WSC", path)
 The database table 'polygons' is populated or re-populated with links to shapefiles of polygons, pour points, and station points.
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
+
+\strong{This function is only capable of fetching pre-made polygons for WSC locations}. Improvements are planned to allow for creation of new polygons using function \code{\link[WRBtools:drainageBasins]{WRBtools::drainageBasins()}}.
+
 Add watershed polygons to the database, stored in a separate folder alongside the database itself. Currently works only with WSC stations, as uses existing watershed polygons created by the WSC. Each watershed gets a folder containing the polygon, the associated pour point, and the monitoring location itself. In addition, a single shapefile is created containing only the watershed polygons.
 }

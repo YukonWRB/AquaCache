@@ -14,7 +14,7 @@ hydro_update_weekly(
 )
 }
 \arguments{
-\item{path}{The path to the local hydro SQLite database, with extension.}
+\item{path}{The path to the local hydro SQLite database, with extension. Passed to \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
 
 \item{WSC_range}{The starting date from which to pull real-time WSC data from the web and replace in the local database. Default is max possible days.}
 
@@ -24,11 +24,13 @@ hydro_update_weekly(
 
 \item{aquarius_range}{Should only unapproved (unlocked) data be replaced, or all available data? Select from "all" or "unapproved". Default is "unapproved".}
 
-\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.}
+\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}.}
 }
 \value{
 Updated entries in the hydro database.
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
+
 The weekly update function pulls and replaces a large tranche of Water Survey of Canada and Aquarius data to ensure incorporation of any edits. By default, all real-time water survey data currently available online is replaced, as is any Aquarius data not previously labelled as "approved". Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 }

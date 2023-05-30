@@ -1,9 +1,12 @@
 #' Calculate daily means and statistics
 #'
+#' @description
+#' `r lifecycle::badge("stable")`
+#'
 #' This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation. It *must* be used with a database created by this package, or one with identical table and column names.
 #'
 #' @param timeseries A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.
-#' @param path The path to the hydrometric database, passed to WRBtools::hydroConnect.
+#' @param path The path to the hydrometric database, passed to [WRBtools::hydroConnect()].
 #' @param start_recalc The day on which to start daily calculations, one vector element per row of the dataset passed as argument to timeseries. If NULL will only recalculate necessary days.
 #'
 #' @return Updated entries in the 'daily' table

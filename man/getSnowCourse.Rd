@@ -14,7 +14,7 @@ getSnowCourse(
 \arguments{
 \item{hydro_db_path}{Full path to the hydrology database}
 
-\item{snow_db_path}{Full path to the snow survey database}
+\item{snow_db_path}{Full path to the snow survey database, passed to \code{\link[WRBtools:snowConnect]{WRBtools::snowConnect()}}.}
 
 \item{inactive}{Should inactive stations be included?}
 
@@ -24,5 +24,9 @@ getSnowCourse(
 The hydro database is updated in place.
 }
 \description{
-Pulls and processes snow course data before updating entries into the local hydrometric database. Calls function WRBtools::snowInfo for the bulk of the work.
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
+
+\strong{This fuction works with the Microsoft Access snow survey database, circa pre spring 2023}. This function must be refreshed once this database changes.
+
+Pulls and processes snow course data before updating entries into the local hydrometric database.
 }

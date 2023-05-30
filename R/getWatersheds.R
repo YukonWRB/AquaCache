@@ -1,5 +1,10 @@
 #' Add watershed polygons to database
 #'
+#' @description
+#' `r lifecycle::badge("experimental")`
+#'
+#' **This function is only capable of fetching pre-made polygons for WSC locations**. Improvements are planned to allow for creation of new polygons using function [WRBtools::drainageBasins()].
+#'
 #' Add watershed polygons to the database, stored in a separate folder alongside the database itself. Currently works only with WSC stations, as uses existing watershed polygons created by the WSC. Each watershed gets a folder containing the polygon, the associated pour point, and the monitoring location itself. In addition, a single shapefile is created containing only the watershed polygons.
 #'
 #' @param locations The locations for which you want to add or update polygons. Default "WSC" will get polygons for all WSC stations in the 'locations' table, or specify a vector of location IDs (must all be present in table 'locations'. Currently only supports addition of WSC polygons.

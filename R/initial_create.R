@@ -1,8 +1,11 @@
 #' Initial hydro database creation.
 #'
+#' @description
+#' `r lifecycle::badge("stable")`
+#'
 #' Creates an SQLite database or replaces an existing database. Establishsd pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and parameter, location and datetime_UTC, or location and date columns.
 #'
-#' @param path The path to the local hydro SQLite database or the location where it should be created, with extension.
+#' @param path The path to the local hydro SQLite database or the location where it should be created, with extension. Passed to [WRBtools::hydroConnect()] if new = FALSE or to [DBI::dbConnect()] if new = TRUE.
 #' @param extras The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course or other discrete measurements, precipitation rasters (forecast and reanalysis products), automatic still images at monitoring locations, forecast values (level and flow), and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "atuo_images", "forecasts", "discrete", "watersheds", or leave "none" for nothing.
 #' @param overwrite TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.
 #' @param new Allows you to create a new SQLite database. By default, the connection to the database path checks for an existing database. You can create a new DB at 'path' if 'path' does not point to an existing database. Creates an SQLite database.

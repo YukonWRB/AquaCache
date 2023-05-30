@@ -1,10 +1,13 @@
 #' Hourly update of real-time data
 #'
+#' @description
+#' `r lifecycle::badge("stable")`
+#'
 #' Retrieves new real-time data from WSC and Aquarius, starting from the last data point in the local database. Also updates the location_data_range table. Only works on stations that are ALREADY in the realtime tables; refer to function hydro_update_daily for how to add new stations. Timeseries that have an identical location name in WSC real-time data and Aquarius will only pull from WSC information.
 #'
 #' @param path The path to the local hydro SQLite database, with extension.
 #' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next five parameters. FALSE will only populate with WSC data.
-#' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see ?WRBtools::aq_download.
+#' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see [WRBtools::aq_download()].
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @import tidyhydat.ws

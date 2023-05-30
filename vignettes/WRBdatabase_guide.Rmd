@@ -1,0 +1,216 @@
+---
+title: "WRBdatabase User Guide"
+author: "Ghislain de Laplante"
+date: "2023-05-30"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{WRBdatabase User Guide}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(WRBdatabase)
+```
+
+Important note regarding this vignette: if you are reading this in an HTML, Word or PDF document from the package folder on the G drive and wish to update the document, please do so via the vignette R Markdown document and re-publish/overwrite the document. The R Markdown document should be the ultimate source of truth regarding this R package and associated Shiny application. Instructions on how to do so are provided in the vignette Markdown document.
+
+This vignette may also come to contain R code and links to other documentation. For best performance and to ensure that all links function, it is recommended to view this vignette from within R Studio. You can view all package vignettes with 'vignette(package = "WRBdatabase")' or this particular vignette with 'vignette(topic = "WRBdatabase_guide")'. Note however that vignettes may not have been installed, depending on the method you used to install the package.
+
+```{r vignette building comments, eval=FALSE, include=FALSE}
+# You should be modifying this vignette from the .Rmd document in the /vignettes folder, NOT the .RMD in the /doc folder.
+# To have this vignette updated on the G drive, uncomment and run the following code *after* re-building the vignette using devtools::build_vignettes()
+# file.copy(from = paste0(dirname(getwd()), "/doc/WRBdatabase_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/WRBdatabase/WRBdatabase user guide.html", overwrite = TRUE)
+```
+
+# Introduction
+
+The WRB's local hydrometeorological database is intended as a central repository of data originating from several disparate sources. These sources as of Feb1, 2023 are: WSC and ECCC (via FTP sites) Aquarius, Snow Survey Access database). Centralization was deemed necessary for several reasons:
+
+1.  Decreased latency in accessing data, providing a better user experience and accelerating the production of reports or other products using these data;
+2.  Convenient single access point for various data streams;
+3.  Harmonization of different interpolation periods into coherent daily means timeseries;
+4.  Elimination of repeated calculations of daily means and informational/plotting statistics.
+
+This database should not be considered a static repository of information: when working as intended, it will continuously incorporate new information and calculate derived data, check itself for errors, and update tables whenever necessary to reflect changes to remote data stores.
+
+The database itself is in .SQLite format, and is created and maintained by a suite of R functions held withing an R package called WRBdatabase. Software development is tracked using Git, reflected to the [YukonWRB/WRBdatabase](https://github.com/YukonWRB/WRBdatabase) GitHub repository, and stable versions are stored locally [on the G drive](file:///G:/water/Common_GW_SW/R-packages/WRBdatabase). Development was undertaken by Ghislain de Laplante, who is also the current package maintainer.
+
+Though the database is currently in .SQLite format, all database interactions using R are passed to the database as standard SQL language and should therefore work seamlessly on PostgreSQL and Microsoft SQL Server databases, among others. An exception to this is the database connection code, which is discussed below under the WRBtools package: this one is specific to the database type by necessecity.
+
+A strong attempt was made to limit additional dependencies wherever feasible, and otherwise to use long term stable, widely adopted packages. That said, there is no guarantee that dependencies will not change: always test new versions of WRBdatabase or updates to other packages on a non-production machine before updating the production machine.
+
+# The WRBdatabase package
+
+The **WRBdatabase** package was written with the goal of being as database-format-agnostic as possible: standard SQL is used for all database interactions once the initial connection is established. To facilitate future changes to database formats and connection methods, connections to the central database and to the snow survey database are handled by dedicated and easy to change functions in the WRBtools package. These are discussed later on in this document.
+
+All of the functions that you will interact with to install and continuously update the database are located in the WRBdatabase package. These include functions for:
+
+-   Initial creation of empty tables (initial_create())
+
+-   Population of empty tables with data for WSC stations location in both Aquarius and Datamart (initial_WSC())
+
+-   Addition of new locations and parameters to the database (add_location)
+
+-   Incorporation of new real-time information from the WSC and from Aquarius (hydro_update_hourly())
+
+-   Calculation of daily means and derived statistics for all continuously-measured parameters (hydro_update_daily() -- this function is discussed in more detail below)
+
+-   Updating realtime information that may be edited after initial creation (e.g. removal of spikes) from datamart (WSC locations) and Aquarius (WRB locations) (hydro_update_weekly())
+
+-   Finding and adding watershed polygons to the database as shapefiles (getWatersheds())
+
+-   Updating manual snow survey information to reflect the Snow Survey Access database (getSnowCourse())
+
+## Workhorse function 1: hydro_update_daily()
+
+This function, intended to be run daily, performs many different operations essential to database currency and integrity. In a nutshell, it does the following:
+
+-   Connects to the database.
+
+-   Checks for a new version of the HYDAT database. Updates it if necessary, and updates all affected time-series
+
+-   Checks for new locations in the 'locations' table. Inserts those into the daily and realtime tables where possible, updates the 'locations' table.
+
+-   Checks for watershed polygons if the new location(s) are operated by the WSC.
+
+-   Pulls in new snow course survey data from February to May (inclusively). Refreshes *all* snow course survey data on the 1^st^ and 15^th^ of the month to incorporate any changes.
+
+-   Calculates daily means for all locations, except for days where daily means are provided in the HYDAT database.
+
+-   Calculates several statistics in the daily table intended to provide historical context for any given day: historical min, max, quartiles, and percent historical range are calculated where enough historical data exists. Note that these are calculated for each day *without using the current day's measurement*, to provide historical context.
+
+## Workhorse function 2: hydro_update_hourly()
+
+This function is intended to run frequently and pulls in new timeseries information from Aquarius and the Water Survey of Canada. No recalculations are performed and no new information is appended to the daily values table.
+
+Be careful not to set this to run too frequently: for all Yukon WSC stations and hydrology stations in Aquarius, expect a run time of \~5 minutes when internet connectivity is good.
+
+## Workhorse function 3: hydro_update_weekly()
+
+This function was created to catch updates or corrections to time-series that have already been downloaded, for example when hydrologists apply a new stage calculation and modify calculated flows retroactively. This function takes a relatively long time to run, especially if comparing local data with all data available online. Parameters do however exist to limit the function's scope to only WSC stations, restrict the date or approval level range, or to limit the stations for which work is performed. If incorporating edits is critical to a certain task, such as when building the Snow Bulletins, consider calling hydro_update_weekly() prior to extracting data.
+
+## Helper function 1: add_timeseries()
+
+If you want to add a timeseries to the database, this is your way in. You'll need to specify a few parameters, such as the local database path, the location of concern, the parameter, units, type of monitoring, and network type. After that, the next run of hydro_update_daily will try to add the timeseries to the database.
+
+Special note for adding Aquarius time-series: if a timeseries parameter of your desired type do not already exist in the database, you willneed to add an entry to the database table *settings* to be able to pull the correct timeseries from Aquarius. For example, if you want to add a specific conductance timeseries, your add_timeseries entries would specify parameter = "specific conductance" and units matching those in Aquarius. The table *settings* would then need a new row where application = aquarius, parameter = specific conductance, value = Specific Conductance Field.Calculated.
+
+The help file for add_timeseries() describes a very important behavior when adding a timeseries that does not exist or fails for any reason: as always, carefully read the help file to understand this behaviour.
+
+## Helper function 2+
+
+Other helper function exist to calculate daily means and statistics, update the local HYDAT database, get watershed polygons, get snow course survey data, etc. These are not meant for routine use, and I suggest referring to the function help documentation to understand how they work.
+
+# Database connections using WRBtools package
+
+As mentioned above, all database connections are performed using the WRBtools package. Two functions apply: hydroConnect connects to the .SQLite database that is the subject of this manual, and snowConnect connects to the Snow Survey Access database. If the format of either of these databases changes, the applicable WRBtools function will need to be changed and the package updated anywhere the WRBdatabase functions are run. Additionally, server-based databases may require more parameters passed to the connection functions. If default parameters cannot be used, the connection function calls within the WRBdatabase package may need to be adapted. Note for working on the package code: RStudio can help [you find + replace a text string across multiple files or directories](https://www.rstudio.com/blog/rstudio-1-3-the-little-things/).
+
+In the case of the Snow Survey database, migration to another database type will almost certainly involve restructuring table names and column names. In this case the WRBdatabase function getSnowCourse may need to be adapted to reference proper table and column names along with changes to the WRBtools::snowConnect() function.
+
+# Dealing with concurrency
+
+SQLite databases are lightweight, quick to deploy, robust, and open-source. However, they lag behind "server type" databases in two ways:
+
+-   Concurrent reads and writes are not possible. A write process must exclusively lock the database until it is complete. This is fine if writes are quick (max a few seconds), and this is the case with the exception of initial creation operations and, marginally, for hydro_update_weekly operations needing to update large time spans. Consequently, I suggest running hydro_update_weekly when users are least likely to access the database, like Sunday at 2 AM.
+
+-   Database connections to SQLite should also specify a permissible wait period immediately after connection (before making database requests) to avoid a 'database is locked' message. This is performed automatically with the WRBtools connection functions.
+
+-   SQLite may not be able to handle a very large number of reads if data requests are large, especially if writes must also happen from time-to-time. There is no simple remedy for this, but SQLite documentation suggests that several 100s of thousands of reads per day are handled without problem. We're probably fine here in Yukon.
+
+The only way to permit concurrent reads and writes using SQLite is to set the database in Write-ahead-log (WAL) mode AND to have all reads + writes happen from the same computer or virtual machine. Note that this is essentially what a server-type database does: multiple machines query the server, but only the server interacts with the DB.
+
+The database code has been written to avoid excessive reads/writes, for example by comparing local data to remote data instead of re-writing, recalculating daily means + statistics only where strictly necessary, etc. In addition, connections are opened only when necessary and closed immediately, which slows down the code slightly but opens up the database for other processes between writes.
+
+# Initial setup
+
+## Software initial setup
+
+You'll need to have R and (optionally) R Studio installed. Ideally, you'll have a system with \> 8GB of RAM and 2 + cores. Technically it'll run fine on one core, but other processes will be slowed to a crawl. The database is created and maintained using R and a few add-on packages.
+
+1.  Download and install R for your operating system. RStudio (an IDE) is not necessary but might make your initial set-up and task scheduling easier.
+
+2.  Install the package WRBdatabase, accepting the option to install all dependencies and updating any packages in need of an update. You can install WRBdatabase using the .tar.gz [installation file](file:///G:/water/Common_GW_SW/R-packages/WRBdatabase) (use function remotes::install_local(path_to_file) or [directly from GitHub](https://github.com/YukonWRB/database) using remotes::install_github(url, build_vignettes = TRUE). Note that development of this R package is on GitHub but that the local .tar.gz files are intended to be tested, stable versions.
+
+## Database initial setup
+
+1.  Determine where you wish to create the database and come up with a name.
+
+2.  Run function initial_create(path), with path = the exact path to the desired database location, including the .sqlite extension.
+
+3.  Option 1: Run initial_WSC. This allows you to combine WSC realtime data stored in Aquarius\* with what is available on tidyhydat, or simply to create many WSC stations in one go and have them populated with historical and real-time information. \*Other means of storage could work, but some script modification would be necessary.
+
+    Option 2: Add all of your desired locations using function add_timeseries and skip initial_WSC.
+
+4.  Add other locations using the function add_location (this can be done at any time!)
+
+5.  Run hydro_update_daily to calculate daily means and statistics from realtime information. Caution: this process can be *very* lengthy if you have many stations, plan to run it overnight or in the background for many hours.
+
+# Ongoing operation
+
+## Intended scheduling frequency
+
+Three functions are designed to be run on a schedule for continuous updating of the database:
+
+1.  **Hydro_update_hourly** fetches and appends new realtime data from Aquarius and from the WSC. No calculations are performed or check on historical data.
+
+2.  **Hydro_update_daily** first calls hydro_update_hourly, then checks for updates to historical WSC data, and then calculates daily means and statistics where necessary. In addition, checks for new versions of HYDAT and updates HYDAT and affected timeseries if necessary, and searches for new snow survey measurements twice a month between February and May (inclusive). Also incorporates new locations into the database, provided they have been added according to the instructions in function add_location.
+
+3.  **Hydro_update_weekly** incorporates any possible changes (edits) to WSC and Aquarius real-time data. For WSC data, fetches *all* available data (by default) and overwrites corresponding records in the local database; for Aquarius, fetches all data not previously labelled as "approved" (by default) and overwrites corresponding records. Daily means and statistics for affected days are recalculated.
+
+**Hydro_update_hourly** does not need to be run hourly, only as often as you wish to incorporate new realtime data. It is in all cases called by hydro_udpate_daily, so could even be omitted. Likewise, **hydro_update_weekly** could be run more infrequently, though you run the very slight risk of not capturing edits to realtime data before it "disappears" after 18 months. **Hydro_update_daily** should however be run on a daily basis if you want up to date means and graphing parameters. When run, it will also overwrite the calculated daily data for the last two days to replace data calculated from partial days.
+
+## Additional functions run on as-needed basis
+
+**add_location()**: Can be used to add a location to the database. Follow the instructions! You can also add a location by interacting with the database directly, though the safeguards of add_location won't apply. Note: data associated with this location will not be fetched until the next run of add_location.
+
+**getWatersheds()**: Adds or updates watershed polygons and pour points for WSC stations wherever they are available. Automatically triggered whenever a new stations is incorporated, but can also be run separately. Creates the watersheds table if necessary, a folder holding one folder per location for which a polygon could be found (each with shapefiles), and a single shapefile holding all polygons.
+
+**getSnowCourse()**: Adds or updates manual snow survey data. Automatically run from hydro_update_daily on the 1^st^ and 15^th^ of every month from February to May, can be run at any time. Currently set up to use the Snow Survey Access .mdb located on the X (carver) drive.
+
+## Scheduling the functions
+
+The functions can be scheduled to run by a variety of different means, but the easiest is using the R package taskscheduleR. This package facilitates the creation of tasks in Windows Task Scheduler, pointing to the R executable and to an R file (the code to run), and creates a log file for each task in the same folder where the script is.
+
+Here is an example using the task scheduling script for hydro_update_daily:
+
+```         
+*taskscheduler_create(taskname = "WRB_database_daily", rscript = "C:\\\\Users\\\\srv-env-fews\\\\Documents\\\\R\\\\scheduling\\\\scripts\\\\WRBdatabase_daily.R", schedule = "DAILY", starttime = "06:10", startdate = format(Sys.Date(), "%m/%d/%Y"))*
+```
+
+Note how the rscript parameter points to an R script. This is important: we're not directly running the function hydro_update_daily but rather running a script in which the function call is located. That script looks like this:
+
+```         
+*Sys.setenv(TZ="MST") #Otherwise it thinks we're in Alaska*
+
+*library(tidyhydat.ws) #tidyhydat.ws has improperly formatted package data and must be loaded first*
+
+*print(paste0("Task start", Sys.time()))*
+
+*print(paste0("Using WRBdatabase version", packageVersion("WRBdatabase")))*
+
+*WRBdatabase::hydro_update_daily(path = "//env-fs/env-data/corp/water/Common_GW_SW/Data/database/hydro.sqlite", snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")*
+```
+
+The first line sets the timezone to Yukon time so that the first *print()* call is in the right time zone.
+
+The log file (again: created in the same folder where your target script lives) will include the two *print* calls as well as any messages created while the function hydro_update_daily runs.
+
+# Troubleshooting
+
+Execution errors may arise from time-to-time when one of the following is true:
+
+-   Changes to folder access permissions. The database must be able to read and write to the folder in which it lives, as well as to the Snow Survey Access database if option is used.
+-   Changes to internet access. Obviously data needs to be fetched from online, and changes to things like firewalls can result in problems accessing the internet, or with reading encrypted data.
+-   Updates to function on which WRBdatabase depends. This one's a user-beware scenario: always test updated packages on a non-production machine (like your personal computer) and not on the production machine.
+-   Updates to WRBdatabase functions: hopefully whoever is updating the functions is doing proper testing, but things slip through the cracks sometimes.
+-   New conditions within the database that the designer did not anticipate or see a need to incorporate and did not create failsafe workarounds. Hypothetical example: you entered a new location with parameter 'soil moisture', and the database only know how to handle 'level' and 'flow'.
+-   From time to time, service outages will also occur to the WRB's Aquarius web server or to the Water Survey of Canada's data stream for realtime information. WSC outages should be resolved without our involvement, though it's always possible that our own firewall is the source of problems accessing that data - check that first. Aquarius-related issues should be brought to the attention of Alex Mischler or whoever the Aquarius expert is at the time.
+
+If any of the conditions above occurs, the good news is that the database remains intact: it just won't update properly or will only update certain portions.
+
+To help find the error, look first to the log files created by the automated processes. Odds are that you can identify the problem just by looking there. If that fails, try running the offending function on your own computer, with up-to-date versions of R and *all* packages.

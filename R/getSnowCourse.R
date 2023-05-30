@@ -1,10 +1,14 @@
-
 #' Snow course data to database
 #'
-#' Pulls and processes snow course data before updating entries into the local hydrometric database. Calls function WRBtools::snowInfo for the bulk of the work.
+#' @description
+#' `r lifecycle::badge("stable")`
+#'
+#' **This fuction works with the Microsoft Access snow survey database, circa pre spring 2023**. This function must be refreshed once this database changes.
+#'
+#' Pulls and processes snow course data before updating entries into the local hydrometric database.
 #'
 #' @param hydro_db_path Full path to the hydrology database
-#' @param snow_db_path Full path to the snow survey database
+#' @param snow_db_path Full path to the snow survey database, passed to [WRBtools::snowConnect()].
 #' @param inactive Should inactive stations be included?
 #' @param overwrite Should all snow course information be overwritten? Only do this if there's been a change in the snow_survey database and you deem this to be the fastest way to reflect that change in the hydro database.
 #'

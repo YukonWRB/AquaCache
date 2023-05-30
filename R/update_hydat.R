@@ -1,9 +1,12 @@
 #' Update HYDAT-related timeseries
 #'
-#' First checks and updates the local version of HYDAT if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in timeseries, will also update the internal_status table with the HYDAT version used for the update.
+#' @description
+#' `r lifecycle::badge("stable")`
+#'
+#' First checks the local version of HYDAT using function [WRBtools::hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in timeseries, will also update the internal_status table with the HYDAT version used for the update.
 #'
 #' @param timeseries Character vector of timeseries for which to look for updates.
-#' @param path The path to the hydrometric database, passed to WRBtools::hydroConnect.
+#' @param path The path to the hydrometric database, passed to [WRBtools::hydroConnect()].
 #' @param force_update Set TRUE if you want to force a check of each location against the local copy of HYDAT.
 #'
 #' @return Updated daily means where HYDAT values exist, and a boolean indicating if the HYDAT database was in fact updated. Note: if force_update is TRUE but there is no new HYDAT database, FALSE will be returned even though database timeseries are updated.

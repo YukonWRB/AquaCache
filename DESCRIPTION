@@ -1,6 +1,6 @@
 Package: WRBdatabase
 Title: Hydrological database creation and maintenance
-Version: 3.0.2-1
+Version: 3.0.2-2
 Authors@R: 
     person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185"))
@@ -20,6 +20,7 @@ Imports:
     fasstr,
     fs,
     hablar,
+    lifecycle,
     lubridate,
     magrittr,
     RSQLite,
@@ -29,6 +30,8 @@ Imports:
     tidyhydat,
     WRBtools
 Suggests: 
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0)
 Remotes:
     github::bcgov/tidyhydat.ws,
@@ -37,3 +40,4 @@ Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
+VignetteBuilder: knitr
