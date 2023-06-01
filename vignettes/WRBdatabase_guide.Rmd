@@ -24,7 +24,7 @@ This vignette may also come to contain R code and links to other documentation. 
 ```{r vignette building comments, eval=FALSE, include=FALSE}
 # You should be modifying this vignette from the .Rmd document in the /vignettes folder, NOT the .RMD in the /doc folder.
 # To have this vignette updated on the G drive, uncomment and run the following code *after* re-building the vignette using devtools::build_vignettes()
-# file.copy(from = paste0(dirname(getwd()), "/doc/WRBdatabase_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/WRBdatabase/WRBdatabase user guide.html", overwrite = TRUE)
+# file.copy(from = paste0(dirname(getwd()), "/doc/WRBdatabase_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/WRBdatabase/documentation/WRBdatabase user guide.html", overwrite = TRUE)
 ```
 
 # Introduction
