@@ -161,7 +161,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
       DBI::dbAppendTable(hydro, "daily", missing_stats) # Append the missing_stats data to the daily table
 
       DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
-      #No disconnect as it's taken care of by on.exit statement.
+      DBI::dbDisconnect(hydro)
     }
   } # End of for loop calculating means and stats for each station in timeseries table
 }
