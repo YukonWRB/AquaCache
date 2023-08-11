@@ -31,31 +31,37 @@ dailyCrossCheck <- function(path, locations = "all")
     tryCatch({
       hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
       realtime <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) AS datetime_UTC FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' GROUP BY DATE(datetime_UTC);"))$datetime_UTC
-      #NOTE: the line below may not be needed with postgres or SQL server since they have proper time formats.
-      realtime_days <- lubridate::date(realtime)
-      daily_days <- DBI::dbGetQuery(hydro, paste0("SELECT date FROM daily WHERE location = '", loc, "' AND parameter = '", parameter, "';"))$date
-      DBI::dbDisconnect(hydro)
 
-      first_missing <- NULL
-      done <- FALSE
-      index <- 1
-      while (!done){
-        if (index == length(realtime_days)){
-          done <- TRUE
+      if (length(realtime_days) > 0) {
+        #NOTE: the line below may not be needed with postgres or SQL server since they have proper time formats.
+        realtime_days <- lubridate::date(realtime)
+        daily_days <- DBI::dbGetQuery(hydro, paste0("SELECT date FROM daily WHERE location = '", loc, "' AND parameter = '", parameter, "';"))$date
+        DBI::dbDisconnect(hydro)
+
+        first_missing <- NULL
+        done <- FALSE
+        index <- 1
+        while (!done){
+          if (index == length(realtime_days)){
+            done <- TRUE
+          }
+          if (!(realtime_days[index] %in% daily_days)){
+            first_missing <- realtime_days[index]
+            done <- TRUE
+          } else {
+            index <- index + 1
+          }
         }
-        if (!(realtime_days[index] %in% daily_days)){
-          first_missing <- realtime_days[index]
-          done <- TRUE
-        } else {
-          index <- index + 1
+        if (!is.null(first_missing)){
+          calculate_stats(timeseries = data.frame("location" = loc, "parameter" = parameter), start_recalc = first_missing, path = path)
+          print(paste0("Found missing entries for location ", loc, " and parameter ", parameter))
         }
+      } else {
+        DBI::dbDisconnect(hydro)
       }
-      if (!is.null(first_missing)){
-        calculate_stats(timeseries = data.frame("location" = loc, "parameter" = parameter), start_recalc = first_missing, path = path)
-        print(paste0("Found missing entries for location ", loc, " and parameter ", parameter))
-      }
+
     }, error = function(e) {
-      print(paste0("Failed on location ", loc, " and parameter ", parameter))
+      print(paste0("dailyCrossCheck: Failed on location ", loc, " and parameter ", parameter))
     })
   }
 
