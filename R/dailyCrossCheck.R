@@ -59,10 +59,8 @@ dailyCrossCheck <- function(path, locations = "all")
       } else {
         DBI::dbDisconnect(hydro)
       }
-
     }, error = function(e) {
       print(paste0("dailyCrossCheck: Failed on location ", loc, " and parameter ", parameter))
     })
   }
-
 }
