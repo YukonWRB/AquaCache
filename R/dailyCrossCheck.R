@@ -36,8 +36,7 @@ dailyCrossCheck <- function(path, locations = "all")
         #NOTE: the line below may not be needed with postgres or SQL server since they have proper time formats.
         realtime_days <- lubridate::date(realtime)
         daily_days <- DBI::dbGetQuery(hydro, paste0("SELECT date FROM daily WHERE location = '", loc, "' AND parameter = '", parameter, "';"))$date
-        DBI::dbD
-        isconnect(hydro)
+        DBI::dbDisconnect(hydro)
 
         first_missing <- NULL
         done <- FALSE
@@ -58,10 +57,8 @@ dailyCrossCheck <- function(path, locations = "all")
           print(paste0("Found missing daily entries for location ", loc, " and parameter ", parameter))
         }
       }
-
     }, error = function(e) {
       print(paste0("dailyCrossCheck: failed on location ", loc, " and parameter ", parameter))
     })
   }
-
 }
