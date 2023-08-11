@@ -59,15 +59,19 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
         if (nrow(existing) > 0){
           mismatch <- FALSE
           done <- FALSE
-          while (!mismatch & !done){
+          while (!done){
             for (j in 1:nrow(flow_historical)){
               date <- flow_historical$date[i]
               if (date %in% existing$date){ # check that the corresponding date exists in existing. If not, mismatch is TRUE
                 if (!(flow_historical[flow_historical$date == date, "value"] == existing[existing$date == date, "value"])){
                   mismatch <- TRUE
+                  new_hydat_start <- date
+                  done <- TRUE
                 }
               } else {
                 mismatch <- TRUE
+                new_hydat_start <- date
+                done <- TRUE
               }
               if (j == nrow(ts)){
                 done <- TRUE
@@ -145,15 +149,19 @@ update_hydat <- function(timeseries, path, force_update = FALSE){
         if (nrow(existing) > 0){
           mismatch <- FALSE
           done <- FALSE
-          while (!mismatch & !done){
+          while (!done){
             for (j in 1:nrow(level_historical)){
               date <- level_historical$date[i]
               if (date %in% existing$date){ # check that the corresponding date exists in existing. If not, mismatch is TRUE
                 if (!(level_historical[level_historical$date == date, "value"] == existing[existing$date == date, "value"])){
                   mismatch <- TRUE
+                  new_hydat_start <- date
+                  done <- TRUE
                 }
               } else {
                 mismatch <- TRUE
+                new_hydat_start <- date
+                done <- TRUE
               }
               if (j == nrow(ts)){
                 done <- TRUE

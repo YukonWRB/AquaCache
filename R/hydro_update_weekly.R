@@ -63,22 +63,22 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
         ts_name <- aq_names[aq_names$parameter == parameter, 2]
         hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         if (aquarius_range == "unapproved"){
-          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND NOT approval = 'approved'"))
-          first_unapproved <- min(realtime$datetime_UTC)
-          data <- WRBtools::aq_download(loc_id = all_timeseries$location[i], ts_name = ts_name, start = first_unapproved, server = server)
+          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND NOT approval = 'Approved'"))
+          data <- WRBtools::aq_download(loc_id = loc, ts_name = ts_name, start = min(realtime$datetime_UTC), server = server)
+          data$timeseries <- data$timeseries[data$timeseries$approval_description != "Approved" , ]
         } else if (aquarius_range == "all"){
-          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND datetime_UTC >= '", first_unapproved, "'"))
-          data <- WRBtools::aq_download(loc_id = all_timeseries$location[i], ts_name = ts_name, server = server)
+          realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "'"))
+          data <- WRBtools::aq_download(loc_id = loc, ts_name = ts_name, server = server)
         }
         DBI::dbDisconnect(hydro)
-        ts <- data.frame("location" = all_timeseries$location[i], "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+        ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
 
       } else if (operator == "WSC"){
         hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
-        realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", all_timeseries$location[i], "' AND datetime_UTC >= '", WSC_range, "'"))
+        realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC >= '", WSC_range, "'"))
         DBI::dbDisconnect(hydro)
         token <- suppressMessages(tidyhydat.ws::token_ws())
-        data <- suppressMessages(tidyhydat.ws::realtime_ws(all_timeseries$location[i], if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(WSC_range), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
+        data <- suppressMessages(tidyhydat.ws::realtime_ws(loc, if (parameter == "flow") 47 else if (parameter == "level") 46, start_date = as.POSIXct(WSC_range), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$parameter <- parameter
@@ -93,7 +93,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
         row <- 1
         while (!mismatch & !done){
           datetime <- ts$datetime_UTC[row]
-          if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime. If not, mismatch is TRUE
+          if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime. If not, mismatch is automaticaly TRUE
             if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"])){ #check that values are the same
               mismatch <- TRUE
               if (row > 1) { #Go back to the last known good point if not the first row
@@ -120,24 +120,26 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
           DBI::dbExecute(hydro, paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date >= '", substr(min(ts$datetime_UTC), 1, 10), "'"))
           #make the new entry into table timeseries
           end <- max(max(realtime$datetime_UTC), ts$datetime_UTC)
-          DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "' WHERE location = '", all_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+          DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
           DBI::dbDisconnect(hydro)
 
           #Recalculate daily means and statistics
           calculate_stats(timeseries = data.frame("location" = loc,
                                                   "parameter" = parameter),
                           path = path,
-                          start_recalc = substr(datetime, 1, 10))
+                          start_recalc = as.Date(substr(datetime, 1, 10)))
         }
       }
     }, error = function(e) {
-      print(paste0("Failed on location ", all_timeseries$location[i], " and parameter ", all_timeseries$parameter[i]))
+      print(paste0("Failed on location ", loc, " and parameter ", parameter))
     }
     )
   }
 
   hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_weekly'"))
-  DBI::dbDisconnect(hydro)
+  DBI::dbExecute(hydro, "VACUUM")
+  DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'vacuum'"))
+  #No disconnect as it's taken care of by on.exit statement.
 
 } #End of function

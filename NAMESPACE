@@ -3,6 +3,7 @@
 export("%>%")
 export(add_timeseries)
 export(calculate_stats)
+export(dailyCrossCheck)
 export(getSnowCourse)
 export(getWatersheds)
 export(hydro_update_daily)

@@ -1,6 +1,6 @@
 Package: WRBdatabase
 Title: Hydrological database creation and maintenance
-Version: 3.0.3
+Version: 3.0.4
 Authors@R: 
     person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185"))
