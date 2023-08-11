@@ -23,7 +23,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
     if (nrow(timeseries) != length(start_recalc)){
       stop("It looks like you're trying to specify a start date for recalculations, but there isn't exactly one vector element per row in the parameter timeseries.")
     }
-    if (class(start_recalc) != "Date") start_recalc <- as.Date(start_recalc)
+    if (inherits(start_recalc, "Date")) start_recalc <- as.Date(start_recalc)
   }
 
   on.exit(DBI::dbDisconnect(hydro))
@@ -84,16 +84,16 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
     missing_stats <- missing_stats[!(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
     all_stats <- all_stats[!(lubridate::month(all_stats$date) == "2" & lubridate::mday(all_stats$date) == "29"), , drop = FALSE]
     # Create a dayofyear column that pretends Feb 29 doesn't exist; all years have 365 days
-    missing_stats <- missing_stats %>% dplyr::mutate(dayofyear = ifelse(lubridate::year(.data$date) %in% leap_list,
-                                                                        ifelse(lubridate::month(.data$date) <= 2,
-                                                                               lubridate::yday(.data$date),
-                                                                               lubridate::yday(.data$date) - 1),
-                                                                        lubridate::yday(.data$date)))
-    all_stats <- all_stats %>% dplyr::mutate(dayofyear = ifelse(lubridate::year(.data$date) %in% leap_list,
-                                                                ifelse(lubridate::month(.data$date) <= 2,
-                                                                       lubridate::yday(.data$date),
-                                                                       lubridate::yday(.data$date) - 1),
-                                                                lubridate::yday(.data$date)))
+    missing_stats$dayofyear <- ifelse(lubridate::year(missing_stats$date) %in% leap_list,
+                                      ifelse(lubridate::month(missing_stats$date) <= 2,
+                                             lubridate::yday(missing_stats$date),
+                                             lubridate::yday(missing_stats$date) - 1),
+                                      lubridate::yday(missing_stats$date))
+    all_stats$dayofyear <- ifelse(lubridate::year(all_stats$date) %in% leap_list,
+                             ifelse(lubridate::month(all_stats$date) <= 2,
+                                    lubridate::yday(all_stats$date),
+                                    lubridate::yday(all_stats$date) - 1),
+                             lubridate::yday(all_stats$date))
 
     #selects only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated). Selects valid rows even if there is no current value, ensuring complete plotting parameters.
     missing_stats <- missing_stats[order(missing_stats[ , "date"]) , ]
@@ -128,7 +128,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
           }
         }
       }
-      missing_stats <- subset(missing_stats, select=-c(dayofyear)) #remove column not in database table
+      missing_stats <- missing_stats[ , !(names(missing_stats) == "dayofyear")]
 
       #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st. Unfortunately this means that initial setups done on those days will not calculate Feb 29!
       if (nrow(feb_29) > 0 & !(substr(as.character(as.Date(.POSIXct(Sys.time(), "UTC"))), 6, 10) %in% c("02-29", "03-01,", "03-02"))) {
