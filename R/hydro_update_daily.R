@@ -109,7 +109,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
               }
               data_realtime <- data_realtime[,c(2,4,1)]
               names(data_realtime) <- c("datetime_UTC", "value", "location")
-              data_realtime$datetime_UTC <- as.character(data_realtime$datetime_UTC)
+              data_realtime$datetime_UTC <- format(data_realtime$datetime_UTC, format = "%Y-%m-%d %H:%M:%S")
               data_realtime$parameter <- parameter
               data_realtime$approval <- "preliminary"
               DBI::dbAppendTable(hydro, "realtime", data_realtime)
@@ -191,10 +191,10 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
             data <- WRBtools::aq_download(loc_id = new_timeseries$location[i], ts_name = ts_name, server = server)
             name <- data$metadata[1,2]
             #add new information to the realtime table
-            ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
+            ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = format(data$timeseries$timestamp_UTC, format = "%Y-%m-%d %H:%M:%S"), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
             DBI::dbAppendTable(hydro, "realtime", ts)
             #make the new entry into table timeseries
-            DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", as.character(min(data$timeseries$timestamp_UTC)),"', end_datetime_UTC = '", as.character(max(data$timeseries$timestamp_UTC)),"', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WRB', network = '", network, "' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+            DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", min(data$timeseries$timestamp_UTC),"', end_datetime_UTC = '", max(data$timeseries$timestamp_UTC),"', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WRB', network = '", network, "' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
             DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", new_timeseries$location[i], "', '", name, "', '", data$metadata$value[5], "', '", data$metadata$value[6], "')"))
           }, error = function(e) {
             print(paste0("Failed to retrieve data from location ", loc, " for parameter ", parameter, " and from Aquarius. The location type was flagged as 'FAILED' in the timeseries table, clear this flag to try again. You may also want to check the timeseries parameter and label in Aquarius."))
