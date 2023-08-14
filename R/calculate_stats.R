@@ -31,6 +31,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
   #calculate daily means for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
   for (i in 1:nrow(timeseries)){
+    #TODO wrap this in a tryCatch for error logging!
     loc <- timeseries$location[i]
     parameter <- timeseries$parameter[i]
     hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
@@ -157,6 +158,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
         delete_query <- paste0(delete_query, " AND date NOT IN ('", paste(remaining_dates, collapse = "','"), "')")
       }
       hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
+      #TODO: the three commands below should be atomic. See DBI-advanced vignette for example. Should include error message if fails.
       DBI::dbExecute(hydro, delete_query)
       DBI::dbAppendTable(hydro, "daily", missing_stats) # Append the missing_stats data to the daily table
 

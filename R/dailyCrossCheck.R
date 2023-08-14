@@ -32,8 +32,8 @@ dailyCrossCheck <- function(path, locations = "all")
       hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
       realtime <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) AS datetime_UTC FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' GROUP BY DATE(datetime_UTC);"))$datetime_UTC
 
-      if (length(realtime) >0 ){
-        #NOTE: the line below may not be needed with postgres or SQL server since they have proper time formats.
+      if (length(realtime) > 0){
+        #NOTE: the line below may not be needed with postgres or SQL server since they have proper time formats. with SQLite, the DB can't auto-convert to plain date and returns a date-time string of the first record for each day.
         realtime_days <- lubridate::date(realtime)
         daily_days <- DBI::dbGetQuery(hydro, paste0("SELECT date FROM daily WHERE location = '", loc, "' AND parameter = '", parameter, "';"))$date
         DBI::dbDisconnect(hydro)
