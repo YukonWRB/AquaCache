@@ -59,6 +59,7 @@ dailyCrossCheck <- function(path, locations = "all")
       }
     }, error = function(e) {
       print(paste0("dailyCrossCheck: failed on location ", loc, " and parameter ", parameter))
+
     })
   }
 }

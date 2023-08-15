@@ -71,8 +71,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
           data <- WRBtools::aq_download(loc_id = loc, ts_name = ts_name, server = server)
         }
         DBI::dbDisconnect(hydro)
-        ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = as.character(data$timeseries$timestamp_UTC), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
-
+        ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = format(data$timeseries$timestamp_UTC, format = "%Y-%m-%d %H:%M:%S"), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
       } else if (operator == "WSC"){
         hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND datetime_UTC >= '", WSC_range, "'"))
@@ -82,7 +81,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
         data <- data[,c(2,4,1)]
         names(data) <- c("datetime_UTC", "value", "location")
         data$parameter <- parameter
-        data$datetime_UTC <- as.character(data$datetime_UTC)
+        data$datetime_UTC <- format(data$datetime_UTC, format = "%Y-%m-%d %H:%M:%S")
         data$approval <- "preliminary"
         ts <- data
       }
@@ -93,7 +92,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
         row <- 1
         while (!mismatch & !done){
           datetime <- ts$datetime_UTC[row]
-          if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime. If not, mismatch is automaticaly TRUE
+          if (datetime %in% realtime$datetime_UTC){ # check that the corresponding time exists in realtime. If not, mismatch is automatically TRUE
             if (!(ts[ts$datetime_UTC == datetime, "value"] == realtime[realtime$datetime_UTC == datetime, "value"])){ #check that values are the same
               mismatch <- TRUE
               if (row > 1) { #Go back to the last known good point if not the first row
