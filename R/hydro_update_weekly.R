@@ -43,7 +43,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
   hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
   if (aquarius){
-    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, remote_param_name FROM settings WHERE application  = 'aquarius'")
   }
   if (locations == "all"){
     all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
@@ -60,7 +60,7 @@ hydro_update_weekly <- function(path, WSC_range = Sys.Date()-577, locations = "a
     tryCatch({
       ts <- data.frame() #Make empty df here so that if (nrow(ts) > 0) works as intended later.
       if (operator == "WRB" & aquarius){
-        ts_name <- aq_names[aq_names$parameter == parameter, 2]
+        ts_name <- aq_names[aq_names$parameter == parameter, "remote_param_name"]
         hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
         if (aquarius_range == "unapproved"){
           realtime <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "' AND NOT approval = 'Approved'"))

@@ -10,7 +10,7 @@
 #'
 #' Uses two functions under the hood that require some set-up of the .Renviron file: [tidyhydat.ws::realtime_ws()] and [WRBtools::aq_download()]. See respective help files for setup information.
 #'
-#' @param path The path to the local hydro SQLite database, with extension.
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [WRBtools::hydroConnect()].
 #' @param WSC_stns The WSC stations you wish to pull information for. In the event that these stations are mirrored in your Aquarius database the function will attempt to fetch that information. Otherwise, only information from the HYDAT database and from real-time WSC data will be incorporated. The default, "yukon" is a preset list of 77 stations in or relevant to Yukon.
 #' @param aquarius TRUE if you are fetching data from Aquarius, in which case you should also check the next three parameters. FALSE will only populate with WSC data.
 #' @param stage The name of the stage(level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All WSC_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.
@@ -22,7 +22,7 @@
 #' @export
 #'
 
-initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
+initial_WSC <- function(con, WSC_stns = "yukon", aquarius = TRUE, stage = "Stage.Preliminary", discharge = "Discharge.Preliminary", server = "https://yukon.aquaticinformatics.net/AQUARIUS")
 
   {
 
@@ -50,8 +50,7 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
   #Check hydat version, update if needed.
   WRBtools::hydat_check()
 
-  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
-  on.exit(DBI::dbDisconnect(hydro))
+  on.exit(DBI::dbDisconnect(con))
 
   if (aquarius){
       #Add the realtime data held in Aquarius to the database
@@ -69,30 +68,49 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
       for (i in names(aqLevel)){
         if (nrow(aqLevel[[i]]$timeseries) > 0){
           timeseries <- aqLevel[[i]]$timeseries[c(1,2)]
-          timeseries$location <- i
+          ts <- data.frame("location" = i,
+                           "parameter" = "level",
+                           "units" = "m",
+                           "type" = "continuous",
+                           "start_datetime" = min(timeseries$timestamp_UTC),
+                           "end_datetime" = max(timeseries$timestamp_UTC),
+                           "last_new_data" = .POSIXct(Sys.time(), "UTC"),
+                           "operator" = "WSC",
+                           "network" = "Canada Yukon Hydrometric Network")
+          try(DBI::dbAppendTable(con, "timeseries", ts))
+          tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))[1,1]
+
+          timeseries$timeseries_id <- tsid
           level_rt <- rbind(level_rt, timeseries)
         }
       }
-      names(level_rt) <- c("datetime_UTC", "value", "location")
+      names(level_rt) <- c("datetime", "value", "timeseries_id")
       level_rt$approval <- "preliminary"
-      level_rt$parameter <- "level"
-      level_rt$datetime_UTC <- as.character(level_rt$datetime_UTC)
 
       flow_rt <- data.frame()
       for (i in names(aqFlow)){
         if (nrow(aqFlow[[i]]$timeseries) > 0){
           timeseries <- aqFlow[[i]]$timeseries[c(1,2)]
-          timeseries$location <- i
+          ts <- data.frame("location" = i,
+                           "parameter" = "flow",
+                           "units" = "m3/s",
+                           "type" = "continuous",
+                           "start_datetime" = min(timeseries$timestamp_UTC),
+                           "end_datetime" = max(timeseries$timestamp_UTC),
+                           "last_new_data" = .POSIXct(Sys.time(), "UTC"),
+                           "operator" = "WSC",
+                           "network" = "Canada Yukon Hydrometric Network")
+          try(DBI::dbAppendTable(con, "timeseries", ts))
+          tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))[1,1]
+          timeseries$timeseries_id <- tsid
           flow_rt <- rbind(flow_rt, timeseries)
         }
       }
-      names(flow_rt) <- c("datetime_UTC", "value", "location")
+      names(flow_rt) <- c("datetime", "value", "timeseries_id")
       flow_rt$approval <- "preliminary"
-      flow_rt$parameter <- "flow"
-      flow_rt$datetime_UTC <- as.character(flow_rt$datetime_UTC)
 
-      DBI::dbAppendTable(hydro, "realtime", level_rt)
-      DBI::dbAppendTable(hydro, "realtime", flow_rt)
+      DBI::dbAppendTable(con, "realtime", level_rt)
+      DBI::dbAppendTable(con, "realtime", flow_rt)
       print("Timeseries existing in Aquarius have been downloaded and appended to the local database.")
   }
 
@@ -106,141 +124,129 @@ initial_WSC <- function(path, WSC_stns = "yukon", aquarius = TRUE, stage = "Stag
 
   #keep only what's necessary from the raw download (drop columns) and format columns; at the same time, make entries in the locations and timeseries table
   for (i in names(new_realtime$flow)){
-    new_realtime$flow[[i]] <- new_realtime$flow[[i]][,c(2,4,1)]
-    names(new_realtime$flow[[i]]) <- c("datetime_UTC", "value", "location")
+    new_realtime$flow[[i]] <- new_realtime$flow[[i]][,c(2,4)]
+    names(new_realtime$flow[[i]]) <- c("datetime", "value")
     new_realtime$flow[[i]]$approval <- "preliminary"
-    new_realtime$flow[[i]]$parameter <- "flow"
-    new_realtime$flow[[i]]$datetime_UTC <- as.character(new_realtime$flow[[i]]$datetime_UTC)
-    start_AQ <- as.character(min(aqFlow[[i]]$timeseries$timestamp_UTC))
-    start_ws <- min(new_realtime$flow[[i]]$datetime_UTC)
+    start_AQ <- min(aqFlow[[i]]$timeseries$timestamp_UTC)
+    start_ws <- min(new_realtime$flow[[i]]$datetime)
     start_datetime <- hablar::rationalize(min(c(start_AQ, start_ws)))
-    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
     name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
-    if (nrow(existing) == 0){ #Not one from Aquarius
+    location_info <- data.frame("location" = i,
+                                "name" = name,
+                                "latitude" = tidyhydat::hy_stations(i)$LATITUDE,
+                                "longitude" = tidyhydat::hy_stations(i)$LONGITUDE)
+    try(DBI::dbAppendTable(con, "locations", location_info), silent = TRUE)
+
+    existing <- DBI::dbGetQuery(con, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
+    if (nrow(existing) == 0){ #Not there yet
       timeseries_info <- data.frame("location" = i,
                                     "parameter" = "flow",
                                     "units" = "m3/s",
                                     "type" = "continuous",
-                                    "start_datetime_UTC" = start_datetime,
-                                    "end_datetime_UTC" = max(new_realtime$flow[[i]]$datetime_UTC),
-                                    "last_new_data_UTC" = as.character(.POSIXct(Sys.time(), "UTC")),
+                                    "start_datetime" = start_datetime,
+                                    "end_datetime" = max(new_realtime$flow[[i]]$datetime),
+                                    "last_new_data" = .POSIXct(Sys.time(), "UTC"),
                                     "operator" = "WSC",
                                     "network" = "Canada Yukon Hydrometric Network")
-      location_info <- data.frame("location" = i,
-                                  "name" = name,
-                                  "latitude" = tidyhydat::hy_stations(i)$LATITUDE,
-                                  "longitude" = tidyhydat::hy_stations(i)$LONGITUDE)
-
-      DBI::dbAppendTable(hydro, "timeseries", timeseries_info)
-      try(DBI::dbAppendTable(hydro, "locations", location_info), silent = TRUE)
+      DBI::dbAppendTable(con, "timeseries", timeseries_info)
+      tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))[1,1]
     } else {
-      DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", max(new_realtime$flow[[i]]$datetime_UTC), ", last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous"))
+      tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))[1,1]
+      DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start_datetime, "', end_datetime = '", max(new_realtime$flow[[i]]$datetime), "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid))
     }
+    delete_bracket <- c(min(new_realtime$flow[[i]]$datetime), max(new_realtime$flow[[i]]$datetime))
+    DBI::dbExecute(con, paste0("DELETE FROM realtime WHERE datetime BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND timeseries_id = ", tsid))
+    new_realtime$flow[[i]]$timeseries_id <- tsid
+    DBI::dbAppendTable(con, "realtime", new_realtime$flow[[i]])
   }
 
   for (i in names(new_realtime$level)){
-    new_realtime$level[[i]] <- new_realtime$level[[i]][,c(2,4,1)]
-    names(new_realtime$level[[i]]) <- c("datetime_UTC", "value", "location")
+    new_realtime$level[[i]] <- new_realtime$level[[i]][,c(2,4)]
+    names(new_realtime$level[[i]]) <- c("datetime", "value")
     new_realtime$level[[i]]$approval <- "preliminary"
-    new_realtime$level[[i]]$parameter <- "level"
-    new_realtime$level[[i]]$datetime_UTC <- as.character(new_realtime$level[[i]]$datetime_UTC)
-    start_AQ <- as.character(min(aqLevel[[i]]$timeseries$timestamp_UTC))
-    start_ws <- min(new_realtime$level[[i]]$datetime_UTC)
+    start_AQ <- min(aqLevel[[i]]$timeseries$timestamp_UTC)
+    start_ws <- min(new_realtime$level[[i]]$datetime)
     start_datetime <- hablar::rationalize(min(c(start_AQ, start_ws)))
-    existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
     name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
-    if (nrow(existing) == 0){ #Not one from Aquarius
+    location_info <- data.frame("location" = i,
+                                "name" = name,
+                                "latitude" = tidyhydat::hy_stations(i)$LATITUDE,
+                                "longitude" = tidyhydat::hy_stations(i)$LONGITUDE)
+    try(DBI::dbAppendTable(con, "locations", location_info), silent = TRUE)
+
+    existing <- DBI::dbGetQuery(con, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
+    if (nrow(existing) == 0){ #Not there yet
       timeseries_info <- data.frame("location" = i,
                                     "parameter" = "level",
-                                    "units" = "m",
+                                    "units" = "m3/s",
                                     "type" = "continuous",
-                                    "start_datetime_UTC" = start_datetime,
-                                    "end_datetime_UTC" = max(new_realtime$level[[i]]$datetime_UTC),
-                                    "last_new_data_UTC" = as.character(.POSIXct(Sys.time(), "UTC")),
+                                    "start_datetime" = start_datetime,
+                                    "end_datetime" = max(new_realtime$level[[i]]$datetime),
+                                    "last_new_data" = .POSIXct(Sys.time(), "UTC"),
                                     "operator" = "WSC",
                                     "network" = "Canada Yukon Hydrometric Network")
-      location_info <- data.frame("location" = i,
-                                  "name" = name,
-                                  "latitude" = tidyhydat::hy_stations(i)$LATITUDE,
-                                  "longitude" = tidyhydat::hy_stations(i)$LONGITUDE)
-
-      DBI::dbAppendTable(hydro, "timeseries", timeseries_info)
-      try(DBI::dbAppendTable(hydro, "locations", location_info), silent = TRUE)
+      DBI::dbAppendTable(con, "timeseries", timeseries_info)
+      tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))[1,1]
     } else {
-      DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", max(new_realtime$level[[i]]$datetime_UTC), "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
+      tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))[1,1]
+      DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start_datetime, "', end_datetime = '", max(new_realtime$level[[i]]$datetime), "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid))
     }
+    delete_bracket <- c(min(new_realtime$level[[i]]$datetime), max(new_realtime$level[[i]]$datetime))
+    DBI::dbExecute(con, paste0("DELETE FROM realtime WHERE datetime BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "' AND timeseries_id = ", tsid))
+    new_realtime$level[[i]]$timeseries_id <- tsid
+    DBI::dbAppendTable(con, "realtime", new_realtime$level[[i]])
   }
-
-  new_flow_rt <- do.call("rbind", new_realtime$flow)
-  rownames(new_flow_rt) <- NULL
-  new_level_rt <- do.call("rbind", new_realtime$level)
-  rownames(new_level_rt) <- NULL
-
-  #Delete the entries and then append the new data into the database. This has the added bonus of adding new rows as well as replacing existing rows
-  delete_bracket <- c(min(new_flow_rt$datetime_UTC), max(new_flow_rt$datetime_UTC))
-  DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = 'flow' AND datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'"))
-  DBI::dbAppendTable(hydro, "realtime", new_flow_rt)
-
-  delete_bracket <- c(min(new_level_rt$datetime_UTC), max(new_level_rt$datetime_UTC))
-  DBI::dbExecute(hydro, paste0("DELETE FROM realtime WHERE parameter = 'level' AND datetime_UTC BETWEEN '", delete_bracket[1], "' AND '", delete_bracket[2], "'"))
-  DBI::dbAppendTable(hydro, "realtime", new_level_rt)
-  print("Timeseries existing in the WSC real-time database have been downloaded and appended to the local database.")
-
 
   #Now deal with historical "HYDAT" information, inserting into measurement tables and adding entry to timeseries table. These daily means take precedence over those later calculated by
   for (i in WSC_stns){
     tryCatch({
-      level <- tidyhydat::hy_daily_levels(i)[,-c(3,5)]
-      colnames(level) <- c("location", "date", "value")
+      level <- tidyhydat::hy_daily_levels(i)[,c("Date", "Value")]
+      colnames(level) <- c("date", "value")
       level$approval <- "approved"
-      level$parameter <- "level"
-      level$date <- as.character(level$date)
-      DBI::dbAppendTable(hydro, "daily", level)
-
-      start_datetime <- paste0(min(level$date), " 00:00:00")
-      existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
-      if (nrow(existing) == 0){ #no corresponding realtime station yet
-        end_datetime <- paste0(max(level$date), " 00:00:00")
+      start_datetime <- as.POSIXct(paste0(min(level$date), " 00:00:00"), tz = "UTC")
+      tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
+      if (nrow(tsid) > 0) {
+        tsid <- tsid[1,1]
+        level$timeseries_id <- tsid
+        DBI::dbAppendTable(con, "daily", level)
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start_datetime, "' WHERE timeseries_id = ", tsid))
+      } else { #no corresponding realtime station yet
+        end_datetime <- as.POSIXct(paste0(max(level$date), " 00:00:00"), tz = "UTC")
         latitude <- tidyhydat::hy_stations(i)$LATITUDE
         longitude <- tidyhydat::hy_stations(i)$LONGITUDE
         name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
-        DBI::dbExecute(hydro, paste0("INSERT INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, last_daily_calculation_UTC, operator, network) VALUES ('", i, "', 'level', 'm', 'continuous', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), "', '", end_datetime, "', 'WSC', 'Canada Yukon Hydrometric Network')"))
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", i, "', '", name, "', '", latitude, "', '", longitude, "'"))
-      } else if (is.null(existing$end_datetime)) {
-        end_datetime <- paste0(max(level$date), " 00:00:00")
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
-      } else {
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "' WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))
+        DBI::dbExecute(con, paste0("INSERT INTO timeseries (location, parameter, units, type, start_datetime, end_datetime, last_new_data, operator, network) VALUES ('", i, "', 'level', 'm', 'continuous', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), " 'WSC', 'Canada Yukon Hydrometric Network')"))
+        DBI::dbExecute(con, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", i, "', '", name, "', '", latitude, "', '", longitude, "'"))
+        tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND type = 'continuous'"))[1,1]
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start_datetime, "' WHERE timeseries_id = ", tsid))
       }
     }, error = function(e){
       print(paste0("No level for station ", i))
       }
     )
-    tryCatch ({
-      flow <- tidyhydat::hy_daily_flows(i)[,-c(3,5)]
-      colnames(flow) <- c("location", "date", "value")
+    tryCatch({
+      flow <- tidyhydat::hy_daily_flows(i)[,c("Date", "Value")]
+      colnames(flow) <- c("date", "value")
       flow$approval <- "approved"
-      flow$parameter <- "flow"
-      flow$date <- as.character(flow$date)
-      DBI::dbAppendTable(hydro, "daily", flow)
-
-      start_datetime <- paste0(min(flow$date), " 00:00:00")
-      existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
-      if (nrow(existing) == 0){ #no corresponding realtime station yet
-        end_datetime <- paste0(max(flow$date), " 00:00:00")
+      start_datetime <- as.POSIXct(paste0(min(flow$date), " 00:00:00"), tz = "UTC")
+      tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
+      if (nrow(tsid) > 0){
+        tsid <- tsid[1,1]
+        flow$timeseries_id <- tsid
+        DBI::dbAppendTable(con, "daily", flow)
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "' WHERE timeseries_id = ", tsid))
+      } else { #no corresponding realtime station yet
+        end_datetime <- as.POSIXct(paste0(max(flow$date), " 00:00:00"), tz = "UTC")
         latitude <- tidyhydat::hy_stations(i)$LATITUDE
         longitude <- tidyhydat::hy_stations(i)$LONGITUDE
         name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
-        DBI::dbExecute(hydro, paste0("INSERT INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, last_daily_calculation_UTC, operator, network) VALUES ('", i, "', 'flow', 'm3/s', 'continuous', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), "', '", end_datetime, "', 'WSC', 'Canada Yukon Hydrometric Network')"))
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", i, "', '", name, "', '", latitude, "', '", longitude, "'"))
-      } else if (is.null(existing$end_datetime)) {
-        end_datetime <- paste0(max(flow$date), " 00:00:00")
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "' WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
-      } else {
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "' WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))
+        DBI::dbExecute(con, paste0("INSERT INTO timeseries (location, parameter, units, type, start_datetime, end_datetime, last_new_data, operator, network) VALUES ('", i, "', 'flow', 'm', 'continuous', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), " 'WSC', 'Canada Yukon Hydrometric Network')"))
+        DBI::dbExecute(con, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", i, "', '", name, "', '", latitude, "', '", longitude, "'"))
+        tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND type = 'continuous'"))[1,1]
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "' WHERE timeseries_id = ", tsid))
       }
-    }, error = function(e) {
-      print(paste0("No flows for station ", i))
+    }, error = function(e){
+      print(paste0("No flow for station ", i))
     }
     )
   } #End of for loop adding historical WSC data

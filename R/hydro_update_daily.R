@@ -48,7 +48,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   if (aquarius){
-    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'") #This loads the timeseries names for later
+    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, remote_param_name FROM settings WHERE application  = 'aquarius'") #This loads the timeseries names for later
   }
 
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
@@ -187,7 +187,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
 
         if (WSC_fail | !(parameter %in% c("level", "flow"))){ #try for a WRB station
           tryCatch({
-            ts_name <- aq_names[aq_names$parameter == new_timeseries$parameter[i] , 2]
+            ts_name <- aq_names[aq_names$parameter == new_timeseries$parameter[i] , "remote_param_name"]
             data <- WRBtools::aq_download(loc_id = new_timeseries$location[i], ts_name = ts_name, server = server)
             name <- data$metadata[1,2]
             #add new information to the realtime table
@@ -275,7 +275,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
       for (i in 1:length(unique(timeseries_WRB$location))){
         #find a corresponding entry in table timeseries to pick a parameter
         parameter <- timeseries_WRB[timeseries_WRB$location == unique(timeseries_WRB$location)[i],]$parameter[1]
-        ts_name <- aq_names[aq_names$parameter == parameter, 2]
+        ts_name <- aq_names[aq_names$parameter == parameter, "remote_param_name"]
         conversion <- WRBtools::aq_download(loc_id = unique(timeseries_WRB$location)[i], ts_name = ts_name, start = Sys.Date()-1, server = server)$metadata
         conversion <- conversion[7,2]
         all_datums[i, ] <- c(unique(timeseries_WRB$location)[i], datum_id_from = 10, datum_id_to = 110, conversion_m = conversion, current = TRUE)

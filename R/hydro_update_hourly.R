@@ -35,7 +35,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
   on.exit(DBI::dbDisconnect(hydro))
   all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
   if (aquarius){
-    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, value FROM settings WHERE application  = 'aquarius'")
+    aq_names <- DBI::dbGetQuery(hydro, "SELECT parameter, remote_param_name FROM settings WHERE application  = 'aquarius'")
   }
   DBI::dbDisconnect(hydro)
 
@@ -49,7 +49,7 @@ hydro_update_hourly <- function(path, aquarius = TRUE, server = "https://yukon.a
 
     tryCatch({
       if (operator == "WRB" & aquarius){
-        ts_name <- aq_names[aq_names$parameter == parameter , 2]
+        ts_name <- aq_names[aq_names$parameter == parameter , "remote_param_name"]
         data <- WRBtools::aq_download(loc_id = loc, ts_name = ts_name, start = as.POSIXct(all_timeseries$end_datetime[i], tz= "UTC") + 1, server = server)
 
         ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = format(data$timeseries$timestamp_UTC, format = "%Y-%m-%d %H:%M:%S"), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
