@@ -35,7 +35,6 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
     loc <- timeseries$location[i]
     parameter <- timeseries$parameter[i]
     hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
-    units <- DBI::dbGetQuery(hydro, paste0("SELECT units FROM timeseries WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,]
     last_day_historic <- as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MAX(date) FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,])
     #TODO: the step below is slow, needs to query a very large table. Can it be done another way?
     earliest_day_realtime <- as.Date(DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) FROM realtime WHERE parameter = '", parameter, "' AND location = '", loc, "'"))[1,])
@@ -150,7 +149,6 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
         missing_stats <- rbind(missing_stats, feb_29)
       }
 
-
       # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no stats even if they are between the start and end date of missing_stats.
       delete_query <- paste0("DELETE FROM daily WHERE parameter = '", parameter, "' AND location = '", loc, "' AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "'")
       remaining_dates <- as.Date(setdiff(seq.Date(min(as.Date(missing_stats$date)), max(as.Date(missing_stats$date)), by = "day"), as.Date(missing_stats$date)), origin = "1970-01-01")
@@ -161,8 +159,7 @@ calculate_stats <- function(timeseries = NULL, path = NULL, start_recalc = NULL)
       #TODO: the three commands below should be atomic. See DBI-advanced vignette for example. Should include error message if fails.
       DBI::dbExecute(hydro, delete_query)
       DBI::dbAppendTable(hydro, "daily", missing_stats) # Append the missing_stats data to the daily table
-
-      DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location= '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+      DBI::dbExecute(hydro, paste0("UPDATE timeseries SET last_daily_calculation_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND category = 'continuous'"))
       DBI::dbDisconnect(hydro)
     }
   } # End of for loop calculating means and stats for each station in timeseries table

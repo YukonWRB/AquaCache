@@ -12,11 +12,11 @@ Description: Set of functions for the initial creation and ongoing
     parameters are calculated to facilitate reporting and graphically
     representing data.
 License: AGPL (>= 3) + file LICENSE
-Depends:
-    tidyhydat.ws
+Depends: R (>= 4.1.0)
 Imports:
     DBI,
     dplyr,
+    data.table,
     fasstr,
     fs,
     hablar,
@@ -24,11 +24,10 @@ Imports:
     lubridate,
     magrittr,
     RSQLite,
-    rpostgis
+    rpostgis,
     sf,
     stats,
     stringr,
-    tidyhydat,
     WRBtools
 Suggests: 
     knitr,

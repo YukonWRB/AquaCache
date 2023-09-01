@@ -4,18 +4,12 @@
 \alias{hydro_update_hourly}
 \title{Hourly update of real-time data}
 \usage{
-hydro_update_hourly(
-  path,
-  aquarius = TRUE,
-  server = "https://yukon.aquaticinformatics.net/AQUARIUS"
-)
+hydro_update_hourly(con, tsid = "all")
 }
 \arguments{
-\item{path}{The path to the local hydro SQLite database, with extension.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
 
-\item{aquarius}{TRUE if you are fetching data from Aquarius, in which case you should also check the next five parameters. FALSE will only populate with WSC data.}
-
-\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}.}
+\item{tsid}{Specific timeseries to update. Default "all" will try to update all timeseries in the database.}
 }
 \value{
 The database is updated in-place, and a data.frame is generated with one row per updated location.
@@ -23,5 +17,7 @@ The database is updated in-place, and a data.frame is generated with one row per
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Retrieves new real-time data from WSC and Aquarius, starting from the last data point in the local database. Also updates the location_data_range table. Only works on stations that are ALREADY in the realtime tables; refer to function hydro_update_daily for how to add new stations. Timeseries that have an identical location name in WSC real-time data and Aquarius will only pull from WSC information.
+Retrieves new real-time data from WSC and Aquarius, starting from the last data point in the local database. Also updates the location_data_range table. Only works on stations that are ALREADY in the realtime tables; refer to function hydro_update_daily for how to add new stations.
+
+Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}} for more information.
 }

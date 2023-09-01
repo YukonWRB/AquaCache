@@ -71,7 +71,7 @@ initial_create <- function(con, overwrite = FALSE) {
     DBI::dbExecute(con, "CREATE TABLE if not exists rasters (
                    description TEXT NOT NULL,
                    parameter TEXT,
-                   units TEXT,
+                   unit TEXT,
                    valid_from TIMESTAMP WITH TIME ZONE,
                    valid_to TIMESTAMP WITH TIME ZONE,
                    file_path TEXT NOT NULL UNIQUE,
@@ -93,7 +93,7 @@ initial_create <- function(con, overwrite = FALSE) {
 
     DBI::dbExecute(con, "CREATE TABLE if not exists discrete (
                    timeseries_id NUMERIC,
-                   target_date DATE,
+                   target_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE,
                    value NUMERIC NOT NULL,
                    sample_class TEXT,
@@ -107,39 +107,42 @@ initial_create <- function(con, overwrite = FALSE) {
 
   # And tables that hold metadata for all locations
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_conversions (
+                 conversion_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  datum_id_from INTEGER NOT NULL,
                  datum_id_to INTEGER NOT NULL,
                  conversion_m NUMERIC NOT NULL,
-                 current TEXT NOT NULL,
-                 PRIMARY KEY (location, datum_id_to, current))")
+                 current BOOLEAN NOT NULL,
+                 CONSTRAINT datum_conversions_constraint UNIQUE (location, datum_id_to, current)")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
-                 datum_id INTEGER NOT NULL,
+                 datum_id INTEGER PRIMARY KEY,
                  datum_name_en TEXT NOT NULL,
-                 datum_name_fr TEXT NOT NULL,
-                 PRIMARY KEY (datum_id))")
+                 datum_name_fr TEXT NOT NULL)")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
-                 location TEXT UNIQUE NOT NULL,
+                 location TEXT PRIMARY KEY,
                  name TEXT,
                  latitude NUMERIC,
-                 longitude NUMERIC,
-                 PRIMARY KEY (location))")
+                 longitude NUMERIC,)")
 
   #The column timeseries_id is auto created for each new entry
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter TEXT NOT NULL,
-                 units TEXT NOT NULL,
-                 type TEXT NOT NULL CHECK(type IN ('discrete', 'continuous')),
+                 unit TEXT NOT NULL,
+                 category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
+                 type TEXT NOT NULL CHECK(type IN ('instantaneous', 'sum', 'mean', 'median'))
+                 period INTERVAL,
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
                  last_daily_calculation TIMESTAMP WITH TIME ZONE,
                  operator TEXT,
-                 network TEXT)")
+                 network TEXT,
+                 public BOOLEAN,
+                 source_fx TEXT NOT NULL)")
 
   #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
 
@@ -148,20 +151,27 @@ initial_create <- function(con, overwrite = FALSE) {
                  value TIMESTAMP WITH TIME ZONE,
                  PRIMARY KEY (event))")
 
-  internal_status <- data.frame("event" = c("HYDAT_version", "last_update_realtime", "last_update_daily", "last_update_weekly", "last_update_snow_courses", "last_update_watersheds", "last_update_rasters"),
+  internal_status <- data.frame("event" = c("HYDAT_version", "last_update_realtime", "last_update_daily", "last_update_weekly", "last_update_snow_courses", "last_update_watersheds", "last_update_rasters", "last_vacuum"),
                                 "value" = NA)
   DBI::dbAppendTable(con, "internal_status", internal_status)
 
   # And a table to hold value pairs to control timeseries visibility and Aquarius TS names
   DBI::dbExecute(con, "CREATE TABLE if not exists settings (
-                 application TEXT NOT NULL,
+                 source_fx TEXT NOT NULL,
                  parameter TEXT NOT NULL,
                  remote_param_name TEXT NOT NULL,
-                 PRIMARY KEY (parameter))")
+                 PRIMARY KEY (source_fx, parameter))")
 
-  params <- data.frame("application" = "aquarius",
+  params_AQ <- data.frame("source_fx" = "aq_download",
                        "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
                        "remote_param_name" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
+  params_WSC <- data.frame("source_fx" = "getRealtimeWSC",
+                           "parameter" = c("level", "flow", "water temperature"),
+                           "remote_param_name" = c("46", "47", "5"))
+  params_USGS <- data.frame("source_fx" = "getRealtimeNWIS",
+                            "parameter" = c("level", "flow", "water temperature"),
+                            "remote_param_name" = c("00065", "00060", "00010"))
+  params <- rbind(params_AQ, params_WSC, params_USGS)
   try(DBI::dbAppendTable(con, "settings", params))
 
   #Populate datum_list table

@@ -10,13 +10,12 @@
 #'@details
 #' Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 #'
-#' Timeseries that have an identical location name in WSC real-time/historical data and Aquarius will only pull from WSC information. For initial setup incorporating mirrored stations in Aquarius, see function [initial_WSC()].
-#'
 #' Note that this function calls hydro_update_hourly to update the realtime tables; stations that were added to the table 'timeseries' since the last run are initialized using a separate process.
 #'
+#' Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [WRBtools::aq_download()] for more information.
+#'
 #' @param path The path to the local hydro SQLite database, with extension.
-#' @param aquarius TRUE if you are fetching new realtime data from Aquarius. FALSE will only populate with WSC station data. Any newly added location will try to pull from Aquarius regardless of this parameter.
-#' @param server The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see [WRBtools::aq_download()].
+#' @param aquarius TRUE if you are fetching new realtime data from Aquarius. FALSE will only populate with WSC station data. Any newly added location will try to pull from Aquarius regardless of this parameter
 #' @param snow_db_path The path to the snow survey database, passed to [WRBtools::snowConnect()].
 #'
 #' @return The database is updated in-place, and diagnostic messages are printed to the console.
@@ -24,7 +23,8 @@
 #' @export
 #'
 
-hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aquaticinformatics.net/AQUARIUS", snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")
+#TODO: snow_db_path should instead be a path or connection identifiers living in the .Renviron file.
+hydro_update_daily <- function(path, aquarius = TRUE, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")
 
 {
   function_start <- Sys.time()
@@ -54,7 +54,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
   print("Getting realtime information up to date with hydro_update_hourly...")
   hourly_start <- Sys.time()
-  hydro_update_hourly(path = path, aquarius = aquarius, server = server)
+  hydro_update_hourly(path = path, aquarius = aquarius)
   hourly_duration <- Sys.time() - hourly_start
   print(paste0("Hydro_update_hourly executed in ", round(hourly_duration[[1]], 2), " ", units(hourly_duration), "."))
 
@@ -81,18 +81,18 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   new_hydat <- update_hydat(timeseries = timeseries_WSC$location, path = path, force_update = FALSE) #This function is run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
 
 
-  print("Checking tables to see if there are new entries of type 'continuous'...")
+  print("Checking tables to see if there are new entries of category 'continuous'...")
   new_stns <- FALSE
-  new_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE start_datetime_UTC IS NULL AND type = 'continuous'")
-  if (nrow(new_timeseries) > 0){ #if TRUE, some new station or data type for an existing station has been added to the timeseries table
+  new_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE start_datetime_UTC IS NULL AND category = 'continuous'")
+  if (nrow(new_timeseries) > 0){ #if TRUE, some new station or data category for an existing station has been added to the timeseries table
     print("New station(s) detected in timeseries table.")
-    timeseries_check_before <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+    timeseries_check_before <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE category = 'continuous'")
     #find the new station
     for (i in 1:nrow(new_timeseries)){
       loc <- new_timeseries$location[i]
       parameter <- new_timeseries$parameter[i]
       network <- new_timeseries$network[i]
-      print(paste0("Attempting to add location ", loc, " for parameter ", parameter, " and type continuous. Timeseries table, locations table, and measurement tables will be populated if successful."))
+      print(paste0("Attempting to add location ", loc, " for parameter ", parameter, " and category continuous. Timeseries table, locations table, and measurement tables will be populated if successful."))
       tryCatch({
         WSC_fail <- TRUE
         if (parameter %in% c("level", "flow")){
@@ -175,9 +175,9 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
               name <- stringr::str_to_title(tidyhydat::hy_stations(new_timeseries$location[i])$STATION_NAME)
 
               if (!is.null(data_realtime)){
-                DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+                DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND category = 'continuous'"))
               } else { #Set last_new_data so calculate_stats doesn't include it in calculations later on
-                DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "', last_new_data_UTC = '", end_datetime, "', last_daily_calculation_UTC = '", end_datetime, "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+                DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "', last_new_data_UTC = '", end_datetime, "', last_daily_calculation_UTC = '", end_datetime, "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND category = 'continuous'"))
               }
               DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", new_timeseries$location[i], "', '", name, "', '", latitude, "', '", longitude, "')"))
             }
@@ -188,27 +188,27 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
         if (WSC_fail | !(parameter %in% c("level", "flow"))){ #try for a WRB station
           tryCatch({
             ts_name <- aq_names[aq_names$parameter == new_timeseries$parameter[i] , "remote_param_name"]
-            data <- WRBtools::aq_download(loc_id = new_timeseries$location[i], ts_name = ts_name, server = server)
+            data <- WRBtools::aq_download(loc_id = new_timeseries$location[i], ts_name = ts_name)
             name <- data$metadata[1,2]
             #add new information to the realtime table
             ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = format(data$timeseries$timestamp_UTC, format = "%Y-%m-%d %H:%M:%S"), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
             DBI::dbAppendTable(hydro, "realtime", ts)
             #make the new entry into table timeseries
-            DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", min(data$timeseries$timestamp_UTC),"', end_datetime_UTC = '", max(data$timeseries$timestamp_UTC),"', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WRB', network = '", network, "' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND type = 'continuous'"))
+            DBI::dbExecute(hydro, paste0("UPDATE timeseries SET start_datetime_UTC = '", min(data$timeseries$timestamp_UTC),"', end_datetime_UTC = '", max(data$timeseries$timestamp_UTC),"', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WRB', network = '", network, "' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND category = 'continuous'"))
             DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", new_timeseries$location[i], "', '", name, "', '", data$metadata$value[5], "', '", data$metadata$value[6], "')"))
           }, error = function(e) {
-            print(paste0("Failed to retrieve data from location ", loc, " for parameter ", parameter, " and from Aquarius. The location type was flagged as 'FAILED' in the timeseries table, clear this flag to try again. You may also want to check the timeseries parameter and label in Aquarius."))
+            print(paste0("Failed to retrieve data from location ", loc, " for parameter ", parameter, " and from Aquarius. The location category was flagged as 'FAILED' in the timeseries table, clear this flag to try again. You may also want to check the timeseries parameter and label in Aquarius."))
           })
         }
 
-        print(paste0("Successfully added station ", loc, " for parameter ", parameter, " and type continuous"))
+        print(paste0("Successfully added station ", loc, " for parameter ", parameter, " and category continuous"))
       }, error = function(e) {
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET type = 'FAILED' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND type = 'continuous'"))
-        print(paste0("Failed to retrieve data from location ", loc, " for parameter ", parameter, ". The location type was flagged as 'FAILED' in the timeseries table, clear this flag to try again."))
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET category = 'FAILED' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND category = 'continuous'"))
+        print(paste0("Failed to retrieve data from location ", loc, " for parameter ", parameter, ". The location category was flagged as 'FAILED' in the timeseries table, clear this flag to try again."))
       })
     }#End of for loop that works on every new station
 
-    timeseries_check_after <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+    timeseries_check_after <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE category = 'continuous'")
     new_failed <- nrow(timeseries_check_after) - nrow(timeseries_check_before)
     if (new_failed < nrow(new_timeseries)){
       new_stns <- TRUE
@@ -229,7 +229,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   print("Checking datum tables...")
   ### Now deal with datums if hydat is updated or if stations were added, or if entries are missing
   datums <- DBI::dbGetQuery(hydro, "SELECT location FROM datum_conversions") #pull the existing datums
-  timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'") #refresh of timeseries in case any where added
+  timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE category = 'continuous'") #refresh of timeseries in case any where added
   missing_datums <- setdiff(unique(timeseries$location), datums$location)
   if (length(missing_datums) > 1) missing_datums <- TRUE else missing_datums <- FALSE
 
@@ -276,7 +276,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
         #find a corresponding entry in table timeseries to pick a parameter
         parameter <- timeseries_WRB[timeseries_WRB$location == unique(timeseries_WRB$location)[i],]$parameter[1]
         ts_name <- aq_names[aq_names$parameter == parameter, "remote_param_name"]
-        conversion <- WRBtools::aq_download(loc_id = unique(timeseries_WRB$location)[i], ts_name = ts_name, start = Sys.Date()-1, server = server)$metadata
+        conversion <- WRBtools::aq_download(loc_id = unique(timeseries_WRB$location)[i], ts_name = ts_name, start = Sys.Date()-1)$metadata
         conversion <- conversion[7,2]
         all_datums[i, ] <- c(unique(timeseries_WRB$location)[i], datum_id_from = 10, datum_id_to = 110, conversion_m = conversion, current = TRUE)
       }
@@ -293,7 +293,7 @@ hydro_update_daily <- function(path, aquarius = TRUE, server = "https://yukon.aq
   #Get list of timeseries again in case it's changed.
   print("Calculating daily means and statistics...")
   stat_start <- Sys.time()
-  timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+  timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE category = 'continuous'")
   needs_calc <- timeseries[is.na(timeseries$last_daily_calculation_UTC) , ] #All of these need a new calculation.
   has_last_new_data <- timeseries[!is.na(timeseries$last_new_data_UTC) & !is.na(timeseries$last_daily_calculation_UTC) , ] #only a subset of these need new calculation. Those that have a calculation and don't have an entry for new data don't need calculations.
   if (nrow(has_last_new_data) > 0){ #Take subset of has_last_new_data where the last calculation was before new data being added.

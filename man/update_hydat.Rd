@@ -7,7 +7,7 @@
 update_hydat(timeseries, path, force_update = FALSE)
 }
 \arguments{
-\item{timeseries}{Character vector of timeseries for which to look for updates.}
+\item{timeseries}{Character vector of timeseries for which to look for updates. "all" will attempt to update all timeseries from operator 'WSC'.}
 
 \item{path}{The path to the hydrometric database, passed to \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
 

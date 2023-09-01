@@ -9,7 +9,6 @@
 #' @param locations The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.
 #'
 #' @return Updated entries in the hydro database.
-#' @import tidyhydat.ws
 #' @export
 #'
 
@@ -20,9 +19,9 @@ dailyCrossCheck <- function(path, locations = "all")
   on.exit(DBI::dbDisconnect(hydro))
 
   if (locations == "all"){
-    all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+    all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE category = 'continuous'")
   } else {
-    all_timeseries <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE type = 'continuous' AND location IN ('", paste(locations, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE category = 'continuous' AND location IN ('", paste(locations, collapse = "', '"), "')"))
   }
 
   for (i in 1:nrow(all_timeseries)){

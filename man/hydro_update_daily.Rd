@@ -7,16 +7,13 @@
 hydro_update_daily(
   path,
   aquarius = TRUE,
-  server = "https://yukon.aquaticinformatics.net/AQUARIUS",
   snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb"
 )
 }
 \arguments{
 \item{path}{The path to the local hydro SQLite database, with extension.}
 
-\item{aquarius}{TRUE if you are fetching new realtime data from Aquarius. FALSE will only populate with WSC station data. Any newly added location will try to pull from Aquarius regardless of this parameter.}
-
-\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}.}
+\item{aquarius}{TRUE if you are fetching new realtime data from Aquarius. FALSE will only populate with WSC station data. Any newly added location will try to pull from Aquarius regardless of this parameter}
 
 \item{snow_db_path}{The path to the snow survey database, passed to \code{\link[WRBtools:snowConnect]{WRBtools::snowConnect()}}.}
 }
@@ -33,7 +30,7 @@ The function checks for an existing HYDAT database, and will download it if it i
 \details{
 Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 
-Timeseries that have an identical location name in WSC real-time/historical data and Aquarius will only pull from WSC information. For initial setup incorporating mirrored stations in Aquarius, see function \code{\link[=initial_WSC]{initial_WSC()}}.
-
 Note that this function calls hydro_update_hourly to update the realtime tables; stations that were added to the table 'timeseries' since the last run are initialized using a separate process.
+
+Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}} for more information.
 }
