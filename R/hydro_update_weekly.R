@@ -9,37 +9,24 @@
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [WRBtools::hydroConnect()].
 #' @param tsid The timeseries_id you wish to have updated. Defaults to "all". Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.
-#' @param start_datetime
+#' @param start_datetime The datetime (as a POSIXct) from which to look for possible new data.
 #'
 #' @return Updated entries in the hydro database.
 #' @export
 #'
 
+#TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
 hydro_update_weekly <- function(con, tsid = "all", start_datetime)
 {
-  on.exit(DBI::dbDisconnect(con))
 
-  if (!(aquarius_range %in% c("all", "unapproved"))){
-    stop("The parameter aquarius_range must be either 'all' or 'unapproved'")
-  }
-  if (aquarius){
-    if (is.null(Sys.getenv("AQPASS"))){
-      stop("Your Aquarius password must be available in the .Renviron file in the form AQPASS='yourpassword'")
-    }
-    if (is.null(Sys.getenv("AQUSER"))){
-      stop("Your Aquarius user name must be available in the .Renviron file in the form AQUSER='yourusername'")
-    }
-  }
-
-  settings <- DBI::dbGetQuery(con,  "SELECT * FROM settings;")
+  settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
   if (tsid == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT * FROM timeseries WHERE category = 'continuous'")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx FROM timeseries WHERE category = 'continuous'")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT * FROM timeseries WHERE timeseries_id IN ('", paste(tsid, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx FROM timeseries WHERE timeseries_id IN ('", paste(tsid, collapse = "', '"), "')"))
   }
 
-  #TODO make the code below work with the functions getRealtimeNWIS, getRealtimeWSC, aq_download.
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
@@ -48,7 +35,7 @@ hydro_update_weekly <- function(con, tsid = "all", start_datetime)
     param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
 
     tryCatch({
-      ts <- do.call(source_fx, list(location = loc, param_code = param_code, start_datetime = start_datetime))
+        ts <- do.call(source_fx, list(location = loc, param_code = param_code, start_datetime = start_datetime))
       if (nrow(ts) > 0){
         realtime <- DBI::dbGetQuery(con, paste0("SELECT * FROM realtime WHERE timeseries_id = ", tsid, " AND datetime >= '", start_datetime, "';"))
         mismatch <- FALSE
@@ -77,13 +64,7 @@ hydro_update_weekly <- function(con, tsid = "all", start_datetime)
         }
         if (mismatch){
           ts <- ts[ts$datetime >= datetime , ]
-          #TODO: the combination of commands below should be atomic. See DBI-advanced vignette for example. Should include error message if fails.
-          #TODO: Needs to be a selective delete/append or replace, since NWIS data might be sparse
-          delete_query <- paste0("DELETE FROM realtime WHERE timeseries_id = ", tsid, " AND date BETWEEN '", min(ts$datetime), "' AND '", max(ts$datetime), "'")
-          ####FINISH ABOVE
-
-
-
+          ts$timeseries_id <- tsid
           DBI::dbExecute(con, paste0("DELETE FROM realtime WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(ts$datetime), "' AND '", max(ts$datetime), "';"))
           DBI::dbAppendTable(con, "realtime", ts)
           #make the new entry into table timeseries
@@ -98,7 +79,7 @@ hydro_update_weekly <- function(con, tsid = "all", start_datetime)
         }
       }
     }, error = function(e) {
-      message("Hydro_update_weekly failed on location ", loc, " and parameter ", parameter, " (location_id ", tsid, ").")
+      warning("Hydro_update_weekly failed on location ", loc, " and parameter ", parameter, " (location_id ", tsid, ").")
     }
     )
   }

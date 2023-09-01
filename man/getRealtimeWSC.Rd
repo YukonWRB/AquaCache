@@ -4,12 +4,7 @@
 \alias{getRealtimeWSC}
 \title{Get realtime data from the WSC}
 \usage{
-getRealtimeWSC(
-  location,
-  param_code = NULL,
-  start_datetime,
-  end_datetime = Sys.time()
-)
+getRealtimeWSC(location, param_code, start_datetime, end_datetime = Sys.time())
 }
 \arguments{
 \item{location}{A WSC station number.}

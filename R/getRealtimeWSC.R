@@ -13,7 +13,7 @@
 #' @return A data.table object of hydrometric data, with datetimes in UTC-0.
 #' @export
 
-getRealtimeWSC <- function (location, param_code = NULL, start_datetime, end_datetime = Sys.time())
+getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime = Sys.time())
 {
   tryCatch({
     if (inherits(start_datetime, c("character", "Date"))){ #Either way defaults to 0 hour

@@ -11,7 +11,7 @@ hydro_update_weekly(con, tsid = "all", start_datetime)
 
 \item{tsid}{The timeseries_id you wish to have updated. Defaults to "all". Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.}
 
-\item{start_datetime}{}
+\item{start_datetime}{The datetime (as a POSIXct) from which to look for possible new data.}
 }
 \value{
 Updated entries in the hydro database.

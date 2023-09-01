@@ -17,7 +17,5 @@ The database is updated in-place, and a data.frame is generated with one row per
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Retrieves new real-time data from WSC and Aquarius, starting from the last data point in the local database. Also updates the location_data_range table. Only works on stations that are ALREADY in the realtime tables; refer to function hydro_update_daily for how to add new stations.
-
-Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}} for more information.
+Retrieves new real-time data starting from the last data point in the local database, using the function speficied in the timeseries table column "source_fx" Only works on stations that are ALREADY in the realtime tables; refer to \code{\link[=add_timeseries]{add_timeseries()}} for how to add new stations.
 }

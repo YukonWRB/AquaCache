@@ -18,8 +18,6 @@
 
 initial_create <- function(con, overwrite = FALSE) {
 
-  on.exit(DBI::dbDisconnect(con))
-
   if (overwrite){
     for (i in DBI::dbListTables(con)){
       DBI::dbExecute(con, paste0("DROP TABLE ", i))
@@ -29,12 +27,15 @@ initial_create <- function(con, overwrite = FALSE) {
   }
 
   #Create the postgis extension, which adds a few necessary tables. Then, create a new schema and set the schema of these tables to decrease clutter in the DB.
+
   tryCatch({
+    if (is.null(DBI::dbGetQuery(con, "SELECT PostGIS_version()"))){
     DBI::dbExecute(con, "CREATE EXTENSION postgis;")
     DBI::dbExecute(con, "CREATE SCHEMA spatial_data;")
     DBI::dbExecute(con, "ALTER TABLE public.geometry_columns SET SCHEMA spatial_data;")
     DBI::dbExecute(con, "ALTER TABLE public.geography_columns SET SCHEMA spatial_data;")
     DBI::dbExecute(con, "ALTER TABLE public.spatial_ref_sys SET SCHEMA spatial_data;")
+    }
   }, error = function(e) {
     stop("Looks like you need to install the postGIS extension before continuing. The process varies depending on your OS: refer to this link for more info. https://postgis.net/documentation/getting_started/")
   })
@@ -113,7 +114,7 @@ initial_create <- function(con, overwrite = FALSE) {
                  datum_id_to INTEGER NOT NULL,
                  conversion_m NUMERIC NOT NULL,
                  current BOOLEAN NOT NULL,
-                 CONSTRAINT datum_conversions_constraint UNIQUE (location, datum_id_to, current)")
+                 UNIQUE (location, datum_id_to, current))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
                  datum_id INTEGER PRIMARY KEY,
@@ -124,7 +125,7 @@ initial_create <- function(con, overwrite = FALSE) {
                  location TEXT PRIMARY KEY,
                  name TEXT,
                  latitude NUMERIC,
-                 longitude NUMERIC,)")
+                 longitude NUMERIC)")
 
   #The column timeseries_id is auto created for each new entry
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
@@ -133,7 +134,7 @@ initial_create <- function(con, overwrite = FALSE) {
                  parameter TEXT NOT NULL,
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
-                 type TEXT NOT NULL CHECK(type IN ('instantaneous', 'sum', 'mean', 'median'))
+                 type TEXT NOT NULL CHECK(type IN ('instantaneous', 'sum', 'mean', 'median')),
                  period INTERVAL,
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
@@ -141,8 +142,15 @@ initial_create <- function(con, overwrite = FALSE) {
                  last_daily_calculation TIMESTAMP WITH TIME ZONE,
                  operator TEXT,
                  network TEXT,
-                 public BOOLEAN,
-                 source_fx TEXT NOT NULL)")
+                 public BOOLEAN NOT NULL,
+                 source_fx TEXT NOT NULL,
+                 source_fx_args TEXT,
+                 UNIQUE NULLS NOT DISTINCT (location, parameter, category, type, period),
+                 CONSTRAINT valid_period CHECK (
+      (type = 'instantaneous' AND period = 'PT0S')
+      OR (type <> 'instantaneous')
+    ));")
+
 
   #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
 
