@@ -61,11 +61,11 @@ initial_create <- function(con, overwrite = FALSE) {
                  percent_historic_range NUMERIC,
                  max NUMERIC,
                  min NUMERIC,
-                 QP90 NUMERIC,
-                 QP75 NUMERIC,
-                 QP50 NUMERIC,
-                 QP25 NUMERIC,
-                 QP10 NUMERIC,
+                 q90 NUMERIC,
+                 q75 NUMERIC,
+                 q50 NUMERIC,
+                 q25 NUMERIC,
+                 q10 NUMERIC,
                  PRIMARY KEY (timeseries_id, date))")
 
 

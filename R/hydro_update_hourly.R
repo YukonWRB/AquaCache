@@ -7,18 +7,18 @@
 #'
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [WRBtools::hydroConnect()].
-#' @param tsid Specific timeseries to update. Default "all" will try to update all timeseries in the database.
+#' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 
-hydro_update_hourly <- function(con, tsid="all")
+hydro_update_hourly <- function(con, timeseries_id = "all")
 {
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
-  if (tsid == "all"){
+  if (timeseries_id == "all"){
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx , end_datetime FROM timeseries WHERE category = 'continuous'")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, end_datetime FROM timeseries WHERE timeseries_id IN ('", paste(tsid, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, end_datetime FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
   }
 
   count <- 0 #counter for number of
@@ -39,7 +39,7 @@ hydro_update_hourly <- function(con, tsid="all")
         #make the new entry into table timeseries
         DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
         count <- count + 1
-        success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries" = tsid))
+        success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries_id" = tsid))
       }
     }, error = function(e) {
       warning("hydro_update_hourly: Failed to check for new data or to append discovered new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], ").")

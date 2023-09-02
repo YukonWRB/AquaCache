@@ -8,7 +8,7 @@
 #'Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [WRBtools::aq_download()] for more information.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [WRBtools::hydroConnect()].
-#' @param tsid The timeseries_id you wish to have updated. Defaults to "all". Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.
+#' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct) from which to look for possible new data.
 #'
 #' @return Updated entries in the hydro database.
@@ -17,14 +17,14 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-hydro_update_weekly <- function(con, tsid = "all", start_datetime)
+hydro_update_weekly <- function(con, timeseries_id = "all", start_datetime)
 {
 
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
-  if (tsid == "all"){
+  if (timeseries_id == "all"){
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx FROM timeseries WHERE category = 'continuous'")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx FROM timeseries WHERE timeseries_id IN ('", paste(tsid, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
   }
 
   for (i in 1:nrow(all_timeseries)){
