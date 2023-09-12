@@ -5,7 +5,7 @@
 #'
 #' Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. Primary keys for most tables are on the location and parameter, location, parameter, and datetime, or location, parameter, and date columns. No indices are specified as the primary key fulfills this task already.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [WRBtools::hydroConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
 #' @return An SQLite database in the folder location specified by 'path'.
@@ -16,7 +16,7 @@
 #NOTE: postgreSQL uses the 'text' data type, but Microsoft SQL server equivalent is varchar(max). Replace all can be used to adapt this script.
 #NOTE: For datetimes to work with both postgres and SQL server, ISO8601 should be used: "2022-01-01T00:00:00-07:00" for MST. This is the new ISO standard anyways.
 
-initial_create <- function(con, overwrite = FALSE) {
+initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   if (overwrite){
     for (i in DBI::dbListTables(con)){
@@ -42,20 +42,22 @@ initial_create <- function(con, overwrite = FALSE) {
 
 
   # realtime table
-  DBI::dbExecute(con, "CREATE TABLE if not exists realtime (
-                 timeseries_id NUMERIC,
+  DBI::dbExecute(con, "CREATE TABLE if not exists measurements_continuous (
+                 timeseries_id NUMERIC NOT NULL,
                  datetime TIMESTAMP WITH TIME ZONE NOT NULL,
-                 value NUMERIC,
+                 value NUMERIC NOT NULL,
                  grade TEXT,
                  approval TEXT,
+                 period INTERVAL,
                  PRIMARY KEY (timeseries_id, datetime))
                  ")
 
   # daily table
-  DBI::dbExecute(con, "CREATE TABLE if not exists daily (
-                 timeseries_id NUMERIC,
+  DBI::dbExecute(con, "CREATE TABLE if not exists calculated_daily (
+                 timeseries_id NUMERIC NOT NULL,
                  date DATE NOT NULL,
                  value NUMERIC,
+                 type TEXT CHECK(type IN ('mean', 'sum')),
                  grade TEXT,
                  approval TEXT,
                  percent_historic_range NUMERIC,
@@ -92,7 +94,7 @@ initial_create <- function(con, overwrite = FALSE) {
                    value NUMERIC,
                    PRIMARY KEY (timeseries_id, datetime))")
 
-    DBI::dbExecute(con, "CREATE TABLE if not exists discrete (
+    DBI::dbExecute(con, "CREATE TABLE if not exists measurements_discrete (
                    timeseries_id NUMERIC,
                    target_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE,
@@ -107,20 +109,23 @@ initial_create <- function(con, overwrite = FALSE) {
                    location TEXT UNIQUE)")
 
   # And tables that hold metadata for all locations
+  DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
+    datum_id INTEGER PRIMARY KEY,
+    datum_name_en TEXT NOT NULL,
+    datum_name_fr TEXT NOT NULL);")
+
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_conversions (
                  conversion_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
-                 datum_id_from INTEGER NOT NULL,
-                 datum_id_to INTEGER NOT NULL,
+                 datum_id_from INTEGER NOT NULL REFERENCES datum_list (datum_id),
+                 datum_id_to INTEGER NOT NULL REFERENCES datum_list (datum_id),
                  conversion_m NUMERIC NOT NULL,
                  current BOOLEAN NOT NULL,
-                 UNIQUE (location, datum_id_to, current))")
+                 UNIQUE (location, datum_id_to, current));")
 
-  DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
-                 datum_id INTEGER PRIMARY KEY,
-                 datum_name_en TEXT NOT NULL,
-                 datum_name_fr TEXT NOT NULL)")
 
+
+  #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
                  location TEXT PRIMARY KEY,
                  name TEXT,
@@ -134,8 +139,7 @@ initial_create <- function(con, overwrite = FALSE) {
                  parameter TEXT NOT NULL,
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
-                 type TEXT NOT NULL CHECK(type IN ('instantaneous', 'sum', 'mean', 'median')),
-                 period INTERVAL,
+                 type TEXT NOT NULL CHECK(type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max')),
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
@@ -145,14 +149,8 @@ initial_create <- function(con, overwrite = FALSE) {
                  public BOOLEAN NOT NULL,
                  source_fx TEXT NOT NULL,
                  source_fx_args TEXT,
-                 UNIQUE NULLS NOT DISTINCT (location, parameter, category, type, period),
-                 CONSTRAINT valid_period CHECK (
-      (type = 'instantaneous' AND period = 'PT0S')
-      OR (type <> 'instantaneous')
-    ));")
+                 UNIQUE (location, parameter, category, type));")
 
-
-  #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
 
   DBI::dbExecute(con, "CREATE TABLE if not exists internal_status (
                  event TEXT NOT NULL,

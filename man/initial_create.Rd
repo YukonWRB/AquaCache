@@ -4,10 +4,10 @@
 \alias{initial_create}
 \title{Initial hydro database creation.}
 \usage{
-initial_create(con, overwrite = FALSE)
+initial_create(con = hydrometConnect(), overwrite = FALSE)
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
 \item{overwrite}{TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.}
 }

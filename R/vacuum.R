@@ -5,19 +5,21 @@
 #'
 #' Performs a VACUUM operation on the database, re-organizing and compacting tables.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [WRBtools::hydroConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
 #' @return A vacuumed database.
 #' @export
 #'
 
 
-vacuum <- function(con)
+vacuum <- function(con = hydometConnect())
 
 {
-  on.exit(DBI::dbDisconnect(con))
-
-  #TODO: operations below should be atomic
-  DBI::dbExecute(con, "VACUUM (ANALYZE)")
-  DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_vacuum';"))
+  DBI::dbWithTransaction(
+    con,
+    {
+      DBI::dbExecute(con, "VACUUM (ANALYZE)")
+      DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_vacuum';"))
+    }
+  )
 }

@@ -1,9 +1,9 @@
-#' Connect to hydrology database
+#' Connect to the hydromet database
 #'
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' This function exists to facilitate connecting to the hydrology database, especially if the database type and connection method changes in the future. Cannot be used to create a new database, use [DBI::dbConnect()] with the appropriate driver (e.g. [RSQLite::SQLite()]) for that purpose.
+#' This function exists to facilitate connecting to the hydrology database, especially if the database type and connection method changes in the future.
 #'
 #' @param name Database name.
 #' @param host Database host address.
@@ -18,7 +18,7 @@
 #' @export
 #'
 
-hydroConnect <- function(name = "hydromet", host = "localhost", port = "5432", username = "postgres", password = "SnowFa11ing", silent = FALSE){
+hydrometConnect <- function(name = "hydromet", host = "localhost", port = "5432", username = "postgres", password = "SnowFa11ing", silent = FALSE){
 
   tryCatch({
     hydro <- DBI::dbConnect(drv = RPostgres::Postgres(),

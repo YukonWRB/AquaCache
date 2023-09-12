@@ -6,7 +6,7 @@
 \alias{WRBdatabase-package}
 \title{WRBdatabase: Hydrological database creation and maintenance}
 \description{
-Set of functions for the initial creation and ongoing maintenance of WRB's local database. This local database is a combination of the Water Survey of Canada real-time and historical data and WRB data held in Aquarius. Supports flow and level parameters from WSC and any consistently-named timeseries from Aquarius. Multiple parameters are calculated to facilitate reporting and graphically representing data.
+Set of functions for the creation and ongoing maintenance of the Yukon Government's hydrometric database in postgreSQL format. This database is a combination of the Water Survey of Canada real-time and historical data, YG data held in Aquarius, USGS data, and discrete snow survey data. Supports any number of timeseries unique by their location, parameter, data type, and period (for sum, mean, etc measurements). Disparate data sources are handled via scripts specified for each timeseries, allowing for expansion of data sources.
 }
 \author{
 \strong{Maintainer}: Ghislain de Laplante \email{ghislaindel@gmail.com} (\href{https://orcid.org/0000-0002-5093-9185}{ORCID})

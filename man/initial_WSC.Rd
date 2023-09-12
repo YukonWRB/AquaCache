@@ -5,7 +5,7 @@
 \title{Initial creation of tables containing WSC data}
 \usage{
 initial_WSC(
-  con,
+  con = hydrometConnect(),
   WSC_stns = "yukon",
   aquarius = TRUE,
   stage = "Stage.Preliminary",
@@ -13,7 +13,7 @@ initial_WSC(
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
 \item{WSC_stns}{The WSC stations you wish to pull information for. In the event that these stations are mirrored in your Aquarius database the function will attempt to fetch that information. Otherwise, only information from the HYDAT database and from real-time WSC data will be incorporated. The default, "yukon" is a preset list of 77 stations in or relevant to Yukon.}
 

@@ -16,15 +16,14 @@
 getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime = Sys.time())
 {
   tryCatch({
-    if (inherits(start_datetime, c("character", "Date"))){ #Either way defaults to 0 hour
+    if (inherits(start_datetime, "character") & nchar(start_datetime) > 10){ #Does not necessarily default to 0 hour.
       start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
     } else if (inherits(start_datetime, "POSIXct")){
       attr(start_datetime, "tzone") <- "UTC"
+    } else if (inherits(start_datetime, "Date") | (inherits(start_datetime, "character") & nchar(start_datetime) == 10)){ #defaults to 0 hour
+      start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
     } else {
       stop("Parameter start_datetime could not be coerced to POSIXct.")
-    }
-    if (nchar(start_datetime) == 10){
-      start_datetime <- paste0(start_datetime, " 00:00:00")
     }
   }, error = function(e){
     stop("Failed to convert parameter start_datetime to POSIXct.")
@@ -34,18 +33,22 @@ getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime =
       end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
     } else if (inherits(end_datetime, "POSIXct")){
       attr(end_datetime, "tzone") <- "UTC"
-    } else if (inherits(end_datetime, "Date") | (inherits(end_datetime, "character") & nchar(end_datetime) == 10)){
+    } else if (inherits(end_datetime, "Date") | (inherits(end_datetime, "character") & nchar(end_datetime) == 10)){ #defaults to very end of day
       end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
       end_datetime <- end_datetime + 60*60*23.9999
     } else {
       stop("Parameter end_datetime could not be coerced to POSIXct.")
     }
-    if (nchar(end_datetime) == 10){
-      end_datetime <- paste0(end_datetime, " 00:00:00")
-    }
   }, error = function(e) {
     stop("Failed to convert parameter end_datetime to POSIXct.")
   })
+
+  if (nchar(as.character(start_datetime)) == 10){
+    start_datetime <- paste0(start_datetime, " 00:00:00")
+  }
+  if (nchar(as.character(end_datetime)) == 10) {
+    end_datetime <- paste0(end_datetime, " 00:00:00")
+  }
 
   if (!(param_code %in%  c(46, 16, 52, 47, 8, 5, 41, 18))){
     stop("Parameter specified is not one of 46, 16, 52, 47, 8, 5, 41, 18.")
@@ -57,8 +60,8 @@ getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime =
   datetime_string <- paste0("start_date=", substr(start_datetime, 1, 10), "%20", substr(start_datetime, 12, 19), "&end_date=", substr(end_datetime, 1, 10), "%20", substr(end_datetime, 12, 19))
   url <- paste0(baseurl, location_string, "&", parameters_string, "&", datetime_string)
 
-  csv <- data.table::fread(url, showProgress = FALSE)[, c("Date", "Value/Valeur", "Qualifier/Qualificatif", "Approval/Approbation")]
-  colnames(csv) <- c("datetime", "value", "grade", "approval")
+  data <- data.table::fread(url, showProgress = FALSE)[, c("Date", "Value/Valeur", "Symbol/Symbole", "Approval/Approbation")]
+  colnames(data) <- c("datetime", "value", "grade", "approval")
 
-  return(as.data.frame(csv))
+  return(as.data.frame(data))
 }

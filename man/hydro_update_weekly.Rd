@@ -4,14 +4,18 @@
 \alias{hydro_update_weekly}
 \title{Weekly update of hydro database}
 \usage{
-hydro_update_weekly(con, tsid = "all", start_datetime)
+hydro_update_weekly(
+  con = hydrometConnect(silent = TRUE),
+  timeseries_id = "all",
+  start_datetime
+)
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{tsid}{The timeseries_id you wish to have updated. Defaults to "all". Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.}
+\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
-\item{start_datetime}{The datetime (as a POSIXct) from which to look for possible new data.}
+\item{start_datetime}{The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
 }
 \value{
 Updated entries in the hydro database.

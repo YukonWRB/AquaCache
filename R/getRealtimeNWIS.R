@@ -75,5 +75,7 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
   }
   colnames(data) <- c("datetime", "value", "grade")
   data$approval <- NA #makes it consistent with other import functions
+
+  return(data)
 }
 

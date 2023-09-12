@@ -4,17 +4,21 @@
 \alias{calculate_stats}
 \title{Calculate daily means and statistics}
 \usage{
-calculate_stats(timeseries = NULL, path = NULL, start_recalc = NULL)
+calculate_stats(
+  con = hydrometConnect(silent = TRUE),
+  timeseries_id,
+  start_recalc = NULL
+)
 }
 \arguments{
-\item{timeseries}{A data.frame containing, at a minimum, columns named 'location', and 'parameter', necessary to identify the exact records in need of updating.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{path}{The path to the hydrometric database, passed to \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
+\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector.}
 
-\item{start_recalc}{The day on which to start daily calculations, one vector element per row of the dataset passed as argument to timeseries. If NULL will only recalculate necessary days.}
+\item{start_recalc}{The day on which to start daily calculations, as a vector of one element OR one vector element per element in \code{tsid} OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.}
 }
 \value{
-Updated entries in the 'daily' table
+Updated entries in the 'calculated_daily' table.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
