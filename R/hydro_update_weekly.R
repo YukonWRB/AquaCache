@@ -95,7 +95,7 @@ hydro_update_weekly <- function(con = hydrometConnect(silent=TRUE), timeseries_i
           )
 
           #Recalculate daily means and statistics
-          calculate_stats(timeseries = tsid,
+          calculate_stats(timeseries_id = tsid,
                           con = con,
                           start_recalc = as.Date(substr(datetime, 1, 10)))
         }

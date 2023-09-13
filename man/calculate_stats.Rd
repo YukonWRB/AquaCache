@@ -13,7 +13,7 @@ calculate_stats(
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector.}
+\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'}
 
 \item{start_recalc}{The day on which to start daily calculations, as a vector of one element OR one vector element per element in \code{tsid} OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.}
 }
@@ -23,5 +23,10 @@ Updated entries in the 'calculated_daily' table.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
+Calculates daily means from data in the measurements_continuous table as well as derived statistics for each day (historical min, max, q10, q25, q50 (mean), q75, q90). Derived daily use values for each day of year \strong{prior} to the current date for historical context, with the exception of the first day of record for which only the min/max are populated with the day's value.  February 29 calculations are handled differently: see details.
+
 This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation. It \emph{must} be used with a database created by this package, or one with identical table and column names.
+}
+\details{
+Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 }

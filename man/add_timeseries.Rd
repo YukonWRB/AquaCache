@@ -26,8 +26,8 @@ One or more new entries are created in the table 'timeseries'
 This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function \code{\link[=add_ts_templates]{add_ts_templates()}} for help in formatting the data.frames to pass to \code{timeseries_df} and \code{locations_df}.
 }
 \details{
-You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated_daily tables with new information for each timeseries.
+You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
 }
 \seealso{
-\code{\link[=add_ts_template]{add_ts_template()}} to see a
+\code{\link[=add_ts_templates]{add_ts_templates()}} to see templates for timesries_df and locations_df.
 }

@@ -6,7 +6,7 @@
 #' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [add_ts_templates()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`.
 #'
 #' @details
-#' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated_daily tables with new information for each timeseries.
+#' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
@@ -14,7 +14,7 @@
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
-#' @seealso [add_ts_template()] to see a
+#' @seealso [add_ts_templates()] to see templates for timesries_df and locations_df.
 
 add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, locations_df = NULL){
 
@@ -47,6 +47,7 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
         start_datetime <- timeseries_df[i, "start_datetime"]
         tryCatch({
           DBI::dbAppendTable(con, "timeseries", add) #This is a try because the timeseries might already have been added by update_hydat, which searches for level + flow for each location.
+          message("Added a new entry to the timeseries table for location ", add$location, " and parameter ", add$parameter, ".")
         }, error = function (e) {
           message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada, and this function automatically looked for the corresponding level/flow timeseries.")
         })
@@ -74,7 +75,8 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
             ts$timeseries_id <- new_tsid
             tryCatch({
               DBI::dbAppendTable(con, "measurements_continuous", ts)
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
+              DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
+              message("Success! Added new data for ", add$location, " and parameter ", add$parameter, ".")
             }, error = function(e) {
               warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/type/categeory combination.")
             })
@@ -85,7 +87,11 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
           }
         } else { #Add the non-continuous data
+          if (nrow(ts) > 0){
+
+          }
           #TODO: Figure out how to handle non-continuous data!!!
+
         }
     }, error = function(e) {
       warning("Failed to add new data for row number ", i, " in the provided timeseries_df data.frame.")
@@ -112,9 +118,12 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
                               conversion_m = locations_df[locations_df$location == i, "conversion_m"],
                               current = locations_df[locations_df$location == i, "current"])
           DBI::dbAppendTable(con, "datum_conversions", datum)
+          message("Added a new entry to the locations table for location ", i, ".")
         }
       ) #End of dbWithTransaction
     }
+
+    #TODO: calculate or find polygons for any locations that have flow or level. Modify function getWatersheds.
   }
 
 

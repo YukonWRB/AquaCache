@@ -17,7 +17,7 @@ The database is updated in-place, and a data.frame is generated with one row per
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Retrieves new real-time data starting from the last data point in the local database, using the function speficied in the timeseries table column "source_fx" Only works on stations that are ALREADY in the realtime tables; refer to \code{\link[=add_timeseries]{add_timeseries()}} for how to add new stations. Does not work on any timeseries of category "discrete".
+Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the realtime tables; refer to \code{\link[=add_timeseries]{add_timeseries()}} for how to add new stations. Does not work on any timeseries of category "discrete".
 \subsection{Measurement periods:}{
 
 With the exception of "instanteneous" timeseries which automatically receive a period of "00:00:00" (0 time), the period associated with measurements (ex: 1 hour precipitation sum) is derived directly from the output of the function associated with each timeseries in the column source_fx of the timeseries table. If the output function does not return a column with name "period" with a value that the database can coerce to a data type "interval", the period will be entered as NULL. If any of the period values cannot be interpreted by lubridate::period as time periods, then they will also be entered as NULL.

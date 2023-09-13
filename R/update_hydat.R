@@ -9,7 +9,7 @@
 #' @param timeseries_id Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries from operator 'WSC'.
 #' @param force_update Set TRUE if you want to force a check of each location against the local copy of HYDAT.
 #'
-#' @return Updated daily means where HYDAT values were replaced by updated values.
+#' @return Updated daily means where HYDAT values were replaced by updated values, and TRUE if a new version of hydat was found.
 #' @export
 #'
 
@@ -38,9 +38,9 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
   if (new_hydat | force_update){
     #Get the required timeseries_ids
     if (timeseries_id[1] == "all"){
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, type FROM timeseries WHERE category = 'continuous' AND operator = 'WSC' AND parameter IN ('flow', 'level')")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, type FROM timeseries WHERE category = 'continuous' AND operator = 'WSC';")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND operator = 'WSC' AND parameter IN ('flow', 'level')"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND operator = 'WSC';"))
       if (length(timeseries_id) != nrow(all_timeseries)){
         fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
         if ((length(fail) == 1)) {
@@ -244,4 +244,5 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
   } else {
     message("No updates were made because the last HYDAT version referenced in the database is the same as the current HYDAT, and you didn't specify force_update = TRUE")
     }#End of function portion that seeks to update HYDAT related data
+  return(new_hydat)
 } #End of function

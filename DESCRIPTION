@@ -26,12 +26,15 @@ Imports:
     lifecycle,
     lubridate,
     magrittr,
-    rpostgis,
+    methods,
+    rlang,
+    RPostgres,
     RSQLite,
     sf,
     stats,
     stringr,
     tidyhydat,
+    tidyr,
     WRBtools
 Suggests: 
     knitr,

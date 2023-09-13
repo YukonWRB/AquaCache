@@ -1,26 +1,22 @@
 #' Daily update of hydro database
 #'
-#'@description
+#' @description
 #'`r lifecycle::badge("stable")`
 #'
-#' Daily update of hydrometric database, with multiple aims: 1. Incorporation of new realtime information; 2. Any station and parameter added to table 'timeseries' is added to its relevant table, and table 'timeseries' is filled out; 3. Updating of datum tables and related data if a new HYDAT database version exists or if new stations are added; 4. Calculation of daily means from realtime data and addition to relevant daily tables; 5. Calculation of daily statistics for new days since last run AND/OR for all days that may have been modified with a HYDAT update. In addition, if tables already exist for watershed polygons or discrete snow survey measurements, these will be populated upon addition of new WSC timeseries or, for snow surveys, updated twice a month during the winter season with new data.
+#' This function is intended to be run on a daily or near-daily basis to ensure data integrity. Pulls in new data, calculates statistics where necessary, and performs cross-checks on several tables (see details for more information).
 #'
-#' The function checks for an existing HYDAT database, and will download it if it is missing or can be updated. At the same time any affected daily timeseries are recalculated (using HYDAT daily means and calculated means) starting from the first day where the new HYDAT information diverges from the existing daily means.
-#'
-#'@details
-#' Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
+#' @details
+#'Calls several functions in sequence: [getNewRealtime()] to pull in new data into the measurements_continuous table, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, update the datums table with any new datums present in HYDAT [update_hydat_datums()], and calculate new statistics if value for last_daily_calculation is < the value for last_new_data in the timeseries database [calculate_stats()].
 #'
 #' Note that this function calls  to update the realtime tables; stations that were added to the table 'timeseries' since the last run are initialized using a separate process.
 #'
-#' Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [WRBtools::aq_download()] for more information.
+#' Any timeseries labelled as 'WRBtools::aq_download()' in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see [WRBtools::aq_download()] for more information.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #'
 #' @return The database is updated in-place, and diagnostic messages are printed to the console.
 #' @export
-#'
-#TODO: should not trigger new calculations unless there is new data to calculate
 
 #TODO: snow_db_path should instead be a path or connection identifiers living in the .Renviron file.
 hydro_update_daily <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all")
@@ -48,7 +44,7 @@ hydro_update_daily <- function(con = hydrometConnect(silent=TRUE), timeseries_id
   rt_start <- Sys.time()
   getNewRealtime(con)
   rt_duration <- Sys.time() - rt_start
-  print(paste0(" executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), "."))
+  print(paste0("getNewRealtime executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), "."))
 
 #   # Get updated snow course measurements if in season, only if the table exists
 #   tables <- DBI::dbListTables(con)
@@ -69,155 +65,12 @@ hydro_update_daily <- function(con = hydrometConnect(silent=TRUE), timeseries_id
 
   #Check for a new version of HYDAT, update timeseries in the database if needed.
   print("Checking for new HYDAT database...")
-  timeseries_WSC <- DBI::dbGetQuery(con, "SELECT timeseries_id FROM timeseries WHERE operator = 'WSC' AND category = 'continuous'")[,1]
-  new_hydat <- update_hydat(timeseries = timeseries_WSC, con = con, force_update = FALSE) #This function is run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
+  new_hydat <- update_hydat(con = con) #This function is run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
 
  #PLACEHOLDER: continue below after fixing update_hydat
 
-  print("Checking tables to see if there are new entries of category 'continuous'...")
-  new_stns <- FALSE
-  new_timeseries <- DBI::dbGetQuery(con, "SELECT * FROM timeseries WHERE start_datetime_UTC IS NULL AND category = 'continuous'")
-  if (nrow(new_timeseries) > 0){ #if TRUE, some new station or data category for an existing station has been added to the timeseries table
-    print("New station(s) detected in timeseries table.")
-    timeseries_check_before <- DBI::dbGetQuery(con, "SELECT * FROM timeseries WHERE category = 'continuous'")
-    #find the new station
-    for (i in 1:nrow(new_timeseries)){
-      loc <- new_timeseries$location[i]
-      parameter <- new_timeseries$parameter[i]
-      network <- new_timeseries$network[i]
-      print(paste0("Attempting to add location ", loc, " for parameter ", parameter, " and category continuous. Timeseries table, locations table, and measurement tables will be populated if successful."))
-      tryCatch({
-        WSC_fail <- TRUE
-        if (parameter %in% c("level", "flow")){
-          tryCatch({ #Try for a WSC station first
-            #add new information to the realtime table
-            data_realtime <- NULL
-            tryCatch({
-              token <- suppressMessages(tidyhydat.ws::token_ws())
-              data_realtime <- NULL
-              if (parameter == "flow"){
-                data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_timeseries$location[i], 47, start_date = as.POSIXct(Sys.Date()-577), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
-              } else if (parameter == "level"){
-                data_realtime <- suppressMessages(tidyhydat.ws::realtime_ws(new_timeseries$location[i], 46, start_date = as.POSIXct(Sys.Date()-577), end_date = .POSIXct(Sys.time(), "UTC"), token = token))
-              }
-              data_realtime <- data_realtime[,c(2,4,1)]
-              names(data_realtime) <- c("datetime_UTC", "value", "location")
-              data_realtime$datetime_UTC <- format(data_realtime$datetime_UTC, format = "%Y-%m-%d %H:%M:%S")
-              data_realtime$parameter <- parameter
-              data_realtime$approval <- "preliminary"
-              DBI::dbAppendTable(con, "realtime", data_realtime)
-              WSC_fail <- FALSE
-            }, error = function(e) {
-              data_realtime <- NULL
-            }
-            )
+  #TODO: cross-check polygons against the flow and level stations that should have polygons. Try to calculate or get them, alert user if not possible.
 
-            #Add new information to the historical table if possible
-            data_historical <- NULL
-            tryCatch({
-              if (parameter == "flow"){
-                data_historical <- tidyhydat::hy_daily_flows(new_timeseries$location[i])[,-c(3,5)]
-              } else if (parameter == "level"){
-                data_historical <- tidyhydat::hy_daily_levels(new_timeseries$location[i])[,-c(3,5)]
-              }
-              colnames(data_historical) <- c("location", "date", "value")
-              data_historical$approval <- "approved"
-              data_historical$parameter <- parameter
-              data_historical$date <- as.character(data_historical$date)
-              DBI::dbAppendTable(con, "daily", data_historical)
-              WSC_fail <- FALSE
-            }, error = function(e){
-              data_historical <- NULL
-            }
-            )
-
-            #make the new entry into the timeseries table if possible
-            if (!is.null(data_realtime) & !is.null(data_historical)){
-              if (!is.null(data_realtime)){
-                start_datetime_realtime <- min(data_realtime$datetime_UTC)
-              } else {
-                start_datetime_realtime <- Sys.time()
-                attr(start_datetime_realtime, "tzone") <- "UTC"
-                start_datetime_realtime <- as.character(start_datetime_realtime)
-              }
-              if (!is.null(data_historical)){
-                start_datetime_historical <- min(data_historical$date)
-              } else {
-                start_datetime_historical <- Sys.time()
-                attr(start_datetime_historical, "tzone") <- "UTC"
-                start_datetime_historical <- as.character(start_datetime_realtime)
-              }
-              start_datetime <- min(c(start_datetime_realtime, start_datetime_historical))
-
-              if (!is.null(data_realtime)){
-                end_datetime_realtime <- max(data_realtime$datetime_UTC)
-              } else {
-                end_datetime_realtime <- "1700-01-01 00:00:00"
-              }
-              if (!is.null(data_historical)){
-                end_datetime_historical <- max(data_historical$date)
-              } else {
-                end_datetime_historical <- "1700-01-01 00:00:00"
-              }
-              end_datetime <- max(c(end_datetime_realtime, end_datetime_historical))
-
-              tryCatch({latitude <- tidyhydat::hy_stations(new_timeseries$location[i])$LATITUDE}, error = function(e) {latitude <- NULL})
-              if(length(latitude) < 1) {latitude <- NULL}
-              tryCatch({longitude <- tidyhydat::hy_stations(new_timeseries$location[i])$LONGITUDE}, error = function(e) {longitude <- NULL})
-              if(length(longitude) < 1) {longitude <- NULL}
-              name <- stringr::str_to_title(tidyhydat::hy_stations(new_timeseries$location[i])$STATION_NAME)
-
-              if (!is.null(data_realtime)){
-                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND category = 'continuous'"))
-              } else { #Set last_new_data so calculate_stats doesn't include it in calculations later on
-                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime_UTC = '", start_datetime, "', end_datetime_UTC = '", end_datetime, "', last_new_data_UTC = '", end_datetime, "', last_daily_calculation_UTC = '", end_datetime, "', operator = 'WSC', network = 'Canada Yukon Hydrometric Network' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND category = 'continuous'"))
-              }
-              DBI::dbExecute(con, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", new_timeseries$location[i], "', '", name, "', '", latitude, "', '", longitude, "')"))
-            }
-          }, error= function(e) {
-          })
-        }
-
-        if (WSC_fail | !(parameter %in% c("level", "flow"))){ #try for a WRB station
-          tryCatch({
-            ts_name <- aq_names[aq_names$parameter == new_timeseries$parameter[i] , "remote_param_name"]
-            data <- WRBtools::aq_download(loc_id = new_timeseries$location[i], ts_name = ts_name)
-            name <- data$metadata[1,2]
-            #add new information to the realtime table
-            ts <- data.frame("location" = loc, "parameter" = parameter, "datetime_UTC" = format(data$timeseries$timestamp_UTC, format = "%Y-%m-%d %H:%M:%S"), "value" = data$timeseries$value, "grade" = data$timeseries$grade_description, "approval" = data$timeseries$approval_description)
-            DBI::dbAppendTable(con, "realtime", ts)
-            #make the new entry into table timeseries
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime_UTC = '", min(data$timeseries$timestamp_UTC),"', end_datetime_UTC = '", max(data$timeseries$timestamp_UTC),"', last_new_data_UTC = '", .POSIXct(Sys.time(), "UTC"), "', operator = 'WRB', network = '", network, "' WHERE location = '", loc, "' AND parameter = '", parameter, "' AND category = 'continuous'"))
-            DBI::dbExecute(con, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", new_timeseries$location[i], "', '", name, "', '", data$metadata$value[5], "', '", data$metadata$value[6], "')"))
-          }, error = function(e) {
-            print(paste0("Failed to retrieve data from location ", loc, " for parameter ", parameter, " and from Aquarius. The location category was flagged as 'FAILED' in the timeseries table, clear this flag to try again. You may also want to check the timeseries parameter and label in Aquarius."))
-          })
-        }
-
-        print(paste0("Successfully added station ", loc, " for parameter ", parameter, " and category continuous"))
-      }, error = function(e) {
-        DBI::dbExecute(con, paste0("UPDATE timeseries SET category = 'FAILED' WHERE location = '", new_timeseries$location[i], "' AND parameter = '", parameter, "' AND category = 'continuous'"))
-        print(paste0("Failed to retrieve data from location ", loc, " for parameter ", parameter, ". The location category was flagged as 'FAILED' in the timeseries table, clear this flag to try again."))
-      })
-    }#End of for loop that works on every new station
-
-    timeseries_check_after <- DBI::dbGetQuery(con, "SELECT * FROM timeseries WHERE category = 'continuous'")
-    new_failed <- nrow(timeseries_check_after) - nrow(timeseries_check_before)
-    if (new_failed < nrow(new_timeseries)){
-      new_stns <- TRUE
-    }
-  } #End of if loop to deal with new stations
-
-  #TODO: only get new polygons for locations that have just been added.
-  #TODO: Add polygons for WRB stations here too, though these will have to be created first.
-  if (new_stns){
-    tryCatch({
-      getWatersheds(locations = "WSC", path = path) #Add a watershed polygon to the polygons table if possible
-      print("Added watershed polygons for new stations and replaced existing polygons.")
-    }, error = function(e) {
-      print("Failed to add new watersheds after adding new timeseries. You could troubleshoot using function getWatersheds in isolation.")
-    })
-  }
 
   print("Checking datum tables...")
   ### Now deal with datums if hydat is updated or if stations were added, or if entries are missing

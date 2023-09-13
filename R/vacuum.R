@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Performs a VACUUM operation on the database, re-organizing and compacting tables.
+#' Performs a VACUUM (ANALYZE) operation on the database, re-organizing and compacting tables.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
@@ -12,7 +12,7 @@
 #'
 
 
-vacuum <- function(con = hydometConnect())
+vacuum <- function(con = hydometConnect(silent = TRUE))
 
 {
   DBI::dbWithTransaction(

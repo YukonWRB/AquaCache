@@ -18,7 +18,7 @@ update_hydat(
 \item{force_update}{Set TRUE if you want to force a check of each location against the local copy of HYDAT.}
 }
 \value{
-Updated daily means where HYDAT values were replaced by updated values.
+Updated daily means where HYDAT values were replaced by updated values, and TRUE if a new version of hydat was found.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

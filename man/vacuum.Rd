@@ -4,7 +4,7 @@
 \alias{vacuum}
 \title{Maintenance (vacuum) function for hydrometric database.}
 \usage{
-vacuum(con = hydometConnect())
+vacuum(con = hydometConnect(silent = TRUE))
 }
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
@@ -15,5 +15,5 @@ A vacuumed database.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Performs a VACUUM operation on the database, re-organizing and compacting tables.
+Performs a VACUUM (ANALYZE) operation on the database, re-organizing and compacting tables.
 }
