@@ -39,8 +39,19 @@
     type <- all_timeseries$type[i]
 
     tryCatch({
-      #TODO: find a way to incorporate the source_fx_args in do.call below
-      ts <- do.call(source_fx, list(location = loc, param_code = param_code, start_datetime = last_data_point))
+      #TODO: find a way to incorporate the source_fx_args in do.call below. Currently works only for a single parameter:argument pair, but needs to work with more than 1. Perhaps each argument can be separated by a number in square brackets, such as [1] parameter1 = 'argument', [2] parameter2 = 'argument'???
+      ##TODO: remember to update add_timeseries and add_ts_template once the input needs are sorted out.
+      if (is.na(source_fx_args)){
+        args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
+      } else {
+        pair_parts <- strsplit(source_fx_args, "=")
+        arg_name <- trimws(pair_parts[[1]][1])
+        param_value <- gsub("\"", "", trimws(pair_parts[[1]][2]))
+        param_value <- gsub("'", "", param_value)
+      }
+
+
+      ts <- do.call(source_fx, args_list)
       if (nrow(ts) > 0){
         if (all_timeseries$type[i] == "instantaneous"){
           ts$period <- "00:00:00"

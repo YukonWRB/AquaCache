@@ -13,6 +13,7 @@
 #' @param param_code The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `Wlevel_bgs.Calculated`.
 #' @param start_datetime The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.
 #' @param end_datetime The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.
+#' @param period The period you wish to asign to the fetched data (NOTE: future development will tease out the period from the data itself). Specify something that can be converted to a period, such as 01:00:00 for one hour, zero minutes, zero seconds.
 #' @param login Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.
 #' @param server The URL for your organization's Aquarius web server. Default pulls from your .renviron file; see details.
 #'
@@ -24,6 +25,7 @@ getRealtimeAquarius <- function(location,
                         param_code,
                         start_datetime,
                         end_datetime = Sys.Date(),
+                        period = NULL,
                         login = Sys.getenv(c("AQUSER", "AQPASS")),
                         server = Sys.getenv("AQSERVER")
 )
@@ -37,6 +39,15 @@ getRealtimeAquarius <- function(location,
   }
   if (nchar(login[2]) == 0 | is.null(login[2])) {
     stop("getRealtimeAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults.")
+  }
+
+  if (!is.null(period)){
+    if (!inherits(period, "character")){
+      period <- as.numeric(period)
+    }
+    if (is.na(lubridate::period(period))){
+      stop("It looks like the period you suplied is not coercible to an actual time period. Review the ISO8601 standard and try again.")
+    }
   }
 
   source(system.file("scripts",  "timeseries_client.R", package = "WRBdatabase")) #This loads the code dependencies
@@ -57,9 +68,6 @@ getRealtimeAquarius <- function(location,
                      config$username,
                      config$password)
   on.exit(timeseries$disconnect())
-
-  # Get the location metadata
-  locationData = timeseries$getLocationData(location)
 
   if (inherits(start_datetime, "POSIXct")){
     attr(start_datetime, "tzone") <- "UTC"
@@ -84,33 +92,41 @@ getRealtimeAquarius <- function(location,
   # Read corrected time-series data from Aquarius, format time series to POSIXct
   RawDL <- timeseries$getTimeSeriesCorrectedData(c(config$timeSeriesName), queryFrom = start, queryTo = end)
 
-  #Get the UTC offset so that times can be made to UTC
-  offset <- as.numeric(substr(locationData$UtcOffset, 1, 3))
-
   #Make the basic timeseries
   ts <- data.frame(datetime = RawDL$Points$Timestamp,
                    value = RawDL$Points$Value$Numeric)
 
   # format times to POSIXct, fix offset
-  ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
-  ts$datetime <- ts$datetime - (offset*60*60)
+  offset <- substr(ts$datetime[1], nchar(ts$datetime[1])-5, nchar(ts$datetime[1]))
+  offset <- gsub(":", "", offset)
+  ts$datetime <- paste0(substr(ts$datetime, 1, nchar(ts$datetime)-6), offset)
+  ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%OS%z")
 
   #format approvals, grade times
   approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment"))]
-  approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
-  approvals$StartTime <- approvals$StartTime - (offset*60*60)
-  approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
-  approvals$EndTime <- approvals$EndTime - (offset*60*60)
+  stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1])-5, nchar(approvals$StartTime[1]))
+  stoffset <- gsub(":", "", stoffset)
+  approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime)-6), stoffset)
+  approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+  endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1])-5, nchar(approvals$EndTime[1]))
+  endoffset <- gsub(":", "", endoffset)
+  approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime)-6), endoffset)
+  approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+
   colnames(approvals) <- c("level", "description", "start_time", "end_time")
 
   grades <- RawDL$Grades
-  grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
-  grades$StartTime <- grades$StartTime - (offset*60*60)
-  grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
-  grades$EndTime <- grades$EndTime - (offset*60*60)
+  stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1])-5, nchar(grades$StartTime[1]))
+  stoffset <- gsub(":", "", stoffset)
+  grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime)-6), stoffset)
+  grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+  endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1])-5, nchar(grades$EndTime[1]))
+  endoffset <- gsub(":", "", endoffset)
+  grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime)-6), endoffset)
+  grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+
   grades <- merge(grades, grade_codes, by.x = "GradeCode", by.y = "code")
-  grades <- grades[,c(1,4,2,3)]
-  colnames(grades) <- c("level", "description", "start_time", "end_time")
+  colnames(grades) <- c("level", "start_time", "end_time", "description")
 
 
   #Add in grades and approval columns
@@ -140,6 +156,26 @@ getRealtimeAquarius <- function(location,
       } # and if the last approval start is after then end of the ts, do nothing with it!
     }
     ts <- tidyr::fill(ts, c(grade, approval), .direction = "down")
+    attr(ts$datetime, "tzone") <- "UTC"
+
+    #TODO: fix this portion if it needs to be used.
+    # if (RawDL$InterpolationTypes$Type != "Instantaneous Values") {
+    #   diffs <- as.numeric(diff(ts$datetime), units = "hours")
+    #   diffs <- zoo::rollmedian(diffs, k = 7, fill = NA)
+    #   table <- table(diffs)
+    #   tot <- length(diffs)
+    #   thresh <- 0.1 * tot
+    #   interval <- as.numeric(names(table[table>thresh]))
+    #
+    #   if (length(interval) > 1){
+    #     warning("It looks like there is a change of period in this data. ")
+    #   }
+    # }
+    #
+    if (!is.null(period)){
+      ts$period <- period
+    }
+
   }
   return(ts)
 }

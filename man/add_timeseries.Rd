@@ -27,6 +27,8 @@ This function facilitates the addition of one or multiple timeseries to the data
 }
 \details{
 You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
+
+Additional arguments to pass to the function specified in source_fx should take the form of c("period = 'PT1H'", "parameter2 = argument2"). Note the single straight quotes around the argument 'PT1H', necessary to clarify that the argument is a character vector.
 }
 \seealso{
 \code{\link[=add_ts_templates]{add_ts_templates()}} to see templates for timesries_df and locations_df.

@@ -24,5 +24,5 @@ For the spatial table, a data.frame with column names and options already in the
 A data.frame is also produced listing the datums present in the database, facilitating your specification of the appropriate datum in the spatial table.
 }
 \description{
-Templates to add timeseries to hydromet database
+Note: if there is no entry in the timeseries table column named source_fx_args, additional arguments to pass to the function specified in source_fx should take the form of c("period = 'PT1H'", "parameter2 = argument2"). Note the single straight quotes around the argument 'PT1H', necessary to clarify that the argument is a character vector.
 }
