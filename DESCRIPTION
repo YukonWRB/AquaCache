@@ -5,9 +5,9 @@ Authors@R:
     person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185"))
 Description: Set of functions for the creation and ongoing maintenance of
-    the Yukon Government's hydrometric database in postgreSQL format. This
+    the Yukon Government's hydrometeorological database in postgreSQL format. This
     database is a combination of the Water Survey of Canada real-time and
-    historical data, YG data held in Aquarius, USGS data, and discrete
+    historical data, YG data held in Aquarius and in the RWIS database, USGS data, and discrete
     snow survey data. Supports any number of timeseries unique by their
     location, parameter, data type, and period (for sum, mean, etc
     measurements). Disparate data sources are handled via scripts
@@ -35,7 +35,8 @@ Imports:
     stringr,
     tidyhydat,
     tidyr,
-    WRBtools
+    WRBtools,
+    zoo
 Suggests: 
     knitr,
     rmarkdown,

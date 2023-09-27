@@ -158,7 +158,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value TIMESTAMP WITH TIME ZONE,
                  PRIMARY KEY (event))")
 
-  internal_status <- data.frame("event" = c("HYDAT_version", "last_update_realtime", "last_update_daily", "last_update_weekly", "last_update_snow_courses", "last_update_watersheds", "last_update_rasters", "last_vacuum"),
+  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_update_weekly", "last_update_snow_courses", "last_update_watersheds", "last_update_rasters", "last_vacuum"),
                                 "value" = NA)
   DBI::dbAppendTable(con, "internal_status", internal_status)
 

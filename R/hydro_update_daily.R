@@ -6,7 +6,7 @@
 #' This function is intended to be run on a daily or near-daily basis to ensure data integrity. Pulls in new data, calculates statistics where necessary, and performs cross-checks on several tables (see details for more information).
 #'
 #' @details
-#'Calls several functions in sequence: [getNewRealtime()] to pull in new data into the measurements_continuous table, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, [update_hydat_datums()] to update the datums table with any new datums present in HYDAT, and [calculate_stats()] to calculate new statistics where necessary.
+#'Calls several functions in sequence: [getNewContinuous()] to pull in new data into the measurements_continuous table, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, [update_hydat_datums()] to update the datums table with any new datums present in HYDAT, and [calculate_stats()] to calculate new statistics where necessary.
 #'
 #' Note that new timeseries should be added using function [add_timeseries()].
 #'
@@ -40,11 +40,11 @@ hydro_update_daily <- function(con = hydrometConnect(silent=TRUE), timeseries_id
   }
 
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
-  message("Getting realtime information up to date with getNewRealtime...")
+  message("Getting realtime information up to date with getNewContinuous...")
   rt_start <- Sys.time()
-  getNewRealtime(con)
+  getNewContinuous(con)
   rt_duration <- Sys.time() - rt_start
-  message(paste0("getNewRealtime executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), "."))
+  message(paste0("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), "."))
 
 
 #   # Get updated snow course measurements if in season, only if the table exists
