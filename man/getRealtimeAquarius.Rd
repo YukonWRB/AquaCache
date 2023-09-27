@@ -9,7 +9,6 @@ getRealtimeAquarius(
   param_code,
   start_datetime,
   end_datetime = Sys.Date(),
-  period = NULL,
   login = Sys.getenv(c("AQUSER", "AQPASS")),
   server = Sys.getenv("AQSERVER")
 )
@@ -22,8 +21,6 @@ getRealtimeAquarius(
 \item{start_datetime}{The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.}
 
 \item{end_datetime}{The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.}
-
-\item{period}{The period you wish to asign to the fetched data (NOTE: future development will tease out the period from the data itself). Specify something that can be converted to a period, such as 01:00:00 for one hour, zero minutes, zero seconds.}
 
 \item{login}{Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.}
 

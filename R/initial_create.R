@@ -49,6 +49,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  grade TEXT,
                  approval TEXT,
                  period INTERVAL,
+                 imputed BOOLEAN NOT NULL,
                  PRIMARY KEY (timeseries_id, datetime))
                  ")
 
@@ -57,9 +58,9 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  timeseries_id NUMERIC NOT NULL,
                  date DATE NOT NULL,
                  value NUMERIC,
-                 type TEXT CHECK(type IN ('mean', 'sum')),
                  grade TEXT,
                  approval TEXT,
+                 imputed BOOLEAN NOT NULL,
                  percent_historic_range NUMERIC,
                  max NUMERIC,
                  min NUMERIC,

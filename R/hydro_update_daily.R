@@ -6,11 +6,11 @@
 #' This function is intended to be run on a daily or near-daily basis to ensure data integrity. Pulls in new data, calculates statistics where necessary, and performs cross-checks on several tables (see details for more information).
 #'
 #' @details
-#'Calls several functions in sequence: [getNewRealtime()] to pull in new data into the measurements_continuous table, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, update the datums table with any new datums present in HYDAT [update_hydat_datums()], and calculate new statistics if value for last_daily_calculation is < the value for last_new_data in the timeseries database [calculate_stats()].
+#'Calls several functions in sequence: [getNewRealtime()] to pull in new data into the measurements_continuous table, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, [update_hydat_datums()] to update the datums table with any new datums present in HYDAT, and [calculate_stats()] to calculate new statistics where necessary.
 #'
-#' Note that this function calls  to update the realtime tables; stations that were added to the table 'timeseries' since the last run are initialized using a separate process.
+#' Note that new timeseries should be added using function [add_timeseries()].
 #'
-#' Any timeseries labelled as 'WRBtools::aq_download()' in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see [WRBtools::aq_download()] for more information.
+#' Any timeseries labelled as 'WRBtools::aq_download()' in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see [WRBtools::aq_download()] for more information about that function, and [add_ts_template()] for details on how to format your parameters.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -40,13 +40,15 @@ hydro_update_daily <- function(con = hydrometConnect(silent=TRUE), timeseries_id
   }
 
   #Ensure that existing realtime data is up-to-date from WSC and Aquarius
-  print("Getting realtime information up to date with getNewRealtime...")
+  message("Getting realtime information up to date with getNewRealtime...")
   rt_start <- Sys.time()
   getNewRealtime(con)
   rt_duration <- Sys.time() - rt_start
-  print(paste0("getNewRealtime executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), "."))
+  message(paste0("getNewRealtime executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), "."))
+
 
 #   # Get updated snow course measurements if in season, only if the table exists
+#   message("Getting discrete data up to date with getNewDiscrete...")
 #   tables <- DBI::dbListTables(con)
 #   if ("discrete" %in% tables) { #Doesn't run if not there!
 #     if ((1 < lubridate::month(Sys.Date())) & (lubridate::month(Sys.Date()) < 7)){ #only from Feb to June inclusively
@@ -64,10 +66,8 @@ hydro_update_daily <- function(con = hydrometConnect(silent=TRUE), timeseries_id
 #   }
 
   #Check for a new version of HYDAT, update timeseries in the database if needed.
-  print("Checking for new HYDAT database...")
+  message("Checking for new HYDAT database...")
   new_hydat <- update_hydat(con = con) #This function is run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
-
- #PLACEHOLDER: continue below after fixing update_hydat
 
   #TODO: cross-check polygons against the flow and level stations that should have polygons. Try to calculate or get them, alert user if not possible.
 

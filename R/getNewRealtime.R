@@ -3,10 +3,12 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the realtime tables; refer to [add_timeseries()] for how to add new stations. Does not work on any timeseries of category "discrete".
+#' Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the realtime tables; refer to [add_timeseries()] for how to add new stations. Does not work on any timeseries of category "discrete": for that, use [getNewDiscrete()]. Timeseriew with no specified souce_fx will be ignored.
 #'
 #' ## Measurement periods:
-#' With the exception of "instanteneous" timeseries which automatically receive a period of "00:00:00" (0 time), the period associated with measurements (ex: 1 hour precipitation sum) is derived directly from the output of the function associated with each timeseries in the column source_fx of the timeseries table. If the output function does not return a column with name "period" with a value that the database can coerce to a data type "interval", the period will be entered as NULL. If any of the period values cannot be interpreted by lubridate::period as time periods, then they will also be entered as NULL.
+#' With the exception of "instantaneous" timeseries which automatically receive a period of "00:00:00" (0 time), the period associated with measurements (ex: 1 hour precipitation sum) is derived from the interval between measurements UNLESS a period column is provided by the source function (column source_fx, may also depend on source_fx_args). This function typically fetches only a few hours of measurements at a time, so if the interval cannot be conclusively determined from the new data (i.e. hourly measurements over four hours with two measurements missed) then additional data points will be pulled from the database.
+#'
+#' If a period supplied by any data fetch function cannot be coerced to an period object acceptable to "duration" data type, NULL values will be entered to differentiate from instantaneous periods of "00:00:00".
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -18,11 +20,11 @@
 {
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE category = 'continuous'")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous'"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)){
-      warning("At least one of the timeseries IDs you called for cannot be found in the database.")
+      warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'continuous', or has no function specified in column source_fx.")
     }
   }
 
@@ -39,31 +41,77 @@
     type <- all_timeseries$type[i]
 
     tryCatch({
-      #TODO: find a way to incorporate the source_fx_args in do.call below. Currently works only for a single parameter:argument pair, but needs to work with more than 1. Perhaps each argument can be separated by a number in square brackets, such as [1] parameter1 = 'argument', [2] parameter2 = 'argument'???
-      ##TODO: remember to update add_timeseries and add_ts_template once the input needs are sorted out.
-      if (is.na(source_fx_args)){
-        args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
-      } else {
-        pair_parts <- strsplit(source_fx_args, "=")
-        arg_name <- trimws(pair_parts[[1]][1])
-        param_value <- gsub("\"", "", trimws(pair_parts[[1]][2]))
-        param_value <- gsub("'", "", param_value)
+      args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
+      if (!is.na(source_fx_args)){ #add some arguments if they are specified
+        args <- strsplit(source_fx_args, "\\},\\s*\\{")
+        pairs <- lapply(args, function(pair){
+          gsub("[{}]", "", pair)
+          })
+        pairs <- lapply(pairs, function(pair){
+          gsub("\"", "", pair)
+        })
+        pairs <- lapply(pairs, function(pair){
+          gsub("'", "", pair)
+        })
+        pairs <- strsplit(unlist(pairs), "=")
+        pairs <- lapply(pairs, function(pair){
+          trimws(pair)
+        })
+        for (j in 1:length(pairs)){
+          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
+        }
       }
 
+      ts <- do.call(source_fx, args_list) #Get the data using the args_list
 
-      ts <- do.call(source_fx, args_list)
       if (nrow(ts) > 0){
-        if (all_timeseries$type[i] == "instantaneous"){
+        if (type == "instantaneous"){ #Can't have a period for instantaneous data
           ts$period <- "00:00:00"
-        } else if (!("period" %in% names(ts))){
-          ts$period <- NA
-        } else {
+        } else if ((type != "instantaneous") & !("period" %in% names(ts))) { #types of mean, median, min, max should all have a period
+            diffs <- as.numeric(diff(ts$datetime), units = "hours")
+            #TODO: make sure that "center" rollmedian is what you want!!!!!
+            smoothed_diffs <- zoo::rollmedian(diffs, k = 3, fill = NA)
+            # Initialize variables to track changes
+            consecutive_count <- 0
+            changes <- data.frame()
+            last_diff <- 0
+            for (j in 1:length(smoothed_diffs)) {
+              if (!is.na(smoothed_diffs[j]) && smoothed_diffs[j] < 25 && smoothed_diffs[j] != last_diff) { # Check if smoothed interval is less than threshold, which is set to more than a whole day (greatest interval possible is 24 hours) as well as not the same as the last recorded diff
+                consecutive_count <- consecutive_count + 1
+                if (consecutive_count == 3) { # At three consecutive new measurements it's starting to look like a pattern
+                  last_diff <- smoothed_diffs[j]
+                  change <- data.frame(datetime = ts$datetime[j-3],
+                                       period = last_diff)
+                  changes <- rbind(changes, change)
+                  consecutive_count <- 0
+                }
+              } else {
+                consecutive_count <- 0
+              }
+            }
+            # Calculate the duration in days, hours, minutes, and seconds and assign to the right location in ts
+            ts$period <- NA
+            if (nrow(changes) > 0){
+              for (j in 1:nrow(changes)){
+                days <- floor(changes$period[j] / 24)
+                remaining_hours <- changes$period[j] %% 24
+                minutes <- floor((remaining_hours - floor(remaining_hours)) * 60)
+                seconds <- round(((remaining_hours - floor(remaining_hours)) * 60 - minutes) * 60)
+                ts[ts$datetime == changes$datetime[j]+10*60, "period"] <- paste("P", days, "DT", floor(remaining_hours), "H", minutes, "M", seconds, "S", sep = "")
+              }
+              #carry non-na's forward and backwards, if applicable
+              ts$period <- zoo::na.locf(zoo::na.locf(ts$period, na.rm = FALSE), fromLast=TRUE)
+            } else {
+              #TODO: Here the period should be pulled from the existing data (i.e. adopt the last data point period)
+            }
+        } else { #Check to make sure that the supplied period can actually be coerced to a period
           check <- lubridate::period(unique(ts$period))
           if (NA %in% check){
             ts$period <- NA
           }
         }
         ts$timeseries_id <- tsid
+        # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
         DBI::dbWithTransaction(
           con, {
             DBI::dbAppendTable(con, "measurements_continuous", ts)

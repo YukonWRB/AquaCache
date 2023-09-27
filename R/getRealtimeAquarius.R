@@ -13,7 +13,6 @@
 #' @param param_code The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `Wlevel_bgs.Calculated`.
 #' @param start_datetime The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.
 #' @param end_datetime The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.
-#' @param period The period you wish to asign to the fetched data (NOTE: future development will tease out the period from the data itself). Specify something that can be converted to a period, such as 01:00:00 for one hour, zero minutes, zero seconds.
 #' @param login Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.
 #' @param server The URL for your organization's Aquarius web server. Default pulls from your .renviron file; see details.
 #'
@@ -25,7 +24,6 @@ getRealtimeAquarius <- function(location,
                         param_code,
                         start_datetime,
                         end_datetime = Sys.Date(),
-                        period = NULL,
                         login = Sys.getenv(c("AQUSER", "AQPASS")),
                         server = Sys.getenv("AQSERVER")
 )
@@ -39,15 +37,6 @@ getRealtimeAquarius <- function(location,
   }
   if (nchar(login[2]) == 0 | is.null(login[2])) {
     stop("getRealtimeAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults.")
-  }
-
-  if (!is.null(period)){
-    if (!inherits(period, "character")){
-      period <- as.numeric(period)
-    }
-    if (is.na(lubridate::period(period))){
-      stop("It looks like the period you suplied is not coercible to an actual time period. Review the ISO8601 standard and try again.")
-    }
   }
 
   source(system.file("scripts",  "timeseries_client.R", package = "WRBdatabase")) #This loads the code dependencies
@@ -157,25 +146,6 @@ getRealtimeAquarius <- function(location,
     }
     ts <- tidyr::fill(ts, c(grade, approval), .direction = "down")
     attr(ts$datetime, "tzone") <- "UTC"
-
-    #TODO: fix this portion if it needs to be used.
-    # if (RawDL$InterpolationTypes$Type != "Instantaneous Values") {
-    #   diffs <- as.numeric(diff(ts$datetime), units = "hours")
-    #   diffs <- zoo::rollmedian(diffs, k = 7, fill = NA)
-    #   table <- table(diffs)
-    #   tot <- length(diffs)
-    #   thresh <- 0.1 * tot
-    #   interval <- as.numeric(names(table[table>thresh]))
-    #
-    #   if (length(interval) > 1){
-    #     warning("It looks like there is a change of period in this data. ")
-    #   }
-    # }
-    #
-    if (!is.null(period)){
-      ts$period <- period
-    }
-
   }
   return(ts)
 }

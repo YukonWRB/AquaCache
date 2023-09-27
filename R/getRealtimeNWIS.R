@@ -20,9 +20,9 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
   if (!inherits(param_code, "numeric")){
     stop("parameter `param_code` must be a numeric.")
   } else {
-    param_code <- sprintf("%05d", param_code)
+    param_code <- sprintf("%05d", param_code) #param codes always have 5 digits, but padded with leading zeros
   }
-  if (inherits(location, "numeric")){ #location codes are always at least 8 digits, but if entering a numeric starting with 0s then these are not retained.
+  if (inherits(location, "numeric")){ #location codes are always at least 8 digits, but if entering a numeric starting with 0s (some codes contain letters too) then these are not retained.
     location <- sprintf("%08d", location)
   }
   tryCatch({
@@ -64,16 +64,26 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
                          startDate =  paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
                          endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
                          modifiedSince = modifiedSince,
-                         asDateTime = TRUE, tz = "UTC", convertType = TRUE)[, c(3:5)]
+                         asDateTime = TRUE,
+                         tz = "UTC",
+                         convertType = TRUE)[, c(3:5)]
   } else {
     data <-  dataRetrieval::readNWISdata(sites = location,
                          service = "iv",
                          parameterCd = param_code,
                          startDate =  paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
                          endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
-                         asDateTime = TRUE, tz = "UTC", convertType = TRUE)[, c(3:5)]
+                         asDateTime = TRUE,
+                         tz = "UTC",
+                         convertType = TRUE)[, c(3:5)]
   }
   colnames(data) <- c("datetime", "value", "grade")
+
+  #TODO: finish unit conversions
+  units <- dataRetrieval::parameterCdFile
+  units[units$parameter_cd == param_code ,]
+
+
   data$approval <- NA #makes it consistent with other import functions
 
   return(data)

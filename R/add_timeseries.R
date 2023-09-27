@@ -8,7 +8,7 @@
 #' @details
 #' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
 #'
-#' Additional arguments to pass to the function specified in source_fx should take the form of c("period = 'PT1H'", "parameter2 = argument2"). Note the single straight quotes around the argument 'PT1H', necessary to clarify that the argument is a character vector.
+#' Additional arguments to pass to the function specified in source_fx should take the form of "{param1 = arg1}, {param2 = 'arg2'}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
@@ -31,7 +31,7 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
     }
   }
 
-  #Check the names of timeseries_df and locations_df, it it's not null
+  #Check the names of timeseries_df and locations_df, if it's not null
   if (!all(c("location", "parameter", "unit", "category", "type", "operator", "network", "public", "source_fx", "source_fx_args", "start_datetime") %in% names(timeseries_df))){
     stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'unit', 'category', 'type', 'start_datetime', 'operator', 'network', 'public', 'source_fx', 'source_fx_args'). Use NA to indicate a column with no applicable value.")
   }
@@ -42,13 +42,38 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
     }
   }
 
+  #TODO: the below code does not work... fix if it's useful
+  # if (!all(is.na(timeseries_df$source_fx_args))) {
+  #   pattern <- "^\\{([a-zA-Z0-9]+ = (\"[^{}]+\"|'[^{}]+'))(, \"[a-zA-Z0-9]+\" = (\"[^{}]+\"|'[^{}]+'))*\\}$"
+  #   # Function to validate the input
+  #   validate_input <- function(input_text) {
+  #     if (grepl(pattern, input_text)) {
+  #       return(TRUE)
+  #     } else {
+  #       return(FALSE)
+  #     }
+  #   }
+  #   for (i in 1:nrow(timeseries_df)){
+  #     if (!is.na(timeseries_df[i, "source_fx_args"])) {
+  #       validate_input(timeseries_df[i, "source_fx_args"])
+  #     }
+  #   }
+  #
+  # # Check if the inputs match the flexible format
+  # print(validate_input(input1))  # TRUE
+  # print(validate_input(input2))  # TRUE
+  # print(validate_input(input3))  # TRUE
+  # print(validate_input(input4))  # TRUE
+
+
+
   #Add the timeseries ########
   for (i in 1:nrow(timeseries_df)){
     tryCatch({
         add <- timeseries_df[i, -which(names(timeseries_df) == "start_datetime")]
         start_datetime <- timeseries_df[i, "start_datetime"]
         tryCatch({
-          DBI::dbAppendTable(con, "timeseries", add) #This is a try because the timeseries might already have been added by update_hydat, which searches for level + flow for each location.
+          DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location.
           message("Added a new entry to the timeseries table for location ", add$location, " and parameter ", add$parameter, ".")
         }, error = function (e) {
           message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada, and this function automatically looked for the corresponding level/flow timeseries.")
@@ -60,7 +85,28 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
         source_fx_args <- add$source_fx_args
         param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "';"))[1,1]
 
-        ts <- do.call(source_fx, list(location = loc, param_code = param_code, start_datetime = start_datetime))
+        args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
+        if (!is.na(source_fx_args)){#add some arguments if they are specified
+          args <- strsplit(source_fx_args, "\\},\\s*\\{")
+          pairs <- lapply(args, function(pair){
+            gsub("[{}]", "", pair)
+          })
+          pairs <- lapply(pairs, function(pair){
+            gsub("\"", "", pair)
+          })
+          pairs <- lapply(pairs, function(pair){
+            gsub("'", "", pair)
+          })
+          pairs <- strsplit(unlist(pairs), "=")
+          pairs <- lapply(pairs, function(pair){
+            trimws(pair)
+          })
+          for (j in 1:length(pairs)){
+            args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
+          }
+        }
+
+        ts <- do.call(source_fx, args_list) #Get the data using the args_list
 
         if (add$category == "continuous"){
           if (nrow(ts) > 0){
