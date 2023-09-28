@@ -85,7 +85,7 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
         source_fx_args <- add$source_fx_args
         param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "';"))[1,1]
 
-        args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
+        args_list <- list(location = loc, param_code = param_code, start_datetime = timeseries_df[i, "start_datetime"])
         if (!is.na(source_fx_args)){#add some arguments if they are specified
           args <- strsplit(source_fx_args, "\\},\\s*\\{")
           pairs <- lapply(args, function(pair){
@@ -124,12 +124,16 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
             tryCatch({
               DBI::dbAppendTable(con, "measurements_continuous", ts)
               DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
-              message("Success! Added new data for ", add$location, " and parameter ", add$parameter, ".")
+              message("Success! Added new realtime data for ", add$location, " and parameter ", add$parameter, ".")
             }, error = function(e) {
               warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/type/categeory combination.")
             })
-
-            calculate_stats(timeseries_id = new_tsid)
+            tryCatch({
+              calculate_stats(timeseries_id = new_tsid)
+              message("Success! Calculated daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
+            }, error = function(e){
+              warning("Unable to calculate daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
+            })
           }
           if (add$operator == "WSC"){
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
@@ -173,9 +177,5 @@ add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, lo
 
     #TODO: calculate or find polygons for any locations that have flow or level. Modify function getWatersheds.
   }
-
-
-
-
 
 }

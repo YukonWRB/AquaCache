@@ -243,6 +243,6 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
     message("Completed update of HYDAT related data.")
   } else {
     message("No updates were made because the last HYDAT version referenced in the database is the same as the current HYDAT, and you didn't specify force_update = TRUE")
-    }#End of function portion that seeks to update HYDAT related data
+  }#End of function portion that seeks to update HYDAT related data
   return(new_hydat)
 } #End of function

@@ -43,7 +43,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
   #calculate daily means or sums for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
   for (i in timeseries_id){
-    tryCatch({
+    tryCatch({ #error catching for calculating stats; another one later for appending to the DB
       last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, ";"))[1,])
       tmp <- DBI::dbGetQuery(con, paste0("SELECT type, operator FROM timeseries WHERE timeseries_id = ", i, ";"))
@@ -87,6 +87,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_LEVELS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
           last_hydat <- as.Date(paste0(last_hydat_year, "-", DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (month) FROM DLY_LEVELS WHERE STATION_NUMBER = '", tmp[, "location"], "' AND year = ", last_hydat_year, ";"))[1,1], "-31"))
         }
+        DBI::dbDisconnect(hydat_con)
         gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime > '", last_hydat + 1, " 00:00:00'"))
 
         if (nrow(gap_measurements) > 0){ #Then there is new measurements data, or we're force-recalculating from an earlier date
@@ -111,7 +112,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           }
           gap_measurements <- as.data.frame(fasstr::fill_missing_dates(gap_measurements, "date", pad_ends = FALSE)) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
 
-          all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date <= '",last_hydat, "';"))
+          all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date <= '", last_hydat, "';"))
           #Need to rbind only the calculated daily means AFTER last_hydat
           all_stats <- rbind(all_stats, gap_measurements[gap_measurements$date >= last_hydat, c("date", "value")])
           missing_stats <- gap_measurements
@@ -140,6 +141,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
           }
           gap_measurements <- as.data.frame(fasstr::fill_missing_dates(gap_measurements, "date", pad_ends = FALSE)) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
+          gap_measurements[is.na(gap_measurements$imputed) , "imputed"] <- FALSE
 
           all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "';"))
           all_stats <- rbind(all_stats, gap_measurements[, c("date", "value")])
@@ -174,27 +176,24 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         temp <- data.frame()
         first_instance_no_stats <- data.frame()
         for (j in unique(missing_stats$dayofyear)){
-          if (length(all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]$date) > 0){ #Check that there is at least some data for that doy
+          if (nrow(all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]) > 0){ #Check that there is at least some data for that doy. If not, no need to manipulate that doy further.
             earliest_full_stats <- lubridate::add_with_rollback(min(all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]$date), lubridate::years(1))
             first_instance <- min(all_stats[all_stats$dayofyear == j & !is.na(all_stats$value), ]$date)
             missing <- missing_stats[missing_stats$dayofyear == j & missing_stats$date >= earliest_full_stats , ]
             temp <- rbind(temp, missing)
             missing_first <- missing_stats[missing_stats$dayofyear ==j  & missing_stats$date == first_instance , ]
             first_instance_no_stats <- rbind(first_instance_no_stats, missing_first)
-          } else {
-
           }
-
         }
         missing_stats <- temp
 
         #Find the first Feb 29, and add it to first_instance_no_stats if there are no adjacent values that will get added in later
         if (nrow(feb_29) > 0){
           first_feb_29 <- feb_29[feb_29$date == min(feb_29$date) , ]
-          if (!all(c((first_feb_29$date  - 1), (first_feb_29$date  + 1)) %in% missing_stats$date) & !is.na(first_feb_29$value)){ #if statement is FALSE, feb 29 will be dealt with later by getting the mean of the surrounding samples so don't add it to first_instance_no_stats
+          if (!all(c((first_feb_29$date  - 1), (first_feb_29$date  + 1)) %in% missing_stats$date) & !is.na(first_feb_29$value)){ #if statement is FALSE, feb 29 will be dealt with later by getting the mean of the surrounding samples so don't add it to first_instance_no_stats so it isn't dealt with here
             feb_29 <- feb_29[!feb_29$date == first_feb_29$date , ]
             first_feb_29$dayofyear <- NA
-            first_instance_no_stats <- rbind(first_instance_no_stats, first_feb_29[, c("date", "value", "grade", "approval", "dayofyear")])
+            first_instance_no_stats <- rbind(first_instance_no_stats, first_feb_29[, c("date", "value", "grade", "approval", "dayofyear", "imputed")])
           }
         }
 
@@ -225,15 +224,20 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             }
           }
           missing_stats <- missing_stats[ , !(names(missing_stats) == "dayofyear")]
+          missing_stats <- hablar::rationalize(missing_stats)
 
-          #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st. Unfortunately this means that initial setups done on those days will not calculate Feb 29!
+          #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st.
           if (nrow(feb_29) > 0 & !(substr(as.character(as.Date(.POSIXct(Sys.time(), "UTC"))), 6, 10) %in% c("02-29", "03-01,", "03-02"))) {
-            for (l in 1:nrow(feb_29)){
-              date <- as.Date(feb_29$date[l])
-              before <- missing_stats[missing_stats$date == date - 1 , ]
-              after <- missing_stats[missing_stats$date == date + 1 , ]
-
-              feb_29[l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10")] <- c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)))
+            for (l in feb_29$date){
+              before <- missing_stats[missing_stats$date == l - 1 , ]
+              after <- missing_stats[missing_stats$date == l + 1 , ]
+              if (nrow(before) == 0 | nrow(after) == 0) { #If TRUE then can't do anything except for passing the value forward
+                if (is.na(feb_29[feb_29$date == l, "value"])){ #If there's no value and can't do anything else then drop the row
+                  feb_29 <- feb_29[!feb_29$date == l ,]
+                }
+              } else {
+                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10")] <- c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)))
+              }
             }
             feb_29 <- hablar::rationalize(feb_29)
             missing_stats <- rbind(missing_stats, feb_29)

@@ -18,7 +18,7 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
 {
 
   if (!inherits(param_code, "numeric")){
-    stop("parameter `param_code` must be a numeric.")
+    as.numeric(param_code)
   } else {
     param_code <- sprintf("%05d", param_code) #param codes always have 5 digits, but padded with leading zeros
   }
@@ -59,14 +59,14 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
 
   if (!is.null(modifiedSince)){
     data <- dataRetrieval::readNWISdata(sites = location,
-                         service = "iv",
-                         parameterCd = param_code,
-                         startDate =  paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
-                         endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
-                         modifiedSince = modifiedSince,
-                         asDateTime = TRUE,
-                         tz = "UTC",
-                         convertType = TRUE)[, c(3:5)]
+                                        service = "iv",
+                                        parameterCd = param_code,
+                                        startDate =  paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
+                                        endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
+                                        modifiedSince = modifiedSince,
+                                        asDateTime = TRUE,
+                                        tz = "UTC",
+                                        convertType = TRUE)[, c(3:5)]
   } else {
     data <-  dataRetrieval::readNWISdata(sites = location,
                                          service = "iv",
@@ -91,4 +91,3 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
 
   return(data)
 }
-

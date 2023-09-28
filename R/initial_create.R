@@ -30,11 +30,11 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   tryCatch({
     if (is.null(DBI::dbGetQuery(con, "SELECT PostGIS_version()"))){
-    DBI::dbExecute(con, "CREATE EXTENSION postgis;")
-    DBI::dbExecute(con, "CREATE SCHEMA spatial_data;")
-    DBI::dbExecute(con, "ALTER TABLE public.geometry_columns SET SCHEMA spatial_data;")
-    DBI::dbExecute(con, "ALTER TABLE public.geography_columns SET SCHEMA spatial_data;")
-    DBI::dbExecute(con, "ALTER TABLE public.spatial_ref_sys SET SCHEMA spatial_data;")
+      DBI::dbExecute(con, "CREATE EXTENSION postgis;")
+      DBI::dbExecute(con, "CREATE SCHEMA spatial_data;")
+      DBI::dbExecute(con, "ALTER TABLE public.geometry_columns SET SCHEMA spatial_data;")
+      DBI::dbExecute(con, "ALTER TABLE public.geography_columns SET SCHEMA spatial_data;")
+      DBI::dbExecute(con, "ALTER TABLE public.spatial_ref_sys SET SCHEMA spatial_data;")
     }
   }, error = function(e) {
     stop("Looks like you need to install the postGIS extension before continuing. The process varies depending on your OS: refer to this link for more info. https://postgis.net/documentation/getting_started/")
@@ -72,7 +72,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  PRIMARY KEY (timeseries_id, date))")
 
 
-    DBI::dbExecute(con, "CREATE TABLE if not exists rasters (
+  DBI::dbExecute(con, "CREATE TABLE if not exists rasters (
                    description TEXT NOT NULL,
                    parameter TEXT,
                    unit TEXT,
@@ -81,21 +81,21 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                    file_path TEXT NOT NULL UNIQUE,
                    PRIMARY KEY (description, parameter, file_path))")
 
-    DBI::dbExecute(con, "CREATE TABLE if not exists images (
+  DBI::dbExecute(con, "CREATE TABLE if not exists images (
                    location TEXT NOT NULL,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                    file BYTEA NOT NULL,
                    type TEXT NOT NULL CHECK(type IN ('auto', 'manual')),
                    PRIMARY KEY (location, datetime, type))")
 
-    DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
+  DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
                    timeseries_id NUMERIC,
                    issue_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                    value NUMERIC,
                    PRIMARY KEY (timeseries_id, datetime))")
 
-    DBI::dbExecute(con, "CREATE TABLE if not exists measurements_discrete (
+  DBI::dbExecute(con, "CREATE TABLE if not exists measurements_discrete (
                    timeseries_id NUMERIC,
                    target_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE,
@@ -103,7 +103,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                    sample_class TEXT,
                    PRIMARY KEY (timeseries_id, datetime))")
 
-    DBI::dbExecute(con, "CREATE TABLE if not exists polygons (
+  DBI::dbExecute(con, "CREATE TABLE if not exists polygons (
                    id SERIAL PRIMARY KEY,
                    description TEXT NOT NULL,
                    geometry geometry(Polygon, 4269) UNIQUE,
@@ -152,6 +152,19 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  source_fx_args TEXT,
                  UNIQUE (location, parameter, category, type));")
 
+  DBI::dbExecute(con, "CREATE TABLE if not exists peaks (
+                 timeseries_id NUMERIC,
+                 agency TEXT NOT NULL,
+                 year NUMERIC NOT NULL,
+                 date DATE NOT NULL,
+                 value NUMERIC NOT NULL,
+                 type TEXT NOT NULL CHECK(type IN ('instantaneous', '1-day', '2-day', '3-day', '4-day', '5-day', '6-day', '7-day', 'monthly')),
+                 condition TEXT NOT NULL CHECK(condition IN ('open water', 'break-up', 'freeze-up', 'winter')),
+                 extrema TEXT NOT NULL CHECK(extrema IN ('minimum', 'maximum')),
+                 uncertainty TEXT,
+                 notes TEXT,
+                 deemed_primary BOOLEAN NOT NULL,
+                 UNIQUE (timeseries_id, agency, year, type, condition, extrema));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists internal_status (
                  event TEXT NOT NULL,
@@ -170,8 +183,8 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  PRIMARY KEY (source_fx, parameter))")
 
   params_AQ <- data.frame("source_fx" = "aq_download",
-                       "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
-                       "remote_param_name" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
+                          "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
+                          "remote_param_name" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
   params_WSC <- data.frame("source_fx" = "getRealtimeWSC",
                            "parameter" = c("level", "flow", "water temperature"),
                            "remote_param_name" = c("46", "47", "5"))
