@@ -4,31 +4,32 @@
 \alias{add_timeseries}
 \title{Add timeseries to database}
 \usage{
-add_timeseries(path, location, parameter, units, type, network)
+add_timeseries(
+  con = hydrometConnect(silent = TRUE),
+  timeseries_df,
+  locations_df = NULL
+)
 }
 \arguments{
-\item{path}{The path to the local database, with extension.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{location}{The location identifier, exactly as per the WSC or as written in Aquarius. Case sensitive. Specify as a character vector of length 1 or more.}
+\item{timeseries_df}{A data.frame containing the information necessary to add the timeseries (see details for template).}
 
-\item{parameter}{The parameter for this location, matched 1:1 to the other vectors. If at all possible match existing parameters, such as "level", "flow", "SWE", "snow depth", or "distance", or "temperature".}
-
-\item{units}{The measurement units for this new location, matched 1:1 to the other vectors. If at all possible try to match an existing unit such as "m" for level or distance, "m3/s" for flow volumes, "mm" for mm SWE or precipitation, "cm" for snow depth.}
-
-\item{type}{Continuous or discrete, matched to the other vectors 1:1.}
-
-\item{network}{The name of the network. Again, try to match existing network names.}
+\item{locations_df}{A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.}
 }
 \value{
-One or more new entries are created in the table 'locations.'
+One or more new entries are created in the table 'timeseries'
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries table. The locations table and matching measurement tables will be populated during the next run of \code{\link[=hydro_update_daily]{hydro_update_daily()}}. If specifying level or flow, incorporation will first be attempted for a WSC location. Failure triggers an attempt to add a station from Aquarius.
+This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function \code{\link[=add_ts_templates]{add_ts_templates()}} for help in formatting the data.frames to pass to \code{timeseries_df} and \code{locations_df}.
+}
+\details{
+You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
 
-If \code{\link[=hydro_update_daily]{hydro_update_daily()}} fails to find a corresponding timeseries anywhere, the offending timeseries will be marked as "FAILED" in the timeseries table in the "type" column. Reset the "type" field to try again.
+Additional arguments to pass to the function specified in source_fx should take the form of "{param1 = arg1}, {param2 = 'arg2'}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 }
 \seealso{
-\code{\link[WRBtools:DB_browse_ts]{WRBtools::DB_browse_ts()}} to see what's in the timeseries table already and match parameters, units, types, networks.
+\code{\link[=add_ts_templates]{add_ts_templates()}} to see templates for timesries_df and locations_df.
 }

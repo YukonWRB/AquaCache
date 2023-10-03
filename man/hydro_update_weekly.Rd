@@ -5,26 +5,17 @@
 \title{Weekly update of hydro database}
 \usage{
 hydro_update_weekly(
-  path,
-  WSC_range = Sys.Date() - 577,
-  locations = "all",
-  aquarius = TRUE,
-  aquarius_range = "unapproved",
-  server = "https://yukon.aquaticinformatics.net/AQUARIUS"
+  con = hydrometConnect(silent = TRUE),
+  timeseries_id = "all",
+  start_datetime
 )
 }
 \arguments{
-\item{path}{The path to the local hydro SQLite database, with extension. Passed to \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{WSC_range}{The starting date from which to pull real-time WSC data from the web and replace in the local database. Default is max possible days.}
+\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
-\item{locations}{The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.}
-
-\item{aquarius}{TRUE if you are fetching data from Aquarius, in which case you should also check the next two parameters. FALSE will only replace WSC data.}
-
-\item{aquarius_range}{Should only unapproved (unlocked) data be replaced, or all available data? Select from "all" or "unapproved". Default is "unapproved".}
-
-\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}.}
+\item{start_datetime}{The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
 }
 \value{
 Updated entries in the hydro database.
@@ -33,4 +24,6 @@ Updated entries in the hydro database.
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
 The weekly update function pulls and replaces a large tranche of Water Survey of Canada and Aquarius data to ensure incorporation of any edits. By default, all real-time water survey data currently available online is replaced, as is any Aquarius data not previously labelled as "approved". Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
+
+Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}} for more information.
 }

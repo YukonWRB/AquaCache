@@ -4,16 +4,12 @@
 \alias{initial_create}
 \title{Initial hydro database creation.}
 \usage{
-initial_create(path, extras = "none", overwrite = FALSE, new = FALSE)
+initial_create(con = hydrometConnect(), overwrite = FALSE)
 }
 \arguments{
-\item{path}{The path to the local hydro SQLite database or the location where it should be created, with extension. Passed to \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}} if new = FALSE or to \code{\link[DBI:dbConnect]{DBI::dbConnect()}} if new = TRUE.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{extras}{The basic database consists of tables for water level and flow, plus metadata tables. Extra tables for distance measurements (e.g. bridge radar distance), snow pillows, snow course or other discrete measurements, precipitation rasters (forecast and reanalysis products), automatic still images at monitoring locations, forecast values (level and flow), and watershed polygons can be created. Select "all" or specify a vector containing anyt of "distance", "snow pillows", "rasters", "atuo_images", "forecasts", "discrete", "watersheds", or leave "none" for nothing.}
-
-\item{overwrite}{TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.}
-
-\item{new}{Allows you to create a new SQLite database. By default, the connection to the database path checks for an existing database. You can create a new DB at 'path' if 'path' does not point to an existing database. Creates an SQLite database.}
+\item{overwrite}{TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.}
 }
 \value{
 An SQLite database in the folder location specified by 'path'.
@@ -21,5 +17,5 @@ An SQLite database in the folder location specified by 'path'.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Creates an SQLite database or replaces an existing database. Establishsd pre-set table structure and populates defaults in the "settings" and "datum_list" tables. All tables are created as WITHOUT ROWID tables, with primary keys for most tables on the location and parameter, location and datetime_UTC, or location and date columns.
+Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. Primary keys for most tables are on the location and parameter, location, parameter, and datetime, or location, parameter, and date columns. No indices are specified as the primary key fulfills this task already.
 }

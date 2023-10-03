@@ -4,17 +4,21 @@
 \alias{update_hydat}
 \title{Update HYDAT-related timeseries}
 \usage{
-update_hydat(timeseries, path, force_update = FALSE)
+update_hydat(
+  con = hydrometConnect(silent = TRUE),
+  timeseries_id = "all",
+  force_update = FALSE
+)
 }
 \arguments{
-\item{timeseries}{Character vector of timeseries for which to look for updates.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{path}{The path to the hydrometric database, passed to \code{\link[WRBtools:hydroConnect]{WRBtools::hydroConnect()}}.}
+\item{timeseries_id}{Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries from operator 'WSC'.}
 
 \item{force_update}{Set TRUE if you want to force a check of each location against the local copy of HYDAT.}
 }
 \value{
-Updated daily means where HYDAT values exist, and a boolean indicating if the HYDAT database was in fact updated. Note: if force_update is TRUE but there is no new HYDAT database, FALSE will be returned even though database timeseries are updated.
+Updated daily means where HYDAT values were replaced by updated values, and TRUE if a new version of hydat was found.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

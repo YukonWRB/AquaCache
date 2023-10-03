@@ -112,7 +112,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     #get new measurements
     if (overwrite){
       DBI::dbExecute(hydro, paste0("DELETE FROM discrete WHERE parameter IN ('snow depth', 'SWE') AND location = '", locations$SNOW_COURSE_ID[i], "'"))
-      DBI::dbExecute(hydro, paste0("DELETE FROM timeseries WHERE parameter IN ('snow depth', 'SWE') AND type = 'discrete' AND location = '", locations$SNOW_COURSE_ID[i], "'"))
+      DBI::dbExecute(hydro, paste0("DELETE FROM timeseries WHERE parameter IN ('snow depth', 'SWE') AND category = 'discrete' AND location = '", locations$SNOW_COURSE_ID[i], "'"))
       DBI::dbExecute(hydro,  paste0("DELETE FROM locations WHERE location = '", locations$SNOW_COURSE_ID[i], "'"))
       DBI::dbExecute(hydro, paste0("DELETE FROM datum_conversions WHERE location = '", locations$SNOW_COURSE_ID[i], "'"))
     }
@@ -120,31 +120,31 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     existing <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM discrete WHERE location = '", locations$SNOW_COURSE_ID[i], "'"))
     df <- df[!(as.character(df$SAMPLE_DATE) %in% existing$target_date) ,] #Retain only new survey dates
     if (nrow(df) > 0){
-      SWE <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "sample_date" = df$SURVEY_DATE, "value" = df$SNOW_WATER_EQUIV, "parameter" = "SWE")
-      depth <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "sample_date" = df$SURVEY_DATE, "value" = df$DEPTH, "parameter" = "snow depth")
+      SWE <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "datetime" = df$SURVEY_DATE, "value" = df$SNOW_WATER_EQUIV, "parameter" = "SWE")
+      depth <- data.frame("location" = df$SNOW_COURSE_ID, "target_date" = df$SAMPLE_DATE, "datetime" = df$SURVEY_DATE, "value" = df$DEPTH, "parameter" = "snow depth")
       df <- rbind(SWE, depth) #bring SWE and DEPTH back together in a 'long' format
-      df[is.na(df$sample_date) , ]$sample_date <- df[is.na(df$sample_date), ]$target_date #sometimes no survey data is given, but there is a target date. Presumably no field visit was conducted because there was 100% chance of no snow.
+      df[is.na(df$datetime) , ]$datetime <- df[is.na(df$datetime), ]$target_date #sometimes no survey data is given, but there is a target date. Presumably no field visit was conducted because there was 100% chance of no snow.
       df <- df[!is.na(df$value), ] #remove rows where there is no measurement
       if (nrow(df) > 0){ #condition again, in case na rows were removed
         df$target_date <- as.character(df$target_date)
-        df$sample_date <- as.character(df$sample_date)
+        df$datetime <- as.character(df$datetime)
         # insert new measurements to the DB
         DBI::dbAppendTable(hydro, "discrete", df)
         # update timeseries table
         start <- as.character(min(df$target_date))
         end <- as.character(max(df$target_date))
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'SWE', 'mm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", locations$SNOW_COURSE_ID[i], "' AND parameter = 'SWE' AND type = 'discrete'"))
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, unit, category, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'SWE', 'mm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", locations$SNOW_COURSE_ID[i], "' AND parameter = 'SWE' AND category = 'discrete'"))
 
-        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, units, type, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'snow depth', 'cm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
-        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", locations$SNOW_COURSE_ID[i], "' AND parameter = 'snow depth' AND type = 'discrete'"))
+        DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO timeseries (location, parameter, unit, category, start_datetime_UTC, end_datetime_UTC, last_new_data_UTC, operator, network) VALUES ('", locations$SNOW_COURSE_ID[i], "', 'snow depth', 'cm', 'discrete', '", start, "', '", end, "', '", as.character(.POSIXct(Sys.time(), "UTC")), "', 'WRB', 'Snow Survey Network')"))
+        DBI::dbExecute(hydro, paste0("UPDATE timeseries SET end_datetime_UTC = '", end, "', last_new_data_UTC = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE location = '", locations$SNOW_COURSE_ID[i], "' AND parameter = 'snow depth' AND category = 'discrete'"))
 
         DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", locations$SNOW_COURSE_ID[i], "', '", gsub("'", "", locations$SNOW_COURSE_NAME[i]), "', '", locations$latitude[i], "', '", locations$longitude[i], "')"))
 
         DBI::dbExecute(hydro, paste0("INSERT OR IGNORE INTO datum_conversions (location, datum_id_from, datum_id_to, conversion_m, current) VALUES ('", locations$SNOW_COURSE_ID[i], "', ' 10', '110', '", locations$ELEVATION[i], "', 'TRUE')"))
       }
     }
-  }
+  } #End of for loop iterating over locations
   DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_snow_courses'"))
   DBI::dbDisconnect(hydro)
   print("Snow course survey data is updated in the database.")

@@ -5,16 +5,15 @@
 \title{Initial creation of tables containing WSC data}
 \usage{
 initial_WSC(
-  path,
+  con = hydrometConnect(),
   WSC_stns = "yukon",
   aquarius = TRUE,
   stage = "Stage.Preliminary",
-  discharge = "Discharge.Preliminary",
-  server = "https://yukon.aquaticinformatics.net/AQUARIUS"
+  discharge = "Discharge.Preliminary"
 )
 }
 \arguments{
-\item{path}{The path to the local hydro SQLite database, with extension.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
 \item{WSC_stns}{The WSC stations you wish to pull information for. In the event that these stations are mirrored in your Aquarius database the function will attempt to fetch that information. Otherwise, only information from the HYDAT database and from real-time WSC data will be incorporated. The default, "yukon" is a preset list of 77 stations in or relevant to Yukon.}
 
@@ -23,8 +22,6 @@ initial_WSC(
 \item{stage}{The name of the stage(level) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All WSC_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.}
 
 \item{discharge}{The name of the discharge(flow) timeseries as it appears in Aquarius, if it exists, in the form Parameter.Label. All WSC_stns must have the same names. !This ONLY applies to WSC stations mirrored in Aquarius.}
-
-\item{server}{The URL to your Aquarius server, if needed. Note that your credentials must be in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}.}
 }
 \value{
 Updated tables in the database.

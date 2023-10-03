@@ -9,7 +9,6 @@
 #' @param locations The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.
 #'
 #' @return Updated entries in the hydro database.
-#' @import tidyhydat.ws
 #' @export
 #'
 
@@ -20,9 +19,9 @@ dailyCrossCheck <- function(path, locations = "all")
   on.exit(DBI::dbDisconnect(hydro))
 
   if (locations == "all"){
-    all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE type = 'continuous'")
+    all_timeseries <- DBI::dbGetQuery(hydro, "SELECT * FROM timeseries WHERE category = 'continuous'")
   } else {
-    all_timeseries <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE type = 'continuous' AND location IN ('", paste(locations, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(hydro, paste0("SELECT * FROM timeseries WHERE category = 'continuous' AND location IN ('", paste(locations, collapse = "', '"), "')"))
   }
 
   for (i in 1:nrow(all_timeseries)){
@@ -32,8 +31,8 @@ dailyCrossCheck <- function(path, locations = "all")
       hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
       realtime <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) AS datetime_UTC FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' GROUP BY DATE(datetime_UTC);"))$datetime_UTC
 
-      if (length(realtime) > 0) {
-        #NOTE: the line below may not be needed with postgres or SQL server since they have proper time formats.
+      if (length(realtime) > 0){
+        #NOTE: the line below may not be needed with postgres or SQL server since they have proper time formats. with SQLite, the DB can't auto-convert to plain date and returns a date-time string of the first record for each day.
         realtime_days <- lubridate::date(realtime)
         daily_days <- DBI::dbGetQuery(hydro, paste0("SELECT date FROM daily WHERE location = '", loc, "' AND parameter = '", parameter, "';"))$date
         DBI::dbDisconnect(hydro)
@@ -54,13 +53,12 @@ dailyCrossCheck <- function(path, locations = "all")
         }
         if (!is.null(first_missing)){
           calculate_stats(timeseries = data.frame("location" = loc, "parameter" = parameter), start_recalc = first_missing, path = path)
-          print(paste0("Found missing entries for location ", loc, " and parameter ", parameter))
+          print(paste0("Found missing daily entries for location ", loc, " and parameter ", parameter))
         }
-      } else {
-        DBI::dbDisconnect(hydro)
       }
     }, error = function(e) {
-      print(paste0("dailyCrossCheck: Failed on location ", loc, " and parameter ", parameter))
+      print(paste0("dailyCrossCheck: failed on location ", loc, " and parameter ", parameter))
+
     })
   }
 }
