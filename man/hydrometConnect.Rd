@@ -6,23 +6,23 @@
 \usage{
 hydrometConnect(
   name = "hydromet",
-  host = "localhost",
-  port = "5432",
-  username = "postgres",
-  password = "SnowFa11ing",
+  host = Sys.getenv("hydrometHost"),
+  port = Sys.getenv("hydrometPort"),
+  username = Sys.getenv("hydrometUser"),
+  password = Sys.getenv("hydrometPass"),
   silent = FALSE
 )
 }
 \arguments{
 \item{name}{Database name.}
 
-\item{host}{Database host address.}
+\item{host}{Database host address. By default searches the .Renviron file for parameter:value pair of form hydrometHost:"hostname".}
 
-\item{port}{Connection port.}
+\item{port}{Connection port. By default searches the .Renviron file for parameter:value pair of form hydrometPort:"1234".}
 
-\item{username}{Username. Refrain from using username with write privileges unless you absolutely know what you're doing.}
+\item{username}{Username. By default searches the .Renviron file for parameter:value pair of form hydrometUser:"username". Refrain from using username with write privileges unless you absolutely know what you're doing.}
 
-\item{password}{Password.}
+\item{password}{Password. By default searches the .Renviron file for parameter:value pair of form hydrometPass:"password".}
 
 \item{silent}{TRUE suppresses messages except for errors.}
 }
