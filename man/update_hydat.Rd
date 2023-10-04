@@ -23,5 +23,5 @@ Updated daily means where HYDAT values were replaced by updated values, and TRUE
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-First checks the local version of HYDAT using function \code{\link[WRBtools:hydat_check]{WRBtools::hydat_check()}} and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in timeseries, will also update the internal_status table with the HYDAT version used for the update.
+First checks the local version of HYDAT using function \code{\link[=hydat_check]{hydat_check()}} and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in timeseries, will also update the internal_status table with the HYDAT version used for the update.
 }

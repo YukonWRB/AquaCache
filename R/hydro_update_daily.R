@@ -10,7 +10,7 @@
 #'
 #' Note that new timeseries should be added using function [add_timeseries()].
 #'
-#' Any timeseries labelled as 'WRBtools::aq_download()' in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see [WRBtools::aq_download()] for more information about that function, and [add_ts_template()] for details on how to format your parameters.
+#' Any timeseries labelled as 'YGWater::aq_download()' in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see [YGWater::aq_download()] for more information about that function, and [add_ts_template()] for details on how to format your parameters.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -122,7 +122,7 @@ hydro_update_daily <- function(con = hydrometConnect(silent=TRUE), timeseries_id
         #find a corresponding entry in table timeseries to pick a parameter
         parameter <- timeseries_WRB[timeseries_WRB$location == unique(timeseries_WRB$location)[i],]$parameter[1]
         ts_name <- aq_names[aq_names$parameter == parameter, "remote_param_name"]
-        conversion <- WRBtools::aq_download(loc_id = unique(timeseries_WRB$location)[i], ts_name = ts_name, start = Sys.Date()-1)$metadata
+        conversion <- YGWater::aq_download(loc_id = unique(timeseries_WRB$location)[i], ts_name = ts_name, start = Sys.Date()-1)$metadata
         conversion <- conversion[7,2]
         all_datums[i, ] <- c(unique(timeseries_WRB$location)[i], datum_id_from = 10, datum_id_to = 110, conversion_m = conversion, current = TRUE)
       }

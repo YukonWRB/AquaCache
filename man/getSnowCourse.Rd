@@ -14,7 +14,7 @@ getSnowCourse(
 \arguments{
 \item{hydro_db_path}{Full path to the hydrology database}
 
-\item{snow_db_path}{Full path to the snow survey database, passed to \code{\link[WRBtools:snowConnect]{WRBtools::snowConnect()}}.}
+\item{snow_db_path}{Full path to the snow survey database, passed to \code{\link[YGWater:snowConnect]{YGWater::snowConnect()}}.}
 
 \item{inactive}{Should inactive stations be included?}
 

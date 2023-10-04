@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. Primary keys for most tables are on the location and parameter, location, parameter, and datetime, or location, parameter, and date columns. No indices are specified as the primary key fulfills this task already.
+#' Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. No indices are specified as the primary key fulfills this task already.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.

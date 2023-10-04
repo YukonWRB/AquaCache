@@ -33,5 +33,5 @@ Pulls data from Aquarius as well as from WSC to perform the initial creation of 
 
 WSC stations should be specified in a character vector of arbitrary length. The naming of WSC stations should follow the WSC convention, e.g. "09AB001". To successfully download from Aquarius these timeseries must be named IDENTICALLY in Aquarius. You must also specify the standard naming scheme for your stage (level) and discharge(flow) timeseries, in the form Parameter.Label.
 
-Uses two functions under the hood that require some set-up of the .Renviron file: \code{\link[tidyhydat.ws:realtime_ws]{tidyhydat.ws::realtime_ws()}} and \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}}. See respective help files for setup information.
+Uses two functions under the hood that require some set-up of the .Renviron file: \code{\link[tidyhydat.ws:realtime_ws]{tidyhydat.ws::realtime_ws()}} and \code{\link[YGWater:aq_download]{YGWater::aq_download()}}. See respective help files for setup information.
 }

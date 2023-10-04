@@ -3,7 +3,7 @@
 #'@description
 #' `r lifecycle::badge("stable")`
 #'
-#' Pared-down and modified version of WRBtools::aq_download.
+#' Pared-down and modified version of YGWater::aq_download.
 #'
 #' ##Passwords:
 #' To store login credentials in your .renviron file, call [usethis::edit_r_environ()] and enter your username and password as value pairs, as AQUSER="your username" and AQPASS="your password". The server should be entered at server="your_server_url". You can also store credentials in the timeseries table in the column source_fx_args, but beware that these credentials are then sitting in the database un-encrypted.

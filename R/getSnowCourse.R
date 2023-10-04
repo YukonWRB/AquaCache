@@ -8,7 +8,7 @@
 #' Pulls and processes snow course data before updating entries into the local hydrometric database.
 #'
 #' @param hydro_db_path Full path to the hydrology database
-#' @param snow_db_path Full path to the snow survey database, passed to [WRBtools::snowConnect()].
+#' @param snow_db_path Full path to the snow survey database, passed to [YGWater::snowConnect()].
 #' @param inactive Should inactive stations be included?
 #' @param overwrite Should all snow course information be overwritten? Only do this if there's been a change in the snow_survey database and you deem this to be the fastest way to reflect that change in the hydro database.
 #'
@@ -19,7 +19,7 @@
 getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
 
-  hydro <- WRBtools::hydroConnect(path = hydro_db_path, silent = TRUE)
+  hydro <- YGWater::hydroConnect(path = hydro_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
   tables <- DBI::dbListTables(hydro)
@@ -29,7 +29,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
-  snowCon <- WRBtools::snowConnect(path = snow_db_path, silent = TRUE)
+  snowCon <- YGWater::snowConnect(path = snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
 
   #Get locations and measurements
@@ -107,7 +107,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     locations <- locations[locations$ACTIVE_FLG == TRUE ,]
   }
 
-  hydro <- WRBtools::hydroConnect(path = hydro_db_path, silent = TRUE)
+  hydro <- YGWater::hydroConnect(path = hydro_db_path, silent = TRUE)
   for (i in 1:nrow(locations)){
     #get new measurements
     if (overwrite){

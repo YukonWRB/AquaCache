@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' First checks the local version of HYDAT using function [WRBtools::hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in timeseries, will also update the internal_status table with the HYDAT version used for the update.
+#' First checks the local version of HYDAT using function [hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in timeseries, will also update the internal_status table with the HYDAT version used for the update.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries from operator 'WSC'.
@@ -16,7 +16,7 @@
 update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all", force_update = FALSE){
 
   #Check if the local copy of HYDAT needs an update
-  WRBtools::hydat_check(silent = FALSE)
+  hydat_check(silent = FALSE)
   hydat_path <- tidyhydat::hy_downloaded_db()
 
   #Check now if the DB should be updated

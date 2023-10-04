@@ -24,5 +24,5 @@ Calls several functions in sequence: \code{\link[=getNewContinuous]{getNewContin
 
 Note that new timeseries should be added using function \code{\link[=add_timeseries]{add_timeseries()}}.
 
-Any timeseries labelled as 'WRBtools::aq_download()' in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}} for more information about that function, and \code{\link[=add_ts_template]{add_ts_template()}} for details on how to format your parameters.
+Any timeseries labelled as 'YGWater::aq_download()' in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see \code{\link[YGWater:aq_download]{YGWater::aq_download()}} for more information about that function, and \code{\link[=add_ts_template]{add_ts_template()}} for details on how to format your parameters.
 }

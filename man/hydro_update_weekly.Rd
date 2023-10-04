@@ -25,5 +25,5 @@ Updated entries in the hydro database.
 
 The weekly update function pulls and replaces a large tranche of Water Survey of Canada and Aquarius data to ensure incorporation of any edits. By default, all real-time water survey data currently available online is replaced, as is any Aquarius data not previously labelled as "approved". Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 
-Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[WRBtools:aq_download]{WRBtools::aq_download()}} for more information.
+Any timeseries labelled as 'getRealtimeAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[=getRealtimeAquarius]{getRealtimeAquarius()}} for more information.
 }
