@@ -4,7 +4,7 @@ Progress tracking for postgres migration/updates
 completed: #########
 initial_create
 initial_WSC
-weekly
+synchronizeContinuous
 vacuum
 getRealtimeAquarius
 getRealtimeWSC
@@ -19,6 +19,7 @@ hydat_check
 to do: #############
 daily   # Getting there... big tasks are being broken up into individual functions
 getSnowCourse  # new snow DB needs to be created before working on this function
+synchronizeDiscrete
 getWatersheds   - and also add a feature to calculate watersheds for locs without a WSC polygon
 getNewDiscrete
 update_hydat_datums

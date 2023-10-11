@@ -17,5 +17,5 @@ An SQLite database in the folder location specified by 'path'.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. Primary keys for most tables are on the location and parameter, location, parameter, and datetime, or location, parameter, and date columns. No indices are specified as the primary key fulfills this task already.
+Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. No indices are specified as the primary key fulfills this task already.
 }

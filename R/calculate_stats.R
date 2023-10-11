@@ -246,7 +246,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         }
       }
     }, error = function(e) {
-      warning("Failed to calculate stats for timeseries_id ", i, ".")
+      warning("calculate_stats: failed to calculate stats for timeseries_id ", i, ".")
     }) #End of tryCatch for stats calculation
 
     if (nrow(missing_stats) > 0){ #This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.

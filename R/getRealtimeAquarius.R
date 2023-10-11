@@ -39,7 +39,7 @@ getRealtimeAquarius <- function(location,
     stop("getRealtimeAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults.")
   }
 
-  source(system.file("scripts",  "timeseries_client.R", package = "WRBdatabase")) #This loads the code dependencies
+  source(system.file("scripts",  "timeseries_client.R", package = "HydroMetDB")) #This loads the code dependencies
 
   #Make a data.frame with grade numbers and meanings because AQ doesn't supply them
   grade_codes <- data.frame(code = c(-55,-50, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 10, 11, 12, 14, 15, 21, 30, 31, 99, 100, 101, 103, 105, 110, 115, 120, 124, 125, 130),
@@ -146,6 +146,10 @@ getRealtimeAquarius <- function(location,
     }
     ts <- tidyr::fill(ts, c(grade, approval), .direction = "down")
     attr(ts$datetime, "tzone") <- "UTC"
+    return(ts)
+  } else {
+    ts <- data.frame()
+    return(ts)
   }
-  return(ts)
+
 }

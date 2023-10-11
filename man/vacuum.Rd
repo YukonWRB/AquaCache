@@ -4,7 +4,7 @@
 \alias{vacuum}
 \title{Maintenance (vacuum) function for hydrometric database.}
 \usage{
-vacuum(con = hydometConnect(silent = TRUE))
+vacuum(con = hydrometConnect(silent = TRUE))
 }
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}

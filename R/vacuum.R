@@ -12,14 +12,9 @@
 #'
 
 
-vacuum <- function(con = hydometConnect(silent = TRUE))
+vacuum <- function(con = hydrometConnect(silent = TRUE))
 
 {
-  DBI::dbWithTransaction(
-    con,
-    {
-      DBI::dbExecute(con, "VACUUM (ANALYZE)")
-      DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_vacuum';"))
-    }
-  )
+  DBI::dbExecute(con, "VACUUM (ANALYZE)")
+  DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_vacuum';"))
 }

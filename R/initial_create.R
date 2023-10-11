@@ -43,7 +43,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   # realtime table
   DBI::dbExecute(con, "CREATE TABLE if not exists measurements_continuous (
-                 timeseries_id NUMERIC NOT NULL,
+                 timeseries_id INTEGER NOT NULL,
                  datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  value NUMERIC NOT NULL,
                  grade TEXT,
@@ -55,7 +55,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   # daily table
   DBI::dbExecute(con, "CREATE TABLE if not exists calculated_daily (
-                 timeseries_id NUMERIC NOT NULL,
+                 timeseries_id INTEGER NOT NULL,
                  date DATE NOT NULL,
                  value NUMERIC,
                  grade TEXT,
@@ -89,14 +89,14 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                    PRIMARY KEY (location, datetime, type))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
-                   timeseries_id NUMERIC,
+                   timeseries_id INTEGER,
                    issue_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                    value NUMERIC,
                    PRIMARY KEY (timeseries_id, datetime))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists measurements_discrete (
-                   timeseries_id NUMERIC,
+                   timeseries_id INTEGER,
                    target_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE,
                    value NUMERIC NOT NULL,
@@ -153,7 +153,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  UNIQUE (location, parameter, category, type));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists peaks (
-                 timeseries_id NUMERIC,
+                 timeseries_id INTEGER PRIMARY KEY,
                  agency TEXT NOT NULL,
                  year NUMERIC NOT NULL,
                  date DATE NOT NULL,
@@ -171,7 +171,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value TIMESTAMP WITH TIME ZONE,
                  PRIMARY KEY (event))")
 
-  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_update_weekly", "last_update_snow_courses", "last_update_watersheds", "last_update_rasters", "last_vacuum"),
+  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync_continuous", "last_sync_discrete", "last_update_watersheds", "last_update_rasters", "last_update_polygons", "last_vacuum"),
                                 "value" = NA)
   DBI::dbAppendTable(con, "internal_status", internal_status)
 
@@ -223,9 +223,70 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
     DBI::dbAppendTable(con, "datum_list", datum_list)
   }
 
-
   #Add in foreign keys
+  DBI::dbExecute(con,
+                 "ALTER TABLE timeseries
+  ADD CONSTRAINT fk_location
+  FOREIGN KEY (location)
+  REFERENCES locations(location);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE calculated_daily
+  ADD CONSTRAINT fk_timeseries_id
+  FOREIGN KEY (timeseries_id)
+  REFERENCES timeseries(timeseries_id);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE measurements_continuous
+  ADD CONSTRAINT fk_timeseries_id
+  FOREIGN KEY (timeseries_id)
+  REFERENCES timeseries(timeseries_id);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE measurements_discrete
+  ADD CONSTRAINT fk_timeseries_id
+  FOREIGN KEY (timeseries_id)
+  REFERENCES timeseries(timeseries_id);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE peaks
+  ADD CONSTRAINT fk_timeseries_id
+  FOREIGN KEY (timeseries_id)
+  REFERENCES timeseries(timeseries_id);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE forecasts
+  ADD CONSTRAINT fk_timeseries_id
+  FOREIGN KEY (timeseries_id)
+  REFERENCES timeseries(timeseries_id);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE polygons
+  ADD CONSTRAINT fk_location
+  FOREIGN KEY (location)
+  REFERENCES locations(location);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE datum_conversions
+  ADD CONSTRAINT fk_location
+  FOREIGN KEY (location)
+  REFERENCES locations(location);")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE images
+  ADD CONSTRAINT fk_location
+  FOREIGN KEY (location)
+  REFERENCES locations(location);")
 
 
-  print(paste0("The database was successfully created."))
+
+  # Create a read-only account
+  DBI::dbExecute(con, "CREATE ROLE hydromet_read WITH LOGIN PASSWORD 'hydromet';")
+  DBI::dbExecute(con, "GRANT CONNECT ON DATABASE hydromet TO hydromet_read;")
+  DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO hydromet_read;")
+  DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO hydromet_read;")
+
+
+
+  print(paste0("The database was successfully created along with a read-only account: username 'hydromet_read', password 'hydromet.'"))
 }
