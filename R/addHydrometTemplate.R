@@ -17,7 +17,7 @@ addHydrometTemplate <- function(con = hydrometConnect(silent=TRUE), format = "sh
 
   if (!is.null(save_path)){
     if (save_path == "choose") {
-      print("Select the output folder for shapefiles...")
+      message("Select the output folder for shapefiles...")
       save_path <- as.character(utils::choose.dir(caption="Select Save Folder"))
     }
     if (!dir.exists(save_path)){

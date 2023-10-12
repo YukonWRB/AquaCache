@@ -1,4 +1,4 @@
-#' Weekly update of hydro database
+#' Update of hysro DB
 #'
 #' @description
 #' `r lifecycle::badge("stable")`
@@ -22,9 +22,11 @@
 synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all", start_datetime)
 {
 
+  message("Synchronizing continuous type timeseries with synchronizeContinuous...")
   if (!inherits(start_datetime, "POSIXct")){
     stop("Parameter start_datetime must be supplied as a POSIXct object.")
   }
+  start <- Sys.time()
 
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
   if (timeseries_id[1] == "all"){
@@ -220,5 +222,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
   }
 
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_sync_continuous';"))
+  diff <- Sys.time() - start
+  message("Total elapsed time for synchronizeContinuous: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
 
 } #End of function

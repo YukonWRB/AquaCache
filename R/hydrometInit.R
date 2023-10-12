@@ -1,4 +1,4 @@
-#' Initial hydro database creation.
+#' Initial hydrometric/meteorological database creation.
 #'
 #' @description
 #' `r lifecycle::badge("stable")`
@@ -16,7 +16,7 @@
 #NOTE: postgreSQL uses the 'text' data type, but Microsoft SQL server equivalent is varchar(max). Replace all can be used to adapt this script.
 #NOTE: For datetimes to work with both postgres and SQL server, ISO8601 should be used: "2022-01-01T00:00:00-07:00" for MST. This is the new ISO standard anyways.
 
-initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
+hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   if (overwrite){
     for (i in DBI::dbListTables(con)){
@@ -288,5 +288,5 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
 
 
 
-  print(paste0("The database was successfully created along with a read-only account: username 'hydromet_read', password 'hydromet.'"))
+  message("The database was successfully created along with a read-only account: username 'hydromet_read', password 'hydromet.'")
 }

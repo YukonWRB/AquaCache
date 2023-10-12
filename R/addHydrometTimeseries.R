@@ -42,31 +42,6 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
     }
   }
 
-  #TODO: the below code does not work... fix if it's useful
-  # if (!all(is.na(timeseries_df$source_fx_args))) {
-  #   pattern <- "^\\{([a-zA-Z0-9]+ = (\"[^{}]+\"|'[^{}]+'))(, \"[a-zA-Z0-9]+\" = (\"[^{}]+\"|'[^{}]+'))*\\}$"
-  #   # Function to validate the input
-  #   validate_input <- function(input_text) {
-  #     if (grepl(pattern, input_text)) {
-  #       return(TRUE)
-  #     } else {
-  #       return(FALSE)
-  #     }
-  #   }
-  #   for (i in 1:nrow(timeseries_df)){
-  #     if (!is.na(timeseries_df[i, "source_fx_args"])) {
-  #       validate_input(timeseries_df[i, "source_fx_args"])
-  #     }
-  #   }
-  #
-  # # Check if the inputs match the flexible format
-  # print(validate_input(input1))  # TRUE
-  # print(validate_input(input2))  # TRUE
-  # print(validate_input(input3))  # TRUE
-  # print(validate_input(input4))  # TRUE
-
-
-
   #Add the timeseries ########
   for (i in 1:nrow(timeseries_df)){
     tryCatch({
