@@ -5,7 +5,7 @@
 #'
 #' Checks that there is a corresponding entry in table "daily" for every day in table "realtime" for every location specified in `locations`.
 #'
-#' @param path The path to the local hydro SQLite database, with extension. Passed to [WRBtools::hydroConnect()].
+#' @param path The path to the local hydro SQLite database, with extension. Passed to [YGWater::hydroConnect()].
 #' @param locations The locations you wish to have updated as a character vector. Defaults to "all", though the meaning of all is dependent on the parameter 'aquarius'. Will search for all timeseries with the specified location codes, so level + flow, snow depth + SWE, etc.
 #'
 #' @return Updated entries in the hydro database.
@@ -15,7 +15,7 @@
 dailyCrossCheck <- function(path, locations = "all")
 {
 
-  hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
+  hydro <- YGWater::hydroConnect(path = path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro))
 
   if (locations == "all"){
@@ -28,7 +28,7 @@ dailyCrossCheck <- function(path, locations = "all")
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
     tryCatch({
-      hydro <- WRBtools::hydroConnect(path = path, silent = TRUE)
+      hydro <- YGWater::hydroConnect(path = path, silent = TRUE)
       realtime <- DBI::dbGetQuery(hydro, paste0("SELECT MIN(datetime_UTC) AS datetime_UTC FROM realtime WHERE location = '", loc, "' AND parameter = '", parameter, "' GROUP BY DATE(datetime_UTC);"))$datetime_UTC
 
       if (length(realtime) > 0){

@@ -22,7 +22,7 @@ locations_df <- data.frame(location = c("15356000"),
                            datum_id_to = c(110),
                            conversion_m = c(259.08),
                            current = c(TRUE))
-add_timeseries(timeseries_df = timeseries_df, locations_df = locations_df)
+addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df)
 
 # Deleting from various tables
 DBI::dbExecute(con, "DELETE FROM timeseries WHERE timeseries_id IN (52)")

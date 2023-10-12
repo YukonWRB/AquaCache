@@ -1,38 +1,48 @@
-#' Get new continuous-type data
+#' Weekly update of hydro database
 #'
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to [addHydrometTimeseries()] for how to add new stations. Does not work on any timeseries of category "discrete": for that, use [getNewDiscrete()]. Timeseries with no specified souce_fx will be ignored.
+#' The weekly update function pulls and replaces data of type 'continuous' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 #'
-#' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Each of these can however be set using the "source_fx_args" column in the "timeseries" table; refer to [addHydrometTimeseries()] for a description of how to formulate these arguments.
+#' NOTE that any data point labelled as imputed = TRUE is ignored, as this implies it is missing from the remote and thus cannot be checked.
 #'
-#' ## Assigning measurement periods:
-#' With the exception of "instantaneous" timeseries which automatically receive a period of "00:00:00" (0 time), the period associated with measurements (ex: 1 hour precipitation sum) is derived from the interval between measurements UNLESS a period column is provided by the source function (column source_fx, may also depend on source_fx_args). This function typically fetches only a few hours of measurements at a time, so if the interval cannot be conclusively determined from the new data (i.e. hourly measurements over four hours with two measurements missed) then additional data points will be pulled from the database.
-#'
-#' If a period supplied by any data fetch function cannot be coerced to an period object acceptable to "duration" data type, NULL values will be entered to differentiate from instantaneous periods of "00:00:00".
+#'Any timeseries labelled as 'getRealtimeAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [getRealtimeAquarius()] for more information.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
-#' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.
+#' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
+#' @param start_datetime The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #'
-#' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
+#' @return Updated entries in the hydro database.
 #' @export
+#'
 
- getNewContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all")
+#TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
+
+synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all", start_datetime)
 {
+
+  if (!inherits(start_datetime, "POSIXct")){
+    stop("Parameter start_datetime must be supplied as a POSIXct object.")
+  }
+
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, type FROM timeseries WHERE category = 'continuous'")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
     if (length(timeseries_id) != nrow(all_timeseries)){
-      warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'continuous', or has no function specified in column source_fx.")
+      warning("At least one of the timeseries IDs you called for cannot be found in the database.")
     }
   }
 
-  count <- 0 #counter for number of successful new pulls
-  success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
+  #Check length of start_datetime is either 1 of same as timeseries_id
+  if (length(start_datetime) != 1){
+    if (length(start_datetime) != nrow(all_timeseries)){
+      stop("There is not exactly one element to start_datetime per valid timeseries_id specified by you in the database. Either you're missing elements to start_datetime or you are looking for timeseries_id that doesn't exist.")
+    }
+  }
+
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
@@ -40,16 +50,15 @@
     source_fx <- all_timeseries$source_fx[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
     param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
-    last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
-    type <- all_timeseries$type[i]
+    start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
 
     tryCatch({
-      args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
+      args_list <- list(location = loc, param_code = param_code, start_datetime = start_dt)
       if (!is.na(source_fx_args)){ #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair){
           gsub("[{}]", "", pair)
-          })
+        })
         pairs <- lapply(pairs, function(pair){
           gsub("\"", "", pair)
         })
@@ -64,12 +73,11 @@
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
-
       ts <- do.call(source_fx, args_list) #Get the data using the args_list
-
       ts <- ts[!is.na(ts$value) , ]
 
       if (nrow(ts) > 0){
+        #assign a period to the data
         if (type == "instantaneous"){ #Period is always 0 for instantaneous data
           ts$period <- "00:00:00"
           no_period <- data.frame() # Created here for use later
@@ -113,8 +121,8 @@
             #carry non-na's forward and backwards, if applicable
             ts$period <- zoo::na.locf(zoo::na.locf(ts$period, na.rm = FALSE), fromLast=TRUE)
 
-          } else { #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
-            no_period <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval FROM measurements_continuous WHERE timeseries_id = ", tsid, " ORDER BY datetime DESC LIMIT 10;"))
+          } else { #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo
+            no_period <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval FROM measurements_continuous WHERE timeseries_id = ", tsid, "AND datetime < '", min(ts$datetime), " ORDER BY datetime DESC LIMIT 10;"))
             ts <- rbind(ts, no_period)
             ts <- ts[order(ts$datetime), ]
             diffs <- as.numeric(diff(ts$datetime), units = "hours")
@@ -156,29 +164,61 @@
             ts$period <- NA
           }
         }
-        ts$timeseries_id <- tsid
-        # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
-        DBI::dbWithTransaction(
-          con, {
-            if (nrow(no_period) > 0){
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_continous WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
+
+        if (nrow(no_period) > 0){
+          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(no_period$datetime), "' AND imputed IS FALSE;"))
+        } else {
+          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", start_dt, "' AND imputed IS FALSE;"))
+        }
+
+
+        #order both timeseries to compare them
+        realtime <- realtime[order(realtime$datetime) , ]
+        ts <- ts[order(ts$datetime) , ]
+
+        # Create a unique datetime key for both data frames
+        ts$key <- paste(ts$datetime, ts$value, ts$grade, ts$approval, ts$period, sep = "|")
+        realtime$key <- paste(realtime$datetime, realtime$value, realtime$grade, realtime$approval, realtime$period, sep = "|")
+
+        # Check for mismatches using set operations
+        mismatch_keys <- setdiff(ts$key, realtime$key)
+
+        # Check if there are any discrepancies
+        if (length(mismatch_keys) > 0) {
+          mismatch <- TRUE
+          datetime <- ts[ts$key %in% mismatch_keys, "datetime"]
+          datetime <- min(datetime)
+        } else {
+          mismatch <- FALSE
+        }
+        ts$key <- NULL
+
+        if (mismatch){
+          ts <- ts[ts$datetime >= datetime , ]
+          ts$timeseries_id <- tsid
+          DBI::dbWithTransaction(
+            con,
+            {
+              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(ts$datetime), "' AND '", max(ts$datetime), "';"))
+              DBI::dbAppendTable(con, "measurements_continuous", ts)
+              #make the new entry into table timeseries
+              end <- max(max(realtime$datetime), ts$datetime)
+              DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
             }
-            DBI::dbAppendTable(con, "measurements_continuous", ts)
-            #make the new entry into table timeseries
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-            count <- count + 1
-            success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries_id" = tsid))
-          }
-        )
+          )
+
+          #Recalculate daily means and statistics
+          calculate_stats(timeseries_id = tsid,
+                          con = con,
+                          start_recalc = as.Date(substr(datetime, 1, 10)))
+        }
       }
     }, error = function(e) {
-      warning("getNewContinuous: Failed to get new data or to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], ").")
-    }) #End of tryCatch
-  } #End of iteration over each location + param
-  message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
-  DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_continuous'"))
-  if (nrow(success) > 0){
-    return(success)
+      warning("synchronizeContinuous failed on location ", loc, " and parameter ", parameter, " (timeseries_id ", tsid, ").")
+    }
+    )
   }
-} #End of function
 
+  DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_sync_continuous';"))
+
+} #End of function

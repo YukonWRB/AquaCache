@@ -57,7 +57,8 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
     stop("Failed to convert parameter end_datetime to POSIXct.")
   })
 
-  if (!is.null(modifiedSince)){
+  tryCatch({ # readNWISdata returns throws an error if there are no rows returned (if run in absence of new data).
+      if (!is.null(modifiedSince)){
     data <- dataRetrieval::readNWISdata(sites = location,
                                         service = "iv",
                                         parameterCd = param_code,
@@ -90,4 +91,10 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
   data$approval <- NA #makes it consistent with other import functions
 
   return(data)
+
+  }, error = function(e) {
+    data <- data.frame()
+    return(data)
+  })
+
 }

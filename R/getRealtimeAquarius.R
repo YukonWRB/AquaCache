@@ -3,7 +3,7 @@
 #'@description
 #' `r lifecycle::badge("stable")`
 #'
-#' Pared-down and modified version of WRBtools::aq_download.
+#' Pared-down and modified version of YGWater::aq_download.
 #'
 #' ##Passwords:
 #' To store login credentials in your .renviron file, call [usethis::edit_r_environ()] and enter your username and password as value pairs, as AQUSER="your username" and AQPASS="your password". The server should be entered at server="your_server_url". You can also store credentials in the timeseries table in the column source_fx_args, but beware that these credentials are then sitting in the database un-encrypted.
@@ -39,7 +39,7 @@ getRealtimeAquarius <- function(location,
     stop("getRealtimeAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults.")
   }
 
-  source(system.file("scripts",  "timeseries_client.R", package = "WRBdatabase")) #This loads the code dependencies
+  source(system.file("scripts",  "timeseries_client.R", package = "HydroMetDB")) #This loads the code dependencies
 
   #Make a data.frame with grade numbers and meanings because AQ doesn't supply them
   grade_codes <- data.frame(code = c(-55,-50, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 10, 11, 12, 14, 15, 21, 30, 31, 99, 100, 101, 103, 105, 110, 115, 120, 124, 125, 130),
@@ -144,8 +144,12 @@ getRealtimeAquarius <- function(location,
         ts[index,]$approval <- approvals$description[i]
       } # and if the last approval start is after then end of the ts, do nothing with it!
     }
-    ts <- tidyr::fill(ts, c(grade, approval), .direction = "down")
+    ts <- tidyr::fill(ts, c(.data$grade, .data$approval), .direction = "down")
     attr(ts$datetime, "tzone") <- "UTC"
+    return(ts)
+  } else {
+    ts <- data.frame()
+    return(ts)
   }
-  return(ts)
+
 }

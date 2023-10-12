@@ -2,7 +2,7 @@
 % Please edit documentation in R/getNewContinuous.R
 \name{getNewContinuous}
 \alias{getNewContinuous}
-\title{Hourly update of real-time data}
+\title{Get new continuous-type data}
 \usage{
 getNewContinuous(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
 }
@@ -17,10 +17,10 @@ The database is updated in-place, and a data.frame is generated with one row per
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the realtime tables; refer to \code{\link[=add_timeseries]{add_timeseries()}} for how to add new stations. Does not work on any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified souce_fx will be ignored.
+Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}} for how to add new stations. Does not work on any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified souce_fx will be ignored.
 \subsection{Default arguments passed to 'source_fx' functions:}{
 
-This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Each of these can however be set using the "source_fx_args" column in the "timeseries" table; refer to \code{\link[=add_timeseries]{add_timeseries()}} for a description of how to formulate these arguments.
+This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Each of these can however be set using the "source_fx_args" column in the "timeseries" table; refer to \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}} for a description of how to formulate these arguments.
 }
 
 \subsection{Assigning measurement periods:}{

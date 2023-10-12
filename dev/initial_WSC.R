@@ -8,9 +8,9 @@
 #'
 #' WSC stations should be specified in a character vector of arbitrary length. The naming of WSC stations should follow the WSC convention, e.g. "09AB001". To successfully download from Aquarius these timeseries must be named IDENTICALLY in Aquarius. You must also specify the standard naming scheme for your stage (level) and discharge(flow) timeseries, in the form Parameter.Label.
 #'
-#' Uses two functions under the hood that require some set-up of the .Renviron file: [tidyhydat.ws::realtime_ws()] and [WRBtools::aq_download()]. See respective help files for setup information.
+#' Uses two functions under the hood that require some set-up of the .Renviron file: [tidyhydat.ws::realtime_ws()] and [YGWater::aq_download()]. See respective help files for setup information.
 #'
-#Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [WRBtools::aq_download()] for more information.
+#Any timeseries labelled as 'getRealtimeAQ' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [YGWater::aq_download()] for more information.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param WSC_stns The WSC stations you wish to pull information for. In the event that these stations are mirrored in your Aquarius database the function will attempt to fetch that information. Otherwise, only information from the HYDAT database and from real-time WSC data will be incorporated. The default, "yukon" is a preset list of 77 stations in or relevant to Yukon.
@@ -32,7 +32,7 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
   }
 
   #Check hydat version, update if needed.
-  WRBtools::hydat_check()
+  hydat_check()
 
   if (aquarius){
       #Add the realtime data held in Aquarius to the database
@@ -40,10 +40,10 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
       aqFlow <- list()
       aqLevel <- list()
       for (i in WSC_stns){
-        try(aqLevel[[i]] <- WRBtools::aq_download(loc_id = i, ts_name = stage))
+        try(aqLevel[[i]] <- YGWater::aq_download(loc_id = i, ts_name = stage))
       }
       for (i in WSC_stns){
-        try(aqFlow[[i]] <- WRBtools::aq_download(i, discharge))
+        try(aqFlow[[i]] <- YGWater::aq_download(i, discharge))
       }
 
       level_rt <- data.frame()

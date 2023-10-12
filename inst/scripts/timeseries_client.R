@@ -20,7 +20,7 @@ timeseriesClient <- methods::setRefClass("timeseriesClient",
                                              # Grab the version of the AQTS server
                                              r <- httr::GET(paste0(prefix, hostname, "/AQUARIUS/apps/v1/version"))
                                              httr::stop_for_status(r, "detecting AQTS version")
-                                             j <- jsonlite::fromJSON(content(r, "text"))
+                                             j <- jsonlite::fromJSON(httr::content(r, "text"))
                                              version <<- j$ApiVersion
                                              # Anything earlier than 14.3 is considered legacy code
                                              isLegacy <<- .self$isVersionLessThan("14.3")
@@ -108,7 +108,7 @@ timeseriesClient <- methods::setRefClass("timeseriesClient",
                                                httr::stop_for_status(r, paste("retrieve time-series at location", location))
 
                                                # Find the unique ID by matching the full identifier
-                                               j <- jsonlite::fromJSON(content(r, "text"))
+                                               j <- jsonlite::fromJSON(httr::content(r, "text"))
                                                uniqueId <- j$TimeSeries$UniqueId[which(j$TimeSeries$Identifier == timeSeriesIdentifier)]
 
                                                if (length(uniqueId) <= 0) {
@@ -134,7 +134,7 @@ timeseriesClient <- methods::setRefClass("timeseriesClient",
                                              isoText
                                            },
                                            getLocationData = function(locationIdentifier) {
-                                             locationData <- jsonlite::fromJSON(content(httr::stop_for_status(
+                                             locationData <- jsonlite::fromJSON(httr::content(httr::stop_for_status(
                                                httr::GET(paste0(publishUri, "/GetLocationData"), query = list(LocationIdentifier = locationIdentifier))
                                                , paste("get location data for", locationIdentifier)), "text"))
                                            },
@@ -152,7 +152,7 @@ timeseriesClient <- methods::setRefClass("timeseriesClient",
                                              )
                                              q <- q[!sapply(q, is.null)]
                                              # Get metadata transaction list
-                                             metadataChangeList <- jsonlite::fromJSON(content(httr::stop_for_status(
+                                             metadataChangeList <- jsonlite::fromJSON(httr::content(httr::stop_for_status(
                                                httr::GET(paste0(.self$publishUri, "/GetMetadataChangeTransactionList"), query = q)
                                                , paste("get metadata change list for", timeSeriesIdentifier)), "text"))
                                              metadataChangeList
@@ -182,7 +182,7 @@ timeseriesClient <- methods::setRefClass("timeseriesClient",
                                                  IncludeGapMarkers = includeGapMarkers)
                                              }
                                              q <- q[!sapply(q, is.null)]
-                                             data <- jsonlite::fromJSON(content(httr::stop_for_status(
+                                             data <- jsonlite::fromJSON(httr::content(httr::stop_for_status(
                                                httr::GET(paste0(.self$publishUri, "/GetTimeSeriesCorrectedData"), query = q)
                                                , paste("get corrected data for", timeSeriesIdentifier)), "text"))
                                            }

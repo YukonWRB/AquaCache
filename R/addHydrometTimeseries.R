@@ -1,9 +1,9 @@
-#' Add timeseries to database
+#' Add timeseries to hydrometric database
 #'
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [add_ts_templates()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`.
+#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addHydrometTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`.
 #'
 #' @details
 #' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
@@ -16,9 +16,9 @@
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
-#' @seealso [add_ts_templates()] to see templates for timesries_df and locations_df.
+#' @seealso [addHydrometTemplate()] to see templates for timesries_df and locations_df.
 
-add_timeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, locations_df = NULL){
+addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, locations_df = NULL){
 
   #Check that every location in the timeseries_df already exists; if they don't, check they've been specified in locations_df
   new_locs <- NULL
