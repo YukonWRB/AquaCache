@@ -2,7 +2,7 @@
 % Please edit documentation in R/synchronizeContinuous.R
 \name{synchronizeContinuous}
 \alias{synchronizeContinuous}
-\title{Weekly update of hydro database}
+\title{Update of hysro DB}
 \usage{
 synchronizeContinuous(
   con = hydrometConnect(silent = TRUE),
