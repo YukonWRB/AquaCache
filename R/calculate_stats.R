@@ -102,12 +102,12 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           gap_measurements <- gap_measurements[,c(3:7)]
           names(gap_measurements) <- c("date", "value", "grade", "approval", "imputed")
 
-          if (min(gap_measurements$date) >= (last_hydat + 1)){ #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
+          if (min(gap_measurements$date) > (last_hydat + 1)){ #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
             gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
           }
 
           if (last_day_historic < min(gap_measurements$date)){
-            backfill <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date > '", last_day_historic, "';"))
+            backfill <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date > '", last_day_historic, "';"))
             gap_measurements <- rbind(gap_measurements, backfill)
           }
           gap_measurements <- as.data.frame(fasstr::fill_missing_dates(gap_measurements, "date", pad_ends = FALSE)) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.

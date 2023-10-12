@@ -1,5 +1,6 @@
 ^LICENSE\.md$
-^WRBdatabase\.Rproj$
+^HydroMetDB\.Rproj$
+^ProgressNotes.md$
 ^\.Rproj\.user$
 ^README\.Rmd$
 ^cran-comments\.md$

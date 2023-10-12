@@ -144,7 +144,7 @@ getRealtimeAquarius <- function(location,
         ts[index,]$approval <- approvals$description[i]
       } # and if the last approval start is after then end of the ts, do nothing with it!
     }
-    ts <- tidyr::fill(ts, c(grade, approval), .direction = "down")
+    ts <- tidyr::fill(ts, c(.data$grade, .data$approval), .direction = "down")
     attr(ts$datetime, "tzone") <- "UTC"
     return(ts)
   } else {

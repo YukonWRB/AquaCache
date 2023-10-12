@@ -60,7 +60,7 @@ initial_create <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value NUMERIC,
                  grade TEXT,
                  approval TEXT,
-                 imputed BOOLEAN NOT NULL,
+                 imputed BOOLEAN,
                  percent_historic_range NUMERIC,
                  max NUMERIC,
                  min NUMERIC,
