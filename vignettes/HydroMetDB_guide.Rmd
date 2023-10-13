@@ -1,10 +1,10 @@
 ---
-title: "WRBdatabase User Guide"
+title: "HydroMetDB User Guide"
 author: "Ghislain de Laplante"
 date: "2023-05-30"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{WRBdatabase User Guide}
+  %\VignetteIndexEntry{HydroMetDB User Guide}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -14,17 +14,17 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-library(WRBdatabase)
+library(HydroMetDB)
 ```
 
 Important note regarding this vignette: if you are reading this in an HTML, Word or PDF document from the package folder on the G drive and wish to update the document, please do so via the vignette R Markdown document and re-publish/overwrite the document. The R Markdown document should be the ultimate source of truth regarding this R package and associated Shiny application. Instructions on how to do so are provided in the vignette Markdown document.
 
-This vignette may also come to contain R code and links to other documentation. For best performance and to ensure that all links function, it is recommended to view this vignette from within R Studio. You can view all package vignettes with 'vignette(package = "WRBdatabase")' or this particular vignette with 'vignette(topic = "WRBdatabase_guide")'. Note however that vignettes may not have been installed, depending on the method you used to install the package.
+This vignette may also come to contain R code and links to other documentation. For best performance and to ensure that all links function, it is recommended to view this vignette from within R Studio. You can view all package vignettes with 'vignette(package = "HydroMetDB")' or this particular vignette with 'vignette(topic = "HydroMetDB_guide")'. Note however that vignettes may not have been installed, depending on the method you used to install the package.
 
 ```{r vignette building comments, eval=FALSE, include=FALSE}
 # You should be modifying this vignette from the .Rmd document in the /vignettes folder, NOT the .RMD in the /doc folder.
 # To have this vignette updated on the G drive, uncomment and run the following code *after* re-building the vignette using devtools::build_vignettes()
-# file.copy(from = paste0(dirname(getwd()), "/doc/WRBdatabase_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/WRBdatabase/documentation/WRBdatabase user guide.html", overwrite = TRUE)
+# file.copy(from = paste0(dirname(getwd()), "/doc/HydroMetDB_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/HydroMetDB/documentation/HydroMetDB user guide.html", overwrite = TRUE)
 ```
 
 # Introduction
@@ -38,17 +38,17 @@ The WRB's local hydrometeorological database is intended as a central repository
 
 This database should not be considered a static repository of information: when working as intended, it will continuously incorporate new information and calculate derived data, check itself for errors, and update tables whenever necessary to reflect changes to remote data stores.
 
-The database itself is in .SQLite format, and is created and maintained by a suite of R functions held withing an R package called WRBdatabase. Software development is tracked using Git, reflected to the [YukonWRB/WRBdatabase](https://github.com/YukonWRB/WRBdatabase) GitHub repository, and stable versions are stored locally [on the G drive](file:///G:/water/Common_GW_SW/R-packages/WRBdatabase). Development was undertaken by Ghislain de Laplante, who is also the current package maintainer.
+The database itself is in .SQLite format, and is created and maintained by a suite of R functions held withing an R package called HydroMetDB. Software development is tracked using Git, reflected to the [YukonWRB/HydroMetDB](https://github.com/YukonWRB/HydroMetDB) GitHub repository, and stable versions are stored locally [on the G drive](file:///G:/water/Common_GW_SW/R-packages/HydroMetDB). Development was undertaken by Ghislain de Laplante, who is also the current package maintainer.
 
-Though the database is currently in .SQLite format, all database interactions using R are passed to the database as standard SQL language and should therefore work seamlessly on PostgreSQL and Microsoft SQL Server databases, among others. An exception to this is the database connection code, which is discussed below under the WRBtools package: this one is specific to the database type by necessecity.
+Though the database is currently in .SQLite format, all database interactions using R are passed to the database as standard SQL language and should therefore work seamlessly on PostgreSQL and Microsoft SQL Server databases, among others. An exception to this is the database connection code, which is discussed below under the YGWater package: this one is specific to the database type by necessecity.
 
-A strong attempt was made to limit additional dependencies wherever feasible, and otherwise to use long term stable, widely adopted packages. That said, there is no guarantee that dependencies will not change: always test new versions of WRBdatabase or updates to other packages on a non-production machine before updating the production machine.
+A strong attempt was made to limit additional dependencies wherever feasible, and otherwise to use long term stable, widely adopted packages. That said, there is no guarantee that dependencies will not change: always test new versions of HydroMetDB or updates to other packages on a non-production machine before updating the production machine.
 
-# The WRBdatabase package
+# The HydroMetDB package
 
-The **WRBdatabase** package was written with the goal of being as database-format-agnostic as possible: standard SQL is used for all database interactions once the initial connection is established. To facilitate future changes to database formats and connection methods, connections to the central database and to the snow survey database are handled by dedicated and easy to change functions in the WRBtools package. These are discussed later on in this document.
+The **HydroMetDB** package was written with the goal of being as database-format-agnostic as possible: standard SQL is used for all database interactions once the initial connection is established. To facilitate future changes to database formats and connection methods, connections to the central database and to the snow survey database are handled by dedicated and easy to change functions in the YGWater package. These are discussed later on in this document.
 
-All of the functions that you will interact with to install and continuously update the database are located in the WRBdatabase package. These include functions for:
+All of the functions that you will interact with to install and continuously update the database are located in the HydroMetDB package. These include functions for:
 
 -   Initial creation of empty tables (initial_create())
 
@@ -106,11 +106,11 @@ The help file for add_timeseries() describes a very important behavior when addi
 
 Other helper function exist to calculate daily means and statistics, update the local HYDAT database, get watershed polygons, get snow course survey data, etc. These are not meant for routine use, and I suggest referring to the function help documentation to understand how they work.
 
-# Database connections using WRBtools package
+# Database connections using YGWater package
 
-As mentioned above, all database connections are performed using the WRBtools package. Two functions apply: hydroConnect connects to the .SQLite database that is the subject of this manual, and snowConnect connects to the Snow Survey Access database. If the format of either of these databases changes, the applicable WRBtools function will need to be changed and the package updated anywhere the WRBdatabase functions are run. Additionally, server-based databases may require more parameters passed to the connection functions. If default parameters cannot be used, the connection function calls within the WRBdatabase package may need to be adapted. Note for working on the package code: RStudio can help [you find + replace a text string across multiple files or directories](https://www.rstudio.com/blog/rstudio-1-3-the-little-things/).
+As mentioned above, all database connections are performed using the YGWater package. Two functions apply: hydroConnect connects to the .SQLite database that is the subject of this manual, and snowConnect connects to the Snow Survey Access database. If the format of either of these databases changes, the applicable YGWater function will need to be changed and the package updated anywhere the HydroMetDB functions are run. Additionally, server-based databases may require more parameters passed to the connection functions. If default parameters cannot be used, the connection function calls within the HydroMetDB package may need to be adapted. Note for working on the package code: RStudio can help [you find + replace a text string across multiple files or directories](https://www.rstudio.com/blog/rstudio-1-3-the-little-things/).
 
-In the case of the Snow Survey database, migration to another database type will almost certainly involve restructuring table names and column names. In this case the WRBdatabase function getSnowCourse may need to be adapted to reference proper table and column names along with changes to the WRBtools::snowConnect() function.
+In the case of the Snow Survey database, migration to another database type will almost certainly involve restructuring table names and column names. In this case the HydroMetDB function getSnowCourse may need to be adapted to reference proper table and column names along with changes to the YGWater::snowConnect() function.
 
 # Dealing with concurrency
 
@@ -118,7 +118,7 @@ SQLite databases are lightweight, quick to deploy, robust, and open-source. Howe
 
 -   Concurrent reads and writes are not possible. A write process must exclusively lock the database until it is complete. This is fine if writes are quick (max a few seconds), and this is the case with the exception of initial creation operations and, marginally, for hydro_update_weekly operations needing to update large time spans. Consequently, I suggest running hydro_update_weekly when users are least likely to access the database, like Sunday at 2 AM.
 
--   Database connections to SQLite should also specify a permissible wait period immediately after connection (before making database requests) to avoid a 'database is locked' message. This is performed automatically with the WRBtools connection functions.
+-   Database connections to SQLite should also specify a permissible wait period immediately after connection (before making database requests) to avoid a 'database is locked' message. This is performed automatically with the YGWater connection functions.
 
 -   SQLite may not be able to handle a very large number of reads if data requests are large, especially if writes must also happen from time-to-time. There is no simple remedy for this, but SQLite documentation suggests that several 100s of thousands of reads per day are handled without problem. We're probably fine here in Yukon.
 
@@ -134,7 +134,7 @@ You'll need to have R and (optionally) R Studio installed. Ideally, you'll have 
 
 1.  Download and install R for your operating system. RStudio (an IDE) is not necessary but might make your initial set-up and task scheduling easier.
 
-2.  Install the package WRBdatabase, accepting the option to install all dependencies and updating any packages in need of an update. You can install WRBdatabase using the .tar.gz [installation file](file:///G:/water/Common_GW_SW/R-packages/WRBdatabase) (use function remotes::install_local(path_to_file) or [directly from GitHub](https://github.com/YukonWRB/database) using remotes::install_github(url, build_vignettes = TRUE). Note that development of this R package is on GitHub but that the local .tar.gz files are intended to be tested, stable versions.
+2.  Install the package HydroMetDB, accepting the option to install all dependencies and updating any packages in need of an update. You can install HydroMetDB using the .tar.gz [installation file](file:///G:/water/Common_GW_SW/R-packages/HydroMetDB) (use function remotes::install_local(path_to_file) or [directly from GitHub](https://github.com/YukonWRB/database) using remotes::install_github(url, build_vignettes = TRUE). Note that development of this R package is on GitHub but that the local .tar.gz files are intended to be tested, stable versions.
 
 ## Database initial setup
 
@@ -191,9 +191,9 @@ Note how the rscript parameter points to an R script. This is important: we're n
 
 *print(paste0("Task start", Sys.time()))*
 
-*print(paste0("Using WRBdatabase version", packageVersion("WRBdatabase")))*
+*print(paste0("Using HydroMetDB version", packageVersion("HydroMetDB")))*
 
-*WRBdatabase::hydro_update_daily(path = "//env-fs/env-data/corp/water/Common_GW_SW/Data/database/hydro.sqlite", snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")*
+*HydroMetDB::hydro_update_daily(path = "//env-fs/env-data/corp/water/Common_GW_SW/Data/database/hydro.sqlite", snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")*
 ```
 
 The first line sets the timezone to Yukon time so that the first *print()* call is in the right time zone.
@@ -206,8 +206,8 @@ Execution errors may arise from time-to-time when one of the following is true:
 
 -   Changes to folder access permissions. The database must be able to read and write to the folder in which it lives, as well as to the Snow Survey Access database if option is used.
 -   Changes to internet access. Obviously data needs to be fetched from online, and changes to things like firewalls can result in problems accessing the internet, or with reading encrypted data.
--   Updates to function on which WRBdatabase depends. This one's a user-beware scenario: always test updated packages on a non-production machine (like your personal computer) and not on the production machine.
--   Updates to WRBdatabase functions: hopefully whoever is updating the functions is doing proper testing, but things slip through the cracks sometimes.
+-   Updates to function on which HydroMetDB depends. This one's a user-beware scenario: always test updated packages on a non-production machine (like your personal computer) and not on the production machine.
+-   Updates to HydroMetDB functions: hopefully whoever is updating the functions is doing proper testing, but things slip through the cracks sometimes.
 -   New conditions within the database that the designer did not anticipate or see a need to incorporate and did not create failsafe workarounds. Hypothetical example: you entered a new location with parameter 'soil moisture', and the database only know how to handle 'level' and 'flow'.
 -   From time to time, service outages will also occur to the WRB's Aquarius web server or to the Water Survey of Canada's data stream for realtime information. WSC outages should be resolved without our involvement, though it's always possible that our own firewall is the source of problems accessing that data - check that first. Aquarius-related issues should be brought to the attention of Alex Mischler or whoever the Aquarius expert is at the time.
 

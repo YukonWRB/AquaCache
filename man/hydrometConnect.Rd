@@ -8,8 +8,8 @@ hydrometConnect(
   name = "hydromet",
   host = Sys.getenv("hydrometHost"),
   port = Sys.getenv("hydrometPort"),
-  username = Sys.getenv("hydrometUser"),
-  password = Sys.getenv("hydrometPass"),
+  username = Sys.getenv("hydrometAdminUser"),
+  password = Sys.getenv("hydrometAdminPass"),
   silent = FALSE
 )
 }
@@ -20,9 +20,9 @@ hydrometConnect(
 
 \item{port}{Connection port. By default searches the .Renviron file for parameter:value pair of form hydrometPort:"1234".}
 
-\item{username}{Username. By default searches the .Renviron file for parameter:value pair of form hydrometUser:"username". Refrain from using username with write privileges unless you absolutely know what you're doing.}
+\item{username}{Username. By default searches the .Renviron file for parameter:value pair of form hydrometAdminUser:"username". Refrain from using username with write privileges unless you absolutely know what you're doing.}
 
-\item{password}{Password. By default searches the .Renviron file for parameter:value pair of form hydrometPass:"password".}
+\item{password}{Password. By default searches the .Renviron file for parameter:value pair of form hydrometAdminPass:"password".}
 
 \item{silent}{TRUE suppresses messages except for errors.}
 }
@@ -33,7 +33,4 @@ A connection to the database.
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
 This function exists to facilitate connecting to the hydrology database, especially if the database type and connection method changes in the future.
-}
-\seealso{
-\code{\link[=DB_browse_ts]{DB_browse_ts()}}, \code{\link[=DB_browse_spatial]{DB_browse_spatial()}}to browse the database contents; \code{\link[=DB_get_meta]{DB_get_meta()}} to extract metadata; \code{\link[=DB_get_ts]{DB_get_ts()}} to extract timeseries information; and \code{\link[=DB_get_spatial]{DB_get_spatial()}} to extract spatial content.
 }

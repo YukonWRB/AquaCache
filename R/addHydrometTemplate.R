@@ -1,23 +1,23 @@
-#' Templates to add timeseries to hydromet database
+#' Templates to add timeseries to hydrometric database
 #'
 #' Additional arguments to pass to the function specified in source_fx should take the form of "{param1 = arg1}, {param2 = 'arg2'}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param format "long" or "short", only applies to the timeseries table. If long, will return one row per unique parameter with the total data.frame length equal to the parameter with the highest count. If short will return a single row, with unique parameter values concatenated in a single cell per parameter.
-#' @param save_path Specify a save path (folder) if you want an xlsx document with column headers as required by function [add_timeseries()]. "choose" lets you choose interactively.
+#' @param save_path Specify a save path (folder) if you want an xlsx document with column headers as required by function [addHydrometTimeseries()]. "choose" lets you choose interactively.
 #' @return A list of three data.frames:
-#' For the timeseries table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `timeseries_df` of [add_timeseries()].
-#' For the spatial table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `locations_df` of [add_timeseries()].
+#' For the timeseries table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `timeseries_df` of [addHydrometTimeseries()].
+#' For the spatial table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `locations_df` of [addHydrometTimeseries()].
 #' A data.frame is also produced listing the datums present in the database, facilitating your specification of the appropriate datum in the spatial table.
 #' @export
 #'
 
-add_ts_templates <- function(con = hydrometConnect(silent=TRUE), format = "short", save_path = NULL){
+addHydrometTemplate <- function(con = hydrometConnect(silent=TRUE), format = "short", save_path = NULL){
 
 
   if (!is.null(save_path)){
     if (save_path == "choose") {
-      print("Select the output folder for shapefiles...")
+      message("Select the output folder for shapefiles...")
       save_path <- as.character(utils::choose.dir(caption="Select Save Folder"))
     }
     if (!dir.exists(save_path)){
@@ -76,7 +76,7 @@ add_ts_templates <- function(con = hydrometConnect(silent=TRUE), format = "short
   list <- list("timeseries_table" = ts_df, "locations_table" = locs, "datums" = datums)
 
   if (!is.null(save_path)){
-    openxlsx::write.xlsx(list, file = paste0(save_path, "/add_ts_template output ", Sys.Date(), ".xlsx"))
+    openxlsx::write.xlsx(list, file = paste0(save_path, "/addHydrometTemplate output ", Sys.Date(), ".xlsx"))
   }
   return(list)
 }

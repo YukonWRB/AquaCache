@@ -1,6 +1,6 @@
 #Function to acquire and store precip rasters into the DB
 
-#Will leverage WRBtools::getHRDPA and getHRDPS.
+#Will leverage YGWater::getHRDPA and getHRDPS.
 
 
 #package: rpostgis::pgWriteRast
