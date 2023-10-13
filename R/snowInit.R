@@ -19,7 +19,7 @@
 
 #initial_create_snow(overwrite = TRUE)
 
-initial_create_snow <- function(con = snowConnect_pg(), overwrite = FALSE) {
+snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
 
 
   if (overwrite){

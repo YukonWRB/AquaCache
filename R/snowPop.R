@@ -13,7 +13,7 @@
 #' @export
 #'
 #'
-populateSnow <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg()) {
+snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg()) {
 
   #### Pull locations data from Access and add to db
   # Create connection
