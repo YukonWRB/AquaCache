@@ -54,14 +54,23 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
     #Now update historical HYDAT timeseries.
     message("Updating database with information in HYDAT due to new HYDAT version or request to force update...")
     for (i in unique(all_timeseries$location)) {
-      new_flow <- as.data.frame(tidyhydat::hy_daily_flows(i))
-      new_flow <- new_flow[ , c("Date", "Value", "Symbol")]
-      names(new_flow) <- c("date", "value", "grade")
-      new_flow <- new_flow[!is.na(new_flow$value) , ]
-      new_level <- as.data.frame(tidyhydat::hy_daily_levels(i))
-      new_level <- new_level[ , c("Date", "Value", "Symbol")]
-      names(new_level) <- c("date", "value", "grade")
-      new_level<- new_level[!is.na(new_level$value) , ]
+      tryCatch({
+        new_flow <- as.data.frame(tidyhydat::hy_daily_flows(i))
+        new_flow <- new_flow[ , c("Date", "Value", "Symbol")]
+        names(new_flow) <- c("date", "value", "grade")
+        new_flow <- new_flow[!is.na(new_flow$value) , ]
+      }, error = function(e) {
+        new_flow <<- data.frame()
+      })
+      tryCatch({
+        new_level <- as.data.frame(tidyhydat::hy_daily_levels(i))
+        new_level <- new_level[ , c("Date", "Value", "Symbol")]
+        names(new_level) <- c("date", "value", "grade")
+        new_level<- new_level[!is.na(new_level$value) , ]
+      }, error = function(e) {
+        new_level <<- data.frame()
+      })
+
 
       if (nrow(new_flow) > 0) {
         tryCatch({
@@ -84,8 +93,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND operator = 'WSC';"))[1,1]
 
-            new_flow$period_type <- "mean"
             new_flow$approval <- "approved"
+            new_flow$imputed <- FALSE
             new_flow$timeseries_id <- tsid_flow
             DBI::dbAppendTable(con, "calculated_daily", new_flow)
             calculate_stats(timeseries_id = tsid_flow,
@@ -114,8 +123,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
               if (mismatch){
                 new_flow$key <- NULL
                 new_flow <- new_flow[new_flow$date >= date , ]
-                new_flow$period_type <- "mean"
                 new_flow$approval <- "approved"
+                new_flow$imputed <- FALSE
                 new_flow$timeseries_id <- tsid_flow
                 DBI::dbWithTransaction(
                   con,
@@ -131,8 +140,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                 start_recalc = start)
               }
             } else { #There is an entry in timeseries table, but no daily data
-              new_flow$period_type <- "mean"
               new_flow$approval <- "approved"
+              new_flow$imputed <- FALSE
               new_flow$timeseries_id <- tsid_flow
               DBI::dbWithTransaction(
                 con, {
@@ -173,8 +182,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND operator = 'WSC';"))[1,1]
 
-            new_level$period_type <- "mean"
             new_level$approval <- "approved"
+            new_level$imputed <- FALSE
             new_level$timeseries$id <- tsid_level
             DBI::dbAppendTable(con, "calculated_daily", new_level)
             calculate_stats(timeseries_id = tsid_level,
@@ -203,8 +212,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
               if (mismatch){
                 new_level$key <- NULL
                 new_level <- new_level[new_level$date >= date , ]
-                new_level$period_type <- "mean"
                 new_level$approval <- "approved"
+                new_level$imputed <- FALSE
                 new_level$timeseries_id <- tsid_level
                 DBI::dbWithTransaction(
                   con,
@@ -220,8 +229,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                 start_recalc = start)
               }
             } else { #There is an entry in timeseries table, but no daily data
-              new_level$period_type <- "mean"
               new_level$approval <- "approved"
+              new_level$imputed <- FALSE
               new_level$timeseries_id <- tsid_level
               DBI::dbWithTransaction(
                 con, {

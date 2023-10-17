@@ -19,31 +19,22 @@
 hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   if (overwrite){
+    DBI::dbExecute(con, "DROP EXTENSION postgis CASCADE")
     for (i in DBI::dbListTables(con)){
-      DBI::dbExecute(con, paste0("DROP TABLE ", i))
+      tryCatch({
+        DBI::dbExecute(con, paste0("DROP TABLE ", i, " CASCADE"))
+      }, error = function(e) {
+        DBI::dbExecute(con, paste0("DROP VIEW ", i))
+      })
     }
     # The DB will still be taking up space after deleting the tables. VACUUM removes empty space from database if you want to reclaim space. Otherwise, simply deleting tables preserves the "empty" space for future database use:
     DBI::dbExecute(con, "VACUUM")
   }
 
   #Create the postgis extension, which adds a few necessary tables. Then, create a new schema and set the schema of these tables to decrease clutter in the DB.
+  rpostgis::pgPostGIS(con, raster = TRUE)
 
-  tryCatch({
-    if (is.null(DBI::dbGetQuery(con, "SELECT PostGIS_version()"))){
-      DBI::dbExecute(con, "CREATE EXTENSION postgis;")
-      DBI::dbExecute(con, "CREATE EXTENSION postgis_raster;")
-      # Setting the schema for spatial tables below seems like a nice idea, but rpostgis functions look for the spatial tables in the public schema.
-      # DBI::dbExecute(con, "CREATE SCHEMA spatial_data;")
-      # DBI::dbExecute(con, "ALTER TABLE public.geometry_columns SET SCHEMA spatial_data;")
-      # DBI::dbExecute(con, "ALTER TABLE public.geography_columns SET SCHEMA spatial_data;")
-      # DBI::dbExecute(con, "ALTER TABLE public.spatial_ref_sys SET SCHEMA spatial_data;")
-    }
-  }, error = function(e) {
-    stop("Looks like you need to install the postGIS extension before continuing. The process varies depending on your OS: refer to this link for more info. https://postgis.net/documentation/getting_started/")
-  })
-
-
-  # realtime table
+  # measurements_continuous table
   DBI::dbExecute(con, "CREATE TABLE if not exists measurements_continuous (
                  timeseries_id INTEGER NOT NULL,
                  datetime TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -55,7 +46,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  PRIMARY KEY (timeseries_id, datetime))
                  ")
 
-  # daily table
+  # calculated_daily table
   DBI::dbExecute(con, "CREATE TABLE if not exists calculated_daily (
                  timeseries_id INTEGER NOT NULL,
                  date DATE NOT NULL,
@@ -93,6 +84,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    datetime TIMESTAMP WITH TIME ZONE,
                    value NUMERIC NOT NULL,
                    sample_class TEXT,
+                   note TEXT,
                    PRIMARY KEY (timeseries_id, datetime))")
 
   # Create spatial-primary tables ########
@@ -160,6 +152,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
                  last_daily_calculation TIMESTAMP WITH TIME ZONE,
+                 last_synchronize TIMESTAMP WITH TIME ZONE,
                  operator TEXT,
                  network TEXT,
                  public BOOLEAN NOT NULL,
@@ -180,6 +173,26 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  notes TEXT,
                  deemed_primary BOOLEAN NOT NULL,
                  UNIQUE (timeseries_id, agency, year, period_type, condition, extrema));")
+
+  DBI::dbExecute(con, "CREATE TABLE if not exists thresholds (
+                 timeseries_id INTEGER PRIMARY KEY,
+                 high_advisory NUMERIC,
+                 high_watch NUMERIC,
+                 high_warning NUMERIC,
+                 flood_minor NUMERIC,
+                 flood_major NUMERIC,
+                 high_firs_human_impacts NUMERIC,
+                 low_advisory NUMERIC,
+                 low_watch NUMERIC,
+                 low_warning NUMERIC,
+                 low_first_human_impacts NUMERIC,
+                 low_aquatic_life_impacts_minor NUMERIC,
+                 low_aquatic_life_impacts_major NUMERIC,
+                 high_aquatic_life_impacts_minor NUMERIC,
+                 high_aquatic_life_impacts_major NUMERIC,
+                 FSL NUMERIC,
+                 LSL NUMERIC);")
+
 
   DBI::dbExecute(con, "CREATE TABLE if not exists internal_status (
                  event TEXT NOT NULL,
@@ -276,12 +289,6 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   REFERENCES timeseries(timeseries_id);")
 
   DBI::dbExecute(con,
-                 "ALTER TABLE polygons
-  ADD CONSTRAINT fk_location
-  FOREIGN KEY (location)
-  REFERENCES locations(location);")
-
-  DBI::dbExecute(con,
                  "ALTER TABLE datum_conversions
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
@@ -293,15 +300,21 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   FOREIGN KEY (location)
   REFERENCES locations(location);")
 
-
+  DBI::dbExecute(con,
+                 "ALTER TABLE thresholds
+                 ADD CONSTRAINT fk_timeseries_id
+                 FOREIGN KEY (timeseries_id)
+                 REFERENCES timeseries(timeseries_id);")
 
   # Create a read-only account
-  DBI::dbExecute(con, "CREATE ROLE hydromet_read WITH LOGIN PASSWORD 'hydromet';")
-  DBI::dbExecute(con, "GRANT CONNECT ON DATABASE hydromet TO hydromet_read;")
-  DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO hydromet_read;")
-  DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO hydromet_read;")
-
-
+  tryCatch({
+    DBI::dbExecute(con, "CREATE ROLE hydromet_read WITH LOGIN PASSWORD 'hydromet';")
+    DBI::dbExecute(con, "GRANT CONNECT ON DATABASE hydromet TO hydromet_read;")
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO hydromet_read;")
+    DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO hydromet_read;")
+  }, error = function(e) {
+    warning("Not able to create a new read only account with name hydromet_read. Ignore this message if it already exists (this function would not have erased the old account)")
+  })
 
   message("The database was successfully created along with a read-only account: username 'hydromet_read', password 'hydromet.'")
 }

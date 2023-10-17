@@ -157,6 +157,7 @@
           }
         }
         ts$timeseries_id <- tsid
+        ts$imputed <- FALSE
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
         DBI::dbWithTransaction(
           con, {

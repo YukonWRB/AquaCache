@@ -168,9 +168,9 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
         }
 
         if (nrow(no_period) > 0){
-          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(no_period$datetime), "' AND imputed IS FALSE;"))
+          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(min(no_period$datetime), min(ts$datetime)), "' AND imputed IS FALSE;"))
         } else {
-          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", start_dt, "' AND imputed IS FALSE;"))
+          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(start_dt, min(ts$datetime)), "' AND imputed IS FALSE;"))
         }
 
 
@@ -185,7 +185,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
         # Check for mismatches using set operations
         mismatch_keys <- setdiff(ts$key, realtime$key)
 
-        # Check if there are any discrepancies
+        # Check where the discrepancy is
         if (length(mismatch_keys) > 0) {
           mismatch <- TRUE
           datetime <- ts[ts$key %in% mismatch_keys, "datetime"]
@@ -198,6 +198,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
         if (mismatch){
           ts <- ts[ts$datetime >= datetime , ]
           ts$timeseries_id <- tsid
+          ts$imputed <- FALSE
           DBI::dbWithTransaction(
             con,
             {
@@ -206,6 +207,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
               #make the new entry into table timeseries
               end <- max(max(realtime$datetime), ts$datetime)
               DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+              DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
             }
           )
 
