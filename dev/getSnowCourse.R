@@ -29,7 +29,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
-  snowCon <- YGWater::snowConnect(path = snow_db_path, silent = TRUE)
+  snowCon <- YGWater::snowConnect_access(path = snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
 
   #Get locations and measurements

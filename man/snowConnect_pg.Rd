@@ -2,14 +2,14 @@
 % Please edit documentation in R/snowConnect.R
 \name{snowConnect_pg}
 \alias{snowConnect_pg}
-\title{Connect to the snow database}
+\title{Connect to the snow postgres database}
 \usage{
 snowConnect_pg(
   name = "snowDB",
-  host = "localhost",
-  port = "5432",
-  username = "postgres",
-  password = Sys.getenv("SnowPass"),
+  host = Sys.getenv("snowHost"),
+  port = Sys.getenv("snowPort"),
+  username = Sys.getenv("snowAdminUser"),
+  password = Sys.getenv("snowAdminPass"),
   silent = FALSE
 )
 }

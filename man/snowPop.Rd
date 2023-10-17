@@ -6,13 +6,16 @@
 \usage{
 snowPop(
   old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb",
-  con = snowConnect_pg()
+  con = snowConnect_pg(),
+  overwrite = TRUE
 )
 }
 \arguments{
 \item{old_snow_db_path}{the path to where the old Access snow database exists}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=snowConnect]{snowConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=snowConnect_pg]{snowConnect_pg()}}.}
+
+\item{overwrite}{If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!}
 }
 \value{
 A populated snowDB database.
