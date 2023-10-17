@@ -3,7 +3,7 @@
 export("%>%")
 export(addHydrometTemplate)
 export(addHydrometTimeseries)
-export(add_vector)
+export(addVector)
 export(calculate_stats)
 export(dailyUpdate)
 export(getNewContinuous)

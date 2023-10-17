@@ -17,7 +17,7 @@ hydat_check
 
 
 to do: #############
-daily   # works on continuous timeseries, contains placeholders for discrete timeseries.
+dailyUpdate   # works on continuous timeseries, 
 getSnowCourse  # new snow DB needs to be created before working on this function  !!! This function is in dev folder
 synchronizeDiscrete
 getWatersheds   - and also add a feature to calculate watersheds for locs without a WSC polygon
