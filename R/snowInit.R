@@ -16,7 +16,7 @@
 
 #TODO: deal with geometry of polygon fields of basin and sub-basin
 
-# snowInit(snowConnect_pg(name = "snowDB", host = "localHost", port = "5432", username = "postgres", password = ?, silent = FALSE), overwrite = TRUE)
+#snowInit(snowConnect_pg(), overwrite = TRUE)
 
 snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
 
