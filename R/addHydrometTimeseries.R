@@ -32,8 +32,8 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
   }
 
   #Check the names of timeseries_df and locations_df, if it's not null
-  if (!all(c("location", "parameter", "unit", "category", "type", "operator", "network", "public", "source_fx", "source_fx_args", "start_datetime") %in% names(timeseries_df))){
-    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'unit', 'category', 'type', 'start_datetime', 'operator', 'network', 'public', 'source_fx', 'source_fx_args'). Use NA to indicate a column with no applicable value.")
+  if (!all(c("location", "parameter", "unit", "category", "period_type", "param_type", "operator", "network", "public", "source_fx", "source_fx_args", "start_datetime") %in% names(timeseries_df))){
+    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'unit', 'category', 'period_type', 'param_type', 'start_datetime', 'operator', 'network', 'public', 'source_fx', 'source_fx_args'). Use NA to indicate a column with no applicable value.")
   }
 
   if (!is.null(locations_df)){
@@ -53,7 +53,7 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
         }, error = function (e) {
           message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada, and this function automatically looked for the corresponding level/flow timeseries.")
         })
-        new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter = '", add$parameter, "' AND category = '", add$category, "' AND type = '", add$type, "';"))[1,1]
+        new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter = '", add$parameter, "' AND category = '", add$category, "' AND period_type = '", add$period_type, "';"))[1,1]
         loc <- add$location
         parameter <- add$parameter
         source_fx <- add$source_fx
@@ -85,7 +85,7 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
 
         if (add$category == "continuous"){
           if (nrow(ts) > 0){
-            if (add$type == "instantaneous"){
+            if (add$period_type == "instantaneous"){
               ts$period <- "00:00:00"
             } else if (!("period" %in% names(ts))){
               ts$period <- NA
@@ -101,7 +101,7 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
               DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
               message("Success! Added new realtime data for ", add$location, " and parameter ", add$parameter, ".")
             }, error = function(e) {
-              warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/type/categeory combination.")
+              warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
             })
             tryCatch({
               calculate_stats(timeseries_id = new_tsid)
@@ -114,10 +114,16 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
           }
         } else { #Add the non-continuous data
-          if (nrow(ts) > 0){
 
-          }
           #TODO: Figure out how to handle non-continuous data!!!
+          #
+          if (nrow(ts) > 0){
+            # At this point ts should contain the data you want to insert into measurements_discrete. If any coercion is necessary (col names or other) do it, then append the data. No need for calculations, periodicity sorting out, or anything necessary on the continuous timeseries.
+            # Remember to update the start_datetime, end_datetime, last_new_data in the timeseries table
+
+          } else {
+            warning("Failed to retrieve any data form ", add$location, " and parameter ", add$parameter, ".")
+          }
 
         }
     }, error = function(e) {
@@ -138,6 +144,10 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
                                  latitude = unique(locations_df[locations_df$location == i, "latitude"]),
                                  longitude = unique(locations_df[locations_df$location == i, "longitude"]))
           DBI::dbAppendTable(con, "locations", location)
+
+          DBI::dbExecute(con, "UPDATE locations SET point = ST_SetSRID(ST_MakePoint(longitude, latitude), 4269) WHERE point IS NULL;")
+
+
           #now datums table
           datum <- data.frame(location = locations_df[locations_df$location == i, "location"],
                               datum_id_from = locations_df[locations_df$location == i, "datum_id_from"],

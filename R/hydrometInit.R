@@ -31,10 +31,12 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   tryCatch({
     if (is.null(DBI::dbGetQuery(con, "SELECT PostGIS_version()"))){
       DBI::dbExecute(con, "CREATE EXTENSION postgis;")
-      DBI::dbExecute(con, "CREATE SCHEMA spatial_data;")
-      DBI::dbExecute(con, "ALTER TABLE public.geometry_columns SET SCHEMA spatial_data;")
-      DBI::dbExecute(con, "ALTER TABLE public.geography_columns SET SCHEMA spatial_data;")
-      DBI::dbExecute(con, "ALTER TABLE public.spatial_ref_sys SET SCHEMA spatial_data;")
+      DBI::dbExecute(con, "CREATE EXTENSION postgis_raster;")
+      # Setting the schema for spatial tables below seems like a nice idea, but rpostgis functions look for the spatial tables in the public schema.
+      # DBI::dbExecute(con, "CREATE SCHEMA spatial_data;")
+      # DBI::dbExecute(con, "ALTER TABLE public.geometry_columns SET SCHEMA spatial_data;")
+      # DBI::dbExecute(con, "ALTER TABLE public.geography_columns SET SCHEMA spatial_data;")
+      # DBI::dbExecute(con, "ALTER TABLE public.spatial_ref_sys SET SCHEMA spatial_data;")
     }
   }, error = function(e) {
     stop("Looks like you need to install the postGIS extension before continuing. The process varies depending on your OS: refer to this link for more info. https://postgis.net/documentation/getting_started/")
@@ -71,22 +73,12 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  q10 NUMERIC,
                  PRIMARY KEY (timeseries_id, date))")
 
-
-  DBI::dbExecute(con, "CREATE TABLE if not exists rasters (
-                   description TEXT NOT NULL,
-                   parameter TEXT,
-                   unit TEXT,
-                   valid_from TIMESTAMP WITH TIME ZONE,
-                   valid_to TIMESTAMP WITH TIME ZONE,
-                   file_path TEXT NOT NULL UNIQUE,
-                   PRIMARY KEY (description, parameter, file_path))")
-
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
                    location TEXT NOT NULL,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                    file BYTEA NOT NULL,
-                   type TEXT NOT NULL CHECK(type IN ('auto', 'manual')),
-                   PRIMARY KEY (location, datetime, type))")
+                   image_type TEXT NOT NULL CHECK(image_type IN ('auto', 'manual')),
+                   PRIMARY KEY (location, datetime, image_type))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
                    timeseries_id INTEGER,
@@ -103,11 +95,35 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    sample_class TEXT,
                    PRIMARY KEY (timeseries_id, datetime))")
 
+  # Create spatial-primary tables ########
   DBI::dbExecute(con, "CREATE TABLE if not exists polygons (
-                   id SERIAL PRIMARY KEY,
-                   description TEXT NOT NULL,
-                   geometry geometry(Polygon, 4269) UNIQUE,
-                   location TEXT UNIQUE)")
+                 polygon_id SERIAL PRIMARY KEY,
+                 polygon_type TEXT NOT NULL CHECK(polygon_type IN ('drainage_basin', 'buffer', 'waterbody', 'prov_terr', 'country', 'other')),
+                 name TEXT NOT NULL,
+                 description TEXT NOT NULL,
+                 geom geometry(Polygon, 4269) NOT NULL,
+                 CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
+                 CONSTRAINT enforce_geotype_geom CHECK (geometrytype(geom) = 'POLYGON'::text),
+                 CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
+                 CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
+                 UNIQUE (name, polygon_type));")
+  DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
+
+  # In theory the function rpostgis::pgWriteRast should be able to insert the raster, and then
+  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_index (
+  #                  rid INTEGER PRIMARY KEY,
+  #                  parameter TEXT NOT NULL,
+  #                  description TEXT,
+  #                  units TEXT NOT NULL,
+  #                  valid_from TIMESTAMP WITH TIME ZONE,
+  #                  valid_to TIMESTAMP WITH TIME ZONE,
+  #                  issued TIMESTAMP WITH TIME ZONE,
+  #                  source TEXT,
+  #                  bands TEXT);")
+  #
+  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters (
+  #                  rid INTEGER);")
+  # DBI::dbExecute(con, "CREATE INDEX rasters_rast_st_conhull_idx ON rasters USING gist( ST_ConvexHull(raster) );")
 
   # And tables that hold metadata for all locations
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
@@ -124,23 +140,22 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  current BOOLEAN NOT NULL,
                  UNIQUE (location, datum_id_to, current));")
 
-
-
-  #Note for locations table: many columns are not NOT NULL because they have to accept null values for initial creation. This is not an oversight.
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
                  location TEXT PRIMARY KEY,
-                 name TEXT,
-                 latitude NUMERIC,
-                 longitude NUMERIC)")
+                 name TEXT NOT NULL,
+                 latitude NUMERIC NOT NULL,
+                 longitude NUMERIC NOT NULL,
+                 point geometry(POINT, 4269))")
 
   #The column timeseries_id is auto created for each new entry
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter TEXT NOT NULL,
+                 param_type TEXT NOT NULL, CHECK(param_type IN ('meteorological', 'hydrometric', 'water chemistry', 'geochemistry', 'atmospheric chemistry')),
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
-                 type TEXT NOT NULL CHECK(type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max')),
+                 period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max')),
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
@@ -150,7 +165,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  public BOOLEAN NOT NULL,
                  source_fx TEXT NOT NULL,
                  source_fx_args TEXT,
-                 UNIQUE (location, parameter, category, type));")
+                 UNIQUE (location, parameter, category, period_type));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists peaks (
                  timeseries_id INTEGER PRIMARY KEY,
@@ -158,13 +173,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  year NUMERIC NOT NULL,
                  date DATE NOT NULL,
                  value NUMERIC NOT NULL,
-                 type TEXT NOT NULL CHECK(type IN ('instantaneous', '1-day', '2-day', '3-day', '4-day', '5-day', '6-day', '7-day', 'monthly')),
+                 period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', '1-day', '2-day', '3-day', '4-day', '5-day', '6-day', '7-day', 'monthly')),
                  condition TEXT NOT NULL CHECK(condition IN ('open water', 'break-up', 'freeze-up', 'winter')),
                  extrema TEXT NOT NULL CHECK(extrema IN ('minimum', 'maximum')),
                  uncertainty TEXT,
                  notes TEXT,
                  deemed_primary BOOLEAN NOT NULL,
-                 UNIQUE (timeseries_id, agency, year, type, condition, extrema));")
+                 UNIQUE (timeseries_id, agency, year, period_type, condition, extrema));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists internal_status (
                  event TEXT NOT NULL,
@@ -175,7 +190,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                                 "value" = NA)
   DBI::dbAppendTable(con, "internal_status", internal_status)
 
-  # And a table to hold value pairs to control timeseries visibility and Aquarius TS names
+  # And a table to hold value pairs to control parameter names
   DBI::dbExecute(con, "CREATE TABLE if not exists settings (
                  source_fx TEXT NOT NULL,
                  parameter TEXT NOT NULL,

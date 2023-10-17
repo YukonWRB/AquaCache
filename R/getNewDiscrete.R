@@ -1,7 +1,7 @@
-#' Get new discrete-type data
+#' Get new discrete-category data
 #'
 #' @description
-#' `r lifecycle::badge("stable")`
+#' `r lifecycle::badge("experimental")`
 #'
 #' Retrieves new discrete data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the discrete table and that have a proper entry in the timeseries table; refer to [addHydrometTimeseries()] for how to add new stations. Does not work on any timeseries of category "continuous": for that, use [getNewContinuous()]. Timeseries with no specified souce_fx will be ignored.
 #'
@@ -17,4 +17,9 @@
 
 getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all") {
   warning("Function getNewDiscrete is not complete yet!!!")
+
+
+  #Notes for Emilie:
+  # 1. Don't forget about necessary updates to the timeseries table, namely for start_datetime, end_datetime, and last_new_data. last_daily_calculation can be left blank.
+  # 2. Note that timeseries.param_type is restricted to specific strings for consistency. See hydrometInit.
 }

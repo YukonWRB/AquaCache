@@ -9,7 +9,11 @@
 # 2.3 Convert datetime_UTC column to datetime, as POSIXct
 # 2.4 Add to the table, trigger calculate_stats to populate the daily table.
 
+
 # 3. Run ancillary functions:
 # 3.1 update_hydat
 # 3.2 getWatersheds
 # 3.3
+
+# 4. Add watershed polygons to the DB
+# 4.1 pull each one, project to the DB epsg:4269 (or just let add_vector take care of it)

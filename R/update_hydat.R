@@ -38,9 +38,9 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
   if (new_hydat | force_update){
     #Get the required timeseries_ids
     if (timeseries_id[1] == "all"){
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, type FROM timeseries WHERE category = 'continuous' AND operator = 'WSC';")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, period_type FROM timeseries WHERE category = 'continuous' AND operator = 'WSC';")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND operator = 'WSC';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND operator = 'WSC';"))
       if (length(timeseries_id) != nrow(all_timeseries)){
         fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
         if ((length(fail) == 1)) {
@@ -71,7 +71,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                     "parameter" = "flow",
                                     "unit" = "m3/s",
                                     "category" = "continuous",
-                                    "type" = "instantaneous",
+                                    "period_type" = "instantaneous",
+                                    "param_type" = "hydrometric",
                                     "start_datetime" = min(new_flow$date),
                                     "end_datetime" = max(new_flow$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
@@ -83,7 +84,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND operator = 'WSC';"))[1,1]
 
-            new_flow$type <- "mean"
+            new_flow$period_type <- "mean"
             new_flow$approval <- "approved"
             new_flow$timeseries_id <- tsid_flow
             DBI::dbAppendTable(con, "calculated_daily", new_flow)
@@ -113,7 +114,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
               if (mismatch){
                 new_flow$key <- NULL
                 new_flow <- new_flow[new_flow$date >= date , ]
-                new_flow$type <- "mean"
+                new_flow$period_type <- "mean"
                 new_flow$approval <- "approved"
                 new_flow$timeseries_id <- tsid_flow
                 DBI::dbWithTransaction(
@@ -130,7 +131,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                 start_recalc = start)
               }
             } else { #There is an entry in timeseries table, but no daily data
-              new_flow$type <- "mean"
+              new_flow$period_type <- "mean"
               new_flow$approval <- "approved"
               new_flow$timeseries_id <- tsid_flow
               DBI::dbWithTransaction(
@@ -159,7 +160,8 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                     "parameter" = "level",
                                     "unit" = "m",
                                     "category" = "continuous",
-                                    "type" = "instantaneous",
+                                    "period_type" = "instantaneous",
+                                    "param_type" = "hydrometric",
                                     "start_datetime" = min(new_level$date),
                                     "end_datetime" = max(new_level$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
@@ -171,7 +173,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND operator = 'WSC';"))[1,1]
 
-            new_level$type <- "mean"
+            new_level$period_type <- "mean"
             new_level$approval <- "approved"
             new_level$timeseries$id <- tsid_level
             DBI::dbAppendTable(con, "calculated_daily", new_level)
@@ -201,7 +203,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
               if (mismatch){
                 new_level$key <- NULL
                 new_level <- new_level[new_level$date >= date , ]
-                new_level$type <- "mean"
+                new_level$period_type <- "mean"
                 new_level$approval <- "approved"
                 new_level$timeseries_id <- tsid_level
                 DBI::dbWithTransaction(
@@ -218,7 +220,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                 start_recalc = start)
               }
             } else { #There is an entry in timeseries table, but no daily data
-              new_level$type <- "mean"
+              new_level$period_type <- "mean"
               new_level$approval <- "approved"
               new_level$timeseries_id <- tsid_level
               DBI::dbWithTransaction(

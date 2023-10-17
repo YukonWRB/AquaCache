@@ -29,7 +29,7 @@ addHydrometTemplate <- function(con = hydrometConnect(silent=TRUE), format = "sh
 
   # Create the data.frame for timeseries ############
   ts <- DBI::dbGetQuery(con, "SELECT * FROM timeseries")
-  names <- names(ts[!(names(ts) %in% c("timeseries_id", "start_datetime", "end_datetime", "last_new_data", "last_daily_calculation"))])
+  names <- names(ts[!(names(ts) %in% c("timeseries_id", "end_datetime", "last_new_data", "last_daily_calculation"))])
 
   if (format == "short"){
     ts_df <- data.frame(matrix(ncol = length(names)))
