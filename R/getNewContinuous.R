@@ -1,4 +1,4 @@
-#' Get new continuous-type data
+#' Get new continuous-category data
 #'
 #' @description
 #' `r lifecycle::badge("stable")`
@@ -23,9 +23,9 @@
 {
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)){
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'continuous', or has no function specified in column source_fx.")
     }
@@ -41,7 +41,7 @@
     source_fx_args <- all_timeseries$source_fx_args[i]
     param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
-    type <- all_timeseries$type[i]
+    period_type <- all_timeseries$period_type[i]
 
     tryCatch({
       args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
@@ -70,10 +70,10 @@
       ts <- ts[!is.na(ts$value) , ]
 
       if (nrow(ts) > 0){
-        if (type == "instantaneous"){ #Period is always 0 for instantaneous data
+        if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
           ts$period <- "00:00:00"
           no_period <- data.frame() # Created here for use later
-        } else if ((type != "instantaneous") & !("period" %in% names(ts))) { #types of mean, median, min, max should all have a period
+        } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
           # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
           no_period <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", tsid, ");"))
           if (nrow(no_period) > 0){

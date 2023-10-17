@@ -2,7 +2,7 @@
 % Please edit documentation in R/getNewContinuous.R
 \name{getNewContinuous}
 \alias{getNewContinuous}
-\title{Get new continuous-type data}
+\title{Get new continuous-category data}
 \usage{
 getNewContinuous(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
 }

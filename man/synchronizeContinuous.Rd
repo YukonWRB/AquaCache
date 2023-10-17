@@ -23,7 +23,7 @@ Updated entries in the hydro database.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-The weekly update function pulls and replaces data of type 'continuous' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
+The weekly update function pulls and replaces data of category 'continuous' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 
 NOTE that any data point labelled as imputed = TRUE is ignored, as this implies it is missing from the remote and thus cannot be checked.
 

@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' The weekly update function pulls and replaces data of type 'continuous' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
+#' The weekly update function pulls and replaces data of category 'continuous' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 #'
 #' NOTE that any data point labelled as imputed = TRUE is ignored, as this implies it is missing from the remote and thus cannot be checked.
 #'
@@ -22,7 +22,7 @@
 synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all", start_datetime)
 {
 
-  message("Synchronizing continuous type timeseries with synchronizeContinuous...")
+  message("Synchronizing continuous category timeseries with synchronizeContinuous...")
   if (!inherits(start_datetime, "POSIXct")){
     stop("Parameter start_datetime must be supplied as a POSIXct object.")
   }
@@ -30,9 +30,9 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
 
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, type FROM timeseries WHERE category = 'continuous'")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, period_type FROM timeseries WHERE category = 'continuous'")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
     if (length(timeseries_id) != nrow(all_timeseries)){
       warning("At least one of the timeseries IDs you called for cannot be found in the database.")
     }
@@ -80,10 +80,10 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
 
       if (nrow(ts) > 0){
         #assign a period to the data
-        if (type == "instantaneous"){ #Period is always 0 for instantaneous data
+        if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
           ts$period <- "00:00:00"
           no_period <- data.frame() # Created here for use later
-        } else if ((type != "instantaneous") & !("period" %in% names(ts))) { #types of mean, median, min, max should all have a period
+        } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
           # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
           no_period <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", tsid, ");"))
           if (nrow(no_period) > 0){

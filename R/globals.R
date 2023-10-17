@@ -2,4 +2,4 @@
 utils::globalVariables(c("timeseries"))
 
 #globals for synchronizeContinuous
-utils::globalVariables(c("type"))
+utils::globalVariables(c("period_type"))

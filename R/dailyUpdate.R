@@ -27,11 +27,11 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
 
   if (timeseries_id[1] == "all"){
-    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation, type FROM timeseries WHERE category = 'continuous'")
-    discrete_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation, type FROM timeseries WHERE category = 'discrete'")
+    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'continuous'")
+    discrete_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'discrete'")
 
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation, type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation, category FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
     if (length(timeseries_id) != nrow(continuous_ts)){
       fail <- timeseries_id[!(timeseries_id %in% continuous_ts$timeseries_id)]
       ifelse ((length(fail) == 1),
@@ -39,8 +39,8 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
       warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )
     }
-    continuous_ts <- all_timeseries[all_timeseries$type == "continuous" , ]
-    discrete_ts <- all_timeseries[all_timeseries$type == "discrete" , ]
+    continuous_ts <- all_timeseries[all_timeseries$category == "continuous" , ]
+    discrete_ts <- all_timeseries[all_timeseries$category == "discrete" , ]
   }
 
   if (nrow(continuous_ts) > 0){

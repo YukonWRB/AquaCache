@@ -28,10 +28,10 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
   }
 
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id, type, operator FROM timeseries WHERE category = 'continuous';"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous';"))
     timeseries_id <- all_timeseries$timeseries_id
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id, type, operator FROM timeseries WHERE category = 'continuous' AND timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous' AND timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "');"))
     if (length(timeseries_id) != length(all_timeseries$timeseries_id)) {
       #TODO: improve this warning message with which tsid exactly was missing
       warning("At least one of the timeseries_id you specified was not of category 'continuous' or could not be found in the database.")
@@ -46,9 +46,9 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
       last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, ";"))[1,])
-      tmp <- DBI::dbGetQuery(con, paste0("SELECT type, operator FROM timeseries WHERE timeseries_id = ", i, ";"))
-      type <- tmp[1,1]
-      operator <- tmp[1,2]
+      tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, operator FROM timeseries WHERE timeseries_id = ", i, ";"))
+      period_type <- tmp[1,1]
+      operator <- tmp[1,2]  #operator is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
 
       if (!is.null(start_recalc)){ #start_recalc is specified (not NULL)
         if (!is.na(earliest_day_measurements)){
@@ -94,7 +94,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           gap_measurements <- gap_measurements %>%
             dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
             dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                             value = if (type == "sum") sum(.data$value) else if (type == "median") stats::median(.data$value) else if (type == "min") min(.data$value) else if (type == "max") max(.data$value) else mean(.data$value),
+                             value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else mean(.data$value),
                              grade = sort(.data$grade,decreasing=TRUE)[1],
                              approval = sort(.data$approval, decreasing=TRUE)[1],
                              imputed = sort(.data$imputed, decreasing = TRUE)[1],
@@ -129,7 +129,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           gap_measurements <- gap_measurements %>%
             dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
             dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                             value = if (type == "sum") sum(.data$value) else if (type == "median") stats::median(.data$value) else if (type == "min") min(.data$value) else if (type == "max") max(.data$value) else mean(.data$value),
+                             value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else mean(.data$value),
                              grade = sort(.data$grade, decreasing = TRUE)[1],
                              approval = sort(.data$approval, decreasing = TRUE)[1],
                              imputed = sort(.data$imputed, decreasing = TRUE)[1],

@@ -2,7 +2,7 @@
 % Please edit documentation in R/getNewDiscrete.R
 \name{getNewDiscrete}
 \alias{getNewDiscrete}
-\title{Get new discrete-type data}
+\title{Get new discrete-category data}
 \usage{
 getNewDiscrete(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
 }
@@ -15,7 +15,7 @@ getNewDiscrete(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
 
 Retrieves new discrete data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the discrete table and that have a proper entry in the timeseries table; refer to \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}} for how to add new stations. Does not work on any timeseries of category "continuous": for that, use \code{\link[=getNewContinuous]{getNewContinuous()}}. Timeseries with no specified souce_fx will be ignored.
 \subsection{Default arguments passed to 'source_fx' functions:}{
