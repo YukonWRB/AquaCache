@@ -1,6 +1,18 @@
+# remotes::install_github("YukonWRB/HydroMetDB")
+# OR
+# load_all() #if working in the package development side
+
+# Add new values to the .renviron file
+# usethis::edit_r_environ()
+
+#Initialize the new DB
+library(HydroMetDB)
+hydrometInit()
+con <- hydrometConnect()
+
+
 # Data migration from old SQLite to new postgres DB
 
-load_all() #to attache this package
 # 1. deal with the timeseries, locations, and datum tables.
 # get each distinct timeseries from the timeseries DB, in list elements.
 oldcon <- WRBtools::hydroConnect()
@@ -35,12 +47,10 @@ datums <- DBI::dbGetQuery(oldcon, "SELECT * FROM datum_conversions")
 datums <- datums[datums$location != "09AB008", ] # for some reason it's no present in the locations table, will have to be added in later
 DBI::dbAppendTable(newcon, "datum_conversions", datums)
 
-# Transfer over the newly created timeseries
-
-
-for (i in 1:nrow(ts_con)){
+for (i in 154:nrow(ts_con)){
   ts <- ts_con[i, ]
   data <- DBI::dbGetQuery(oldcon, paste0("SELECT datetime_UTC, value, grade, approval FROM realtime WHERE location = '", ts$location, "' AND parameter = '", ts$parameter, "';"))
+  data <- data[!is.na(data$value) , ]
   if (nrow(data) > 0){
     DBI::dbAppendTable(newcon, "timeseries", ts)
     tsid <- DBI::dbGetQuery(newcon, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", ts$location, "' AND parameter = '", ts$parameter, "';"))[1,1]
@@ -67,7 +77,7 @@ for (i in 1:nrow(ts_disc)){
     depth_data <-DBI::dbGetQuery(oldcon, paste0("SELECT target_date, sample_date, value FROM discrete WHERE parameter = 'snow depth' AND location = '", ts$location, "';"))
     SWE_data <- data.frame()
   }
-
+  
   if (ts$parameter == "SWE"){
     if (nrow(SWE_data) > 0){
       DBI::dbAppendTable(newcon, "timeseries", ts)
@@ -106,11 +116,11 @@ for (i in 1:nrow(ts_disc)){
 #Now bring in the hydat data
 update_hydat(newcon, force_update = TRUE)
 #And synchronize the realtime timeseries
-synchronizeContinuous(newcon, start_datetime = Sys.time()-1000*24*60*60)
+synchronizeContinuous(newcon, start_datetime = Sys.time()-2000*24*60*60)
 #NOTE both functions above call calculate_stats where needed.
 
 # 4. Add watershed polygons to the DB
-basins <- terra::vect("G:/water/Common_GW_SW/Data/basins/drainage_polygons.shp")
+basins <- terra::vect("//env-fs/env-data/corp/water/Common_GW_SW/Data/basins/drainage_polygons.shp")
 basins <- basins[, c(1,2)]
 names(basins) <- c("name", "description")
 basins$polygon_type <- "drainage_basin"

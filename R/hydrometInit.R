@@ -210,7 +210,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  remote_param_name TEXT NOT NULL,
                  PRIMARY KEY (source_fx, parameter))")
 
-  params_AQ <- data.frame("source_fx" = "aq_download",
+  params_AQ <- data.frame("source_fx" = "getRealtimeAquarius",
                           "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
                           "remote_param_name" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
   params_WSC <- data.frame("source_fx" = "getRealtimeWSC",
@@ -313,8 +313,8 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
     DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO hydromet_read;")
     DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO hydromet_read;")
   }, error = function(e) {
-    warning("Not able to create a new read only account with name hydromet_read. Ignore this message if it already exists (this function would not have erased the old account)")
+    warning("May have failed to create new read only account with name hydromet_read. Ignore this message if it already exists (this function would not have erased the old account), otherwise check if it exists before worrying.")
   })
 
-  message("The database was successfully created along with a read-only account: username 'hydromet_read', password 'hydromet.'")
+  message("The database was successfully created. If a read-only account was created it has username hydromet_read and password hydromet")
 }

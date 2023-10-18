@@ -45,6 +45,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
     }
   }
 
+  updated <- 0 #Counter for number of updated timeseries
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
@@ -168,11 +169,24 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
         }
 
         if (nrow(no_period) > 0){
-          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(min(no_period$datetime), min(ts$datetime)), "' AND imputed IS FALSE;"))
+          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(min(no_period$datetime), min(ts$datetime)), "';"))
         } else {
-          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(start_dt, min(ts$datetime)), "' AND imputed IS FALSE;"))
+          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(start_dt, min(ts$datetime)), "';"))
+        }
+        #Check if any imputed data points are present in the new data; replace the imputed value if TRUE
+        imputed <- realtime[realtime$imputed == TRUE , ]
+        imputed.remains <- data.frame()
+        if (nrow(imputed) > 0){
+          for (i in 1:nrow(imputed)){
+            if (!(imputed[i, "datetime"] %in% ts)){
+              imputed.remains <- rbind(imputed.remains, imputed[i , ])
+            }
+          }
         }
 
+        if (min(ts$datetime) > min(realtime$datetime)){ #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
+          realtime <- realtime[realtime$datetime >= min(ts$datetime) , ]
+        }
 
         #order both timeseries to compare them
         realtime <- realtime[order(realtime$datetime) , ]
@@ -202,7 +216,13 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
           DBI::dbWithTransaction(
             con,
             {
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(ts$datetime), "' AND '", max(ts$datetime), "';"))
+              updated <- updated + 1
+              if (nrow(imputed.remains) > 0){
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(ts$datetime), "' AND '", max(ts$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
+              } else {
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(ts$datetime), "' AND '", max(ts$datetime), "';"))
+              }
+
               DBI::dbAppendTable(con, "measurements_continuous", ts)
               #make the new entry into table timeseries
               end <- max(max(realtime$datetime), ts$datetime)
@@ -224,6 +244,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
   }
 
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_sync_continuous';"))
+  message("Found ", updated, " timeseries to refresh out of the ", nrow(all_timeseries), " provided.")
   diff <- Sys.time() - start
   message("Total elapsed time for synchronizeContinuous: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
 
