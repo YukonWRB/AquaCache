@@ -78,20 +78,24 @@ getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime 
                                          tz = "UTC",
                                          convertType = TRUE)[, c(3:5)]
   }
-  colnames(data) <- c("datetime", "value", "grade")
+    if (nrow(data) > 0){
+      colnames(data) <- c("datetime", "value", "grade")
+      data <- data[!is.na(data$value) , ]
+      if (param_code == "00011"){ #temp in F into C
+        data$value <- (data$value - 32) / 1.8
+      } else if (param_code %in% c("00060", "00061")){ #flow in ft3/s into m3/s
+        data$value <- data$value * 0.028316832
+      } else if (param_code %in% c("00065", "62610", "62611", "72150")) { #levels in ft into meters
+        data$value <- data$value * 0.3048
+      }
 
-  if (param_code == "00011"){ #temp in F into C
-    data$value <- (data$value - 32) / 1.8
-  } else if (param_code %in% c("00060", "00061")){ #flow in ft3/s into m3/s
-    data$value <- data$value * 0.028316832
-  } else if (param_code %in% c("00065", "62610", "62611", "72150")) { #levels in ft into meters
-    data$value <- data$value * 0.3048
-  }
+      data$approval <- NA #makes it consistent with other import functions
 
-  data$approval <- NA #makes it consistent with other import functions
-
-  return(data)
-
+      return(data)
+    } else {
+      data <- data.frame()
+      return(data)
+    }
   }, error = function(e) {
     data <- data.frame()
     return(data)

@@ -2,8 +2,8 @@ load_all()
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = c("15356000", "15348000", "15041200", "15024800", "15129120", "15453500"),
-                            parameter = c("flow"),
+timeseries_df <- data.frame(location = c("15356000", "15348000", "15041200", "15024800", "15129120", "15453500", "15356000", "15348000", "15041200", "15024800", "15129120", "15453500"),
+                            parameter = c("flow","flow","flow","flow","flow","flow","level","level","level","level","level","level"),
                             unit = c("m3/s"),
                             category = "continuous",
                             period_type = "instantaneous",
@@ -27,7 +27,7 @@ addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df
 
 # Deleting from various tables
 # locs <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE ")
-# DBI::dbExecute(con, "DELETE FROM timeseries WHERE location IN (52)")
+DBI::dbExecute(con, "DELETE FROM timeseries WHERE timeseries_id IN (363,364,365,366)")
 DBI::dbExecute(con, "DELETE FROM measurements_continuous WHERE timeseries_id IN (363,364,365,366)")
 DBI::dbExecute(con, "DELETE FROM calculated_daily WHERE timeseries_id IN (363,364,365,366)")
 # DBI::dbExecute(con, "DELETE FROM locations WHERE location = '30MA005'")

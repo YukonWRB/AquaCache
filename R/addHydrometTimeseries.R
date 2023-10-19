@@ -143,11 +143,11 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
           #TODO: Figure out how to handle non-continuous data!!!
           #
           # if (nrow(ts) > 0){
-          #   # At this point ts should contain the data you want to insert into measurements_discrete. If any coercion is necessary (col names or other) do it, then append the data. No need for calculations, periodicity sorting out, or anything necessary on the continuous timeseries.
+          #   # At this point ts should contain the data you want to insert into measurements_discrete. If any coercion is necessary (col names or other) it should have been done by the source_fx function. No need for calculations, periodicity sorting out, or anything necessary on the continuous timeseries.
           #   # Remember to update the start_datetime, end_datetime, last_new_data in the timeseries table
           #
           # } else {
-          #   warning("Failed to retrieve any data form ", add$location, " and parameter ", add$parameter, ".")
+          #   warning("Failed to retrieve any data from ", add$location[i], " and parameter ", add$parameter[i], "using function ", add$source_fx[i], ".")
           # }
 
         }
