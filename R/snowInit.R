@@ -15,9 +15,8 @@
 #'
 
 #TODO: deal with geometry of polygon fields of basin and sub-basin
-# Without ROWID??
 
-#initial_create_snow(overwrite = TRUE)
+#snowInit(snowConnect_pg(), overwrite = TRUE)
 
 snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
 
@@ -46,7 +45,7 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
   # locations
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
                  location TEXT PRIMARY KEY,
-                 name TEXT,
+                 name TEXT NOT NULL UNIQUE,
                  agency TEXT,
                  basin TEXT,
                  sub_basin TEXT,
@@ -63,21 +62,22 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
   # maintenance
   DBI::dbExecute(con, "CREATE TABLE if not exists maintenance (
                  maintenance_id SERIAL PRIMARY KEY,
-                 location TEXT,
-                 date DATE,
-                 maintenance TEXT,
-                 completed BOOLEAN,
+                 location TEXT NOT NULL,
+                 date DATE NOT NULL,
+                 maintenance TEXT NOT NULL,
+                 completed BOOLEAN NOT NULL,
 
                  FOREIGN KEY (location) REFERENCES locations(location))"
   )
 
   # survey
-  # TODO: location and survey_date should be a unique combination
   DBI::dbExecute(con, "CREATE TABLE if not exists survey (
                  survey_id SERIAL PRIMARY KEY,
-                 location TEXT,
-                 survey_date DATE,
+                 location TEXT NOT NULL,
+                 target_date DATE NOT NULL,
+                 survey_date DATE NOT NULL,
                  notes TEXT,
+                 CONSTRAINT survey_loc UNIQUE (survey_date, location),
 
                  FOREIGN KEY (location) REFERENCES locations(location))"
   )
@@ -85,20 +85,28 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
   # measurements
   DBI::dbExecute(con, "CREATE TABLE if not exists measurements (
                  measurement_id SERIAL PRIMARY KEY,
-                 survey_id INTEGER,
-                 sample_datetime TIMESTAMP,
+                 survey_id INTEGER NOT NULL,
+                 sample_datetime TIMESTAMP NOT NULL,
                  sampler_name TEXT,
-                 estimate_flag BOOLEAN,
-                 exclude_flag BOOLEAN,
+                 estimate_flag BOOLEAN NOT NULL,
+                 exclude_flag BOOLEAN NOT NULL,
                  SWE NUMERIC,
                  depth NUMERIC,
                  notes TEXT,
+                 CONSTRAINT survey_sample_time UNIQUE (survey_id, sample_datetime),
 
                  FOREIGN KEY (survey_id) REFERENCES survey(survey_id))"
   )
 
-
-
+  # Create a read-only account
+  tryCatch({
+    DBI::dbExecute(con, "CREATE ROLE snow_read WITH LOGIN PASSWORD 'snow';")
+    DBI::dbExecute(con, "GRANT CONNECT ON DATABASE snowDB TO snow_read;")
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO snow_read;")
+    DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO snow_read;")
+  }, error = function(e) {
+    warning("Not able to create a new read only account with name snow_read. Ignore this message if it already exists (this function would not have erased the old account)")
+  })
 
 }
 
