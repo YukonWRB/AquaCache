@@ -1,4 +1,4 @@
-#' Connect to the snow database
+#' Connect to the snow postgres database
 #'
 #' @description
 #' `r lifecycle::badge("experimental")`
@@ -17,14 +17,12 @@
 #' @export
 #'
 
-
-
-snowConnect_pg <- function(name = "snowDB", host = "localhost", port = "5432", username = "postgres", password = Sys.getenv("SnowPass"), silent = FALSE){
+snowConnect_pg <- function(name = "snowDB", host = Sys.getenv("snowHost"), port = Sys.getenv("snowPort"), username = Sys.getenv("snowAdminUser"), password = Sys.getenv("snowAdminPass"), silent = FALSE){
 
 
 
   tryCatch({
-    hydro <- DBI::dbConnect(drv = RPostgres::Postgres(),
+    snow <- DBI::dbConnect(drv = RPostgres::Postgres(),
                             dbname = name,
                             host = host,
                             port = port,
@@ -33,7 +31,7 @@ snowConnect_pg <- function(name = "snowDB", host = "localhost", port = "5432", u
     if (!silent){
       print("Remember to disconnect using DBI::dbDisconnect() when finished.")
     }
-    return(hydro)
+    return(snow)
   }, error = function(e){
     stop("Connection failed.")
   })

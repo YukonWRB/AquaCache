@@ -7,15 +7,22 @@
 #'
 #' @param old_snow_db_path the path to where the old Access snow database exists
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect_pg()].
+#'
+#' @param overwrite If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!
 #'
 #' @return A populated snowDB database.
 #' @export
 #'
-#'
-snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg()) {
 
-  #### Pull locations data from Access and add to db
+#TODO: Add sub_basins into locations table
+# Add polygon shapes into basins and sub-basins tables
+
+#snowPop(con = snowConnect_pg(), overwrite = TRUE)
+
+snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg(), overwrite = TRUE) {
+
+  #### Pull data from Access and add to db
   # Create connection
   snowCon <- WRBtools::snowConnect(path = old_snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
@@ -26,13 +33,18 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   agency <- DBI::dbReadTable(snowCon, "AGENCY")
   DBI::dbDisconnect(snowCon)
 
+  if (overwrite == TRUE) {
+    DBI::dbExecute(con, "DELETE FROM measurements")
+    DBI::dbExecute(con, "DELETE FROM survey")
+    DBI::dbExecute(con, "DELETE FROM locations")
+    DBI::dbExecute(con, "DELETE FROM sub_basins")
+    DBI::dbExecute(con, "DELETE FROM basins")
+  }
+
 #### ---------------------- Basins and sub-basins ------------------------- ####
   # Create tables
   sub_basins <- data.frame(sub_basin = c("Upper Yukon", "Teslin", "Central Yukon", "Pelly", "Stewart", "White", "Lower Yukon", "Porcupine", "Peel", "Liard", "Alsek", "Alaska", NA), polygon = NA)
   basins$basins <- c("Alsek", "Yukon", "Porcupine", "Liard", "Peel", "Alaska")
-
-  DBI::dbExecute(con, "DELETE FROM sub_basins")
-  DBI::dbExecute(con, "DELETE FROM basins")
 
   # Add data to database
   for (i in 1:nrow(basins)) {
@@ -42,8 +54,6 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   for (i in 1:nrow(sub_basins)) {
     DBI::dbExecute(con, paste0("INSERT INTO sub_basins (sub_basin) VALUES ('", sub_basins$sub_basin[i], "')"))
   }
-  DBI::dbDisconnect(con)
-
 
 
 #### --------------------------- Locations -------------------------------- ####
@@ -67,81 +77,72 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
 
   # Update column names
   colnames(locations) <- c("location", "name", "latitude", "longitude", "active", "elevation", "agency", "basin", "notes", 'sub_basin')
+  # Deal with any apostrophes in strings
+  locations$name <- gsub("'", "''", locations$name)
 
   ## Add to db
-  DBI::dbExecute(con, "INSERT INTO locations "
-  )
-
   for (i in 1:nrow(locations)) {
     DBI::dbExecute(con, paste0("INSERT INTO locations (location, name, agency, basin, sub_basin, active, elevation, latitude, longitude, notes) VALUES ('", locations$location[i], "', '", locations$name[i], "', '", locations$agency[i], "', '", locations$basin[i], "', '", locations$sub_basin[i], "', '", locations$active[i], "', '", locations$elevation[i], "', '", locations$latitude[i], "', '", locations$longitude[i], "', '", locations$notes[i], "')"))
   }
-  DBI::dbDisconnect(con)
+
+
+#### ----------------------------- Survey --------------------------------- ####
+  # Remove rows with EXCLUDE_FLG = TRUE
+  survey <- meas[meas$EXCLUDE_FLG==FALSE,]
+  # Deal with NA target and survey dates
+    # For those with data, keep and make sample date the target date
+      # Find rows where survey_date is NA and depth is not NA
+      rows_to_update <- is.na(survey$SURVEY_DATE) & !is.na(survey$DEPTH)
+      # Update survey_date with target_date for selected rows
+      survey$SURVEY_DATE[rows_to_update] <- survey$SAMPLE_DATE[rows_to_update]
+    # For those without data, remove
+      rows_to_remove <- is.na(survey$SURVEY_DATE) & is.na(survey$DEPTH)
+      survey <- survey[!rows_to_remove,]
+
+  # Remove columns and add notes
+  survey <- survey[c("SNOW_COURSE_ID", "SAMPLE_DATE", "SURVEY_DATE")]
+  survey$notes <- NA
+  # Rename columns
+  colnames(survey) <- c("location", "target_date", "survey_date", "notes")
+  # Check for things
+    # Check for duplicate rows
+    survey[duplicated(survey) | duplicated(survey, fromLast = TRUE), ] # NONE!
+    # Check for non-unique combinations of location and target_date
+    test <- paste(survey$location, survey$target_date, sep = "")
+    test[duplicated(test)] # NONE!
+    # Check that all locations exist in locations table and vice-versa
+    setdiff(unique(locations$location), unique(survey$location))
+    setdiff(unique(survey$location), unique(locations$location))
+
+  # Import into db
+  for (i in 1:nrow(survey)) {
+    DBI::dbExecute(con, paste0("INSERT INTO survey (location, target_date, survey_date, notes) VALUES ('", survey$location[i], "', '", survey$target_date[i], "', '", survey$survey_date[i], "', '", survey$notes[i], "')"))
+  }
+
+#### -------------------------- Measurements ------------------------------ ####
+  # Pull survey table from db
+    survey <- DBI::dbReadTable(con, "survey")
+  # Remove columns not interested in
+    measurements <- meas[,c("SNOW_COURSE_ID", "DEPTH", "SNOW_WATER_EQUIV", "SAMPLE_DATE", "ESTIMATE_FLG", "EXCLUDE_FLG")]
+  # Rename columns
+    colnames(measurements) <- c("location", "depth", "swe", "target_date", "estimate_flag", "exclude_flag")
+
+  # Merge survey with measurements
+    measurements <- merge(survey, measurements, by=c('location', 'target_date'))
+  # Remove columns
+    measurements <- measurements[, !(names(measurements) %in% c("location", "target_date"))]
+  # Create sample_datetime from survey_date
+    measurements$sample_datetime <- as.POSIXct(paste(measurements$survey_date, "12:00:00"), format = "%Y-%m-%d %H:%M:%S")
+  # Remove sample_date
+    measurements <- measurements[, !(names(measurements) %in% c("survey_date"))]
+  # Add sample_name column
+    measurements$sampler_name <- NA
+
+  # Import measurements into db
+    for (i in 1:nrow(measurements)) {
+      DBI::dbExecute(con, paste0("INSERT INTO measurements (survey_id, sample_datetime, sampler_name, estimate_flag, exclude_flag, swe, depth, notes) VALUES ('", measurements$survey_id[i], "', '", measurements$sample_datetime[i], "', '", measurements$sampler_name[i], "', '", measurements$estimate_flag[i], "', '", measurements$exclude_flag[i], "', '", measurements$swe[i], "', '", measurements$depth[i], "', '", measurements$notes[i], "')"))
+    }
+
+ DBI::dbDisconnect(con)
 
 }
-#### ------------------------ Other to be added --------------------------- ####
-#   ##### Measurements pre-processing ####
-#   #Manipulate/preprocess things a bit
-#   meas <- meas[which(meas$EXCLUDE_FLG==0),] # OMIT VALUES OF EXCLUDEFLG=1, aka TRUE
-#   meas$SAMPLE_DATE <- as.Date(meas$SAMPLE_DATE)
-#   meas$year <- lubridate::year(meas$SAMPLE_DATE)
-#   meas$month <- lubridate::month(meas$SAMPLE_DATE)
-#
-#   ##### Dealing with special cases #####
-#   #Deal with special cases - correction factors
-#   # Special case (i) Twin Creeks: 09BA-SC02B will take precedence over A from 2016 onwards.
-#   subset <- meas[meas$SNOW_COURSE_ID %in% c("09BA-SC02A", "09BA-SC02B"),]
-#   duplicated <- data.frame(table(subset$SAMPLE_DATE))
-#   duplicated <- duplicated[duplicated$Freq > 1 , ]
-#   duplicated <- as.Date(as.vector(duplicated$Var1))
-#   swe_factor <- NULL
-#   for (i in 1:length(duplicated)){ # Calculate correction factors:
-#     a <- subset[subset$SNOW_COURSE_ID == "09BA-SC02A" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
-#     b <- subset[subset$SNOW_COURSE_ID == "09BA-SC02B" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
-#     swe_factor[i] <- 1 + (b-a)/a
-#   }
-#   depth_factor <- NULL
-#   for (i in 1:length(duplicated)){
-#     a <- subset[subset$SNOW_COURSE_ID == "09BA-SC02A" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
-#     b <- subset[subset$SNOW_COURSE_ID == "09BA-SC02B" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
-#     depth_factor[i] <- 1 + (b-a)/a
-#   }
-#   swe_correction <- mean(swe_factor)
-#   depth_correction <- mean(depth_factor)
-#   meas <- meas[!(meas$SNOW_COURSE_ID=="09BA-SC02A" & meas$year >= 2016),] # Remove 09BA-SC02A values in 2016 and later.
-#   meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="09BA-SC02A"] <- swe_correction*(meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="09BA-SC02A"]) # Multiply all 09BA-SC02A values by correction factors
-#   meas$DEPTH[meas$SNOW_COURSE_ID=="09BA-SC02A"] <- depth_correction*(meas$DEPTH[meas$SNOW_COURSE_ID=="09BA-SC02A"])
-#   meas$SNOW_COURSE_ID[meas$SNOW_COURSE_ID=="09BA-SC02A"] <- "09BA-SC02B" #Rename as 09BA-SC02B (A will no longer exist here)
-#   locations <- locations[!(locations$SNOW_COURSE_ID == "09BA-SC02A") , ]
-#
-#   # Special case (ii) Hyland 10AD-SC01 and 10AD-SC01B. B will take precedence over (no letter) from 2018 onwards.
-#   subset <- meas[meas$SNOW_COURSE_ID %in% c("10AD-SC01", "10AD-SC01B"),]
-#   duplicated <- data.frame(table(subset$SAMPLE_DATE))
-#   duplicated <- duplicated[duplicated$Freq > 1 , ]
-#   duplicated <- as.Date(as.vector(duplicated$Var1))
-#   swe_factor <- NULL
-#   for (i in 1:length(duplicated)){ # Calculate correction factors
-#     a <- subset[subset$SNOW_COURSE_ID == "10AD-SC01" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
-#     b <- subset[subset$SNOW_COURSE_ID == "10AD-SC01B" & subset$SAMPLE_DATE == duplicated[i], "SNOW_WATER_EQUIV"]
-#     swe_factor[i] <- 1 + (b-a)/a
-#   }
-#   depth_factor <- NULL
-#   for (i in 1:length(duplicated)){
-#     a <- subset[subset$SNOW_COURSE_ID == "10AD-SC01" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
-#     b <- subset[subset$SNOW_COURSE_ID == "10AD-SC01B" & subset$SAMPLE_DATE == duplicated[i], "DEPTH"]
-#     depth_factor[i] <- 1 + (b-a)/a
-#   }
-#   swe_correction <- mean(swe_factor)
-#   depth_correction <- mean(depth_factor)
-#   meas <- meas[!(meas$SNOW_COURSE_ID=="10AD-SC01" & meas$year>=2018),] #Remove SC01 blank values in 2018 and later.
-#   meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="10AD-SC01"] <- swe_correction*(meas$SNOW_WATER_EQUIV[meas$SNOW_COURSE_ID=="10AD-SC01"]) #Multiply all remaining SC01 values by correction factors
-#   meas$DEPTH[meas$SNOW_COURSE_ID=="10AD-SC01"] <- depth_correction*(meas$DEPTH[meas$SNOW_COURSE_ID=="10AD-SC01"])
-#   meas$SNOW_COURSE_ID[meas$SNOW_COURSE_ID=="10AD-SC01"] <- "10AD-SC01B" #Step 3: Rename as 010AD-SC01B (blank will no longer exist)
-#   locations <- locations[!(locations$SNOW_COURSE_ID == "10AD-SC01") , ]
-#
-#   if (!inactive){ #Filter out the inactive stations if inactive is FALSE
-#     remove <- locations[locations$ACTIVE_FLG==TRUE,]$SNOW_COURSE_ID
-#     meas <- meas[meas$SNOW_COURSE_ID %in% remove , ]
-#     locations <- locations[locations$ACTIVE_FLG == TRUE ,]
-#   }
-#
-# }
