@@ -1,5 +1,2 @@
 #globals for getRealtimeAquarius
-utils::globalVariables(c("timeseries"))
-
-#globals for synchronizeContinuous
-utils::globalVariables(c("period_type"))
+utils::globalVariables(c("timeseries"))  #This is not fixable otherwise because it comes from a sourced file which lives in /inst

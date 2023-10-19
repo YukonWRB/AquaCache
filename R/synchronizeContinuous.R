@@ -49,6 +49,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
+    period_type <- all_timeseries$period_type[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
@@ -226,8 +227,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
               DBI::dbAppendTable(con, "measurements_continuous", ts)
               #make the new entry into table timeseries
               end <- max(max(realtime$datetime), ts$datetime)
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+              DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
             }
           )
 
