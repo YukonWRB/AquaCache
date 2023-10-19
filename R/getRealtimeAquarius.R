@@ -84,42 +84,43 @@ getRealtimeAquarius <- function(location,
   #Make the basic timeseries
   ts <- data.frame(datetime = RawDL$Points$Timestamp,
                    value = RawDL$Points$Value$Numeric)
+  ts <- ts[!is.na(ts$value) , ]
 
-  # format times to POSIXct, fix offset
-  offset <- substr(ts$datetime[1], nchar(ts$datetime[1])-5, nchar(ts$datetime[1]))
-  offset <- gsub(":", "", offset)
-  ts$datetime <- paste0(substr(ts$datetime, 1, nchar(ts$datetime)-6), offset)
-  ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%OS%z")
-
-  #format approvals, grade times
-  approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment"))]
-  stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1])-5, nchar(approvals$StartTime[1]))
-  stoffset <- gsub(":", "", stoffset)
-  approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime)-6), stoffset)
-  approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-  endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1])-5, nchar(approvals$EndTime[1]))
-  endoffset <- gsub(":", "", endoffset)
-  approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime)-6), endoffset)
-  approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-
-  colnames(approvals) <- c("level", "description", "start_time", "end_time")
-
-  grades <- RawDL$Grades
-  stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1])-5, nchar(grades$StartTime[1]))
-  stoffset <- gsub(":", "", stoffset)
-  grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime)-6), stoffset)
-  grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-  endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1])-5, nchar(grades$EndTime[1]))
-  endoffset <- gsub(":", "", endoffset)
-  grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime)-6), endoffset)
-  grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-
-  grades <- merge(grades, grade_codes, by.x = "GradeCode", by.y = "code")
-  colnames(grades) <- c("level", "start_time", "end_time", "description")
-
-
-  #Add in grades and approval columns
   if (nrow(ts) > 0){
+    # format times to POSIXct, fix offset
+    offset <- substr(ts$datetime[1], nchar(ts$datetime[1])-5, nchar(ts$datetime[1]))
+    offset <- gsub(":", "", offset)
+    ts$datetime <- paste0(substr(ts$datetime, 1, nchar(ts$datetime)-6), offset)
+    ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%OS%z")
+
+    #format approvals, grade times
+    approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment"))]
+    stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1])-5, nchar(approvals$StartTime[1]))
+    stoffset <- gsub(":", "", stoffset)
+    approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime)-6), stoffset)
+    approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+    endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1])-5, nchar(approvals$EndTime[1]))
+    endoffset <- gsub(":", "", endoffset)
+    approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime)-6), endoffset)
+    approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+
+    colnames(approvals) <- c("level", "description", "start_time", "end_time")
+
+    grades <- RawDL$Grades
+    stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1])-5, nchar(grades$StartTime[1]))
+    stoffset <- gsub(":", "", stoffset)
+    grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime)-6), stoffset)
+    grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+    endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1])-5, nchar(grades$EndTime[1]))
+    endoffset <- gsub(":", "", endoffset)
+    grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime)-6), endoffset)
+    grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+
+    grades <- merge(grades, grade_codes, by.x = "GradeCode", by.y = "code")
+    colnames(grades) <- c("level", "start_time", "end_time", "description")
+
+
+    #Add in grades and approval columns
     ts <- ts[!duplicated(ts) , ] #In unknown circumstances, Aquarius spits out duplicate points.
     ts$grade <- NA
     for (i in 1:nrow(grades)){
