@@ -77,6 +77,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         next()
       }
 
+      missing_stats <- data.frame()
       flag <- FALSE  #This flag is in case there actually isn't an entry in hydat for the station yet. Rare case but it happens!
       if (operator == "WSC" & (last_day_historic < Sys.Date()-30)){ #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
         tmp <- DBI::dbGetQuery(con, paste0("SELECT location, parameter FROM timeseries WHERE timeseries_id = ", i, ";"))
