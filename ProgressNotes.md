@@ -28,10 +28,14 @@ Create code to pull all data in the existing sqlite DB, cast to new DB, and use 
 Create function to add polygons using terra
 Create function to add rasters using terra
 
+addHydrometTimeseries needs:
+  to be set up to input discrete data
+  to calculate data periodicity, unless it's properly taken care of via other functions
+
 
 # Roadmap to getting discrete data in the DB:
 1. Create the source_fx function that will actually fetch the data.
-2. Finish the relevant section of addHydrometTimeseries.R (see notes withint that script).
+2. Finish the relevant section of addHydrometTimeseries.R (see notes within that script).
 3. Add the new data by passing relevant arguments to addHydrometTimeseries.R.
 4. Populate script getNewDiscrete.R and test it out. It should call your source_fx functions(s) and look for new data. See example of getNewContinuous which forms an argument list and calls do.call() to trigger the function. You might need to delete some data points from the end of the timeseries and modify timeseries.end_datetime so that your function pulls in new data.
 5. Function dailyUpdate is already set to call getNewDiscrete whenever it is run (see line 54 and on)

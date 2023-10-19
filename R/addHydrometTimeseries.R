@@ -42,6 +42,37 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
     }
   }
 
+
+  #Add the location info ###########
+  if (!is.null(new_locs)){
+    for (i in new_locs){
+      DBI::dbWithTransaction(
+        con,
+        {
+          #locations table first
+          location <- data.frame(location = unique(locations_df[locations_df$location == i, "location"]),
+                                 name = unique(locations_df[locations_df$location == i, "name"]),
+                                 latitude = unique(locations_df[locations_df$location == i, "latitude"]),
+                                 longitude = unique(locations_df[locations_df$location == i, "longitude"]))
+          DBI::dbAppendTable(con, "locations", location)
+
+          DBI::dbExecute(con, "UPDATE locations SET point = ST_SetSRID(ST_MakePoint(longitude, latitude), 4269) WHERE point IS NULL;")
+
+
+          #now datums table
+          datum <- data.frame(location = locations_df[locations_df$location == i, "location"],
+                              datum_id_from = locations_df[locations_df$location == i, "datum_id_from"],
+                              datum_id_to = locations_df[locations_df$location == i, "datum_id_to"],
+                              conversion_m = locations_df[locations_df$location == i, "conversion_m"],
+                              current = locations_df[locations_df$location == i, "current"])
+          DBI::dbAppendTable(con, "datum_conversions", datum)
+          message("Added a new entry to the locations table for location ", i, ".")
+        }
+      ) #End of dbWithTransaction
+    }
+  }
+
+
   #Add the timeseries ########
   for (i in 1:nrow(timeseries_df)){
     tryCatch({
@@ -85,17 +116,10 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
 
         if (add$category == "continuous"){
           if (nrow(ts) > 0){
-            if (add$period_type == "instantaneous"){
-              ts$period <- "00:00:00"
-            } else if (!("period" %in% names(ts))){
-              ts$period <- NA
-            } else {
-              check <- lubridate::period(unique(ts$period))
-              if (NA %in% check){
-                ts$period <- NA
-              }
-            }
+            #TODO: right now the period is not being calculated here. Does it need to, or does calculate_stats or synchronizeContinuous do it already?
+            ts$period <- "00:00:00"
             ts$timeseries_id <- new_tsid
+            ts$imputed <- FALSE
             tryCatch({
               DBI::dbAppendTable(con, "measurements_continuous", ts)
               DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
@@ -114,53 +138,25 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
           }
         } else { #Add the non-continuous data
+          warning("This function is not yet set up to deal with 'discrete' category data!!! Skipping any such timeseries in the provided data.frame.")
 
           #TODO: Figure out how to handle non-continuous data!!!
           #
-          if (nrow(ts) > 0){
-            # At this point ts should contain the data you want to insert into measurements_discrete. If any coercion is necessary (col names or other) do it, then append the data. No need for calculations, periodicity sorting out, or anything necessary on the continuous timeseries.
-            # Remember to update the start_datetime, end_datetime, last_new_data in the timeseries table
-
-          } else {
-            warning("Failed to retrieve any data form ", add$location, " and parameter ", add$parameter, ".")
-          }
+          # if (nrow(ts) > 0){
+          #   # At this point ts should contain the data you want to insert into measurements_discrete. If any coercion is necessary (col names or other) do it, then append the data. No need for calculations, periodicity sorting out, or anything necessary on the continuous timeseries.
+          #   # Remember to update the start_datetime, end_datetime, last_new_data in the timeseries table
+          #
+          # } else {
+          #   warning("Failed to retrieve any data form ", add$location, " and parameter ", add$parameter, ".")
+          # }
 
         }
     }, error = function(e) {
       warning("Failed to add new data for row number ", i, " in the provided timeseries_df data.frame.")
     })
-  } #End of loop iterating over each new entry
+  } #End of loop iterating over each new  timeseries entry
 
-
-  #Add the location info ###########
-  if (!is.null(new_locs)){
-    for (i in new_locs){
-      DBI::dbWithTransaction(
-        con,
-        {
-          #locations table first
-          location <- data.frame(location = unique(locations_df[locations_df$location == i, "location"]),
-                                 name = unique(locations_df[locations_df$location == i, "name"]),
-                                 latitude = unique(locations_df[locations_df$location == i, "latitude"]),
-                                 longitude = unique(locations_df[locations_df$location == i, "longitude"]))
-          DBI::dbAppendTable(con, "locations", location)
-
-          DBI::dbExecute(con, "UPDATE locations SET point = ST_SetSRID(ST_MakePoint(longitude, latitude), 4269) WHERE point IS NULL;")
-
-
-          #now datums table
-          datum <- data.frame(location = locations_df[locations_df$location == i, "location"],
-                              datum_id_from = locations_df[locations_df$location == i, "datum_id_from"],
-                              datum_id_to = locations_df[locations_df$location == i, "datum_id_to"],
-                              conversion_m = locations_df[locations_df$location == i, "conversion_m"],
-                              current = locations_df[locations_df$location == i, "current"])
-          DBI::dbAppendTable(con, "datum_conversions", datum)
-          message("Added a new entry to the locations table for location ", i, ".")
-        }
-      ) #End of dbWithTransaction
-    }
 
     #TODO: calculate or find polygons for any locations that have flow or level. Modify function getWatersheds.
-  }
 
 }
