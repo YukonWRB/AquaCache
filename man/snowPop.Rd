@@ -7,7 +7,9 @@
 snowPop(
   old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb",
   con = snowConnect_pg(),
-  overwrite = TRUE
+  overwrite = TRUE,
+  basins_shp_path =
+    "G:/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp"
 )
 }
 \arguments{
