@@ -10,6 +10,7 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect_pg()].
 #'
 #' @param overwrite If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!
+#' @param basins_shp_path Path and file name of sub basins shapefile.
 #'
 #' @return A populated snowDB database.
 #' @export
