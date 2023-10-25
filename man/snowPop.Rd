@@ -7,7 +7,9 @@
 snowPop(
   old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb",
   con = snowConnect_pg(),
-  overwrite = TRUE
+  overwrite = TRUE,
+  basins_shp_path =
+    "G:/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp"
 )
 }
 \arguments{
@@ -16,6 +18,8 @@ snowPop(
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=snowConnect_pg]{snowConnect_pg()}}.}
 
 \item{overwrite}{If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!}
+
+\item{basins_shp_path}{Path and file name of sub basins shapefile.}
 }
 \value{
 A populated snowDB database.

@@ -12,7 +12,6 @@
 #' @export
 #'
 #'
-#'
 
 #TODO: deal with geometry of polygon fields of basin and sub-basin
 
@@ -20,27 +19,61 @@
 
 snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
 
-
   if (overwrite){
+    DBI::dbExecute(con, "DROP EXTENSION postgis CASCADE")
     for (i in DBI::dbListTables(con)){
-      DBI::dbExecute(con, paste0("DROP TABLE ", i, " CASCADE"))
+      tryCatch({
+        DBI::dbExecute(con, paste0("DROP TABLE ", i, " CASCADE"))
+      }, error = function(e) {
+        DBI::dbExecute(con, paste0("DROP VIEW ", i))
+      })
     }
+
+  # if (overwrite){
+  #   for (i in DBI::dbListTables(con)){
+  #     DBI::dbExecute(con, paste0("DROP TABLE ", i, " CASCADE"))
+  #   }
     # The DB will still be taking up space after deleting the tables. VACUUM removes empty space from database if you want to reclaim space. Otherwise, simply deleting tables preserves the "empty" space for future database use:
     DBI::dbExecute(con, "VACUUM")
   }
 
+  rpostgis::pgPostGIS(con, raster = TRUE)
+
   # Create tables
+  ### Basin  with geom test
+  # Create spatial-primary tables ########
+  # DBI::dbExecute(con, "CREATE TABLE if not exists basins (
+  #                basin TEXT PRIMARY KEY,
+  #                polygon geometry(Polygon, 4269) NOT NULL,
+  #                CONSTRAINT enforce_dims_geom CHECK (st_ndims(polygon) = 2),
+  #                CONSTRAINT enforce_geotype_geom CHECK (geometrytype(polygon) = 'POLYGON'::text),
+  #                CONSTRAINT enforce_srid_geom CHECK (st_srid(polygon) = 4269),
+  #                CONSTRAINT enforce_valid_geom CHECK (st_isvalid(polygon)),
+  #                UNIQUE (basin, polygon));")
+  # DBI::dbExecute(con, "CREATE INDEX polygons_idx ON basins USING GIST (polygon);") #Forces use of GIST indexing which is necessary for large polygons
+  # ###
+
   # basins
   DBI::dbExecute(con, "CREATE TABLE if not exists basins (
                  basin TEXT PRIMARY KEY,
                  polygon POLYGON)"
   )
 
-  # sub_basins
   DBI::dbExecute(con, "CREATE TABLE if not exists sub_basins (
                  sub_basin TEXT PRIMARY KEY,
-                 polygon POLYGON)"
-  )
+                 polygon geometry(Polygon, 4269) NOT NULL,
+                 CONSTRAINT enforce_dims_geom2 CHECK (st_ndims(polygon) = 2),
+                 CONSTRAINT enforce_geotype_geom2 CHECK (geometrytype(polygon) = 'POLYGON'::text),
+                 CONSTRAINT enforce_srid_geom2 CHECK (st_srid(polygon) = 4269),
+                 CONSTRAINT enforce_valid_geom2 CHECK (st_isvalid(polygon)))")#,
+                 #UNIQUE (sub_basin, polygon));")
+  #DBI::dbExecute(con, "CREATE INDEX polygons_idx2 ON sub_basins USING GIST (polygon);") #Forces use of GIST indexing which is necessary for large polygons
+
+  # # sub_basins
+  # DBI::dbExecute(con, "CREATE TABLE if not exists sub_basins (
+  #                sub_basin TEXT PRIMARY KEY,
+  #                polygon POLYGON)"
+  # )
 
   # locations
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
@@ -96,6 +129,18 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
                  CONSTRAINT survey_sample_time UNIQUE (survey_id, sample_datetime),
 
                  FOREIGN KEY (survey_id) REFERENCES survey(survey_id))"
+  )
+
+  # Create means - view
+  DBI::dbExecute(con, paste0("CREATE VIEW means AS ",
+  "SELECT survey.location, measurements.survey_id, ",
+  "AVG(swe) AS swe, AVG(depth) AS depth, MIN(sample_datetime) AS sample_datetime, ",
+  "STDDEV(swe) AS swe_sd, STDDEV(depth) AS depth_sd, ",
+  "COUNT(*) AS sample_count_used ",
+  "FROM measurements ",
+  "INNER JOIN survey ON measurements.survey_id = survey.survey_id ",
+  "WHERE exclude_flag = FALSE ",
+  "GROUP BY measurements.survey_id, survey.location")
   )
 
   # Create a read-only account

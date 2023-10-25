@@ -10,17 +10,19 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect_pg()].
 #'
 #' @param overwrite If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!
+#' @param basins_shp_path Path and file name of sub basins shapefile.
 #'
 #' @return A populated snowDB database.
 #' @export
 #'
 
-#TODO: Add sub_basins into locations table
-# Add polygon shapes into basins and sub-basins tables
+#TODO: Add polygon shapes into basins
 
 #snowPop(con = snowConnect_pg(), overwrite = TRUE)
 
-snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg(), overwrite = TRUE) {
+snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg(), overwrite = TRUE, basins_shp_path = "G:/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp")
+                      #"H:/estewart/SnowBulletin/Maps/swe_basins.shp")
+  {
 
   #### Pull data from Access and add to db
   # Create connection
@@ -42,18 +44,36 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   }
 
 #### ---------------------- Basins and sub-basins ------------------------- ####
+  ### Basins
   # Create tables
-  sub_basins <- data.frame(sub_basin = c("Upper Yukon", "Teslin", "Central Yukon", "Pelly", "Stewart", "White", "Lower Yukon", "Porcupine", "Peel", "Liard", "Alsek", "Alaska", NA), polygon = NA)
   basins$basins <- c("Alsek", "Yukon", "Porcupine", "Liard", "Peel", "Alaska")
-
   # Add data to database
   for (i in 1:nrow(basins)) {
     DBI::dbExecute(con, paste0("INSERT INTO basins (basin) VALUES ('", basins$basin[i], "')"))
   }
 
-  for (i in 1:nrow(sub_basins)) {
-    DBI::dbExecute(con, paste0("INSERT INTO sub_basins (sub_basin) VALUES ('", sub_basins$sub_basin[i], "')"))
-  }
+  ### Sub_basins
+      #sub_basins <- sf::st_read(data("swe_basins"))
+      sub_basins <- sf::st_read(basins_shp_path)
+      # Subset to cols of interest
+      sub_basins <- sub_basins[,c(1,4)]
+      # Add Alaska and NA
+      sub_basins[nrow(sub_basins) + 1,] <- list("Alaska", NA)
+      sub_basins[nrow(sub_basins) + 1,] <- list("Other", NA)
+      # Change column names to match snowdb ones
+      sub_basins <- sub_basins %>% dplyr::rename(sub_basin = "SWE_Basin", polygon = "geometry")
+      # Re-project
+      sub_basins <- sf::st_transform(sub_basins, 4269)
+      # Add to db
+      rpostgis::pgWriteGeom(con, name = c('public', 'sub_basins') , data.obj = sub_basins, geom = "polygon")
+
+  # ### Old
+  #     # Create tables
+  #     sub_basins <- data.frame(sub_basin = c("Upper Yukon", "Teslin", "Central Yukon", "Pelly", "Stewart", "White", "Lower Yukon", "Porcupine", "Peel", "Liard", "Alsek", "Alaska", NA), polygon = NA)
+  #     # Add to db
+  #     for (i in 1:nrow(sub_basins)) {
+  #       DBI::dbExecute(con, paste0("INSERT INTO sub_basins (sub_basin) VALUES ('", sub_basins$sub_basin[i], "')"))
+  #     }
 
 
 #### --------------------------- Locations -------------------------------- ####
@@ -69,16 +89,20 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   locations <- merge(locations, basins, by = "BASIN_ID")
   # Change agency_id to agency
   locations <- merge(locations, agency, by = "AGENCY_ID")
+  # Subset table
   locations <- locations[, c("SNOW_COURSE_ID", "SNOW_COURSE_NAME", "latitude", "longitude", "ACTIVE_FLG", "ELEVATION", "AGENCY_NAME", "basins")]
   # Add notes
   locations$notes <- NA
   # Add sub_basins
   locations$sub_basin <- NA
-
   # Update column names
   colnames(locations) <- c("location", "name", "latitude", "longitude", "active", "elevation", "agency", "basin", "notes", 'sub_basin')
   # Deal with any apostrophes in strings
   locations$name <- gsub("'", "''", locations$name)
+  # Add sub-basins
+  name_to_sub_basin <- c('Aishihik Lake'='Alsek', 'Alder Creek'='Alsek', 'Arrowhead Lake'='Stewart', 'Atlin (B.C)'='Upper_Yukon', 'Beaver Creek'='White', 'Blackstone River'='Peel', 'Bonnet Plume Lake'='Peel', 'Boundary (Alaska)'='Lower_Yukon', 'Burns Lake'='Pelly', 'Burwash Airstrip'='White', 'Burwash Uplands'='White', 'Calumet'='Stewart', 'Canyon Lake'='Alsek', 'Casino Creek'='White', 'Chadburn Lake'='Upper_Yukon', 'Chair Mountain'='White', 'Clay Creek'='Alsek', 'Clearwater Creek'='Pelly', 'Clinton Creek'='Lower_Yukon', 'Duke River'='White', 'Duke River A'='White', 'Eagle Plains'='Porcupine', 'Eagle River'='Porcupine', 'Eaglecrest'='Alaska', 'Edwards Lake'='Stewart', 'Felsite Creek'='Alsek', 'Finlayson Airstrip'='Pelly', 'Ford Lake'='Liard', 'Fort Selkirk'='Pelly', 'Frances River'='Liard', 'Fuller Lake'='Pelly', 'Grizzly Creek'='Lower_Yukon', 'Haines Junction Farm'='Alsek', 'Hoole River'='Pelly', 'Hyland River'='Liard', 'Hyland River B'='Liard', 'Jordan Lake'='Teslin_Big_Salmon', 'Keno Hill'='Stewart', 'King Solomon Dome'='Lower_Yukon', 'Log Cabin (B.C.)'='Upper_Yukon', 'Long Lake'='Upper_Yukon', 'MacIntosh'='White', 'MacMillan Pass'='Pelly', 'Mayo Airport A'='Stewart', 'Mayo Airport B'='Stewart', 'McClintock'='Upper_Yukon', 'Meadow Creek'='Teslin_Big_Salmon', 'Midnight Dome'='Lower_Yukon', 'Montana Mountain'='Upper_Yukon', 'Moore Creek Bridge'='Alaska', 'Morley Lake'='Teslin_Big_Salmon', 'Mount Berdoe'='Central_Yukon', 'Mount Nansen'='White', 'Mt McIntyre A'='Upper_Yukon', 'Mt McIntyre B'='Upper_Yukon', 'Mt McIntyre C'='Upper_Yukon', 'Mt McIntyre D'='Upper_Yukon', 'Mt Peters'='Teslin_Big_Salmon', 'Northern Lake'='Teslin_Big_Salmon', 'Ogilvie River'='Peel', 'Old Crow'='Porcupine', 'Pelly Farm'='Pelly', 'Pine Lake Airstrip'='Liard', 'Plata Airstrip'='Stewart', 'Profile Mountain'='Alsek', 'Rackla Lake'='Stewart', "Riff''s Ridge"='Porcupine', 'Rose Creek'='Pelly', 'Ross River Hill'='Pelly', 'Russell Lake'='Pelly', 'Satasha Lake'='Central_Yukon', 'Stanley Creek'='Alsek', 'Stewart Crossing A'='Stewart', 'Summit'='Alsek', 'Tagish'='Upper_Yukon', 'Takhanne'='Alsek', 'Tintina Airstrip'='Liard', 'Tsichu River'='Liard', 'Tungsten'='Liard', 'Twin Creeks A'='Pelly', 'Twin Creeks B'='Pelly', 'Watson Lake Airport'='Liard', 'White River'='White', 'Whitehorse Airport'='Upper_Yukon', 'Williams Creek'='Central_Yukon', 'Withers Lake'='Stewart')
+
+  locations$sub_basin <- name_to_sub_basin[locations$name]
 
   ## Add to db
   for (i in 1:nrow(locations)) {
