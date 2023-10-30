@@ -16,11 +16,12 @@
 #' @export
 #'
 
-#TODO: Add polygon shapes into basins
+#TODO: Add polygon shapes into basins, ask Tyler to create these?
+#TODO: Add snow scale/pillow locations
 
 #snowPop(con = snowConnect_pg(), overwrite = TRUE)
 
-snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg(), overwrite = TRUE, basins_shp_path = "G:/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp")
+snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg(), overwrite = TRUE, basins_shp_path = "//env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp")
                       #"H:/estewart/SnowBulletin/Maps/swe_basins.shp")
   {
 
@@ -32,6 +33,7 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   locations <- DBI::dbReadTable(snowCon, "SNOW_COURSE")
   meas <- DBI::dbGetQuery(snowCon, paste0("SELECT * FROM SNOW_SAMPLE WHERE SNOW_COURSE_ID IN ('", paste(locations$SNOW_COURSE_ID, collapse = "', '"), "')"))
   basins <- DBI::dbReadTable(snowCon, "SNOW_BASIN")
+  basins$basin <- c("Alsek", "Yukon", "Porcupine", "Liard", "Peel", "Alaska")
   agency <- DBI::dbReadTable(snowCon, "AGENCY")
   DBI::dbDisconnect(snowCon)
 
@@ -46,10 +48,10 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
 #### ---------------------- Basins and sub-basins ------------------------- ####
   ### Basins
   # Create tables
-  basins$basins <- c("Alsek", "Yukon", "Porcupine", "Liard", "Peel", "Alaska")
+  basins_db <- c("Alsek", "Yukon", "Porcupine", "Liard", "Peel", "Alaska", "North_Slope")
   # Add data to database
-  for (i in 1:nrow(basins)) {
-    DBI::dbExecute(con, paste0("INSERT INTO basins (basin) VALUES ('", basins$basin[i], "')"))
+  for (i in 1:length(basins)) {
+    DBI::dbExecute(con, paste0("INSERT INTO basins (basin) VALUES ('", basins_db[i], "')"))
   }
 
   ### Sub_basins
@@ -58,8 +60,10 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
       # Subset to cols of interest
       sub_basins <- sub_basins[,c(1,4)]
       # Add Alaska and NA
+      sub_basins[nrow(sub_basins) + 1,] <- list("North_Slope", NA)
       sub_basins[nrow(sub_basins) + 1,] <- list("Alaska", NA)
       sub_basins[nrow(sub_basins) + 1,] <- list("Other", NA)
+
       # Change column names to match snowdb ones
       sub_basins <- sub_basins %>% dplyr::rename(sub_basin = "SWE_Basin", polygon = "geometry")
       # Re-project
@@ -90,7 +94,7 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   # Change agency_id to agency
   locations <- merge(locations, agency, by = "AGENCY_ID")
   # Subset table
-  locations <- locations[, c("SNOW_COURSE_ID", "SNOW_COURSE_NAME", "latitude", "longitude", "ACTIVE_FLG", "ELEVATION", "AGENCY_NAME", "basins")]
+  locations <- locations[, c("SNOW_COURSE_ID", "SNOW_COURSE_NAME", "latitude", "longitude", "ACTIVE_FLG", "ELEVATION", "AGENCY_NAME", "basin")]
   # Add notes
   locations$notes <- NA
   # Add sub_basins
@@ -103,6 +107,42 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   name_to_sub_basin <- c('Aishihik Lake'='Alsek', 'Alder Creek'='Alsek', 'Arrowhead Lake'='Stewart', 'Atlin (B.C)'='Upper_Yukon', 'Beaver Creek'='White', 'Blackstone River'='Peel', 'Bonnet Plume Lake'='Peel', 'Boundary (Alaska)'='Lower_Yukon', 'Burns Lake'='Pelly', 'Burwash Airstrip'='White', 'Burwash Uplands'='White', 'Calumet'='Stewart', 'Canyon Lake'='Alsek', 'Casino Creek'='White', 'Chadburn Lake'='Upper_Yukon', 'Chair Mountain'='White', 'Clay Creek'='Alsek', 'Clearwater Creek'='Pelly', 'Clinton Creek'='Lower_Yukon', 'Duke River'='White', 'Duke River A'='White', 'Eagle Plains'='Porcupine', 'Eagle River'='Porcupine', 'Eaglecrest'='Alaska', 'Edwards Lake'='Stewart', 'Felsite Creek'='Alsek', 'Finlayson Airstrip'='Pelly', 'Ford Lake'='Liard', 'Fort Selkirk'='Pelly', 'Frances River'='Liard', 'Fuller Lake'='Pelly', 'Grizzly Creek'='Lower_Yukon', 'Haines Junction Farm'='Alsek', 'Hoole River'='Pelly', 'Hyland River'='Liard', 'Hyland River B'='Liard', 'Jordan Lake'='Teslin_Big_Salmon', 'Keno Hill'='Stewart', 'King Solomon Dome'='Lower_Yukon', 'Log Cabin (B.C.)'='Upper_Yukon', 'Long Lake'='Upper_Yukon', 'MacIntosh'='White', 'MacMillan Pass'='Pelly', 'Mayo Airport A'='Stewart', 'Mayo Airport B'='Stewart', 'McClintock'='Upper_Yukon', 'Meadow Creek'='Teslin_Big_Salmon', 'Midnight Dome'='Lower_Yukon', 'Montana Mountain'='Upper_Yukon', 'Moore Creek Bridge'='Alaska', 'Morley Lake'='Teslin_Big_Salmon', 'Mount Berdoe'='Central_Yukon', 'Mount Nansen'='White', 'Mt McIntyre A'='Upper_Yukon', 'Mt McIntyre B'='Upper_Yukon', 'Mt McIntyre C'='Upper_Yukon', 'Mt McIntyre D'='Upper_Yukon', 'Mt Peters'='Teslin_Big_Salmon', 'Northern Lake'='Teslin_Big_Salmon', 'Ogilvie River'='Peel', 'Old Crow'='Porcupine', 'Pelly Farm'='Pelly', 'Pine Lake Airstrip'='Liard', 'Plata Airstrip'='Stewart', 'Profile Mountain'='Alsek', 'Rackla Lake'='Stewart', "Riff''s Ridge"='Porcupine', 'Rose Creek'='Pelly', 'Ross River Hill'='Pelly', 'Russell Lake'='Pelly', 'Satasha Lake'='Central_Yukon', 'Stanley Creek'='Alsek', 'Stewart Crossing A'='Stewart', 'Summit'='Alsek', 'Tagish'='Upper_Yukon', 'Takhanne'='Alsek', 'Tintina Airstrip'='Liard', 'Tsichu River'='Liard', 'Tungsten'='Liard', 'Twin Creeks A'='Pelly', 'Twin Creeks B'='Pelly', 'Watson Lake Airport'='Liard', 'White River'='White', 'Whitehorse Airport'='Upper_Yukon', 'Williams Creek'='Central_Yukon', 'Withers Lake'='Stewart')
 
   locations$sub_basin <- name_to_sub_basin[locations$name]
+
+  # Add missing locations
+  # Mayo Airport C, Whitehorse Airport A, Whitehorse Airport B (only Whitehorse Airport)
+  # North Slope locations
+  new_locs <- data.frame("location" = c("09MD-SC01", "09MD-SC02", "09MD-SC03", "09MD-SC04", "09MD-SC05", "09MD-SC06"),
+                     "name" = c("AK Border", "Komakuk Beach", "Herschel Island", "Stokes Point", "Shingle Point", "NWT/YK Border"),
+                     "latitude" = c(69.6458, 69.5908, 69.5748, 69.3177, 68.9212, 68.7312),
+                     "longitude" = c(-141.0000, -140.1813, -138.8630, -138.7460, -137.2695, -136.4750),
+                     "active" = c(rep(TRUE, times = 6)),
+                     "elevation" = c(2, 8, 61, 17, 38, 100),
+                     "agency" = rep("Parks Canada", times = 6),
+                     "basin" = rep("North_Slope", times = 6),
+                     "notes" = rep(NA, times = 6),
+                     "sub_basin" = rep("North_Slope", times = 6))
+  locations <- rbind(locations, new_locs)
+  # Snow scale/pillows
+    # Twin Creeks B Snow Scale, Withers Pillow, Withers Scale, Tagish Snow Scale, Tagish Snow Pillow, Hyland Snow Scale, Buckbrush Snow Scales. King Solomon Dome?
+  #TODO: Ask Ghislain what would make the most sense. Maybe add something to timeseries that would give method, so that you could specify snow pillow or snow scale? Other option is to just create new sites, but this could get messy.
+  # new_locs <- data.frame("location" = c("09BA-M7", "09DB-M1_pillow", "09DB-M1_scale",
+  #                                       "09AA-M1_pillow", "09AA-M1_scale", "10AD-M2",
+  #                                       "?"),
+  #                        "name" = c("Twin Creeks North", "Withers Lake", "Withers Lake",
+  #                                   "Tagish", "Tagish", "Hyland North",
+  #                                   "Buckbrush"),
+  #                        "latitude" = c(62.61939, 63.980283, "?",
+  #                                       "?", "?", 61.58012),
+  #                        "longitude" = c(-131.26337, -132.297827, "?",
+  #                                        "?", "?", -128.30507),
+  #                        "active" = c(rep(TRUE, times = 6)),
+  #                        "elevation" = c(888, 965),
+  #                        "agency" = rep("Yukon Environment", times = 6),
+  #                        "basin" = c("Yukon", "Yukon"),
+  #                        "notes" = rep(NA, times = 6),
+  #                        "sub_basin" = c("Pelly", "Stewart"))
+  # locations <- rbind(locations, new_locs)
+
 
   ## Add to db
   for (i in 1:nrow(locations)) {
@@ -134,8 +174,7 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
     # Check for non-unique combinations of location and target_date
     test <- paste(survey$location, survey$target_date, sep = "")
     test[duplicated(test)] # NONE!
-    # Check that all locations exist in locations table and vice-versa
-    setdiff(unique(locations$location), unique(survey$location))
+    # Check that all survey locations exist in locations table and vice-versa
     setdiff(unique(survey$location), unique(locations$location))
 
   # Import into db
@@ -161,10 +200,11 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
     measurements <- measurements[, !(names(measurements) %in% c("survey_date"))]
   # Add sample_name column
     measurements$sampler_name <- NA
+    measurements$average <- rep(TRUE, times=nrow(measurements))
 
   # Import measurements into db
     for (i in 1:nrow(measurements)) {
-      DBI::dbExecute(con, paste0("INSERT INTO measurements (survey_id, sample_datetime, sampler_name, estimate_flag, exclude_flag, swe, depth, notes) VALUES ('", measurements$survey_id[i], "', '", measurements$sample_datetime[i], "', '", measurements$sampler_name[i], "', '", measurements$estimate_flag[i], "', '", measurements$exclude_flag[i], "', '", measurements$swe[i], "', '", measurements$depth[i], "', '", measurements$notes[i], "')"))
+      DBI::dbExecute(con, paste0("INSERT INTO measurements (survey_id, sample_datetime, sampler_name, estimate_flag, exclude_flag, swe, depth, average, notes) VALUES ('", measurements$survey_id[i], "', '", measurements$sample_datetime[i], "', '", measurements$sampler_name[i], "', '", measurements$estimate_flag[i], "', '", measurements$exclude_flag[i], "', '", measurements$swe[i], "', '", measurements$depth[i], "', '", measurements$average[i], "', '", measurements$notes[i], "')"))
     }
 
  DBI::dbDisconnect(con)

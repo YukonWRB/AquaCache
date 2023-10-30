@@ -125,6 +125,7 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
                  exclude_flag BOOLEAN NOT NULL,
                  SWE NUMERIC,
                  depth NUMERIC,
+                 average BOOLEAN,
                  notes TEXT,
                  CONSTRAINT survey_sample_time UNIQUE (survey_id, sample_datetime),
 
