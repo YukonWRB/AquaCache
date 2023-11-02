@@ -18,7 +18,7 @@
 
 getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
-
+  # Set hydromet database connection
   hydro <- YGWater::hydroConnect(path = hydro_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(hydro), add=TRUE)
 
@@ -29,6 +29,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     initial_create(path = hydro_db_path, extras = "snow courses", overwrite = FALSE)
   }
 
+  # Set snow database connection
   snowCon <- YGWater::snowConnect_access(path = snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
 
@@ -107,6 +108,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
     locations <- locations[locations$ACTIVE_FLG == TRUE ,]
   }
 
+  # Reconnect to hydromet database and
   hydro <- YGWater::hydroConnect(path = hydro_db_path, silent = TRUE)
   for (i in 1:nrow(locations)){
     #get new measurements
@@ -145,6 +147,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
       }
     }
   } #End of for loop iterating over locations
+
   DBI::dbExecute(hydro, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_snow_courses'"))
   DBI::dbDisconnect(hydro)
   print("Snow course survey data is updated in the database.")
