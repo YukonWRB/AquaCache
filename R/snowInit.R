@@ -15,7 +15,7 @@
 
 #TODO: deal with geometry of polygon fields of basin and sub-basin
 
-#snowInit(snowConnect_pg(), overwrite = TRUE)
+#snowInit(snowConnect_pg(), overwrite = FALSE)
 
 snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
 
@@ -104,7 +104,7 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
   )
 
   # survey
-  DBI::dbExecute(con, "CREATE TABLE if not exists survey (
+  DBI::dbExecute(con, "CREATE TABLE if not exists surveys (
                  survey_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  target_date DATE NOT NULL,
@@ -127,22 +127,29 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
                  depth NUMERIC,
                  average BOOLEAN,
                  notes TEXT,
-                 CONSTRAINT survey_sample_time UNIQUE (survey_id, sample_datetime),
 
-                 FOREIGN KEY (survey_id) REFERENCES survey(survey_id))"
+                 FOREIGN KEY (survey_id) REFERENCES surveys(survey_id))"
   )
+#                 CONSTRAINT survey_sample_time UNIQUE (survey_id, sample_datetime),
 
-  # Create means - view
   DBI::dbExecute(con, paste0("CREATE VIEW means AS ",
-  "SELECT survey.location, measurements.survey_id, ",
-  "AVG(swe) AS swe, AVG(depth) AS depth, MIN(sample_datetime) AS sample_datetime, ",
-  "STDDEV(swe) AS swe_sd, STDDEV(depth) AS depth_sd, ",
-  "COUNT(*) AS sample_count_used ",
-  "FROM measurements ",
-  "INNER JOIN survey ON measurements.survey_id = survey.survey_id ",
-  "WHERE exclude_flag = FALSE ",
-  "GROUP BY measurements.survey_id, survey.location")
-  )
+                             "WITH measurement_counts AS (",
+                             "  SELECT survey_id, COUNT(*) AS total_count ",
+                             "  FROM measurements ",
+                             "  GROUP BY survey_id",
+                             ")",
+                             "SELECT surveys.location, measurements.survey_id, ",
+                             "AVG(swe) AS swe, AVG(depth) AS depth, MIN(sample_datetime) AS sample_datetime, ",
+                             "STDDEV(swe) AS swe_sd, STDDEV(depth) AS depth_sd, ",
+                             "COUNT(*) AS sample_count_used, ",
+                             "total_count - COUNT(*) AS sample_count_ex, ",
+                             "BOOL_OR(measurements.estimate_flag) AS estimate_flag ",
+                             "FROM measurements ",
+                             "INNER JOIN surveys ON measurements.survey_id = surveys.survey_id ",
+                             "LEFT JOIN measurement_counts ON measurements.survey_id = measurement_counts.survey_id ",
+                             "WHERE exclude_flag = FALSE ",
+                             "GROUP BY measurements.survey_id, surveys.location, total_count"
+  ))
 
   # Create a read-only account
   tryCatch({

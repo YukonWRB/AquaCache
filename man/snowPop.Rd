@@ -9,7 +9,7 @@ snowPop(
   con = snowConnect_pg(),
   overwrite = TRUE,
   basins_shp_path =
-    "G:/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp"
+    "//env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp"
 )
 }
 \arguments{

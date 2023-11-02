@@ -17,7 +17,7 @@
 #'
 
 #TODO: Add polygon shapes into basins, ask Tyler to create these?
-#TODO: Add snow scale/pillow locations
+#TODO: Consider eventually adding Mayo Airport C and Whitehorse Airport B. These have not been added as they are new sites that will be moved again soon.
 
 #snowPop(con = snowConnect_pg(), overwrite = TRUE)
 
@@ -25,9 +25,11 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
                       #"H:/estewart/SnowBulletin/Maps/swe_basins.shp")
   {
 
+  #Initial setup
+  rlang::check_installed("sf", reason = "Package sf is required to use function snowPop")
   #### Pull data from Access and add to db
   # Create connection
-  snowCon <- WRBtools::snowConnect(path = old_snow_db_path, silent = TRUE)
+  snowCon <- YGwater::snowConnect_access(path = old_snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
   #Get tables
   locations <- DBI::dbReadTable(snowCon, "SNOW_COURSE")
@@ -39,7 +41,7 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
 
   if (overwrite == TRUE) {
     DBI::dbExecute(con, "DELETE FROM measurements")
-    DBI::dbExecute(con, "DELETE FROM survey")
+    DBI::dbExecute(con, "DELETE FROM surveys")
     DBI::dbExecute(con, "DELETE FROM locations")
     DBI::dbExecute(con, "DELETE FROM sub_basins")
     DBI::dbExecute(con, "DELETE FROM basins")
@@ -108,6 +110,14 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
 
   locations$sub_basin <- name_to_sub_basin[locations$name]
 
+  # Change agencies
+  name_to_agency <- c('Aishihik Lake'='Yukon Energy Corporation', 'Alder Creek'='Parks Canada', 'Arrowhead Lake'='WRB', 'Atlin (B.C)'='WRB', 'Beaver Creek'='EMR', 'Blackstone River'='EMR', 'Bonnet Plume Lake'='EMR', 'Boundary (Alaska)'='Natural Resources Conservation Service, USDA', 'Burns Lake'='EMR', 'Burwash Airstrip'='EMR', 'Burwash Uplands'='EMR', 'Calumet'='EMR', 'Canyon Lake'='Yukon Energy Corporation', 'Casino Creek'='EMR', 'Chadburn Lake'='WRB', 'Chair Mountain'='EMR', 'Clay Creek'='Parks Canada', 'Clearwater Creek'='WRB', 'Clinton Creek'='WRB', 'Duke River'='Parcs Canada', 'Duke River A'='WRB', 'Eagle Plains'='EMR', 'Eagle River'='EMR', 'Eaglecrest'='Natural Resources Conservation Service, USDA', 'Edwards Lake'='EMR', 'Felsite Creek'='WRB', 'Finlayson Airstrip'='EMR', 'Ford Lake'='EMR', 'Fort Selkirk'='WRB', 'Frances River'='EMR', 'Fuller Lake'='EMR', 'Grizzly Creek'='EMR', 'Haines Junction Farm'='EMR', 'Hoole River'='EMR', 'Hyland River'='EMR', 'Hyland River B'='EMR', 'Jordan Lake'='EMR', 'Keno Hill'='WRB', 'King Solomon Dome'='EMR', 'Log Cabin (B.C.)'='EMR', 'Long Lake'='WRB', 'MacIntosh'='EMR', 'MacMillan Pass'='WRB', 'Mayo Airport A'='EMR', 'Mayo Airport B'='EMR', 'McClintock'='WRB', 'Meadow Creek'='EMR', 'Midnight Dome'='EMR', 'Montana Mountain'='EMR', 'Moore Creek Bridge'='Natural Resources Conservation Service, USDA', 'Morley Lake'='EMR', 'Mount Berdoe'='EMR', 'Mount Nansen'='EMR', 'Mt McIntyre A'='WRB', 'Mt McIntyre B'='WRB', 'Mt McIntyre C'='WRB', 'Mt McIntyre D'='WRB', 'Mt Peters'='WRB', 'Northern Lake'='WRB', 'Ogilvie River'='EMR', 'Old Crow'='Vuntut Gwitchin First Nation', 'Pelly Farm'='Private Contract', 'Pine Lake Airstrip'='EMR', 'Plata Airstrip'='EMR', 'Profile Mountain'='Parcs Canada', 'Rackla Lake'='EMR', "Riff''s Ridge"='EMR', 'Rose Creek'='EMR', 'Ross River Hill'='WRB', 'Russell Lake'='EMR', 'Satasha Lake'='EMR', 'Stanley Creek'='WRB', 'Stewart Crossing A'='WRB', 'Summit'='EMR', 'Tagish'='EMR', 'Takhanne'='WRB', 'Tintina Airstrip'='EMR', 'Tsichu River'='WRB', 'Tungsten'='WRB', 'Twin Creeks A'='EMR', 'Twin Creeks B'='EMR', 'Watson Lake Airport'='EMR', 'White River'='WRB', 'Whitehorse Airport'='WRB', 'Williams Creek'='EMR', 'Withers Lake'='EMR')
+
+  locations$agency <- name_to_agency[locations$name]
+
+  locations$agency[locations$agency == 'EMR'] <- 'Yukon Energy Mines and Resources, Compliance Monitoring and Inspections Branch'
+  locations$agency[locations$agency == 'WRB'] <- 'Yukon Environment, Water Resources Branch'
+
   # Add missing locations
   # Mayo Airport C, Whitehorse Airport A, Whitehorse Airport B (only Whitehorse Airport)
   # North Slope locations
@@ -144,47 +154,48 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   # locations <- rbind(locations, new_locs)
 
 
+
   ## Add to db
   for (i in 1:nrow(locations)) {
     DBI::dbExecute(con, paste0("INSERT INTO locations (location, name, agency, basin, sub_basin, active, elevation, latitude, longitude, notes) VALUES ('", locations$location[i], "', '", locations$name[i], "', '", locations$agency[i], "', '", locations$basin[i], "', '", locations$sub_basin[i], "', '", locations$active[i], "', '", locations$elevation[i], "', '", locations$latitude[i], "', '", locations$longitude[i], "', '", locations$notes[i], "')"))
   }
 
 
-#### ----------------------------- Survey --------------------------------- ####
+#### ----------------------------- Surveys --------------------------------- ####
   # Remove rows with EXCLUDE_FLG = TRUE
-  survey <- meas[meas$EXCLUDE_FLG==FALSE,]
+  surveys <- meas[meas$EXCLUDE_FLG==FALSE,]
   # Deal with NA target and survey dates
     # For those with data, keep and make sample date the target date
       # Find rows where survey_date is NA and depth is not NA
-      rows_to_update <- is.na(survey$SURVEY_DATE) & !is.na(survey$DEPTH)
+      rows_to_update <- is.na(surveys$SURVEY_DATE) & !is.na(surveys$DEPTH)
       # Update survey_date with target_date for selected rows
-      survey$SURVEY_DATE[rows_to_update] <- survey$SAMPLE_DATE[rows_to_update]
+      surveys$SURVEY_DATE[rows_to_update] <- surveys$SAMPLE_DATE[rows_to_update]
     # For those without data, remove
-      rows_to_remove <- is.na(survey$SURVEY_DATE) & is.na(survey$DEPTH)
-      survey <- survey[!rows_to_remove,]
+      rows_to_remove <- is.na(surveys$SURVEY_DATE) & is.na(surveys$DEPTH)
+      surveys <- surveys[!rows_to_remove,]
 
   # Remove columns and add notes
-  survey <- survey[c("SNOW_COURSE_ID", "SAMPLE_DATE", "SURVEY_DATE")]
-  survey$notes <- NA
+  surveys <- surveys[c("SNOW_COURSE_ID", "SAMPLE_DATE", "SURVEY_DATE")]
+  surveys$notes <- NA
   # Rename columns
-  colnames(survey) <- c("location", "target_date", "survey_date", "notes")
+  colnames(surveys) <- c("location", "target_date", "survey_date", "notes")
   # Check for things
     # Check for duplicate rows
-    survey[duplicated(survey) | duplicated(survey, fromLast = TRUE), ] # NONE!
+    surveys[duplicated(surveys) | duplicated(surveys, fromLast = TRUE), ] # NONE!
     # Check for non-unique combinations of location and target_date
-    test <- paste(survey$location, survey$target_date, sep = "")
+    test <- paste(surveys$location, surveys$target_date, sep = "")
     test[duplicated(test)] # NONE!
     # Check that all survey locations exist in locations table and vice-versa
-    setdiff(unique(survey$location), unique(locations$location))
+    setdiff(unique(surveys$location), unique(locations$location))
 
   # Import into db
-  for (i in 1:nrow(survey)) {
-    DBI::dbExecute(con, paste0("INSERT INTO survey (location, target_date, survey_date, notes) VALUES ('", survey$location[i], "', '", survey$target_date[i], "', '", survey$survey_date[i], "', '", survey$notes[i], "')"))
+  for (i in 1:nrow(surveys)) {
+    DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes) VALUES ('", surveys$location[i], "', '", surveys$target_date[i], "', '", surveys$survey_date[i], "', '", surveys$notes[i], "')"))
   }
 
 #### -------------------------- Measurements ------------------------------ ####
   # Pull survey table from db
-    survey <- DBI::dbReadTable(con, "survey")
+    survey <- DBI::dbReadTable(con, "surveys")
   # Remove columns not interested in
     measurements <- meas[,c("SNOW_COURSE_ID", "DEPTH", "SNOW_WATER_EQUIV", "SAMPLE_DATE", "ESTIMATE_FLG", "EXCLUDE_FLG")]
   # Rename columns
