@@ -1,9 +1,9 @@
 #' Initial population of PostgreSQL snow database.
 #'
 #' @description
-#' `r lifecycle::badge("experimental")`
+#' `r lifecycle::badge("stable")`
 #'
-#' Populates the snowDB PostgreSQL database. Pulls existing data from Access database. Currently only populates a couple of tables and is a work in progess.
+#' Populates the snowDB PostgreSQL database. Pulls existing data from Access database.
 #'
 #' @param old_snow_db_path the path to where the old Access snow database exists
 #'

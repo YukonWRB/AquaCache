@@ -156,6 +156,7 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
     DBI::dbExecute(con, "CREATE ROLE snow_read WITH LOGIN PASSWORD 'snow';")
     DBI::dbExecute(con, "GRANT CONNECT ON DATABASE snowDB TO snow_read;")
     DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO snow_read;")
+    DBI::dbExecute(con, "GRANT SELECT ON means to snow_read;")
     DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO snow_read;")
   }, error = function(e) {
     warning("Not able to create a new read only account with name snow_read. Ignore this message if it already exists (this function would not have erased the old account)")
