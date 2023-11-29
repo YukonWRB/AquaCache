@@ -1,18 +1,20 @@
 Package: HydroMetDB
 Title: Hydrological database creation and maintenance
-Version: 1.0.1
-
-Authors@R: 
-    person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
-           comment = c(ORCID = "0000-0002-5093-9185"))
+Version: 1.0.2
+Authors@R: c(
+    person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-5093-9185")),
+    person("Emilie", "Stwart-Jones", , "emilie.stewart-jones@yukon.ca", role = "aut")
+  )
 Description: Set of functions for the creation and ongoing maintenance of
-    the Yukon Government's hydrometeorological database in postgreSQL format. This
-    database is a combination of the Water Survey of Canada real-time and
-    historical data, YG data held in Aquarius and in the RWIS database, USGS data, and discrete
-    snow survey data. Supports any number of timeseries unique by their
-    location, parameter, data type, and period (for sum, mean, etc
-    measurements). Disparate data sources are handled via scripts
-    specified for each timeseries, allowing for expansion of data sources.
+    the Yukon Government's hydrometeorological database in postgreSQL
+    format. This database is a combination of the Water Survey of Canada
+    real-time and historical data, YG data held in Aquarius and in the
+    RWIS database, USGS data, and discrete snow survey data. Supports any
+    number of timeseries unique by their location, parameter, data type,
+    and period (for sum, mean, etc measurements). Disparate data sources
+    are handled via scripts specified for each timeseries, allowing for
+    expansion of data sources.
 License: AGPL (>= 3) + file LICENSE
 Depends: 
     R (>= 4.1.0)
@@ -27,19 +29,20 @@ Imports:
     lubridate,
     magrittr,
     rlang,
-    RPostgres,
     rpostgis,
+    RPostgres,
     RSQLite,
-    terra,
     stats,
+    terra,
     tidyhydat,
     tidyr,
     zoo
 Suggests: 
     knitr,
+    openxlsx,
     rmarkdown,
-    testthat (>= 3.0.0),
-    openxlsx
+    sf,
+    testthat (>= 3.0.0)
 VignetteBuilder: 
     knitr
 Config/testthat/edition: 3

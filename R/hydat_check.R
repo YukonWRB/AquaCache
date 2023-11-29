@@ -7,7 +7,7 @@
 #'
 #' @param silent Should messages be printed to the console?
 #'
-#' @return An updated local copy of hydat, if indicated by the age of the remote HYDAT.
+#' @return TRUE if hydat was updated, FALSE if not. Also an updated local copy of hydat, if indicated by the age of the remote HYDAT being younger than the local hydat.
 #' @export
 #'
 
@@ -33,11 +33,13 @@ hydat_check <- function(silent = FALSE){
         if (!silent){
           message("The local WSC HYDAT database was updated.")
         }
+        updated <- TRUE
       } else {
-        if (!silent){
-          warning("Failed to update the local HYDAT database. There is probably an active connection to the database preventing an overwrite.")
-        }
+        warning("Failed to update the local HYDAT database. There is probably an active connection to the database preventing an overwrite.")
+        updated <- FALSE
       }
+    } else {
+      updated <- FALSE
     }
   } else if (is.null(hydat_path)) {# if hydat does not already exist, download fresh to the default location
     tidyhydat::download_hydat(ask=FALSE)
@@ -48,9 +50,13 @@ hydat_check <- function(silent = FALSE){
     if (!silent){
       message("A local copy of the WSC HYDAT database was installed.")
     }
+    updated <- TRUE
+  } else {
+    updated <- FALSE
   }
 
   if (!silent){
     message("hydat_check completed.")
   }
+  return(updated)
 }
