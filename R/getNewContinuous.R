@@ -21,7 +21,11 @@
 
  getNewContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all")
 {
+
+  # Get settings
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
+
+  # Create table of timeseries
   if (timeseries_id[1] == "all"){
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
   } else {
@@ -33,6 +37,8 @@
 
   count <- 0 #counter for number of successful new pulls
   success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
+
+  # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
@@ -176,6 +182,7 @@
       warning("getNewContinuous: Failed to get new data or to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], ").")
     }) #End of tryCatch
   } #End of iteration over each location + param
+
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_continuous'"))
   if (nrow(success) > 0){

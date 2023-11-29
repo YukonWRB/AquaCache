@@ -15,9 +15,7 @@
 
 #TODO: deal with geometry of polygon fields of basin and sub-basin
 
-#snowInit(snowConnect_pg(), overwrite = FALSE)
-
-snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
+snowInit <- function(con = snowConnect(), overwrite = FALSE) {
 
   if (overwrite){
     DBI::dbExecute(con, "DROP EXTENSION postgis CASCADE")

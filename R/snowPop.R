@@ -19,9 +19,8 @@
 #TODO: Add polygon shapes into basins, ask Tyler to create these?
 #TODO: Consider eventually adding Mayo Airport C and Whitehorse Airport B. These have not been added as they are new sites that will be moved again soon.
 
-#snowPop(con = snowConnect_pg(), overwrite = TRUE)
 
-snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg(), overwrite = TRUE, basins_shp_path = "//env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp")
+snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect(), overwrite = TRUE, basins_shp_path = "//env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp")
                       #"H:/estewart/SnowBulletin/Maps/swe_basins.shp")
   {
 
@@ -29,7 +28,7 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   rlang::check_installed("sf", reason = "Package sf is required to use function snowPop")
   #### Pull data from Access and add to db
   # Create connection
-  snowCon <- YGwater::snowConnect_access(path = old_snow_db_path, silent = TRUE)
+  snowCon <- snowConnect_access(path = old_snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
   #Get tables
   locations <- DBI::dbReadTable(snowCon, "SNOW_COURSE")
