@@ -7,7 +7,7 @@
 #'
 #' @param old_snow_db_path the path to where the old Access snow database exists
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect_pg()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect()].
 #'
 #' @param overwrite If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!
 #' @param basins_shp_path Path and file name of sub basins shapefile.

@@ -5,7 +5,7 @@
 #'
 #' Creates a PostgreSQL database or replaces an existing database. Established pre-set table structure. All tables are created and with primary keys.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect_pg()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
 #' @return A PostgreSQL database in ....
