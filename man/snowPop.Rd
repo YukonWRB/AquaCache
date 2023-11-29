@@ -6,7 +6,7 @@
 \usage{
 snowPop(
   old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb",
-  con = snowConnect_pg(),
+  con = snowConnect(),
   overwrite = TRUE,
   basins_shp_path =
     "//env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp"
@@ -15,7 +15,7 @@ snowPop(
 \arguments{
 \item{old_snow_db_path}{the path to where the old Access snow database exists}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=snowConnect_pg]{snowConnect_pg()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=snowConnect]{snowConnect()}}.}
 
 \item{overwrite}{If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!}
 
@@ -25,7 +25,7 @@ snowPop(
 A populated snowDB database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Populates the snowDB PostgreSQL database. Pulls existing data from Access database. Currently only populates a couple of tables and is a work in progess.
+Populates the snowDB PostgreSQL database. Pulls existing data from Access database.
 }

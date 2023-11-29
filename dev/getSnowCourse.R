@@ -16,6 +16,17 @@
 #' @export
 #'
 
+getSnowCourse <- function(location, param_code, start_datetime, end_datetime = Sys.time()){
+  # Checking start_datetime parameter
+  # Checking end_datetime parameter
+  # Checking param_code
+  # Pull data from snowDB
+  con <- HydroMetDB::snowConnect()
+
+  tab <- dbGetQuery(con, "SELECT sample_datetime, swe, depth FROM means")
+}
+
+
 getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", inactive = FALSE, overwrite = FALSE){
 
   # Set hydromet database connection
@@ -30,7 +41,7 @@ getSnowCourse <- function(hydro_db_path, snow_db_path = "//carver/infosys/Snow/D
   }
 
   # Set snow database connection
-  snowCon <- YGWater::snowConnect_access(path = snow_db_path, silent = TRUE)
+  snowCon <- snowConnect_access(path = snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
 
   #Get locations and measurements

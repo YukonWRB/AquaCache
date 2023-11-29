@@ -15,6 +15,7 @@
 
 getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime = Sys.time())
 {
+  # Checking start_datetime parameter
   tryCatch({
     if (inherits(start_datetime, "character") & nchar(start_datetime) > 10){ #Does not necessarily default to 0 hour.
       start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
@@ -28,6 +29,8 @@ getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime =
   }, error = function(e){
     stop("Failed to convert parameter start_datetime to POSIXct.")
   })
+
+  # Checking end_datetime parameter
   tryCatch({
     if (inherits(end_datetime, "character") & nchar(end_datetime) > 10){ #Does not necessarily default to 0 hour.
       end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
@@ -50,10 +53,12 @@ getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime =
     end_datetime <- paste0(end_datetime, " 00:00:00")
   }
 
+  # Checking param_code
   if (!(param_code %in%  c(46, 16, 52, 47, 8, 5, 41, 18))){
     stop("Parameter specified is not one of 46, 16, 52, 47, 8, 5, 41, 18.")
   }
 
+  # Pull data from WSC
   baseurl <- "https://wateroffice.ec.gc.ca/services/real_time_data/csv/inline?"
   location_string <- paste0("stations[]=", location)
   parameters_string <- paste0("parameters[]=", param_code)

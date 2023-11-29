@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("experimental")`
 #'
-#' This function exists to facilitate connecting to the snow database, especially if the database type and connection method changes in the future.
+#' This function exists to facilitate connecting to the snow database, especially if the database type and connection method changes in the future. This function is different from the [YGwater::snowConnect()] function in that it defaults to an account with write privileges.
 #'
 #' @param name Database name.
 #' @param host Database host address.
@@ -17,7 +17,7 @@
 #' @export
 #'
 
-snowConnect_pg <- function(name = "snowDB", host = Sys.getenv("snowHost"), port = Sys.getenv("snowPort"), username = Sys.getenv("snowAdminUser"), password = Sys.getenv("snowAdminPass"), silent = FALSE){
+snowConnect <- function(name = "snowDB", host = Sys.getenv("snowHost"), port = Sys.getenv("snowPort"), username = Sys.getenv("snowAdminUser"), password = Sys.getenv("snowAdminPass"), silent = FALSE){
 
 
 

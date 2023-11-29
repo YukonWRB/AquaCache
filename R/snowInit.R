@@ -5,7 +5,7 @@
 #'
 #' Creates a PostgreSQL database or replaces an existing database. Established pre-set table structure. All tables are created and with primary keys.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect_pg()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
 #' @return A PostgreSQL database in ....
@@ -15,9 +15,7 @@
 
 #TODO: deal with geometry of polygon fields of basin and sub-basin
 
-#snowInit(snowConnect_pg(), overwrite = FALSE)
-
-snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
+snowInit <- function(con = snowConnect(), overwrite = FALSE) {
 
   if (overwrite){
     DBI::dbExecute(con, "DROP EXTENSION postgis CASCADE")
@@ -156,6 +154,7 @@ snowInit <- function(con = snowConnect_pg(), overwrite = FALSE) {
     DBI::dbExecute(con, "CREATE ROLE snow_read WITH LOGIN PASSWORD 'snow';")
     DBI::dbExecute(con, "GRANT CONNECT ON DATABASE snowDB TO snow_read;")
     DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO snow_read;")
+    DBI::dbExecute(con, "GRANT SELECT ON means to snow_read;")
     DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO snow_read;")
   }, error = function(e) {
     warning("Not able to create a new read only account with name snow_read. Ignore this message if it already exists (this function would not have erased the old account)")

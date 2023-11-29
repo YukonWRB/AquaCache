@@ -4,10 +4,10 @@
 \alias{snowInit}
 \title{Initial PostgreSQL snow database creation.}
 \usage{
-snowInit(con = snowConnect_pg(), overwrite = FALSE)
+snowInit(con = snowConnect(), overwrite = FALSE)
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=snowConnect_pg]{snowConnect_pg()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=snowConnect]{snowConnect()}}.}
 
 \item{overwrite}{TRUE overwrites the database, if one exists in the same path. Nothing will be kept. FALSE will create tables only where they are missing.}
 }

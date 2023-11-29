@@ -1,13 +1,13 @@
 #' Initial population of PostgreSQL snow database.
 #'
 #' @description
-#' `r lifecycle::badge("experimental")`
+#' `r lifecycle::badge("stable")`
 #'
-#' Populates the snowDB PostgreSQL database. Pulls existing data from Access database. Currently only populates a couple of tables and is a work in progess.
+#' Populates the snowDB PostgreSQL database. Pulls existing data from Access database.
 #'
 #' @param old_snow_db_path the path to where the old Access snow database exists
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect_pg()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [snowConnect()].
 #'
 #' @param overwrite If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!
 #' @param basins_shp_path Path and file name of sub basins shapefile.
@@ -19,9 +19,8 @@
 #TODO: Add polygon shapes into basins, ask Tyler to create these?
 #TODO: Consider eventually adding Mayo Airport C and Whitehorse Airport B. These have not been added as they are new sites that will be moved again soon.
 
-#snowPop(con = snowConnect_pg(), overwrite = TRUE)
 
-snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect_pg(), overwrite = TRUE, basins_shp_path = "//env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp")
+snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", con = snowConnect(), overwrite = TRUE, basins_shp_path = "//env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/02_Manual_Surveys/04_Miscellaneous/Basins_shapefiles/swe_basins.shp")
                       #"H:/estewart/SnowBulletin/Maps/swe_basins.shp")
   {
 
@@ -29,7 +28,7 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   rlang::check_installed("sf", reason = "Package sf is required to use function snowPop")
   #### Pull data from Access and add to db
   # Create connection
-  snowCon <- YGwater::snowConnect_access(path = old_snow_db_path, silent = TRUE)
+  snowCon <- snowConnect_access(path = old_snow_db_path, silent = TRUE)
   on.exit(DBI::dbDisconnect(snowCon), add=TRUE)
   #Get tables
   locations <- DBI::dbReadTable(snowCon, "SNOW_COURSE")
