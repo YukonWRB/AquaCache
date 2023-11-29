@@ -147,7 +147,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  param_type TEXT NOT NULL, CHECK(param_type IN ('meteorological', 'hydrometric', 'water chemistry', 'geochemistry', 'atmospheric chemistry')),
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
-                 period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max')),
+                 period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
