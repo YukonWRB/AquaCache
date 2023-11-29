@@ -1,7 +1,6 @@
 Package: HydroMetDB
 Title: Hydrological database creation and maintenance
-Version: 1.0.1
-
+Version: 1.0.2
 Authors@R: 
     person("Ghislain", "de Laplante", , "ghislaindel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185"))
@@ -39,7 +38,8 @@ Suggests:
     knitr,
     rmarkdown,
     testthat (>= 3.0.0),
-    openxlsx
+    openxlsx,
+    sf
 VignetteBuilder: 
     knitr
 Config/testthat/edition: 3

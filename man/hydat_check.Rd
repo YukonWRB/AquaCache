@@ -10,7 +10,7 @@ hydat_check(silent = FALSE)
 \item{silent}{Should messages be printed to the console?}
 }
 \value{
-An updated local copy of hydat, if indicated by the age of the remote HYDAT.
+TRUE if hydat was updated, FALSE if not. Also an updated local copy of hydat, if indicated by the age of the remote HYDAT being younger than the local hydat.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

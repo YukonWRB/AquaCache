@@ -32,15 +32,15 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
 
   } else {
     all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation, category FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
-    if (length(timeseries_id) != nrow(continuous_ts)){
-      fail <- timeseries_id[!(timeseries_id %in% continuous_ts$timeseries_id)]
+    continuous_ts <- all_timeseries[all_timeseries$category == "continuous" , ]
+    discrete_ts <- all_timeseries[all_timeseries$category == "discrete" , ]
+    if (length(timeseries_id) != nrow(all_timeseries)){
+      fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
       ifelse ((length(fail) == 1),
       warning("Could not find one of the timeseries_ids that you specified: ID ", fail, " is missing from the database."),
       warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )
     }
-    continuous_ts <- all_timeseries[all_timeseries$category == "continuous" , ]
-    discrete_ts <- all_timeseries[all_timeseries$category == "discrete" , ]
   }
 
   if (nrow(continuous_ts) > 0){
