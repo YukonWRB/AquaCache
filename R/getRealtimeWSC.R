@@ -65,13 +65,6 @@ getRealtimeWSC <- function (location, param_code, start_datetime, end_datetime =
   datetime_string <- paste0("start_date=", substr(start_datetime, 1, 10), "%20", substr(start_datetime, 12, 19), "&end_date=", substr(end_datetime, 1, 10), "%20", substr(end_datetime, 12, 19))
   url <- paste0(baseurl, location_string, "&", parameters_string, "&", datetime_string)
 
-  data <- data.table::fread(url, showProgress = FALSE)[, c("Date", "Value/Valeur", "Symbol/Symbole", "Approval/Approbation")]
-  if (nrow(data) > 0){
-    colnames(data) <- c("datetime", "value", "grade", "approval")
-    return(as.data.frame(data))
-  } else {
-    data <- data.frame(data)
-    return(data)
-  }
+  data <- data.table::fread(url, showProgress = FALSE, data.table = FALSE, select = c("Date", "Value/Valeur", "Symbol/Symbole", "Approval/Approbation"), col.names = c("datetime", "value", "grade", "approval"))
 
-}
+} #End of function

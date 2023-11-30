@@ -14,6 +14,8 @@
 
 snowConnect_access <- function(path = "default", silent=FALSE){
 
+  rlang::check_installed("odbc", reason = "necessary to connect to Access DB.") #This is here because odbc is not a 'depends' of this package; it is only necessary for this function and is therefore in "suggests"
+
   if (path == "default"){
     path <- "//carver/infosys/Snow/DB/SnowDB.mdb"
   }
