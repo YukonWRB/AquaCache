@@ -64,7 +64,8 @@ addHydrometTemplate <- function(con = hydrometConnect(silent=TRUE), format = "sh
                      datum_id_from = c(10, 10),
                      datum_id_to = c(35, 605),
                      conversion_m = c(913.86603, 913.51099),
-                     current = c(FALSE, TRUE))
+                     current = c(FALSE, TRUE),
+                     note = "Optional location note here.")
 
   # Create the datum list table
   datums <- DBI::dbReadTable(con, "datum_list")

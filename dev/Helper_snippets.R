@@ -2,34 +2,36 @@ load_all()
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = c("15356000", "15348000", "15041200", "15024800", "15129120", "15453500", "15356000", "15348000", "15041200", "15024800", "15129120", "15453500"),
-                            parameter = c("flow","flow","flow","flow","flow","flow","level","level","level","level","level","level"),
-                            unit = c("m3/s"),
+timeseries_df <- data.frame(location = c("51426"),
+                            parameter = c("dly max air temp", "dly min air temp", "dly mean air temp", "dly tot precip", "dly tot rain", "dly tot snow", "hly tot precip", "air temp"),
+                            unit = c("C", "C", "C", "mm", "mm", "cm", "mm", "C"),
                             category = "continuous",
-                            period_type = "instantaneous",
-                            param_type = "hydrometric",
-                            start_datetime = "1970-01-01 00:00:00",
-                            operator = "USGS",
-                            network = "USGS",
+                            period_type = c("max", "min", "(min+max)/2", "sum", "sum", "sum", "sum", "instantaneous"),
+                            param_type = "meteorological",
+                            start_datetime = "2023-11-01",
+                            operator = "ECCC",
+                            network = "ECCC met",
                             public = TRUE,
-                            source_fx = "getRealtimeNWIS",
-                            source_fx_args = NA)
+                            source_fx = "getRealtimeECCCwx",
+                            source_fx_args = c("{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'hour'}", "{interval = 'hour'}"),
+                            note = "Current measurement location is Dawson airport, but timeseries includes measurements taken in town and at other locations near the airport. Historical measurements adjusted using overlap to match current location")
 
-locations_df <- data.frame(location = c("15356000", "15348000", "15041200", "15024800", "15129120", "15453500"),
-                           name = c("Yukon River at Eagle", "Fortymile River Near Steele Creek", "Taku River Near Juneau", "Stikine River Near Wrangell", "Alsek River at Dry Bay Near Yakutat", "Yukon River Near Stevens Village"),
-                           latitude = c(64.789168, 64.3088552, 58.53829828, 56.70772188, 59.1928056, 65.8751013),
-                           longitude = c(-141.2000892, -141.4045168, -133.7017432, -132.1319653, -138.3339167, -149.7203487),
+locations_df <- data.frame(location = c("51426"),
+                           name = c("Mayo Airport"),
+                           latitude = c(63.62),
+                           longitude = c(-135.87),
                            datum_id_from = c(10),
-                           datum_id_to = c(63, 63, 63, 63, 63, 1000),
-                           conversion_m = c(259.08, 365.76, 15.24, 7.62, 15.24, 74.31024),
-                           current = c(TRUE))
+                           datum_id_to = c(110),
+                           conversion_m = c(503.8),
+                           current = c(TRUE),
+                           note = "Timeseries associated with this location may be compound timeseries from multiple locations in the same region. Refer to the timeseries-specific note for details if applicable.")
 addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df)
 
 # Deleting from various tables
 # locs <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE ")
-DBI::dbExecute(con, "DELETE FROM timeseries WHERE timeseries_id IN (363,364,365,366)")
-DBI::dbExecute(con, "DELETE FROM measurements_continuous WHERE timeseries_id IN (363,364,365,366)")
-DBI::dbExecute(con, "DELETE FROM calculated_daily WHERE timeseries_id IN (363,364,365,366)")
+DBI::dbExecute(con, "DELETE FROM timeseries WHERE timeseries_id IN ()")
+DBI::dbExecute(con, "DELETE FROM measurements_continuous WHERE timeseries_id IN (385,386,387,388,389,390,391,392)")
+DBI::dbExecute(con, "DELETE FROM calculated_daily WHERE timeseries_id IN (385,386,387,388,389,390,391,392)")
 # DBI::dbExecute(con, "DELETE FROM locations WHERE location = '30MA005'")
 # DBI::dbExecute(con, "DELETE FROM datum_conversions WHERE location = '30MA005'")
 
