@@ -73,16 +73,20 @@ getRealtimeECCCwx <- function(location, param_code, start_datetime, end_datetime
   }
 
   #Extract the necessary information according to the param_code
-  if ("time" %in% names(dl)){ #Must be hourly
-    data <- data.frame(datetime = dl$time,
-                       value = dl[[param_code]]) #Note the different subsetting because dl is a tibble.
-    data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
-  } else if (("date" %in% names(dl)) & !("time" %in% names(dl))){ #Must be daily
-    data <- data.frame(datetime = as.POSIXct(dl$date, tz = "UTC"),
-                       value = dl[[param_code]]) #Note the different subsetting because dl is a tibble.
-    data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
+  if (nrow(dl) > 0){
+    if ("time" %in% names(dl)){ #Must be hourly
+      data <- data.frame(datetime = dl$time,
+                         value = dl[[param_code]]) #Note the different subsetting because dl is a tibble.
+      data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
+    } else if (("date" %in% names(dl)) & !("time" %in% names(dl))){ #Must be daily
+      data <- data.frame(datetime = as.POSIXct(dl$date, tz = "UTC"),
+                         value = dl[[param_code]]) #Note the different subsetting because dl is a tibble.
+      data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
+    } else {
+      stop("getRealtimeECCCwx: Column named 'time' or 'date' has not been found.")
+    }
   } else {
-    stop("getRealtimeECCCwx: Column named 'time' or 'date' has not been found.")
+    data <- data.frame()
   }
 
   return(data)
