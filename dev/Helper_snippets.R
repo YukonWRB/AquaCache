@@ -2,7 +2,7 @@ load_all()
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = c("51426"),
+timeseries_df <- data.frame(location = c("54198"),
                             parameter = c("dly max air temp", "dly min air temp", "dly mean air temp", "dly tot precip", "dly tot rain", "dly tot snow", "hly tot precip", "air temp"),
                             unit = c("C", "C", "C", "mm", "mm", "cm", "mm", "C"),
                             category = "continuous",
@@ -16,13 +16,13 @@ timeseries_df <- data.frame(location = c("51426"),
                             source_fx_args = c("{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'hour'}", "{interval = 'hour'}"),
                             note = "Current measurement location is Dawson airport, but timeseries includes measurements taken in town and at other locations near the airport. Historical measurements adjusted using overlap to match current location")
 
-locations_df <- data.frame(location = c("51426"),
-                           name = c("Mayo Airport"),
-                           latitude = c(63.62),
-                           longitude = c(-135.87),
+locations_df <- data.frame(location = c("54198"),
+                           name = c("Watson Lake Airport"),
+                           latitude = c(60.12),
+                           longitude = c(-128.82),
                            datum_id_from = c(10),
                            datum_id_to = c(110),
-                           conversion_m = c(503.8),
+                           conversion_m = c(687.3),
                            current = c(TRUE),
                            note = "Timeseries associated with this location may be compound timeseries from multiple locations in the same region. Refer to the timeseries-specific note for details if applicable.")
 addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df)
