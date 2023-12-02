@@ -80,7 +80,7 @@
           ts$period <- "00:00:00"
           delete_flag <- FALSE
         } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
-          period_res <- calculate_period(data = ts, timeseries_id = tsid)
+          period_res <- calculate_period(data = ts, timeseries_id = tsid, con = con)
           ts <- period_res$ts
           delete_flag <- period_res$delete_flag
         } else { #Check to make sure that the supplied period can actually be coerced to a period
@@ -90,11 +90,12 @@
           }
         }
         ts$timeseries_id <- tsid
+        ts$imputed <- FALSE
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
         DBI::dbWithTransaction(
           con, {
             if (delete_flag){
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_continous WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
+              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
             }
             DBI::dbAppendTable(con, "measurements_continuous", ts)
             #make the new entry into table timeseries

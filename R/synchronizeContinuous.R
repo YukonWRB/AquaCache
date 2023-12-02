@@ -81,27 +81,8 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
       ts <- ts[!is.na(ts$value) , ]
 
       if (nrow(ts) > 0){
-        #assign a period to the data
-        if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
-          ts$period <- "00:00:00"
-          delete_flag <- FALSE
-        } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
-          period_res <- calculate_period(data = ts, timeseries_id = tsid)
-          ts <- period_res$ts
-          delete_flag <- period_res$delete_flag
-        } else { #Check to make sure that the supplied period can actually be coerced to a period
-          check <- lubridate::period(unique(ts$period))
-          if (NA %in% check){
-            ts$period <- NA
-          }
-        }
-
-        if (delete_flag){
-          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(ts$datetime),"';"))
-        } else {
-          realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, period, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(start_dt, min(ts$datetime)), "';"))
-        }
-        #Check if any imputed data points are present in the new data; replace the imputed value if TRUE
+        realtime <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(ts$datetime),"';"))
+        #Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
         imputed <- realtime[realtime$imputed == TRUE , ]
         imputed.remains <- data.frame()
         if (nrow(imputed) > 0){
@@ -121,8 +102,8 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
         ts <- ts[order(ts$datetime) , ]
 
         # Create a unique datetime key for both data frames
-        ts$key <- paste(ts$datetime, ts$value, ts$grade, ts$approval, ts$period, sep = "|")
-        realtime$key <- paste(realtime$datetime, realtime$value, realtime$grade, realtime$approval, realtime$period, sep = "|")
+        ts$key <- paste(ts$datetime, ts$value, ts$grade, ts$approval, sep = "|")
+        realtime$key <- paste(realtime$datetime, realtime$value, realtime$grade, realtime$approval, sep = "|")
 
         # Check for mismatches using set operations
         mismatch_keys <- setdiff(ts$key, realtime$key)
@@ -139,6 +120,18 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
 
         if (mismatch){
           ts <- ts[ts$datetime >= datetime , ]
+          #assign a period to the data
+          if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
+            ts$period <- "00:00:00"
+          } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
+            period_res <- calculate_period(data = ts, timeseries_id = tsid, con = con)
+            ts <- period_res$ts
+          } else { #Check to make sure that the supplied period can actually be coerced to a period
+            check <- lubridate::period(unique(ts$period))
+            if (NA %in% check){
+              ts$period <- NA
+            }
+          }
           ts$timeseries_id <- tsid
           ts$imputed <- FALSE
           DBI::dbWithTransaction(

@@ -14,8 +14,8 @@ calculate_period(data, timeseries_id, con = hydrometConnect())
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }
 \value{
-A list of two objects: a data.frame with calculated periods and a boolean delete flag, true if rows were fetched from the database (and thus need to be deleted prior to appending) or false if no data needs to be replaced
+A list of two objects: a data.frame with calculated periods and a Boolean delete flag, true if rows were fetched from the database (and thus need to be deleted prior to appending) or false if no data needs to be replaced
 }
 \description{
-Calculates a period for temporal data and prepares a column names 'period' with ISO8601 formated periods for import to postgres database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals.
+Calculates a period for continuous=type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals.
 }

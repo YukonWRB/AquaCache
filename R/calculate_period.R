@@ -1,12 +1,12 @@
 #' Calculate periodicity of data and add a column
 #'
-#' Calculates a period for temporal data and prepares a column names 'period' with ISO8601 formated periods for import to postgres database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals.
+#' Calculates a period for continuous=type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals.
 #'
 #' @param data The data.frame for which to calculate periodicity. Must contain, at minimum, columns named 'datetime', 'value', 'grade', 'approval', but only 'datetime' needs to have no NAs.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
-#' @return A list of two objects: a data.frame with calculated periods and a boolean delete flag, true if rows were fetched from the database (and thus need to be deleted prior to appending) or false if no data needs to be replaced
+#' @return A list of two objects: a data.frame with calculated periods and a Boolean delete flag, true if rows were fetched from the database (and thus need to be deleted prior to appending) or false if no data needs to be replaced
 #' @export
 
 calculate_period <- function(data, timeseries_id, con = hydrometConnect())
