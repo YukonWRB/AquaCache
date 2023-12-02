@@ -37,8 +37,8 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     if (length(timeseries_id) != nrow(all_timeseries)){
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
       ifelse ((length(fail) == 1),
-      warning("Could not find one of the timeseries_ids that you specified: ID ", fail, " is missing from the database."),
-      warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
+              warning("Could not find one of the timeseries_ids that you specified: ID ", fail, " is missing from the database."),
+              warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )
     }
   }
