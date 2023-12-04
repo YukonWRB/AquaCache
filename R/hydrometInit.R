@@ -258,7 +258,8 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  "ALTER TABLE timeseries
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
-  REFERENCES locations(location);")
+  REFERENCES locations(location)
+                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE calculated_daily
@@ -294,13 +295,15 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  "ALTER TABLE datum_conversions
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
-  REFERENCES locations(location);")
+  REFERENCES locations(location)
+                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE images
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
-  REFERENCES locations(location);")
+  REFERENCES locations(location)
+                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE thresholds

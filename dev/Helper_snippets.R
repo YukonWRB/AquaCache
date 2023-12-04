@@ -17,7 +17,7 @@ timeseries_df <- data.frame(location = c("54198"),
                             note = "Current measurement location is Dawson airport, but timeseries includes measurements taken in town and at other locations near the airport. Historical measurements adjusted using overlap to match current location")
 
 locations_df <- data.frame(location = c("54198"),
-                           name = c("Watson Lake Airport"),
+                           name = c("Watson Lake"),
                            latitude = c(60.12),
                            longitude = c(-128.82),
                            datum_id_from = c(10),

@@ -124,8 +124,7 @@ synchronizeContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries
           if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
             ts$period <- "00:00:00"
           } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
-            period_res <- calculate_period(data = ts, timeseries_id = tsid, con = con)
-            ts <- period_res$ts
+            ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
           } else { #Check to make sure that the supplied period can actually be coerced to a period
             check <- lubridate::period(unique(ts$period))
             if (NA %in% check){

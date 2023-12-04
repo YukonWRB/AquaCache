@@ -64,7 +64,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       } else { #start_recalc is NULL
         if (!is.na(last_day_historic) & !is.na(earliest_day_measurements)){
           last_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, ";"))[1,])
-          last_day_historic <- last_day_historic - 2 # recalculate the last two days of historic data in case new data had come in
+          last_day_historic <- last_day_historic - 2 # recalculate the last two days of historic data in case new data has come in
         } else if (is.na(last_day_historic) & !is.na(earliest_day_measurements)){ #say, a new timeseries that isn't in hydat yet or one that's just being added and has no calculations yet
           last_day_historic <- earliest_day_measurements
         } else { # a timeseries that is only in HYDAT, has no realtime measurements
@@ -122,7 +122,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
               gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
             }
 
-            if (last_day_historic < min(gap_measurements$date)){
+            if (last_day_historic < min(gap_measurements$date)){ #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with calculated_daily values.
               backfill <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date > '", last_day_historic, "';"))
               gap_measurements <- rbind(gap_measurements, backfill)
             }
@@ -144,7 +144,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       }
 
       if (operator != "WSC" || flag) { #All timeseries where: operator is not WSC and therefore lack superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
-        gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime > '", last_day_historic, " 00:00:00'"))
+        gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00'"))
 
         if (nrow(gap_measurements) > 0){ #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
           gap_measurements <- gap_measurements %>%
@@ -225,8 +225,16 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           first_instance_no_stats$max <- first_instance_no_stats$value
           first_instance_no_stats$min <- first_instance_no_stats$value
           first_instance_no_stats <- first_instance_no_stats[!is.na(first_instance_no_stats$value) , ]
-          DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", i, " AND date IN ('", paste(first_instance_no_stats$date, collapse = "', '"), "')"))
-          DBI::dbAppendTable(con, "calculated_daily", first_instance_no_stats)
+          DBI::dbWithTransaction(
+            con,
+            {
+              DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", i, " AND date IN ('", paste(first_instance_no_stats$date, collapse = "', '"), "')"))
+              DBI::dbAppendTable(con, "calculated_daily", first_instance_no_stats)
+              if (nrow(missing_stats) == 0){  #If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
+                DBI::dbExecute(con, paste0("UPDATE timeseries SET last_daily_calculation = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", i, ";"))
+              }
+            }
+          )
         }
 
         if (nrow(missing_stats) > 0){
@@ -284,7 +292,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           {
             DBI::dbExecute(con, delete_query)
             DBI::dbAppendTable(con, "calculated_daily", missing_stats) # Append the missing_stats data to the calculated_daily table
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET last_daily_calculation = '", as.character(.POSIXct(Sys.time(), "UTC")), "' WHERE timeseries_id = ", i, ";"))
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET last_daily_calculation = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", i, ";"))
           }
         )
       }, error = function(e){
