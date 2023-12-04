@@ -3,7 +3,7 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' A function used to fetch weather data from ECCC, using the weathercan package.
+#' A function used to fetch weather data from ECCC, using the weathercan package for speed and simplicity. Since ECCC weather data comes in as a tibble with ~36 rows (all parameters)and there is no way to tailor the request to a single parameter, this function will save the output of the first download as an .rdata file to the session temporary folder. Subsequent runs of the function will search the temporary folder for a suitable file and attempt to use it, downloading again only if no suitable file is found. Temporary folder contents are deleted when the R session is closed.
 #'
 #' @param location An ECCC Station ID (not to be mistaken for other IDs such as the Nav Canada ID, the WMO ID, or the Climate ID). See [weathercan::stations()] for help finding the right ID.
 #' @param param_code The name of the column containing the desired data, as output in the data.frame given by [weathercan::weather_dl()]. Taken from the param_code column of the 'settings' table. Note that this column name varies depending on the interval specified (hour, day, month).

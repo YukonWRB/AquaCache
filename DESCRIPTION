@@ -1,10 +1,11 @@
 Package: HydroMetDB
 Title: Hydrological database creation and maintenance
-Version: 1.0.4
+Version: 1.1.0
 Authors@R: c(
     person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
-    person("Emilie", "Stwart-Jones", , "emilie.stewart-jones@yukon.ca", role = "aut")
+    person("Emilie", "Stewart-Jones", , "emilie.stewart-jones@yukon.ca", role = "aut",
+    comment = c(ORCID = "0000-0002-0013-8953"))
   )
 Description: Set of functions for the creation and ongoing maintenance of
     the Yukon Government's hydrometeorological database in postgreSQL

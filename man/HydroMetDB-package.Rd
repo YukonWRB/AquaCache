@@ -13,7 +13,7 @@ Set of functions for the creation and ongoing maintenance of the Yukon Governmen
 
 Authors:
 \itemize{
-  \item Emilie Stwart-Jones \email{emilie.stewart-jones@yukon.ca}
+  \item Emilie Stewart-Jones \email{emilie.stewart-jones@yukon.ca}
 }
 
 }

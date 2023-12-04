@@ -48,7 +48,7 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     rt_start <- Sys.time()
     getNewContinuous(con = con, timeseries_id = continuous_ts$timeseries_id)
     rt_duration <- Sys.time() - rt_start
-    message(paste0("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), "."))
+    message("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), ".")
   }
 
   if (nrow(discrete_ts) > 0){
@@ -56,7 +56,7 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     disc_start <- Sys.time()
     getNewDiscrete(con = con, timeseries_id = discrete_ts$timeseries_id)
     disc_duration <- Sys.time() - disc_start
-    message(paste0("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), "."))
+    message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
   }
 
 
@@ -66,7 +66,7 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   suppressMessages(new_hydat <- update_hydat(con = con)) #This function is run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
   if (new_hydat){
     hy_duration <- Sys.time() - hy_start
-    message(paste0("A new version of HYDAT was detected. Timeseries were updated in ", round(hy_duration[[1]], 2), " ", units(hy_duration), "."))
+    message("A new version of HYDAT was detected. Timeseries were updated in ", round(hy_duration[[1]], 2), " ", units(hy_duration), ".")
   } else {
     message("HYDAT database is already up to date")
   }
@@ -89,17 +89,18 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
       needs_new_calc <- has_last_new_data[(has_last_new_data$last_new_data) > has_last_new_data$last_daily_calculation , ]
       needs_calc <- rbind(needs_calc, needs_new_calc)
     }
-    calculate_stats(timeseries_id = needs_calc$timeseries_id, con = con)
-
-    stats_diff <- Sys.time() - stat_start
-    total_diff <- Sys.time() - function_start
-
-    message(paste0("Daily means and statistics calculated in ", round(stats_diff[[1]], 2), " ", units(stats_diff)))
+    if (nrow(needs_calc) > 0){
+      calculate_stats(timeseries_id = needs_calc$timeseries_id, con = con)
+      stats_diff <- Sys.time() - stat_start
+      message("Daily means and statistics calculated in ", round(stats_diff[[1]], 2), " ", units(stats_diff))
+    } else {
+      message("No daily means and stats to calculate, skpping.")
+    }
   }
-
 
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_daily'"))
 
+  total_diff <- Sys.time() - function_start
   message("Total elapsed time for hydro_update_daily: ", round(total_diff[[1]], 2), " ", units(total_diff), ". End of function.")
 
 } #End of function

@@ -93,11 +93,5 @@ calculate_period <- function(data, timeseries_id, con = hydrometConnect())
       ts$period <- NULL
     }
   }
-  if (nrow(no_period) > 0){
-    delete_flag <- TRUE
-  } else {
-    delete_flag <- FALSE
-  }
-  result <- list(ts = ts, delete_flag = delete_flag)
-  return(result)
+  return(ts)
 } # End of function
