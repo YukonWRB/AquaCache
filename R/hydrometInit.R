@@ -157,6 +157,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  operator TEXT,
                  network TEXT,
                  public BOOLEAN NOT NULL,
+                 public_delay INTERVAL,
                  source_fx TEXT NOT NULL,
                  source_fx_args TEXT,
                  note TEXT,
