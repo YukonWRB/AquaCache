@@ -47,6 +47,8 @@ Suggests:
     rmarkdown,
     sf,
     testthat (>= 3.0.0)
+Remotes:
+    github::ropensci/weathercan
 VignetteBuilder: 
     knitr
 Config/testthat/edition: 3

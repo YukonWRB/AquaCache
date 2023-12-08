@@ -2,7 +2,7 @@ load_all()
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = c("54198"),
+timeseries_df <- data.frame(location = c("51426"),
                             parameter = c("dly max air temp", "dly min air temp", "dly mean air temp", "dly tot precip", "dly tot rain", "dly tot snow", "hly tot precip", "air temp"),
                             unit = c("C", "C", "C", "mm", "mm", "cm", "mm", "C"),
                             category = "continuous",

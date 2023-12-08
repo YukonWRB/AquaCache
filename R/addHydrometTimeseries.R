@@ -23,7 +23,7 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
   #Check that every location in the timeseries_df already exists; if they don't, check they've been specified in locations_df
   new_locs <- NULL
   exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")
-  if (!all(unique(timeseries_df$location) %in% exist_locs)) {
+  if (!all(unique(timeseries_df$location) %in% exist_locs$location)) {
     if (is.null(locations_df)){
       stop("You didn't specify a locations_df, but not all of the locations in your timeseries_df are already in the database. Either double-check your timeseries_df or give me a locations_df from which to add the missing location(s) ", paste(unique(timeseries_df$location)[!(unique(timeseries_df$location) %in% exist_locs)], collapse = ", "), ".")
     } else {
@@ -119,7 +119,6 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
 
       if (add$category == "continuous"){
         if (nrow(ts) > 0){
-          #TODO: right now the period is not being calculated here.
           if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
             ts$period <- "00:00:00"
             no_period <- data.frame() # Created here for use later
