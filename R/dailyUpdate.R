@@ -101,6 +101,6 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_update_daily'"))
 
   total_diff <- Sys.time() - function_start
-  message("Total elapsed time for hydro_update_daily: ", round(total_diff[[1]], 2), " ", units(total_diff), ". End of function.")
+  message("Total elapsed time for dailyUpdate: ", round(total_diff[[1]], 2), " ", units(total_diff), ". End of function.")
 
 } #End of function

@@ -119,7 +119,6 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
 
       if (add$category == "continuous"){
         if (nrow(ts) > 0){
-          #TODO: right now the period is not being calculated here.
           if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
             ts$period <- "00:00:00"
             no_period <- data.frame() # Created here for use later
