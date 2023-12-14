@@ -18,6 +18,7 @@
 
 hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
+  # Overwrite and vacuum if requested ###########
   if (overwrite){
     DBI::dbExecute(con, "DROP EXTENSION postgis CASCADE")
     for (i in DBI::dbListTables(con)){
@@ -31,9 +32,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
     DBI::dbExecute(con, "VACUUM")
   }
 
-  #Create the postgis extension, which adds a few necessary tables. Then, create a new schema and set the schema of these tables to decrease clutter in the DB.
-  rpostgis::pgPostGIS(con, raster = TRUE)
-
+  # Add tables with constraints ###############
   # measurements_continuous table
   DBI::dbExecute(con, "CREATE TABLE if not exists measurements_continuous (
                  timeseries_id INTEGER NOT NULL,
@@ -76,6 +75,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    issue_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                    value NUMERIC,
+                   min NUMERIC,
+                   q10 NUMERIC,
+                   q25 NUMERIC,
+                   q50 NUMERIC,
+                   q75 NUMERIC,
+                   q90 NUMERIC,
+                   max NUMERIC,
                    PRIMARY KEY (timeseries_id, datetime))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists measurements_discrete (
@@ -86,36 +92,6 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    sample_class TEXT,
                    note TEXT,
                    PRIMARY KEY (timeseries_id, datetime))")
-
-  # Create spatial-primary tables ########
-  DBI::dbExecute(con, "CREATE TABLE if not exists polygons (
-                 polygon_id SERIAL PRIMARY KEY,
-                 polygon_type TEXT NOT NULL CHECK(polygon_type IN ('drainage_basin', 'buffer', 'waterbody', 'prov_terr', 'country', 'other')),
-                 name TEXT NOT NULL,
-                 description TEXT NOT NULL,
-                 geom geometry(Polygon, 4269) NOT NULL,
-                 CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
-                 CONSTRAINT enforce_geotype_geom CHECK (geometrytype(geom) = 'POLYGON'::text),
-                 CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
-                 CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
-                 UNIQUE (name, polygon_type));")
-  DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
-
-  # In theory the function rpostgis::pgWriteRast should be able to insert the raster, and then
-  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_index (
-  #                  rid INTEGER PRIMARY KEY,
-  #                  parameter TEXT NOT NULL,
-  #                  description TEXT,
-  #                  units TEXT NOT NULL,
-  #                  valid_from TIMESTAMP WITH TIME ZONE,
-  #                  valid_to TIMESTAMP WITH TIME ZONE,
-  #                  issued TIMESTAMP WITH TIME ZONE,
-  #                  source TEXT,
-  #                  bands TEXT);")
-  #
-  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters (
-  #                  rid INTEGER);")
-  # DBI::dbExecute(con, "CREATE INDEX rasters_rast_st_conhull_idx ON rasters USING gist( ST_ConvexHull(raster) );")
 
   # And tables that hold metadata for all locations
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
@@ -163,13 +139,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  note TEXT,
                  UNIQUE (location, parameter, category, period_type));")
 
-  DBI::dbExecute(con, "CREATE TABLE if not exists peaks (
+  DBI::dbExecute(con, "CREATE TABLE if not exists extrema (
                  timeseries_id INTEGER PRIMARY KEY,
                  agency TEXT NOT NULL,
                  year NUMERIC NOT NULL,
                  date DATE NOT NULL,
                  value NUMERIC NOT NULL,
-                 period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', '1-day', '2-day', '3-day', '4-day', '5-day', '6-day', '7-day', 'monthly')),
+                 period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', '1-day', '2-day', '3-day', '4-day', '5-day', '6-day', '7-day', 'monthly', 'yearly')),
                  condition TEXT NOT NULL CHECK(condition IN ('open water', 'break-up', 'freeze-up', 'winter')),
                  extrema TEXT NOT NULL CHECK(extrema IN ('minimum', 'maximum')),
                  uncertainty TEXT,
@@ -184,7 +160,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  high_warning NUMERIC,
                  flood_minor NUMERIC,
                  flood_major NUMERIC,
-                 high_firs_human_impacts NUMERIC,
+                 high_first_human_impacts NUMERIC,
                  low_advisory NUMERIC,
                  low_watch NUMERIC,
                  low_warning NUMERIC,
@@ -225,7 +201,8 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   params <- rbind(params_AQ, params_WSC, params_USGS)
   try(DBI::dbAppendTable(con, "settings", params))
 
-  #Populate datum_list table
+
+  #Populate datum_list table from hydat database #############
   #Check hydat version, update if needed.
   tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
   local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
@@ -254,7 +231,47 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
     DBI::dbAppendTable(con, "datum_list", datum_list)
   }
 
-  #Add in foreign keys
+
+  # Ceate postgis extension and related tables ###############
+  #Create the postgis extension, which adds a few necessary tables. Then, create a new schema and set the schema of these tables to decrease clutter in the DB.
+  rpostgis::pgPostGIS(con, raster = TRUE)
+
+  # Create spatial-primary tables ########
+  DBI::dbExecute(con, "CREATE TABLE if not exists polygons (
+                 polygon_id SERIAL PRIMARY KEY,
+                 polygon_type TEXT NOT NULL CHECK(polygon_type IN ('drainage_basin', 'buffer', 'waterbody', 'prov_terr', 'country', 'other')),
+                 name TEXT NOT NULL,
+                 description TEXT NOT NULL,
+                 geom geometry(Polygon, 4269) NOT NULL,
+                 CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
+                 CONSTRAINT enforce_geotype_geom CHECK (geometrytype(geom) = 'POLYGON'::text),
+                 CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
+                 CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
+                 UNIQUE (name, polygon_type));")
+  DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
+
+  DBI::dbExecute(con, "CREATE TABLE if not exists rasters_model_outputs (
+                   rid SERIAL PRIMARY KEY,
+                   model TEXT NOT NULL,
+                   valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
+                   valid_to TIMESTAMP WITH TIME ZONE NOT NULL,
+                   issued TIMESTAMP WITH TIME ZONE NOT NULL,
+                   source TEXT,
+                   bands JSONB NOT NULL, --Each band is a parameter
+                   rast RASTER NOT NULL);")
+  DBI::dbExecute(con, "CREATE INDEX rasters_model_outputs_st_conhull_idx ON rasters_model_outputs USING gist(ST_ConvexHull(rast));")
+
+  DBI::dbExecute(con, "CREATE TABLE if not exists rasters_general (
+                   rid SERIAL PRIMARY KEY,
+                   parameter TEXT NOT NULL,
+                   description TEXT NOT NULL,
+                   units TEXT NOT NULL,
+                   source TEXT,
+                   rast RASTER);")
+  DBI::dbExecute(con, "CREATE INDEX rasters_general_st_conhull_idx ON rasters_general USING gist(ST_ConvexHull(rast));")
+
+
+  #Add in foreign keys ###########
   DBI::dbExecute(con,
                  "ALTER TABLE timeseries
   ADD CONSTRAINT fk_location
@@ -281,7 +298,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   REFERENCES timeseries(timeseries_id);")
 
   DBI::dbExecute(con,
-                 "ALTER TABLE peaks
+                 "ALTER TABLE extrema
   ADD CONSTRAINT fk_timeseries_id
   FOREIGN KEY (timeseries_id)
   REFERENCES timeseries(timeseries_id);")
@@ -311,6 +328,193 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  ADD CONSTRAINT fk_timeseries_id
                  FOREIGN KEY (timeseries_id)
                  REFERENCES timeseries(timeseries_id);")
+
+
+  # Add table comments #############
+  # timeseries
+  DBI::dbExecute(con, "
+  COMMENT ON TABLE timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, category (continuous or discrete), and period_type. For this purpose, continuous data is data gathered at regular and frequent intervals (usually max 1 day), while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parametes.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addHydrometTimeseries.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.location IS 'Matches to the locations table.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.category IS 'Discrete or continuous. Continuous data is data gathered at regular and frequent intervals (usually max 1 day), while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parametes.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.period_type IS 'One of instantaneous, sum, mean, median, min, max, or (min+max)/2. This last value is used for the ''daily mean'' temperatures at met stations which are in fact not true mean temps.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.start_datetime IS 'First data point for the timeseries.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.end_datetime IS 'Last data point for the timeseries.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.last_new_data IS 'Time at which data was last appended to the timeseries';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.last_daily_calculation IS 'Time at which daily means were calculated using function calculate_stats. Not used for discrete timeseries.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.last_synchronize IS 'Time at which the timeseries was cross-checked against values held by the remote or partner database; the local store should have been updated to reflect the remote.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.operator IS 'Name of the agency or person responsible for the data represented in this timeseries.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.public_delay IS 'For public = TRUE stations, an option delay with which to serve the data to the public.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.source_fx IS 'Function (from the R package HydroMetDB) to use for incorporation of new data.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addHydrometTimeseries for usage.';
+  ")
+
+  #measurements_continuous
+  DBI::dbExecute(con, "COMMENT ON TABLE public.measurements_continuous IS 'Stores observations and imputed values for continuous timeseries.'
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.measurements_continuous.source_fx_args IS 'The periodicity of data can change within a timeseries, for example if recording rates go from every 6 hours to hourly.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.measurements_continuous.source_fx_args IS 'Imputed values may be user-entered.';
+  ")
+
+  # settings
+  DBI::dbExecute(con, "COMMENT ON TABLE public.settings IS 'This table stores the name of functions used to pull in new data, the parameter with which they are associated, and the remote parameter name to pass to the source function for each function and database parameter name.'
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.settings.source_fx IS 'The R function (from the HydroMetDB package) to use for fetching data.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.settings.source_fx IS 'Parameter names used in the timeseries table.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.settings.source_fx IS 'The parameter name or code to pass to the parameter param_code of the R function specified in source_fx.';
+  ")
+
+  # calculated_daily
+  DBI::dbExecute(con, "COMMENT ON TABLE public.calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the HydroMetDB package function calculate_stats.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.percent_historic_range IS 'The percent of historical range for that measurement compared to all previous records for the same day of year (not including the current measurement). Only populated once a minimum of three values exist for the current day of year (including the current value). February 29 values are the mean of February 28 and March 1.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.max IS 'Historical max for the day of year, excluding current measurement.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.min IS 'Historical min for the day of year, excluding current measurement.'
+  ")
+
+  # forecasts
+  DBI::dbExecute(con, "COMMENT ON TABLE public.forecasts IS 'Holds forecast timeseries information. Each timeseries must match up with a timeseries_id from the timeseries table. Quantiles are optional. Data should be deleted after a certain time interval to prevent unecessarily burdening the database.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.forecasts.issue_datetime IS 'The datetime at which the forecast data point (row) was issued.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.forecasts.issue_datetime IS 'The datetime for which the forecast data point (row) is valid.'
+  ")
+
+  # datum_list
+  DBI::dbExecute(con, "COMMENT ON TABLE public.datum_list IS 'Holds datum ids (referenced in the table datum_conversions) and their corresponding names in french and english. Taken directly from the datum list provided by HYDAT. Non-hydat datums can be added with datum_id beginning at 1000.'
+  ")
+
+  # datum_conversions
+  DBI::dbExecute(con, "COMMENT ON TABLE public.datum_conversions IS 'Holds vertical datum conversions in meters, as well as identifying the most recent conversion for the timeseries.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.datum_conversions.conversion_id IS 'Integer autoincrement column uniquely identifying the conversion.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.datum_conversions.datum_id_from IS 'The datum_id (matching an entry in table datum_list) from which the conversion value is from. Datum_id 10 is equal to the station assumed datum (station 0 relative to some arbitrary local benchmark).'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.datum_conversions.datum_id_to IS 'The datum_id (matching an entry in table datum_list) from which the conversion value is to.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.datum_conversions.conversion_m IS 'The elevation offset in meters to apply if transforming elevation values from the datum_id_from to the datum_id_to.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.datum_conversions.current IS 'TRUE means that the conversion is the most up-to-date in the database. Only one conversion_id can be current for each location.'
+  ")
+
+  # images
+  DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images or local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images. NOT intended to capture what the instrumentation looks like, only what the conditions at the location are.'
+  ")
+
+  # internal_status
+  DBI::dbExecute(con, "COMMENT ON TABLE public.internal_status IS 'Holds information about when a certain operation took place on the database using the R functions in the HydroMetDB package.'
+  ")
+
+  # extrema
+  DBI::dbExecute(con, "COMMENT ON TABLE public.extrema IS 'Holds vetted information about extrema specific to each time-series. Can be used for calculating return periods. Entries unique on timeseries_id, agency, year, period_type, condition, extrema, which allows for multiple different types of extrema from different authorities (agencies) for each timeseries.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.agency IS 'The agency (authority) which calculated the extreme value. Ex: Water Resources Branch, Water Survey of Canada, Tetra Tech, etc.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.year IS 'The year for which each value is valid.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.date IS 'The exact date on which the extreme value occured.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.period_type IS 'One of instantaneous, 1-day, 2-day, 3-day, 4-day, 5-day, 6-day, 7-day, monthly, yearly. For example, a 1-day max flow is the maximum 1-day averaged flow for the year; instantaneous max flow is the greatest value single data point recorded for the year.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.condition IS 'One of open water, break-up, freeze-up, winter. Any given timeseries can have one value of each for each year.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.extrema IS 'One of minimum or maximum. Necessary along with other descriptive columns to fully describe what each value represents.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.uncertainty IS ''
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.extrema.deemed_primary IS 'If TRUE then the extrema value is the best (most reliable) value and should be used for most calculations and representations.'
+  ")
+
+  # Thresholds
+  DBI::dbExecute(con, "COMMENT ON TABLE public.thresholds IS 'Holds threshold values for a variety of things like streamflows, water levels, flood levels, aquatic life inpacts.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.high_advisory IS 'Value at which a high water advisory is to be issued.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.high_watch IS 'Value at which a high water watch is to be issued.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.high_warning IS 'Value at which a high water warning is to be issued.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.flood_minor IS 'Value at which a minor flood is to be declared.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.flood_major IS 'Value at which a major flood is to be declared.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.high_first_human_impacts IS 'High-side value at which first human impacts are known, such as impacts to navigation.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.low_first_human_impacts IS 'Low-side value at which first human impacts are known, such as impacts to navigation.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.low_advisory IS 'Value at which a low water advisory is to be issued.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.low_watch IS 'Value at which a low water watch is to be issued.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.low_warning IS 'Value at which a low water warning is to be issued.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.low_aquatic_life_impacts_minor IS 'Low-side (water temp, level, flow) minor impact threshold to aquatic life.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.low_aquatic_life_impacts_major IS 'Low-side (water temp, level, flow) major impact threshold to aquatic life.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.high_aquatic_life_impacts_minor IS 'High-side (water temp, level, flow) minor impact threshold to aquatic life.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.high_aquatic_life_impacts_major IS 'High-side (water temp, level, flow) major impact threshold to aquatic life.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.fsl IS 'Full supply level (as per water use licence for control structure operations)'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.thresholds.lsl IS 'Low supply level (as per water use licence for control structure operations)'
+  ")
+
+  # polygons
+  DBI::dbExecute(con, "COMMENT ON TABLE public.polygons IS 'Holds polygons necessary for representing drainage basins, watersheds, etc.'
+  ")
+
+  # measurements_discrete
+  DBI::dbExecute(con, "COMMENT ON TABLE public.measurements_discrete IS 'Holds discrete observations, such as snow survey results, laboratory analyses, etc.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.target_datetime IS 'Optional column to be used for things like snow surveys where the measurements are around a certain target date and need to be plotted with the target date rather than the actual sample date.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.datetime IS 'The datetime on which the measurement was taken, or on which the sample was acquired in the field.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.sample_class IS 'Mostly for aqueous chem samples, to identify the sample as regular, field duplicate, lab duplicate, etc.'
+  ")
+
+
 
   # Create a read-only account
   tryCatch({
