@@ -194,19 +194,24 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
           suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
         }
       } else { #Add the non-continuous data
-        warning("This function is not yet set up to deal with 'discrete' category data!!! Skipping any such timeseries in the provided data.frame.")
-
-        #TODO: Figure out how to handle non-continuous data!!!
-        #
-        # if (nrow(ts) > 0){
-        #   # At this point ts should contain the data you want to insert into measurements_discrete. If any coercion is necessary (col names or other) it should have been done by the source_fx function. No need for calculations, periodicity sorting out, or anything necessary on the continuous timeseries.
-        #   # Remember to update the start_datetime, end_datetime, last_new_data in the timeseries table
-        #
-        # } else {
-        #   warning("Failed to retrieve any data from ", add$location[i], " and parameter ", add$parameter[i], "using function ", add$source_fx[i], ".")
-        # }
-
-      }
+        if (nrow(ts) > 0){
+          ts$timeseries_id <- new_tsid
+          tryCatch({
+            DBI::dbAppendTable(con, "measurements_discrete", ts)
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
+            message("Success! Added new discrete data for ", add$location, " and parameter ", add$parameter, ".")
+          }, error = function(e) {
+            warning("Unable to add new values to the measurements_discrete table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
+          })
+        } else { #There is no data to associate with this timeseries. Delete it and see if the location should also be deleted.
+          DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
+          loc_necessary <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", loc, "'"))
+          if (nrow(loc_necessary) == 0){
+            DBI::dbExecute(con, paste0("DELETE FROM locations WHERE timeseries_id = ", new_tsid, ";"))
+          }
+          warning("There was no data found for row ", i, ". The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
+        }
+      } #End of loop adding discrete data
     }, error = function(e) {
       warning("Failed to add new data for row number ", i, " in the provided timeseries_df data.frame.")
     })
