@@ -186,10 +186,12 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
     test[duplicated(test)] # NONE!
     # Check that all survey locations exist in locations table and vice-versa
     setdiff(unique(surveys$location), unique(locations$location))
+    # Add sampler_name column
+    surveys$sampler_name <- NA
 
   # Import into db
   for (i in 1:nrow(surveys)) {
-    DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes) VALUES ('", surveys$location[i], "', '", surveys$target_date[i], "', '", surveys$survey_date[i], "', '", surveys$notes[i], "')"))
+    DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name) VALUES ('", surveys$location[i], "', '", surveys$target_date[i], "', '", surveys$survey_date[i], "', '", surveys$notes[i], "', '", measurements$sampler_name[i], "')"))
   }
 
 #### -------------------------- Measurements ------------------------------ ####
@@ -208,13 +210,12 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
     measurements$sample_datetime <- as.POSIXct(paste(measurements$survey_date, "12:00:00"), format = "%Y-%m-%d %H:%M:%S")
   # Remove sample_date
     measurements <- measurements[, !(names(measurements) %in% c("survey_date"))]
-  # Add sample_name column
-    measurements$sampler_name <- NA
+  # Add average column
     measurements$average <- rep(TRUE, times=nrow(measurements))
 
   # Import measurements into db
     for (i in 1:nrow(measurements)) {
-      DBI::dbExecute(con, paste0("INSERT INTO measurements (survey_id, sample_datetime, sampler_name, estimate_flag, exclude_flag, swe, depth, average, notes) VALUES ('", measurements$survey_id[i], "', '", measurements$sample_datetime[i], "', '", measurements$sampler_name[i], "', '", measurements$estimate_flag[i], "', '", measurements$exclude_flag[i], "', '", measurements$swe[i], "', '", measurements$depth[i], "', '", measurements$average[i], "', '", measurements$notes[i], "')"))
+      DBI::dbExecute(con, paste0("INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, average, notes) VALUES ('", measurements$survey_id[i], "', '", measurements$sample_datetime[i], "', '", measurements$estimate_flag[i], "', '", measurements$exclude_flag[i], "', '", measurements$swe[i], "', '", measurements$depth[i], "', '", measurements$average[i], "', '", measurements$notes[i], "')"))
     }
 
  DBI::dbDisconnect(con)
