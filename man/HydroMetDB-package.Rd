@@ -13,7 +13,7 @@ Set of functions for the creation and ongoing maintenance of the Yukon Governmen
 
 Authors:
 \itemize{
-  \item Emilie Stewart-Jones \email{emilie.stewart-jones@yukon.ca}
+  \item Emilie Stewart-Jones \email{emilie.stewart-jones@yukon.ca} (\href{https://orcid.org/0000-0002-0013-8953}{ORCID})
 }
 
 }
