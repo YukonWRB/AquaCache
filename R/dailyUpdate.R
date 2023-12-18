@@ -27,9 +27,8 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
 
   if (timeseries_id[1] == "all"){
-    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'continuous'")
-    discrete_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'discrete'")
-
+    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL")
+    discrete_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL")
   } else {
     all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation, category FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
     continuous_ts <- all_timeseries[all_timeseries$category == "continuous" , ]
@@ -50,7 +49,6 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     rt_duration <- Sys.time() - rt_start
     message("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), ".")
   }
-
   if (nrow(discrete_ts) > 0){
     message("Getting discrete information up to date with getNewDiscrete...")
     disc_start <- Sys.time()
@@ -58,7 +56,6 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     disc_duration <- Sys.time() - disc_start
     message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
   }
-
 
   ### Check for a new version of HYDAT, update timeseries in the database if needed. #####
   message("Checking for new HYDAT database with update_hydat...")
@@ -76,7 +73,6 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     message("Checking if latest version of HYDAT has new datums...")
     update_hydat_datums(con = con)
   }
-
 
   ### Calculate new daily means and stats from realtime data where necessary #######
   if (nrow(continuous_ts) > 0){
