@@ -77,11 +77,14 @@ getSnowCourse <- function(location, param_code, start_datetime, end_datetime = S
     meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, sample_datetime, ", param_code, ", estimate_flag FROM means WHERE location = '", location, "' AND sample_datetime > '", start_datetime, "';"))
     names(meas) <- c("target_datetime", "datetime", "value", "note")
   }
-  meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC")
-  meas$note <- as.character(meas$note)
-  meas$note[meas$note == "TRUE"] <- "estimated"
-  meas$note[meas$note == "FALSE"] <- NA
-  meas$sample_class <- NA
-
+  if (nrow(meas) > 0){
+    meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC")
+    meas$note <- as.character(meas$note)
+    meas$note[meas$note == "TRUE"] <- "estimated"
+    meas$note[meas$note == "FALSE"] <- NA
+    meas$sample_class <- NA
+  } else {
+    meas <- data.frame()
+  }
   return(meas)
 }

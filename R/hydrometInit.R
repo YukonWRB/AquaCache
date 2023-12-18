@@ -134,7 +134,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  network TEXT,
                  public BOOLEAN NOT NULL,
                  public_delay INTERVAL,
-                 source_fx TEXT NOT NULL,
+                 source_fx TEXT,
                  source_fx_args TEXT,
                  note TEXT,
                  UNIQUE (location, parameter, category, period_type));")
@@ -178,7 +178,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value TIMESTAMP WITH TIME ZONE,
                  PRIMARY KEY (event))")
 
-  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync_continuous", "last_sync_discrete", "last_update_watersheds", "last_update_rasters", "last_update_polygons", "last_vacuum"),
+  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync", "last_sync_discrete", "last_update_watersheds", "last_update_rasters", "last_update_polygons", "last_vacuum"),
                                 "value" = NA)
   DBI::dbAppendTable(con, "internal_status", internal_status)
 
@@ -250,25 +250,25 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  UNIQUE (name, polygon_type));")
   DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
 
-  DBI::dbExecute(con, "CREATE TABLE if not exists rasters_model_outputs (
-                   rid SERIAL PRIMARY KEY,
-                   model TEXT NOT NULL,
-                   valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
-                   valid_to TIMESTAMP WITH TIME ZONE NOT NULL,
-                   issued TIMESTAMP WITH TIME ZONE NOT NULL,
-                   source TEXT,
-                   bands JSONB NOT NULL, --Each band is a parameter
-                   rast RASTER NOT NULL);")
-  DBI::dbExecute(con, "CREATE INDEX rasters_model_outputs_st_conhull_idx ON rasters_model_outputs USING gist(ST_ConvexHull(rast));")
-
-  DBI::dbExecute(con, "CREATE TABLE if not exists rasters_general (
-                   rid SERIAL PRIMARY KEY,
-                   parameter TEXT NOT NULL,
-                   description TEXT NOT NULL,
-                   units TEXT NOT NULL,
-                   source TEXT,
-                   rast RASTER);")
-  DBI::dbExecute(con, "CREATE INDEX rasters_general_st_conhull_idx ON rasters_general USING gist(ST_ConvexHull(rast));")
+  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_model_outputs (
+  #                  rid SERIAL PRIMARY KEY,
+  #                  model TEXT NOT NULL,
+  #                  valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
+  #                  valid_to TIMESTAMP WITH TIME ZONE NOT NULL,
+  #                  issued TIMESTAMP WITH TIME ZONE NOT NULL,
+  #                  source TEXT,
+  #                  bands JSONB NOT NULL, --Each band is a parameter
+  #                  rast RASTER NOT NULL);")
+  # DBI::dbExecute(con, "CREATE INDEX rasters_model_outputs_st_conhull_idx ON rasters_model_outputs USING gist(ST_ConvexHull(rast));")
+  #
+  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_general (
+  #                  rid SERIAL PRIMARY KEY,
+  #                  parameter TEXT NOT NULL,
+  #                  description TEXT NOT NULL,
+  #                  units TEXT NOT NULL,
+  #                  source TEXT,
+  #                  rast RASTER);")
+  # DBI::dbExecute(con, "CREATE INDEX rasters_general_st_conhull_idx ON rasters_general USING gist(ST_ConvexHull(rast));")
 
 
   #Add in foreign keys ###########
@@ -283,37 +283,49 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  "ALTER TABLE calculated_daily
   ADD CONSTRAINT fk_timeseries_id
   FOREIGN KEY (timeseries_id)
-  REFERENCES timeseries(timeseries_id);")
+  REFERENCES timeseries(timeseries_id)
+  ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE measurements_continuous
   ADD CONSTRAINT fk_timeseries_id
   FOREIGN KEY (timeseries_id)
-  REFERENCES timeseries(timeseries_id);")
+  REFERENCES timeseries(timeseries_id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE measurements_discrete
   ADD CONSTRAINT fk_timeseries_id
   FOREIGN KEY (timeseries_id)
-  REFERENCES timeseries(timeseries_id);")
+  REFERENCES timeseries(timeseries_id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE extrema
   ADD CONSTRAINT fk_timeseries_id
   FOREIGN KEY (timeseries_id)
-  REFERENCES timeseries(timeseries_id);")
+  REFERENCES timeseries(timeseries_id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE forecasts
   ADD CONSTRAINT fk_timeseries_id
   FOREIGN KEY (timeseries_id)
-  REFERENCES timeseries(timeseries_id);")
+  REFERENCES timeseries(timeseries_id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+
 
   DBI::dbExecute(con,
                  "ALTER TABLE datum_conversions
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
   REFERENCES locations(location)
+                 ON DELETE CASCADE
                  ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
@@ -321,13 +333,16 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
   REFERENCES locations(location)
+                 ON DELETE CASCADE
                  ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE thresholds
                  ADD CONSTRAINT fk_timeseries_id
                  FOREIGN KEY (timeseries_id)
-                 REFERENCES timeseries(timeseries_id);")
+                 REFERENCES timeseries(timeseries_id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
 
 
   # Add table comments #############

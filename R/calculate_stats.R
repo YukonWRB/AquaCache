@@ -5,6 +5,8 @@
 #'
 #' Calculates daily means from data in the measurements_continuous table as well as derived statistics for each day (historical min, max, q10, q25, q50 (mean), q75, q90). Derived daily use values for each day of year **prior** to the current date for historical context, with the exception of the first day of record for which only the min/max are populated with the day's value.  February 29 calculations are handled differently: see details.
 #'
+#' Some continuous measurment data has a period of greater than 1 day. In these cases it would be impossible to calculate daily statistics, so this function explicitly excludes data points with a period greater than P1D.
+#'
 #' This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation. It *must* be used with a database created by this package, or one with identical table and column names.
 #'
 #' @details
@@ -45,7 +47,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
   for (i in timeseries_id){
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
       last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
-      earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, ";"))[1,])
+      earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
       tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, operator FROM timeseries WHERE timeseries_id = ", i, ";"))
       period_type <- tmp[1,1]
       operator <- tmp[1,2]  #operator is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
@@ -63,7 +65,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         }
       } else { #start_recalc is NULL
         if (!is.na(last_day_historic) & !is.na(earliest_day_measurements)){
-          last_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, ";"))[1,])
+          last_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
           last_day_historic <- last_day_historic - 2 # recalculate the last two days of historic data in case new data has come in
         } else if (is.na(last_day_historic) & !is.na(earliest_day_measurements)){ #say, a new timeseries that isn't in hydat yet or one that's just being added and has no calculations yet
           last_day_historic <- earliest_day_measurements
@@ -104,7 +106,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         DBI::dbDisconnect(hydat_con)
 
         if (!flag){
-          gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime > '", last_hydat + 1, " 00:00:00'"))
+          gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime > '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
 
           if (nrow(gap_measurements) > 0){ #Then there is new measurements data, or we're force-recalculating from an earlier date
             gap_measurements <- gap_measurements %>%
@@ -144,7 +146,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       }
 
       if (operator != "WSC" || flag) { #All timeseries where: operator is not WSC and therefore lack superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
-        gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00'"))
+        gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
 
         if (nrow(gap_measurements) > 0){ #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
           gap_measurements <- gap_measurements %>%
@@ -174,7 +176,6 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           }
         }
       }
-
 
       # Now calculate stats where they are missing
       if (nrow(missing_stats) > 0){
