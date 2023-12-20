@@ -176,8 +176,19 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.average IS 'TRUE if depth and SWE values represent an average of multiple samples. FALSE if SWE and depth values are for a single sample. All entries before the 2024 snow season are calculated averages.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.notes IS 'Notes specific to a sample. Ex: ground ice layer thickness, number of attempts, etc.'")
 
-  "Before the institution of this postgreSQL database, only the average of the samples were recorded in the database. As such, for the years 2023 and before, only depth and swe are averages, "
   ## means
+  DBI::dbExecute(con, "COMMENT ON VIEW public.means IS 'Calculates the means of all samples of a snow survey. Only samples with exclude_flag = FALSE are included.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.location IS 'The location the measurement is associated to.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.survey_id IS 'The survey_id, as seen in the surveys table. Survey_id will be unique, as means are aggregated by survey_id.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.target_date IS 'The target_date for the snow survey.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.swe IS 'The mean SWE of all the samples taken for the snow survey.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.depth IS 'The mean snow depth of all the samples taken for the snow survey.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.sample_datetime IS 'The mean sample date of all the samples taken for the snow survey.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.swe_sd IS 'The standard deviation of the SWE of all the samples taken for the snow survey.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.depth_sd IS 'The standard deviation of the snow depth of all the samples taken for the snow survey.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.sample_count_used IS 'The number of samples included in the mean. Samples where exclude_flag = TRUE are excluded from the mean.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.sample_count_ex IS 'The number of samples excluded from the mean. Samples where exclude_flag = TRUE are excluded from the mean.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.estimate_flag IS 'TRUE if one of the samples of the survey have estimate_flag = TRUE. Currently, only samples which are themsleves means of multiple samples should be flagged as an estimate.'")
 
 
   #### Create a read-only account
