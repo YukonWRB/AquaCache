@@ -250,6 +250,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  UNIQUE (name, polygon_type));")
   DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
 
+  #N OTE: raster tables are created upon first use of the raster addition function.
   # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_model_outputs (
   #                  rid SERIAL PRIMARY KEY,
   #                  model TEXT NOT NULL,

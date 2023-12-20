@@ -88,7 +88,7 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
   } #End of iteration over each location + param
 
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
-  DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_discretes'"))
+  DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_discrete'"))
 
   if (nrow(success) > 0){
     return(success)
