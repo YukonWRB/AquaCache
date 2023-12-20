@@ -3,7 +3,7 @@
 #' Write raster to PostGIS database table.
 #'
 #' @description
-#' This function is not meant to be used by itself: in most cases use [add_model_rasters()] or add_raster() which will populate reference tables so that your raster can be easily found later.
+#' This function is not meant to be used by itself: in most cases use [add_model_raster()] or [add_raster()] which will populate reference tables so that your raster can be easily found later.
 #'
 #' Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of [rpostgis::pgWriteRast()].
 #'
@@ -48,7 +48,6 @@
 writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, blocks = NULL,
                         constraints = TRUE) {
 
-  rpostgis:::dbConnCheck(con)
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {
     stop("PostGIS is not enabled on this database.")
   }
@@ -61,13 +60,27 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
   r_class <- DBI::dbQuoteString(con, class(raster)[1])
   r_crs <- DBI::dbQuoteString(con, terra::crs(raster))
 
-  nameq <- rpostgis:::dbTableNameFix(con, rast_table)
-  namef <- rpostgis:::dbTableNameFix(con, rast_table, as.identifier = FALSE)
-
   if (!(rast_table %in% DBI::dbListTables(con))) {
     message("Raster table does not already exist. Creating it.")
-    rast.tmp.query <- paste0("CREATE TABLE ", paste(nameq, collapse = "."),
-                             " (rid serial primary key, reference_id numeric, r_class character varying, r_proj4 character varying, rast raster);")
+    version <- DBI::dbGetQuery(con, "SELECT version()")
+    if (grepl("PostgreSQL", version$version)){
+      rast.tmp.query <- paste0("CREATE TABLE ", rast_table,
+                             " (rid SERIAL PRIMARY KEY,
+                             reference_id INTEGER,
+                             r_class TEXT,
+                             r_proj4 TEXT,
+                             rast RASTER NOT NULL);")
+    } else if (grepl("Microsoft", version$version)) {
+      rast.tmp.query <- paste0("CREATE TABLE ", rast_table,
+                               " (rid INT IDENTITY(1,1) PRIMARY KEY,
+                             reference_id INTEGER,
+                             r_class VARCHAR(MAX),
+                             r_proj4 VARCHAR(MAX),
+                             rast RASTER NOT NULL);")
+    } else {
+      stop("This script is designed to work with either postgreSQL or SQL server databases.")
+    }
+
     ## If the execute fails, postgis.raster extension is not installed?
     tryCatch(
       {
@@ -82,9 +95,9 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
     new <- T
   } else {
     message("Appending to existing table. Dropping any existing raster constraints...")
-    try(DBI::dbExecute(con, paste0("SELECT DropRasterConstraints('", namef[1], "','", namef[2], "','rast',",
+    try(DBI::dbExecute(con, paste0("SELECT DropRasterConstraints('", rast_table, "','rast',",
                                     paste(rep("TRUE", 12), collapse = ","),");")))
-    n.base <- DBI::dbGetQuery(con, paste0("SELECT max(rid) r from ", paste(nameq, collapse = "."), ";"))$r
+    n.base <- DBI::dbGetQuery(con, paste0("SELECT max(rid) r from ", rast_table, ";"))$r
     new = F
   }
 
@@ -161,8 +174,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
     if (band == 1) {
 
       # Create empty raster
-      tmp.query <- paste0("INSERT INTO ", paste(nameq,
-                                                collapse = "."), " (rid, r_class, r_proj4, rast) VALUES (",n,
+      tmp.query <- paste0("INSERT INTO ", rast_table, " (rid, r_class, r_proj4, rast) VALUES (",n,
                           ",",r_class,",",r_crs,", ST_MakeEmptyRaster(",
                           d[2], ",", d[1], ",", ex[1], ",", ex[4], ",",
                           res[1], ",", -res[2], ", 0, 0,", srid[1], ") );")
@@ -170,16 +182,16 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
 
       # Upper left x/y for alignment snapping
       # if (trn == 1 & crn == 1) {
-      tmp.query <- paste0("SELECT ST_UpperLeftX(rast) x FROM ", paste(nameq, collapse = ".") ," where rid = 1;")
+      tmp.query <- paste0("SELECT ST_UpperLeftX(rast) x FROM ", rast_table ," where rid = 1;")
       upx <- DBI::dbGetQuery(con, tmp.query)$x
-      tmp.query <- paste0("SELECT ST_UpperLeftY(rast) y FROM ", paste(nameq, collapse = ".") ," where rid = 1;")
+      tmp.query <- paste0("SELECT ST_UpperLeftY(rast) y FROM ", rast_table ," where rid = 1;")
       upy <- DBI::dbGetQuery(con, tmp.query)$y
       # }
 
       # New band
       if (res[1] != res[2]) s2g <- paste0(", ", res[1], ", ", -res[2]) else s2g <- NULL
       bndargs <- paste0("ROW(",1:length(names(r1)),",",bit.depth,"::text,0,", ndval,")")
-      tmp.query <- paste0("UPDATE ", paste(nameq, collapse = "."),
+      tmp.query <- paste0("UPDATE ", rast_table,
                           " SET rast = ST_SnapToGrid(ST_AddBand(rast,ARRAY[",
                           paste(bndargs,collapse = ","),"]::addbandarg[]), ", upx, "," , upy , s2g, ") ",
                           "where rid = ",
@@ -194,7 +206,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
       paste0("[", paste(x, collapse = ","), "]")
     }), collapse = ",")
 
-    tmp.query <- paste0("UPDATE ", paste(nameq, collapse = "."),
+    tmp.query <- paste0("UPDATE ", rast_table,
                         " SET rast = ST_SetValues(rast,",band,", 1, 1, ARRAY[",
                         r2, "]::double precision[][])
                                where rid = ",
@@ -206,21 +218,20 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
   purrr::pmap(list(rgrid$band, rgrid$trn, rgrid$crn, rgrid$n), export_block)
 
   # Get the rids of the rows just appended. Done as a query here in case any rows in object rgrid failed to append
-  new_rids <- DBI::dbGetQuery(con, paste0("SELECT rid FROM ", paste(nameq, collapse = "."), " WHERE rid > ", n.base, ";"))[, 1]
+  new_rids <- DBI::dbGetQuery(con, paste0("SELECT rid FROM ", rast_table, " WHERE rid > ", n.base, ";"))[, 1]
 
   # Create index
   if (!new) {
-    tmp.query <- paste0("DROP INDEX ", gsub("\"", "", paste(nameq, collapse = ".")), "_rast_st_conhull_idx")
+    tmp.query <- paste0("DROP INDEX ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
     DBI::dbExecute(con, tmp.query)
   }
-  tmp.query <- paste0("CREATE INDEX ", gsub("\"", "", nameq[2]),
-                      "_rast_st_conhull_idx ON ", paste(nameq, collapse = "."),
+  tmp.query <- paste0("CREATE INDEX ", gsub("\"", "", rast_table),
+                      "_rast_st_conhull_idx ON ", rast_table,
                       " USING gist( ST_ConvexHull(rast) );")
   DBI::dbExecute(con, tmp.query)
 
   # 5. add raster constraints
-  tmp.query <- paste0("SELECT AddRasterConstraints(", DBI::dbQuoteString(con,
-                                                                         namef[1]), "::name,", DBI::dbQuoteString(con, namef[2]),
+  tmp.query <- paste0("SELECT AddRasterConstraints('public'::name,", DBI::dbQuoteString(con, rast_table),
                       "::name, 'rast'::name);")
   DBI::dbExecute(con, tmp.query)
 

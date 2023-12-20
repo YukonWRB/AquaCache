@@ -42,7 +42,7 @@ depending on the PostgreSQL server settings.}
 A list with TRUE for successful import and the rid(s) of the appended entries.
 }
 \description{
-This function is not meant to be used by itself: in most cases use \code{\link[=add_model_rasters]{add_model_rasters()}} or add_raster() which will populate reference tables so that your raster can be easily found later.
+This function is not meant to be used by itself: in most cases use \code{\link[=add_model_raster]{add_model_raster()}} or \code{\link[=add_raster]{add_raster()}} which will populate reference tables so that your raster can be easily found later.
 
 Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of \code{\link[rpostgis:pgWriteRast]{rpostgis::pgWriteRast()}}.
 }
