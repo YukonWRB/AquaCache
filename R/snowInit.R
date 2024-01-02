@@ -110,7 +110,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                              "  FROM measurements ",
                              "  GROUP BY survey_id",
                              ")",
-                             "SELECT surveys.location, measurements.survey_id, surveys.target_date, ",
+                             "SELECT surveys.location, locations.name, locations.sub_basin, measurements.survey_id, surveys.target_date, ",
                              "AVG(swe) AS swe, AVG(depth) AS depth, MIN(sample_datetime) AS sample_datetime, ",
                              "STDDEV(swe) AS swe_sd, STDDEV(depth) AS depth_sd, ",
                              "COUNT(*) AS sample_count_used, ",
@@ -118,9 +118,10 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                              "BOOL_OR(measurements.estimate_flag) AS estimate_flag ",
                              "FROM measurements ",
                              "INNER JOIN surveys ON measurements.survey_id = surveys.survey_id ",
+                             "INNER JOIN locations on surveys.location = locations.location ",
                              "LEFT JOIN measurement_counts ON measurements.survey_id = measurement_counts.survey_id ",
                              "WHERE exclude_flag = FALSE ",
-                             "GROUP BY measurements.survey_id, surveys.location, surveys.target_date, total_count"
+                             "GROUP BY measurements.survey_id, surveys.location, surveys.target_date, total_count, locations.name, locations.sub_basin"
   ))
 
   #### Add Comments to table and columns
@@ -179,6 +180,8 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
   ## means
   DBI::dbExecute(con, "COMMENT ON VIEW public.means IS 'Calculates the means of all samples of a snow survey. Only samples with exclude_flag = FALSE are included.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.means.location IS 'The location the measurement is associated to.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.name IS 'The commonly used name of the location the measurement is associated to.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.means.sub_basin IS 'The sub-basin is which the measurement was taken. Refers to the basin names used in the snow bulletin.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.means.survey_id IS 'The survey_id, as seen in the surveys table. Survey_id will be unique, as means are aggregated by survey_id.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.means.target_date IS 'The target_date for the snow survey.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.means.swe IS 'The mean SWE of all the samples taken for the snow survey.'")
