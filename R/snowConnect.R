@@ -1,7 +1,7 @@
 #' Connect to the snow postgres database
 #'
 #' @description
-#' `r lifecycle::badge("experimental")`
+#' `r lifecycle::badge("stable")`
 #'
 #' This function exists to facilitate connecting to the snow database, especially if the database type and connection method changes in the future. This function is different from the [YGwater::snowConnect()] function in that it defaults to an account with write privileges.
 #'

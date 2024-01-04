@@ -121,7 +121,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter TEXT NOT NULL,
-                 param_type TEXT NOT NULL, CHECK(param_type IN ('meteorological', 'hydrometric', 'water chemistry', 'geochemistry', 'atmospheric chemistry')),
+                 param_type TEXT NOT NULL, CHECK(param_type IN ('meteorological', 'surface water physical', 'surface water chemistry', 'ground water chemistry', 'ground water physical', 'geochemistry', 'atmospheric chemistry')),
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
@@ -137,7 +137,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  source_fx TEXT,
                  source_fx_args TEXT,
                  note TEXT,
-                 UNIQUE (location, parameter, category, period_type));")
+                 UNIQUE (location, parameter, category, period_type, param_type));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists extrema (
                  timeseries_id INTEGER PRIMARY KEY,

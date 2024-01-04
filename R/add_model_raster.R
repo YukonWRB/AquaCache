@@ -1,9 +1,9 @@
 #' Add a model-output raster file to the database
 #'
 #' @description
-#' Use this function to add a raster file output by a model (forecast or reanalysis) to the database. Ensures that database constraints are met. If you need to replace or delete a vector for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first.
+#' Use this function to add a raster file output by a model (forecast or reanalysis) to the database. Ensures that database constraints are met. If you need to replace or delete a vector for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first. If the raster is not created by a model use function [add_raster()] instead.
 #'
-#' You can fetch the rasters using [rpostgis::pgGetRast()]. You'll have to specify which reference_id as a clause; find the right one in the 'rasters_reference' table. The rasters themselves live in the 'rasters' table.
+#' Depending on size, rasters might be broken up into many tiles. Because of this and the database's spatial capabilities, it's possible to only fetch the tiles you need using [rpostgis::pgGetRast()]. You'll have to specify which reference_id to use as a clause; find the right one in the 'rasters_reference' table. Look at the parameter `boundary` to specify a limited spatial extent, and at `bands` to only fetch certain bands. The rasters themselves live in the 'rasters' table, but the reference id in in the 'rasters_reference' table.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param raster The raster object to add to the database, as a [terra::rast()] object, as a file path, or as a valid URL. Can be multi-band. Band names will be taken directly from this raster.
