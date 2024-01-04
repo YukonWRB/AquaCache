@@ -29,6 +29,7 @@ Imports:
     lifecycle,
     lubridate,
     magrittr,
+    odbc,
     purrr,
     rlang,
     rpostgis,

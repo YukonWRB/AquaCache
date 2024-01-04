@@ -2,29 +2,29 @@ load_all()
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = c("51426"),
-                            parameter = c("dly max air temp", "dly min air temp", "dly mean air temp", "dly tot precip", "dly tot rain", "dly tot snow", "hly tot precip", "air temp"),
-                            unit = c("C", "C", "C", "mm", "mm", "cm", "mm", "C"),
-                            category = "continuous",
-                            period_type = c("max", "min", "(min+max)/2", "sum", "sum", "sum", "sum", "instantaneous"),
-                            param_type = "meteorological",
-                            start_datetime = "2023-11-01",
-                            operator = "ECCC",
-                            network = "ECCC met",
+timeseries_df <- data.frame(location = c("YOWN-0101"),
+                            parameter = c("uranium dissolved", "arsenic dissolved"),
+                            unit = c("mg/l", "mg/l"),
+                            category = "discrete",
+                            period_type = c("instantaneous"),
+                            param_type = "ground water chemistry",
+                            start_datetime = "1980-01-01",
+                            operator = "WRB",
+                            network = "YOWN",
                             public = TRUE,
-                            source_fx = "getRealtimeECCCwx",
-                            source_fx_args = c("{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'hour'}", "{interval = 'hour'}"),
-                            note = "Current measurement location is Dawson airport, but timeseries includes measurements taken in town and at other locations near the airport. Historical measurements adjusted using overlap to match current location")
+                            source_fx = "getEQWin",
+                            source_fx_args = NA,
+                            note = NA)
 
-locations_df <- data.frame(location = c("54198"),
-                           name = c("Watson Lake"),
-                           latitude = c(60.12),
-                           longitude = c(-128.82),
+locations_df <- data.frame(location = c("YOWN-0101"),
+                           name = c("Wolf Creek Well"),
+                           latitude = c(60.606923),
+                           longitude = c(-134.962745),
                            datum_id_from = c(10),
                            datum_id_to = c(110),
-                           conversion_m = c(687.3),
+                           conversion_m = c(749),
                            current = c(TRUE),
-                           note = "Timeseries associated with this location may be compound timeseries from multiple locations in the same region. Refer to the timeseries-specific note for details if applicable.")
+                           note = NA)
 addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df)
 
 # Deleting from various tables
