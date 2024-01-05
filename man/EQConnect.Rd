@@ -4,7 +4,10 @@
 \alias{EQConnect}
 \title{Connect to the EQWin database}
 \usage{
-EQConnect(path = "X:/EQWin/WR/DB/Water_Resources.mdb", silent = FALSE)
+EQConnect(
+  path = "//carver/infosys/EQWin/WR/DB/Water_Resources.mdb",
+  silent = FALSE
+)
 }
 \arguments{
 \item{path}{Full path to the database including extension.}
