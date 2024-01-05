@@ -70,6 +70,7 @@
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
+
       ts <- do.call(source_fx, args_list) #Get the data using the args_list
       ts <- ts[!is.na(ts$value) , ]
 

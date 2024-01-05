@@ -13,7 +13,7 @@
 #' @export
 #'
 
-EQConnect <- function(path = "X:/EQWin/WR/DB/Water_Resources.mdb", silent = FALSE){
+EQConnect <- function(path = "//carver/infosys/EQWin/WR/DB/Water_Resources.mdb", silent = FALSE){
 
   tryCatch({
     EQWin <- DBI::dbConnect(drv = odbc::odbc(), .connection_string = paste0("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=", path))
