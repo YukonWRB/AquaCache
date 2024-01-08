@@ -27,20 +27,33 @@ readSnowTemplate <- function(template) {
 
     maintenance <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(27:30), cols = c(2:10), colNames=TRUE, skipEmptyRows=FALSE, skipEmptyCols=TRUE)
 
-    # Create surveys table (location, target_date, survey_date, notes, sampler_name)
+    ### Create surveys table (location, target_date, survey_date, notes, sampler_name)
     location <- survey[1, 2]
     target_date <- survey[2, 2]
     survey_date <- survey[3, 2]
     sampler_name <- survey[4, 2]
-    # Notes
-    airtemp <- notes[1, 9]
-    weather <- c(notes[2,2:9], notes[3,2:9])
-    weather <- c(notes[2,3], notes[2,5], notes[2, 7], notes[2,9], notes[3,3], notes[3,5], notes[3,7], notes[3,9])
-    notes <- paste0("The ")
 
+    ## Notes
+    # Air temp
+    airtemp <- notes[1, 9]
+    # Weather
+    weather <- unlist(c(notes[2,c(3,5,7,9)], notes[3,c(3,5,7,9)]))
+    names(weather) <- unlist(c(notes[2,c(2,4,6,8)], notes[3,c(2,4,6,8)]))
+    weather <- weather[!is.na(weather)]
+    weather <- paste("Weather was", paste(tolower(names(weather)), collapse = " and "), "at time of sampling")
+    # Snow conditions
+    snow <- unlist(c(notes[c(5,6,7,8), c(9)],
+                     notes[c(9,10), c(5)],
+                     notes[c(9,10), c(9)]))
+    names(snow) <- unlist(c(notes[c(5,6,7,8), c(2)],
+                            notes[c(9,10), c(2)],
+                            notes[c(9,10), c(6)]))
+    snow <- snow[!is.na(snow)]
+    snow <- paste0(names(snow), collapse=". ")
+    # Ground ice layer
+    groundice <- notes[]
 
     surveys <- data.frame()
-
 
     # Create measurements table (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, average, notes)
     # Create maintenance table
