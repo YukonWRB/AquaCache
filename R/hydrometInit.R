@@ -12,10 +12,6 @@
 #' @export
 #'
 
-
-#NOTE: postgreSQL uses the 'text' data type, but Microsoft SQL server equivalent is varchar(max). Replace all can be used to adapt this script.
-#NOTE: For datetimes to work with both postgres and SQL server, ISO8601 should be used: "2022-01-01T00:00:00-07:00" for MST. This is the new ISO standard anyways.
-
 hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   # Overwrite and vacuum if requested ###########
@@ -64,11 +60,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  PRIMARY KEY (timeseries_id, date))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
+                   image_id SERIAL PRIMARY KEY,
                    location TEXT NOT NULL,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                   fetch_datetime TIMESTAMP WITH TIME ZONE,
+                   format TEXT NOT NULL,
                    file BYTEA NOT NULL,
-                   image_type TEXT NOT NULL CHECK(image_type IN ('auto', 'manual')),
-                   PRIMARY KEY (location, datetime, image_type))")
+                   image_type TEXT NOT NULL CHECK(image_type IN ('auto', 'manual')))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
                    timeseries_id INTEGER,
@@ -115,6 +113,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  longitude NUMERIC NOT NULL,
                  point geometry(POINT, 4269),
                  note TEXT)")
+
+  DBI::dbExecute(con, "CREATE TABLE if not exists documents (
+                 document_id SERIAL PRIMARY KEY,
+                 location TEXT NOT NUKK,
+                 description TEXT NOT NULL,
+                 format TEXT NOT NULL,
+                 document BYTEA NOT NULL);")
 
   #The column timeseries_id is auto created for each new entry
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
@@ -250,7 +255,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  UNIQUE (name, polygon_type));")
   DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
 
-  #N OTE: raster tables are created upon first use of the raster addition function.
+  #NOTE: raster tables are created upon first use of the raster addition function.
   # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_model_outputs (
   #                  rid SERIAL PRIMARY KEY,
   #                  model TEXT NOT NULL,
@@ -334,6 +339,14 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
   REFERENCES locations(location)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE documents
+                 ADD CONSTRAINT fk_location
+                 FOREIGN KEY (location)
+                 REFERENCES locations(location)
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
 

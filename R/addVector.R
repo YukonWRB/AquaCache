@@ -19,7 +19,7 @@
 #' @param table The referenced table in the database (as character string), must be under the public schema.
 #' @param geom_col_name The name of the column in which to insert the geometry object.
 #'
-#' @return Nothing, but the vector should be added to the DB if no error is thrown.
+#' @return TRUE if the vector was added.
 #' @export
 #'
 
@@ -62,4 +62,5 @@ addVector <- function(con, geom, table, geom_col_name = "geom"){
   } else if (terra::geomtype(geom) == "lines"){
     stop("Function is not yet adapted to deal with lines!")
   }
+  return(TRUE)
 }

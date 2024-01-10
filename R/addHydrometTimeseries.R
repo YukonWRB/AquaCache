@@ -80,10 +80,10 @@ addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries
       add <- timeseries_df[i, -which(names(timeseries_df) == "start_datetime")]
       start_datetime <- timeseries_df[i, "start_datetime"]
       tryCatch({
-        DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location.
-        message("Added a new entry to the timeseries table for location ", add$location, " and parameter ", add$parameter, ".")
+        DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
+        message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", add$parameter, ", category ", add$category, ", param_type ", add$param_type, ", and period_type ", add$period_type, ".")
       }, error = function (e) {
-        message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada, and this function automatically looked for the corresponding level/flow timeseries.")
+        message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and this function automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries.")
       })
       new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter = '", add$parameter, "' AND category = '", add$category, "' AND period_type = '", add$period_type, "';"))[1,1]
       loc <- add$location

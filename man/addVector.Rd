@@ -16,7 +16,7 @@ addVector(con, geom, table, geom_col_name = "geom")
 \item{geom_col_name}{The name of the column in which to insert the geometry object.}
 }
 \value{
-Nothing, but the vector should be added to the DB if no error is thrown.
+TRUE if the vector was added.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
