@@ -12,7 +12,7 @@
 #' @export
 #'
 
-addHydrometTemplate <- function(con = hydrometConnect(silent=TRUE), format = "short", save_path = NULL){
+addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), format = "short", save_path = NULL){
 
 
   if (!is.null(save_path)){

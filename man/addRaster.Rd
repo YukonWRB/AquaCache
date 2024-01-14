@@ -19,7 +19,7 @@ addRaster(
 
 \item{raster}{The raster object to add to the database, as a \code{\link[terra:rast]{terra::rast()}} object, as a file path, or as a valid URL. Can be multi-band. Band names will be taken directly from this raster.}
 
-\item{description}{A succint description for the raster.}
+\item{description}{A succinct description for the raster.}
 
 \item{units}{The units associated with each band, as a character vector. If left NULL function will attempt to retrieve units from the raster metadata. Otherwise if specified must be a vector of 1 or of length equal to the number of raster bands.}
 

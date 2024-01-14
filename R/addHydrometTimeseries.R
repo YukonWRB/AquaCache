@@ -3,22 +3,22 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addHydrometTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`.
+#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addHydrometTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`.
 #'
 #' @details
 #' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
 #'
 #' Additional arguments to pass to the function specified in source_fx should take the form of "{param1 = arg1}, {param2 = 'arg2'}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
 #' @param locations_df A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
-#' @seealso [addHydrometTemplate()] to see templates for timesries_df and locations_df.
+#' @seealso [addHydrometTimeseriesTemplate()] to see templates for timesries_df and locations_df.
 
-addHydrometTimeseries <- function(con = hydrometConnect(silent=TRUE), timeseries_df, locations_df = NULL){
+addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, con = hydrometConnect()){
 
   #Check that every location in the timeseries_df already exists; if they don't, check they've been specified in locations_df
   new_locs <- NULL

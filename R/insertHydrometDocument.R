@@ -5,16 +5,15 @@
 #'
 #' This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See [fetchDocument()] to get a document out again.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param path Valid path including extension to the document to upload.
 #' @param location The location with which to associate the document (must be in the database).
 #' @param description A text description of what the document is. Please be descriptive!
-#' @param con A connection to the database.
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-addHydrometDocument <- function(path, location, description, con = hydrometConnect(silent=TRUE)){
+insertHydrometDocument <- function(path, location, description, con = hydrometConnect()){
 
   #Checks
   if (length(path) > 1){

@@ -76,6 +76,7 @@ addModelRaster <- function(con, raster, model, valid_from, valid_to, issued, uni
     if (grepl("PostgreSQL", version$version)){
       DBI::dbExecute(con, "CREATE TABLE rasters_reference (
                    reference_id SERIAL PRIMARY KEY,
+                   raster_series_id INTEGER,
                    type TEXT CHECK(type IN ('model', 'other')),
                    model TEXT,
                    description TEXT,
@@ -94,6 +95,7 @@ addModelRaster <- function(con, raster, model, valid_from, valid_to, issued, uni
     } else if (grepl("Microsoft", version$version)) {
       DBI::dbExecute(con, "CREATE TABLE rasters_reference (
                    reference_id INT IDENTITY(1,1) PRIMARY KEY,
+                   raster_series_id INTEGER,
                    type VARCHAR(MAX) CHECK(type IN ('model', 'other')),
                    model VARCHAR(MAX),
                    description (VARCHAR(MAX),
@@ -151,6 +153,7 @@ addModelRaster <- function(con, raster, model, valid_from, valid_to, issued, uni
 
     if (add_constraints){
       DBI::dbExecute(con, "ALTER TABLE rasters ADD CONSTRAINT fk_reference_id FOREIGN KEY (reference_id) REFERENCES rasters_reference(reference_id) ON DELETE CASCADE ON UPDATE CASCADE")
+      DBI::dbExecute(con, "ALTER TABLE rasters_reference ADD CONSTRAINT fk_raster_series_id FOREIGN KEY (raster_series_id) REFERENCES raster_series_index(raster_series_id) ON DELETE CASCADE ON UPDATE CASCADE")
     }
 
     return (new_id)

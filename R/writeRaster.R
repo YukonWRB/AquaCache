@@ -5,7 +5,7 @@
 #' @description
 #' This function is not meant to be used by itself: in most cases use [addModelRaster()] or [addRaster()] which will populate reference tables so that your raster can be easily found later.
 #'
-#' Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of [rpostgis::pgWriteRast()]. Will creat the raster table if necessary.
+#' Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of [rpostgis::pgWriteRast()]. Will creaet the raster table if necessary.
 #'
 #' @details
 #' SpatRaster band names will be stored in an array in the column

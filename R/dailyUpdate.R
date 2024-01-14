@@ -10,7 +10,7 @@
 #'
 #' Note that new timeseries should be added using function [addHydrometTimeseries()].
 #'
-#' Any timeseries labelled as getRealtimeAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see getRealtimeAquarius for more information about that function, and [addHydrometTemplate()] for details on how to format the parameters to pass to [addHydrometTimeseries()].
+#' Any timeseries labelled as getRealtimeAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see getRealtimeAquarius for more information about that function, and [addHydrometTimeseriesTemplate()] for details on how to format the parameters to pass to [addHydrometTimeseries()].
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
