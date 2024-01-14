@@ -23,7 +23,7 @@
 #' @export
 #'
 
-addVector <- function(con, geom, table, geom_col_name = "geom"){
+insertVector <- function(con, geom, table, geom_col_name = "geom"){
 
   if (!inherits(geom, "SpatVector")){
     stop("This function requires a {terra} SpatVector object.")

@@ -19,7 +19,7 @@
 #' @return The reference_id of the newly appended raster.
 #' @export
 
-addModelRaster <- function(con, raster, model, valid_from, valid_to, issued, units = NULL, source = NULL, bit.depth = NULL, blocks = NULL)
+insertModelRaster <- function(con, raster, model, valid_from, valid_to, issued, units = NULL, source = NULL, bit.depth = NULL, blocks = NULL)
 {
 
 

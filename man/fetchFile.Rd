@@ -35,5 +35,5 @@ A data.frame containing the row(s) identified by the specified ID.
 \description{
 \emph{NOTE} Unless you need flexibility, use functions \code{\link[=fetchDocument]{fetchDocument()}} or \code{\link[=fetchImage]{fetchImage()}}.
 
-Extracts a document/file stored in a postgreSQL database as BYTEA type. Should be flexible enough to work with most schemas, but was designed around the 'documents' and 'images' table created with this package and with files uploaded to the database with \code{\link[=addHydrometDocument]{addHydrometDocument()}} or \code{\link[=addHydrometImageSeries]{addHydrometImageSeries()}}. For extracting rasters to R (which automatically sets the CRS) see \code{\link[rpostgis:pgGetRast]{rpostgis::pgGetRast()}}.
+Extracts a document/file stored in a postgreSQL database as BYTEA type. Should be flexible enough to work with most schemas, but was designed around the 'documents' and 'images' table created with this package and with files uploaded to the database with \code{\link[=insertHydrometDocument]{insertHydrometDocument()}} or \code{\link[=insertHydrometImage]{insertHydrometImage()}}. For extracting rasters to R (which automatically sets the CRS) see \code{\link[rpostgis:pgGetRast]{rpostgis::pgGetRast()}}.
 }
