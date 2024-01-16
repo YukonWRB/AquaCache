@@ -1,0 +1,73 @@
+---
+title: "User's guide to WRB databases"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{User's guide to WRB databases}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(HydroMetDB)
+```
+
+```{r vignette building comments, eval=FALSE, include=FALSE}
+# You should be modifying this vignette from the .Rmd document in the /vignettes folder, NOT the .RMD in the /doc folder.
+# To have this vignette updated on the G drive, uncomment and run the following code *after* re-building the vignette using devtools::build_vignettes()
+# file.copy(from = paste0(dirname(getwd()), "/doc/HydroMetDB_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/HydroMetDB/documentation/HydroMetDB user guide.html", overwrite = TRUE)
+```
+
+This guide describes the initial set-up of the snow and hydromet databases as well as their ongoing operation. A function workflow is provided for both databases.
+
+# General database notes
+## Database type
+Both databases are created as postgreSQL databases. PostgreSQL is a free and open-source relational database software with a commercial backer called Enterprise DB; this company provides add-on services that may facilitate the upkeep, backup, and restore of the database, but their services are not necesasry. The Department of Environment uses Microsoft SQL Server databases and does not directly support postgreSQL databases. Their support is limited to providing a virtual machine for running the database server on, and backing up the network drives to which the databases should be backed up.
+
+The initial reason to use postgreSQL rather than SQL Server was due to its open-source nature, which allowed for bypassing the time consuming (and potentially project-ending) step of convincing ENV-IT to let us do this project. Now however, it has become apparent that PostgreSQL is in fact more suited to this type of database due to it's more flexible data types: the text and datetime with time zone data types are easier to use than the SQL Server equivalents, and there is no equivalent for period (duration) data type at all. 
+
+We also retain complete control of our databases by forgoing the departmental standard, allowing us to add/remove users and change privileges, perform backups/restores at will, and upgrading software as we see fit. The draw-back is that we have to perform our own database maintenance and backups with no support. That said, migration to SQL Server is possible but would require careful review of scripts to align with the SQL Server data types, and an entirely different workflow to handle data periodicity.
+
+## Setting up a postgreSQL instance
+The first step to initializing our databases is to determine the computer which will run the database. This machine needs to be running 24/7 with little to no downtime, be able to schedule tasks and run R (RStudio is optional), and have sufficient storage for both databases for the foreseeable future. It also needs to be connected to the Yukon Government networks, able to have port 5432 open (or another port if specified in the PostgreSQL settings), and able to connect to the internet without the corporate firewall being restrictive.
+
+Installing PostgreSQL on Windows is easy: go to https://www.postgresql.org/download/ and find the most recent version, then download and install it. You'll also want to run the Stack Builder software (installed along with the database) and install the pgAdmin and PostGIS add-ons. Installations to Linux with a GUI can also be done from this page, but you'll have to find instructions online for command-line Linux if that's ever necessary.
+
+Once PostgreSQL is installed, open the pgAdmin software. You'll be prompted to create a password for the "postgres" user: this is the username with the highest privileges, so make sure that you use a memorable password and write it down somewhere save. Once pgAdmin loads you should see a server instance for the latest database version you installed, plus any previous server versions also installed on your machine. There should be a single database in that server called "postgres"; leave it, this is a critical piece.
+
+The rest of the database setup depends on whether you're recovering from a server or virtual machine break-down, migrating to a new version of PostgreSQL, or performing an initial setup.
+
+## Initial database setup
+If you need to start from scratch, that is, databases without any information in them, this R package contains R scripts to initialize both the snow and hydromet database (functions [snowInit()] and [hydrometInit()] respectively). After that, refer to the information below for either database to set up the proper scheduled workflows for the day-to-day database operation.
+
+## Backing up the database cluster
+The database cluster is currently (2024-01-16) set to be backed up once a week to the corporate G drive, which is itself backed up in multiple locations. Scripts have been designed to automate this backup and delete old backup versions: see "G:\water\Data\postgres_backups". The backup script (DB_backup.bat) is written to work from the machine on which the database is running, while the restore scripts are written to run from any other machine with access to the G drive. You MUST read the READMEs provided to avoid critical issues.
+
+## Restoring the cluster, databases, or tables
+Database recovery scripts have been created and live here: "G:\water\Data\postgres_backups\scripts\restore_scripts". You mustt read the file restore_instructions.txt before doing anything, and I highly recommend also reading the PostgreSQL help files for the database restore utilities **psql** and **pg_restore**. The as-provided restore scripts allow you to restore "global level" database parameters such as usernames, passwords, and permissions, and then to restore any database that was running on the server at the time of the backup. Sometimes however you'll want to only restore a part of a database: you can adapt the DB_restore.bat script to restore only a targeted subset of information. Again, the help files for pg_restore outline all of the different otpions and also provide examples of how to do this.
+
+## Installing R and RStudio
+The hydromet database relies on a series of R scripts (described below) to ingest and process information, while the snow database relies on R scripts to process and insert snow survey measurements. You'll need to provision a machine with an R instance to run these scripts (RStudio is optional but makes life easy): this could be the same machine running the database or another "always on" machine. After that, credentials need to be made available in the .Renviron file. See the following file for a snapshot of those: ""G:\water\Data\postgres_backups\.Renviron credentials.txt"".
+
+
+# Hydromet Database
+## Folder access permissions
+The hydromet database requires some additional folder access permissions for the "\\carver\infosys\EQWin" folder if EQWin (water quality) data is to be updated. It'll also need access to "//env-fs/env-data/corp/water/data" in order to run database backups using the pre-created scripts.
+
+## R settings
+Many hydromet database functions access information stored in password-protected URLs or require credentials to interact with an API. To avoid storing credentials online with the HydroMetDB code on GitHub, these settings are stored in an .Renviron file on the machine which will run R scripts. These credentials are kept here as a backup: ""G:\water\Data\postgres_backups\.Renviron credentials.txt"".
+
+## Hydromet-related R functions and their purposes
+
+
+## Suggested scheduling of R functions
+
+
+
+# Snow Database

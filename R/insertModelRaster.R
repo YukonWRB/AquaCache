@@ -116,7 +116,7 @@ insertModelRaster <- function(con, raster, model, valid_from, valid_to, issued, 
     add_constraints <- TRUE
   }
 
-  #Make sure that if units are provided that there's either one or 1 per band
+  #Make sure that if units are provided that there's either one total or 1 per band
   if (!is.null(units)){
     if (!inherits(units, "character")){
       stop("Parameter units must be specified as a character vector.")
@@ -131,8 +131,8 @@ insertModelRaster <- function(con, raster, model, valid_from, valid_to, issued, 
     units <- paste(terra::units(raster), collapse = ", ")
   }
 
-  # Attempt to write the raster to file
-  res <- insertRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks,
+  # Attempt to write the raster to the database
+  res <- writeRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks,
               constraints = TRUE)
 
   if (res$status){

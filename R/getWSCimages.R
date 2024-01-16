@@ -51,12 +51,17 @@ getWSCImages <- function(location, start_datetime, username = Sys.getenv("ECCCUS
 
   tbl <- tbl[tbl$location == location & tbl$datetime >= start_datetime , ]
 
-  files <- list()
-  for (i in 1:nrow(tbl)){
-    download_url <- paste0(url, "/", tbl[i, "link"[]])
-    file <- httr::GET(download_url, config = httr::authenticate(username, password))
-    file$timestamp <- tbl[i, "datetime"]
-    files[[tbl[i, "link"]]] <- file
+  if (nrow(tbl) > 0){
+    files <- list()
+    for (i in 1:nrow(tbl)){
+      download_url <- paste0(url, "/", tbl[i, "link"[]])
+      file <- httr::GET(download_url, config = httr::authenticate(username, password))
+      file$timestamp <- tbl[i, "datetime"]
+      files[[tbl[i, "link"]]] <- file
+    }
+  } else {
+    files <- NULL
   }
+
   return(files)
 }

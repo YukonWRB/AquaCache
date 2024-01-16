@@ -59,6 +59,9 @@ getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent=TR
         }
       }
       imgs <- do.call(source_fx, args_list) #Get the data using the args_list
+      if (is.null(imgs)){
+        next()
+      }
 
       for (j in 1:length(imgs)){
         img <- imgs[[j]]
@@ -72,7 +75,7 @@ getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent=TR
     })
   }
   message(count, " out of ", nrow(meta_ids), " img_meta_ids were updated.")
-  message(image_count, " were added in total.")
+  message(image_count, " images were added in total.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_images'"))
   return(success)
 }

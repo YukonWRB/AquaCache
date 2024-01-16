@@ -195,7 +195,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value TIMESTAMP WITH TIME ZONE,
                  PRIMARY KEY (event))")
 
-  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync", "last_sync_discrete", "last_update_watersheds", "last_update_rasters", "last_update_polygons", "last_vacuum"),
+  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync", "last_sync_discrete", "last_update_watersheds", "last_new_rasters", "last_new_polygons", "last_vacuum", "last_new_images"),
                                 "value" = NA)
   DBI::dbAppendTable(con, "internal_status", internal_status)
 
@@ -269,7 +269,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS raster_series_index (
                  raster_series_id SERIAL PRIMARY KEY,
-                 model TEXT,
+                 model TEXT UNIQUE NOT NULL,
                  start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  end_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  last_new_raster TIMESTAMP WITH TIME ZONE NOT NULL,

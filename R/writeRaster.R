@@ -3,7 +3,7 @@
 #' Write raster to PostGIS database table.
 #'
 #' @description
-#' This function is not meant to be used by itself: in most cases use [addModelRaster()] or [addRaster()] which will populate reference tables so that your raster can be easily found later.
+#' This function is not meant to be used by itself: in most cases use [insertModelRaster()] or [insertRaster()] which will populate reference tables so that your raster can be easily found later.
 #'
 #' Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of [rpostgis::pgWriteRast()]. Will create the raster table if necessary.
 #'
@@ -41,11 +41,7 @@
 #' @keywords internal
 #' @return A list with TRUE for successful import and the rid(s) of the appended entries.
 
-
-# raster <- terra::rast("https://dd.weather.gc.ca/model_hrdpa/2.5km/06/20231217T06Z_MSC_HRDPA_APCP-Accum6h_Sfc_RLatLon0.0225_PT0H.grib2")
-# raster <- raster[[1]]
-
-insertRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, blocks = NULL,
+writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, blocks = NULL,
                         constraints = TRUE) {
 
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {

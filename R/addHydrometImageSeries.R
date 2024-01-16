@@ -1,10 +1,12 @@
 #' Add new image series (auto-fetched)
 #'
+#' Use this function to add a new image series, i.e. a continually updating time-series of images that can be accessed from the web or internal server location on a regular basis.
+#'
 #' @param location The location associated with the image series.
 #' @param start_datetime The datetime (as POSIXct) from which to look for images
 #' @param source_fx The function to use for fetching new images. Must be an existing function in this package.
-#' @param source_fx_args Additional arguments to pass to the function, in the form "{{param1 = arg1}}, {{param2 = 'arg2'}}". Do not deviate from this format!
-#' @param public Should the function be publicly visible?
+#' @param source_fx_args Additional arguments to pass to the function, in the form "{param1 = arg1}, {param2 = 'arg2'}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
+#' @param public Should the images be publicly visible?
 #' @param public_delay A period in ISO 8601 format by which to delay public visibility of images.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
@@ -15,8 +17,8 @@
 addHydrometImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, public = TRUE, public_delay = NA, con = hydrometConnect(silent = TRUE)) {
   #function will add entry to images_index, then trigger getNewImages from the user-specified start_datetime
 
-  on.exit(DBI::dbDisconnect())
-  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location = '", location, "' AND img_type = 'public'"))[1,1]
+  on.exit(DBI::dbDisconnect(con))
+  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location = '", location, "' AND img_type = 'auto'"))[1,1]
   if (!is.na(exists)){
     stop("There is already an entry for that location and for images of type 'auto' in the images_index table.")
   }

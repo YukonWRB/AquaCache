@@ -42,7 +42,7 @@ insertModelRaster(
 The reference_id of the newly appended raster.
 }
 \description{
-Use this function to add a raster file output by a model (forecast or reanalysis) to the hydromet or snow database (if the later has the necessary tables craeted) Ensures that database constraints are met. If you need to replace or delete a raster for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first. If the raster is not created by a model use function \code{\link[=addRaster]{addRaster()}} instead.
+Use this function to add a raster file output by a model (forecast or reanalysis) to the hydromet or snow database (if the later has the necessary tables craeted) Ensures that database constraints are met. If you need to replace or delete a raster for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first. If the raster is not created by a model use function \code{\link[=insertRaster]{insertRaster()}} instead.
 
 Depending on size, rasters might be broken up into many tiles. Because of this and the database's spatial capabilities, it's possible to only fetch the tiles you need using \code{\link[rpostgis:pgGetRast]{rpostgis::pgGetRast()}}. You'll have to specify which reference_id to use as a clause; find the right one in the 'rasters_reference' table. Look at the parameter \code{boundary} to specify a limited spatial extent, and at \code{bands} to only fetch certain bands. The rasters themselves live in the 'rasters' table, but the reference id in in the 'rasters_reference' table.
 }
