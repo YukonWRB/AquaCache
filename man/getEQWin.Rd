@@ -4,7 +4,13 @@
 \alias{getEQWin}
 \title{Bring EQWin water quality data into the hydromet database}
 \usage{
-getEQWin(location, param_code, start_datetime, end_datetime = Sys.time())
+getEQWin(
+  location,
+  param_code,
+  start_datetime,
+  end_datetime = Sys.time(),
+  EQcon = EQConnect(silent = TRUE)
+)
 }
 \arguments{
 \item{location}{The location code associated with the snow course.}
@@ -14,6 +20,8 @@ getEQWin(location, param_code, start_datetime, end_datetime = Sys.time())
 \item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 
 \item{end_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
+
+\item{EQcon}{connection to the EQWin database. See EQConnect for details.}
 }
 \value{
 A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.

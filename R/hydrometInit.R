@@ -12,10 +12,6 @@
 #' @export
 #'
 
-
-#NOTE: postgreSQL uses the 'text' data type, but Microsoft SQL server equivalent is varchar(max). Replace all can be used to adapt this script.
-#NOTE: For datetimes to work with both postgres and SQL server, ISO8601 should be used: "2022-01-01T00:00:00-07:00" for MST. This is the new ISO standard anyways.
-
 hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   # Overwrite and vacuum if requested ###########
@@ -64,11 +60,25 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  PRIMARY KEY (timeseries_id, date))")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
-                   location TEXT NOT NULL,
+                   image_id SERIAL PRIMARY KEY,
+                   img_meta_id INTEGER NOT NULL,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
-                   file BYTEA NOT NULL,
-                   image_type TEXT NOT NULL CHECK(image_type IN ('auto', 'manual')),
-                   PRIMARY KEY (location, datetime, image_type))")
+                   fetch_datetime TIMESTAMP WITH TIME ZONE,
+                   format TEXT NOT NULL,
+                   file BYTEA NOT NULL)")
+
+  DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS images_index (
+                 img_meta_id SERIAL PRIMARY KEY,
+                 location TEXT NOT NULL,
+                 img_type TEXT CHECK(img_type IN ('auto', 'manual')),
+                 first_img TIMESTAMP WITH TIME ZONE,
+                 last_img TIMESTAMP WITH TIME ZONE,
+                 last_new_img TIMESTAMP WITH TIME ZONE,
+                 public BOOLEAN NOT NULL,
+                 public_delay INTERVAL,
+                 source_fx TEXT,
+                 source_fx_args TEXT,
+                 UNIQUE (location, img_type));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
                    timeseries_id INTEGER,
@@ -115,6 +125,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  longitude NUMERIC NOT NULL,
                  point geometry(POINT, 4269),
                  note TEXT)")
+
+  DBI::dbExecute(con, "CREATE TABLE if not exists documents (
+                 document_id SERIAL PRIMARY KEY,
+                 location TEXT NOT NUKK,
+                 description TEXT NOT NULL,
+                 format TEXT NOT NULL,
+                 document BYTEA NOT NULL);")
 
   #The column timeseries_id is auto created for each new entry
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
@@ -250,26 +267,18 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  UNIQUE (name, polygon_type));")
   DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
 
-  #N OTE: raster tables are created upon first use of the raster addition function.
-  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_model_outputs (
-  #                  rid SERIAL PRIMARY KEY,
-  #                  model TEXT NOT NULL,
-  #                  valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
-  #                  valid_to TIMESTAMP WITH TIME ZONE NOT NULL,
-  #                  issued TIMESTAMP WITH TIME ZONE NOT NULL,
-  #                  source TEXT,
-  #                  bands JSONB NOT NULL, --Each band is a parameter
-  #                  rast RASTER NOT NULL);")
-  # DBI::dbExecute(con, "CREATE INDEX rasters_model_outputs_st_conhull_idx ON rasters_model_outputs USING gist(ST_ConvexHull(rast));")
-  #
-  # DBI::dbExecute(con, "CREATE TABLE if not exists rasters_general (
-  #                  rid SERIAL PRIMARY KEY,
-  #                  parameter TEXT NOT NULL,
-  #                  description TEXT NOT NULL,
-  #                  units TEXT NOT NULL,
-  #                  source TEXT,
-  #                  rast RASTER);")
-  # DBI::dbExecute(con, "CREATE INDEX rasters_general_st_conhull_idx ON rasters_general USING gist(ST_ConvexHull(rast));")
+  DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS raster_series_index (
+                 raster_series_id SERIAL PRIMARY KEY,
+                 model TEXT,
+                 start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                 end_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                 last_new_raster TIMESTAMP WITH TIME ZONE NOT NULL,
+                 public BOOLEAN NOT NULL,
+                 public_delay INTERVAL,
+                 source_fx TEXT,
+                 source_fx_args TEXT);")
+
+  #NOTE: Additional raster tables are created upon first use of the raster addition function.
 
 
   #Add in foreign keys ###########
@@ -330,10 +339,28 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
-                 "ALTER TABLE images
+                 "ALTER TABLE images_index
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
   REFERENCES locations(location)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+  DBI::dbExecute(con,
+                 "ALTER TABLE images
+  ADD CONSTRAINT fk_img_meta_id
+  FOREIGN KEY (img_meta_id)
+  REFERENCES images_index(img_meta_id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+
+  DBI::dbExecute(con, "ALTER TABLE images_index FOREIGN KEY images_index.location REFERENCES locations.location")
+  DBI::dbExecute(con, "ALTER TABLE images FOREIGN KEY images.img_meta_id REFERENCES images_index.img_meta_id")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE documents
+                 ADD CONSTRAINT fk_location
+                 FOREIGN KEY (location)
+                 REFERENCES locations(location)
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
 

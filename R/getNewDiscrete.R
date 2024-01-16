@@ -34,11 +34,17 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
   success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
 
   # Run for loop over timeseries rows
+  EQcon <- "unset"
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
+    if (source_fx == "getEQWin" & EQcon == "unset"){
+      EQcon <- EQConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
+
+    }
     source_fx_args <- all_timeseries$source_fx_args[i]
     param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
@@ -63,6 +69,9 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
         for (j in 1:length(pairs)){
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
+      }
+      if (source_fx == "getEQWin"){
+        args_list[["EQcon"]] <- EQcon
       }
       ts <- do.call(source_fx, args_list) #Get the data using the args_list
       ts <- ts[!is.na(ts$value) , ]

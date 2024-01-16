@@ -9,17 +9,12 @@
 #' @param param_code The parameter code as specified in the EQWin table eqparams.
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
+#' @param EQcon connection to the EQWin database. See EQConnect for details.
 #'
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
 
-
-# location <- "YOWN-0101"
-# param_code <- "U-D"
-# start_datetime <- Sys.time()-60*60*24*20000
-# end_datetime <- Sys.time()
-
-getEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.time()) {
+getEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
 
   # Checking start_datetime parameter
   tryCatch({
@@ -60,17 +55,20 @@ getEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.ti
 
   StnId <- DBI::dbGetQuery(EQcon, paste0("SELECT StnId FROM eqstns WHERE StnCode = '", location, "';"))[1,1]
   SampleIds <- DBI::dbGetQuery(EQcon, paste0("SELECT SampleId, CollectDateTime, SampleClass FROM eqsampls WHERE StnId = ", StnId, " AND CollectDateTime >= #",  substr(as.character(start_datetime), 1,19), "# AND CollectDateTime <= #", substr(as.character(end_datetime), 1,19), "#;"))
-  SampleIds$CollectDateTime <- lubridate::force_tz(SampleIds$CollectDateTime, "MST")
-  ParamId <- DBI::dbGetQuery(EQcon, paste0("SELECT ParamId FROM eqparams WHERE ParamCode = '", param_code, "'"))[1,1]
-  samps <- DBI::dbGetQuery(EQcon, paste0("SELECT SampleId, Result FROM eqdetail WHERE SampleId IN (", paste(SampleIds$SampleId, collapse = ", "), ") AND ParamId = ", ParamId, ";"))
-
-  if (nrow(samps) > 0){
-    result <- merge(samps, SampleIds)
-    result <- result[ -1]
-    names(result) <- c("value", "datetime", "sample_class")
-    #make <DL values the negative of the DL
-    result$value <- as.numeric(gsub("<", "-", result$value))
-  } else {
+  if (nrow(SampleIds) > 0){
+    SampleIds$CollectDateTime <- lubridate::force_tz(SampleIds$CollectDateTime, "MST")
+    ParamId <- DBI::dbGetQuery(EQcon, paste0("SELECT ParamId FROM eqparams WHERE ParamCode = '", param_code, "'"))[1,1]
+    samps <- DBI::dbGetQuery(EQcon, paste0("SELECT SampleId, Result FROM eqdetail WHERE SampleId IN (", paste(SampleIds$SampleId, collapse = ", "), ") AND ParamId = ", ParamId, ";"))
+    if (nrow(samps) > 0){
+      result <- merge(samps, SampleIds)
+      result <- result[ -1]
+      names(result) <- c("value", "datetime", "sample_class")
+      #make <DL values the negative of the DL
+      result$value <- as.numeric(gsub("<", "-", result$value))
+    } else {
+      result <- data.frame()
+    }
+  }  else {
     result <- data.frame()
   }
   return(result)

@@ -24,5 +24,5 @@ Calls several functions in sequence: \code{\link[=getNewContinuous]{getNewContin
 
 Note that new timeseries should be added using function \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}}.
 
-Any timeseries labelled as getRealtimeAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see getRealtimeAquarius for more information about that function, and \code{\link[=addHydrometTemplate]{addHydrometTemplate()}} for details on how to format the parameters to pass to \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}}.
+Any timeseries labelled as getRealtimeAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see getRealtimeAquarius for more information about that function, and \code{\link[=addHydrometTimeseriesTemplate]{addHydrometTimeseriesTemplate()}} for details on how to format the parameters to pass to \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}}.
 }

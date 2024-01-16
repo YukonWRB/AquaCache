@@ -10,7 +10,7 @@
 #'
 #' Note that new timeseries should be added using function [addHydrometTimeseries()].
 #'
-#' Any timeseries labelled as getRealtimeAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see getRealtimeAquarius for more information about that function, and [addHydrometTemplate()] for details on how to format the parameters to pass to [addHydrometTimeseries()].
+#' Any timeseries labelled as getRealtimeAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see getRealtimeAquarius for more information about that function, and [addHydrometTimeseriesTemplate()] for details on how to format the parameters to pass to [addHydrometTimeseries()].
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -42,20 +42,52 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     }
   }
 
+
+  #Get new data ################
   if (nrow(continuous_ts) > 0){
-    message("Getting continuous information up to date with getNewContinuous...")
-    rt_start <- Sys.time()
-    getNewContinuous(con = con, timeseries_id = continuous_ts$timeseries_id)
-    rt_duration <- Sys.time() - rt_start
-    message("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), ".")
+    tryCatch({
+      message("Getting continuous information up to date with getNewContinuous...")
+      rt_start <- Sys.time()
+      getNewContinuous(con = con, timeseries_id = continuous_ts$timeseries_id)
+      rt_duration <- Sys.time() - rt_start
+      message("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), ".")
+    }, error = function(e){
+      warning("Error fetching new continuous data.")
+    })
   }
+
   if (nrow(discrete_ts) > 0){
-    message("Getting discrete information up to date with getNewDiscrete...")
-    disc_start <- Sys.time()
-    getNewDiscrete(con = con, timeseries_id = discrete_ts$timeseries_id)
-    disc_duration <- Sys.time() - disc_start
-    message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
+    tryCatch({
+      message("Getting discrete information up to date with getNewDiscrete...")
+      disc_start <- Sys.time()
+      getNewDiscrete(con = con, timeseries_id = discrete_ts$timeseries_id)
+      disc_duration <- Sys.time() - disc_start
+      message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
+    }, error = function(e) {
+      warning("Error fetching new discrete data.")
+    })
   }
+
+  tryCatch({
+    message("Getting new images with getNewImages...")
+    img_start <- Sys.time()
+    getNewImages(con = con)
+    img_duration <- Sys.time() - img_start
+    message("getNewImages executed in ", round(img_duration[[1]], 2), " ", units(img_duration), ".")
+  }, error = function(e){
+    warning("Error fetching new images.")
+  })
+
+  tryCatch({
+    message("Getting new rasters with getNewRasters...")
+    rst_start <- Sys.time()
+    getNewRasters(con = con)
+    rst_duration <- Sys.time() - rst_start
+    message("getNewRasters executed in ", round(rst_duration[[1]], 2), " ", units(rst_duration), ".")
+  }, error = function(e){
+    warning("Error fetching new rasters")
+  })
+
 
   ### Check for a new version of HYDAT, update timeseries in the database if needed. #####
   message("Checking for new HYDAT database with update_hydat...")

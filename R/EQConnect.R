@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' This function exists to facilitate connecting to the EQWin Access database.
+#' This function exists to facilitate connecting to the EQWin Access database. Requires installation of Microsoft Access redistributable of the right bitness for the version of R you're running. See https://www.microsoft.com/en-us/download/details.aspx?id=54920 for installation. Note that 64 bit R needs a 64 bit installation.
 #'
 #' @param path Full path to the database including extension.
 #' @param silent TRUE suppresses messages except for errors.
@@ -22,7 +22,7 @@ EQConnect <- function(path = "//carver/infosys/EQWin/WR/DB/Water_Resources.mdb",
     }
     return(EQWin)
   }, error = function(e) {
-    stop("EQWin connection failed.")
+    stop("EQWin connection failed. Do you need to install the Access database engine? Check the help file.")
   })
 
 }
