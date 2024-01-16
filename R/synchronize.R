@@ -12,6 +12,7 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
+#' @param discrete Should discrete data also be synchronized?
 #'
 #' @return Updated entries in the hydro database.
 #' @export
@@ -19,12 +20,14 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all", start_datetime)
+synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all", start_datetime, discrete = FALSE)
 {
 
+  on.exit(DBI::dbDisconnect(con))
   start <- Sys.time()
 
   message("Synchronizing timeseries with synchronize...")
+
   if (!inherits(start_datetime, "POSIXct")){
     stop("Parameter start_datetime must be supplied as a POSIXct object.")
   }
@@ -39,9 +42,9 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
 
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category FROM timeseries WHERE source_fx IS NOT NULL")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type FROM timeseries WHERE source_fx IS NOT NULL")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
     if (length(timeseries_id) != nrow(all_timeseries)){
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
       ifelse ((length(fail) == 1),
@@ -52,13 +55,21 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   }
 
   updated <- 0 #Counter for number of updated timeseries
+  EQcon <- "unset"
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
     category <- all_timeseries$category[i]
+    if (category == "discrete" & !discrete){
+      next()
+    }
     period_type <- all_timeseries$period_type[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
+    if (source_fx == "getEQWin" & EQcon == "unset"){
+      EQcon <- EQConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
+    }
     source_fx_args <- all_timeseries$source_fx_args[i]
     param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
@@ -83,6 +94,9 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
         for (j in 1:length(pairs)){
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
+      }
+      if (source_fx == "getEQWin"){
+        args_list[["EQcon"]] <- EQcon
       }
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
       inRemote <- inRemote[!is.na(inRemote$value) , ]
@@ -158,17 +172,17 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
               updated <- updated + 1
               if (category == "continuous"){
                 if (nrow(imputed.remains) > 0){
-                  DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(inRemote$datetime), "' AND '", max(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
+                  DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
                 } else {
-                  DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(inRemote$datetime), "' AND '", max(inRemote$datetime), "';"))
+                  DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
                 }
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
               } else if (category == "discrete"){
-                DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime BETWEEN '", min(inRemote$datetime), "' AND '", max(inRemote$datetime), "';"))
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
+                DBI::dbAppendTable(con, "measurements_discrete", inRemote)
               }
-              DBI::dbAppendTable(con, "measurements_discrete", inRemote)
               #make the new entry into table timeseries
-              end <- max(max(inDB$datetime), inRemote$datetime)
+              end <- max(max(inDB$datetime), max(inRemote$datetime))
               DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
             }
           )

@@ -30,5 +30,5 @@ getWSCImages(
 A list object of type 'response' containing the image (object$content) and metadata regarding the object and how/when it was fetched.
 }
 \description{
-Fetches images from the WSC auto-images. Default URL is for the Yukon, adjust for other cameras/locations. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}
+Fetches auto images from the WSC. Default URL is for the Yukon, adjust for other cameras/locations. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}
 }

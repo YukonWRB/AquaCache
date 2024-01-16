@@ -6,7 +6,7 @@
 \alias{HydroMetDB-package}
 \title{HydroMetDB: Hydrological database creation and maintenance}
 \description{
-Set of functions for the creation and ongoing maintenance of the Yukon Government's hydrometeorological database in postgreSQL format. This database is a combination of the Water Survey of Canada real-time and historical data, YG data held in Aquarius and in the RWIS database, USGS data, and discrete snow survey data. Supports any number of timeseries unique by their location, parameter, data type, and period (for sum, mean, etc measurements). Disparate data sources are handled via scripts specified for each timeseries, allowing for expansion of data sources.
+Set of functions for the creation and ongoing maintenance of the Yukon Government's hydrometeorological database in postgreSQL format. This database is a combination of the Water Survey of Canada real-time and historical data, YG data held in Aquarius and in the RWIS database, USGS data, discrete snow survey data, and water quality data. Supports any number of timeseries unique by their location, parameter, data type, and period (for sum, mean, etc measurements). Disparate data sources are handled via scripts specified for each timeseries, allowing for expansion of data sources.
 }
 \author{
 \strong{Maintainer}: Ghislain de Laplante \email{ghislain.delaplante@yukon.ca} (\href{https://orcid.org/0000-0002-5093-9185}{ORCID})

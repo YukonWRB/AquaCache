@@ -1,6 +1,6 @@
 #' Get images from the WSC
 #'
-#' Fetches images from the WSC auto-images. Default URL is for the Yukon, adjust for other cameras/locations. Intended to be called by function [getNewImages()]
+#' Fetches auto images from the WSC. Default URL is for the Yukon, adjust for other cameras/locations. Intended to be called by function [getNewImages()]
 #'
 #' @param location The location for which to get images.
 #' @param start_datetime The earliest datetime to start pulling images from.

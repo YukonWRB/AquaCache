@@ -20,5 +20,5 @@ A connection to the database.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-This function exists to facilitate connecting to the EQWin Access database.
+This function exists to facilitate connecting to the EQWin Access database. Requires installation of Microsoft Access redistributable of the right bitness for the version of R you're running. See https://www.microsoft.com/en-us/download/details.aspx?id=54920 for installation. Note that 64 bit R needs a 64 bit installation.
 }

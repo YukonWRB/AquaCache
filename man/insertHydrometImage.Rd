@@ -35,5 +35,7 @@ TRUE if an image was properly added to the database.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
+Images auto-generated on a regular basis should be updated in the database using function \code{\link[=getNewImages]{getNewImages()}} instead of this function. For one-off images, read on.
+
 This function facilitates the addition of one image at a time to the database in the 'images' table. Each image must be linked to a specific location. Adding an image directly to the database is not possible, since the file must be converted to a binary object before loading. See \code{\link[=fetchImage]{fetchImage()}} to get the image out again.
 }

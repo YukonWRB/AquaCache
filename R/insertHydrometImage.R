@@ -3,6 +3,8 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
+#' Images auto-generated on a regular basis should be updated in the database using function [getNewImages()] instead of this function. For one-off images, read on.
+#'
 #' This function facilitates the addition of one image at a time to the database in the 'images' table. Each image must be linked to a specific location. Adding an image directly to the database is not possible, since the file must be converted to a binary object before loading. See [fetchImage()] to get the image out again.
 #'
 #' @param object Valid path including extension to the document to upload, or an object of class 'response' such as that provided by [getWSCImages()].

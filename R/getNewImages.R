@@ -1,22 +1,12 @@
-# #Function to fetch data for tables:
-# -images
-# -rasters (weather)
-#
-#
-# getNewMisc <- function(tables = c("rasters_series_index", "images_index")){
-#
-# }
-
-
-#' Get new miscellaneous data
+#' Get new images
 #'
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Retrieves new data corresponding to entries in tables such as "images_index" or "raster_series_index". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table.
+#' Retrieves new data corresponding to entries in the table "images_index". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addHydrometTimeseries()] for a description of how to formulate these arguments.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addHydrometTimeseries()] for a description of how to formulate these arguments.
+#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'images_index' table, start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
 #'
 #' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].

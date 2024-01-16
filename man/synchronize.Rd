@@ -7,7 +7,8 @@
 synchronize(
   con = hydrometConnect(silent = TRUE),
   timeseries_id = "all",
-  start_datetime
+  start_datetime,
+  discrete = FALSE
 )
 }
 \arguments{
@@ -16,6 +17,8 @@ synchronize(
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
 \item{start_datetime}{The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
+
+\item{discrete}{Should discrete data also be synchronized?}
 }
 \value{
 Updated entries in the hydro database.
