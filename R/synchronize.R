@@ -66,7 +66,7 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     period_type <- all_timeseries$period_type[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
-    if (source_fx == "getEQWin" & EQcon == "unset"){
+    if (source_fx == "getNewEQWin" & EQcon == "unset"){
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
     }
@@ -95,7 +95,7 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
-      if (source_fx == "getEQWin"){
+      if (source_fx == "getNewEQWin"){
         args_list[["EQcon"]] <- EQcon
       }
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list

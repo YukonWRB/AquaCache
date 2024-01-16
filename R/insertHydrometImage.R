@@ -7,7 +7,7 @@
 #'
 #' This function facilitates the addition of one image at a time to the database in the 'images' table. Each image must be linked to a specific location. Adding an image directly to the database is not possible, since the file must be converted to a binary object before loading. See [fetchImage()] to get the image out again.
 #'
-#' @param object Valid path including extension to the document to upload, or an object of class 'response' such as that provided by [getWSCImages()].
+#' @param object Valid path including extension to the document to upload, or an object of class 'response' such as that provided by [getNewWSCImages()].
 #' @param img_meta_id The img_meta_id, from the table images_index, corresponding to the image location and type. Set NULL if there is no img_meta_id yet.
 #' @param datetime The datetime the image was taken at, as a POSIXct object or something that can be coerced to one. If not POSIXct timezone is assumed to be UTC.
 #' @param fetch_datetime The datetime the image was retrieved (optional).

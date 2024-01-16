@@ -36,7 +36,7 @@ insertRaster <- function(con, raster, description, units = NULL, source = NULL, 
                    source TEXT,
                    CONSTRAINT check_model_constraints
                      CHECK (
-                     (type = 'model' AND model IS NOT NULL AND valid_from IS NOT NULL AND valid_to IS NOT NULL AND issued IS NOT NULL) OR
+                     (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
                      (type = 'other' AND description IS NOT NULL)
                      )
                      );")
@@ -54,7 +54,7 @@ insertRaster <- function(con, raster, description, units = NULL, source = NULL, 
                    source VARCHAR(MAX),
                    CONSTRAINT check_model_constraints
                      CHECK (
-                     (type = 'model' AND model IS NOT NULL AND valid_from IS NOT NULL AND valid_to IS NOT NULL AND issued IS NOT NULL) OR
+                     (type = 'model' AND AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
                      (type = 'other' AND description IS NOT NULL)
                      )
                      );")
@@ -62,9 +62,11 @@ insertRaster <- function(con, raster, description, units = NULL, source = NULL, 
       stop("This script is designed to work with either postgreSQL or SQL server databases.")
     }
     add_constraints <- TRUE
+  } else {
+    add_constraints <- FALSE
   }
 
-  #Make sure that if units are provided that there's either one or 1 per band
+  #Make sure that if units are provided that there's either 1 or 1 per band
   if (!is.null(units)){
     if (!inherits(units, "character")){
       stop("Parameter units must be specified as a character vector.")

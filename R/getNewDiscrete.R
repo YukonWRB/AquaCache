@@ -41,7 +41,7 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
     parameter <- all_timeseries$parameter[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
-    if (source_fx == "getEQWin" & is.null(EQcon)){
+    if (source_fx == "getNewEQWin" & is.null(EQcon)){
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
     }
@@ -56,7 +56,7 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
     tryCatch({
       args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
-      if (source_fx == "getEQWin"){
+      if (source_fx == "getNewEQWin"){
         args_list[["EQcon"]] <- EQcon
       }
       if (source_fx == "getSnowCourse"){

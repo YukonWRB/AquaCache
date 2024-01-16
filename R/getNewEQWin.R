@@ -14,7 +14,7 @@
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
 
-getEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
+getNewEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
 
   # Checking start_datetime parameter
   tryCatch({

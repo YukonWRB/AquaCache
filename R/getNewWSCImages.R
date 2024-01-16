@@ -24,7 +24,7 @@ getNewWSCImages <- function(location, start_datetime, username = Sys.getenv("ECC
     saved_files <- data.frame(file = saved_files,
                               datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"))
     ok <- saved_files[saved_files$datetime < Sys.time()+10*60 , ]
-    if (nrow(ok) > 0){
+    if (nrow(ok) > 1){
       target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
       tbl <- readRDS(paste0(tempdir(), "/getNewWSCImages/", target_file$file))
       file_exists <- TRUE

@@ -92,9 +92,16 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
   } else {
     message("Appending to existing table. Dropping any existing raster constraints...")
     try(DBI::dbExecute(con, paste0("SELECT DropRasterConstraints('", rast_table, "','rast',",
-                                    paste(rep("TRUE", 12), collapse = ","),");")))
+                                   paste(rep("TRUE", 12), collapse = ","),");")))
     n.base <- DBI::dbGetQuery(con, paste0("SELECT max(rid) r from ", rast_table, ";"))$r
-    new = F
+    if (is.na(n.base)){
+      n.base <- 0
+      new <- T
+      tmp.query <- paste0("DROP INDEX ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
+      DBI::dbExecute(con, tmp.query)
+    } else {
+      new <- F
+    }
   }
 
   r1 <- raster

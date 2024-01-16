@@ -26,16 +26,17 @@ addHydrometRasterSeries <- function(model, start_datetime, source_fx, source_fx_
                        public = public,
                        start_datetime = start_datetime,
                        last_new_raster = start_datetime,
+                       end_datetime = start_datetime,
                        public_delay = public_delay,
                        source_fx = source_fx,
                        source_fx_args = source_fx_args)
 
   DBI::dbAppendTable(con, "raster_series_index", insert)
-  res <- DBI::dbGetQuery(con, paste0("SELECT raster_series_id FROM raster_series_index WHERE location = '", location, "' AND img_type = 'auto'"))[1,1]
-  added <- getNewRasters(raster_series_id = res, con = con)
+  res <- DBI::dbGetQuery(con, paste0("SELECT raster_series_id FROM raster_series_index WHERE model = '", model, "';"))[1,1]
+  added <- getNewRasters(raster_series_ids = res, con = con)
   if (length(added) == 0){
+    DBI::dbExecute(con, paste0("DELETE FROM raster_series_index WHERE raster_series_id = ", res, ";"))
     warning("Failed to find or add new images. The new entry to table raster_series_index has been deleted.")
-    DBI::dbExecute(con, paste0("DELETE FROM raster_series_index WHERE img_meta_id = ", res, ";"))
   } else {
     first_new <- DBI::dbGetQuery(con, paste0("SELECT MIN(valid_from) FROM rasters_reference WHERE raster_series_id = ", res, ";"))[1,1]
     DBI::dbExecute(con, paste0("UPDATE raster_series_index SET start_datetime = '", first_new, "' WHERE raster_series_id = ", res, ";"))
