@@ -36,11 +36,14 @@ readSnowTemplate <- function(template) {
     ## Notes
     # Air temp
     airtemp <- notes[1, 9]
+    if (!is.na(airtemp)) {
+      airtemp <- paste0("Air temperature was ", airtemp)
+    }
     # Weather
     weather <- unlist(c(notes[2,c(3,5,7,9)], notes[3,c(3,5,7,9)]))
     names(weather) <- unlist(c(notes[2,c(2,4,6,8)], notes[3,c(2,4,6,8)]))
     weather <- weather[!is.na(weather)]
-    weather <- paste("Weather was", paste(tolower(names(weather)), collapse = " and "), "at time of sampling")
+    weather <- paste("Weather was", paste(tolower(names(weather)), collapse = " and "))
     # Snow conditions
     snow <- unlist(c(notes[c(5,6,7,8), c(9)],
                      notes[c(9,10), c(5)],
@@ -50,8 +53,33 @@ readSnowTemplate <- function(template) {
                             notes[c(9,10), c(6)]))
     snow <- snow[!is.na(snow)]
     snow <- paste0(names(snow), collapse=". ")
+    snow_cm <- notes[16, 9]
+    if (!is.na(snow_cm)) {
+      snow_cm <- paste0(snow_cm, " cm of fresh snow on surface")
+    } else {snow_cm <- ""}
     # Ground ice layer
-    groundice <- notes[]
+    groundice <- notes[c(11), c(5,9)]
+    names(groundice) <- unlist(notes[c(11), c(2,6)])
+
+    if (!is.na(groundice[1]) && !is.na(groundice[2])) {
+      groundice <- paste("The ground ice layer under the snow is", groundice[2], "cm thick")
+    } else if (tolower(groundice[1]) == "x" && is.na(groundice[2])) {
+      groundice <- "A ground ice layer is present under the snow"
+    } else {
+      groundice <- ""
+    }
+
+    # Sampling conditions
+    sampling <- notes[c(13,14,15), c(9)]
+    names(sampling) <- notes[c(13,14,15), c(2)]
+    sampling <- sampling[!is.na(sampling)]
+    sampling <- paste0(names(sampling), collapse=". ")
+
+    # Remarks
+    remarks <- notes[18,2]
+
+    # Pull all notes together now
+    paste0("At time of sampling: ", paste(c(airtemp, weather, snow, snow_cm, groundice, sampling, remarks), collapse = ". "))
 
     surveys <- data.frame()
 
