@@ -15,7 +15,7 @@
 #' @export
 
 
-getRealtimeECCCwx <- function(location, param_code, start_datetime, end_datetime = Sys.time(), interval)
+downloadECCCwx <- function(location, param_code, start_datetime, end_datetime = Sys.time(), interval)
 {
 
   # Checking start_datetime parameter
@@ -50,14 +50,14 @@ getRealtimeECCCwx <- function(location, param_code, start_datetime, end_datetime
   })
 
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
-  files <- list.files(paste0(tempdir(), "/getRealtimeECCCwx"))
+  files <- list.files(paste0(tempdir(), "/downloadECCCwx"))
 
   if (length(files) == 0){
     file_exists <- FALSE
   } else {
     name <- paste0(location, "_", interval, "_", substr(start_datetime, 1, 10), "_", substr(end_datetime, 1, 10), ".rdata")
     if (name %in% files){
-     load(paste0(tempdir(), "/getRealtimeECCCwx/", location, "_", interval, "_", substr(start_datetime, 1, 10), "_", substr(end_datetime, 1, 10), ".rdata"))
+     load(paste0(tempdir(), "/downloadECCCwx/", location, "_", interval, "_", substr(start_datetime, 1, 10), "_", substr(end_datetime, 1, 10), ".rdata"))
       file_exists <- TRUE
     } else {
       file_exists <- FALSE
@@ -68,8 +68,8 @@ getRealtimeECCCwx <- function(location, param_code, start_datetime, end_datetime
   if (!file_exists){
     dl <- suppressMessages(weathercan::weather_dl(location, start = start_datetime, interval = interval, time_disp = "UTC", quiet = TRUE))
     #Save the file to the tempdir, from which it will be deleted once the R session ends
-    dir.create(paste0(tempdir(), "/getRealtimeECCCwx"), showWarnings = FALSE)
-    save(dl, file = paste0(tempdir(), "/getRealtimeECCCwx/", location, "_", interval, "_", substr(start_datetime, 1, 10), "_", substr(end_datetime, 1, 10), ".rdata"))
+    dir.create(paste0(tempdir(), "/downloadECCCwx"), showWarnings = FALSE)
+    save(dl, file = paste0(tempdir(), "/downloadECCCwx/", location, "_", interval, "_", substr(start_datetime, 1, 10), "_", substr(end_datetime, 1, 10), ".rdata"))
   }
 
   #Extract the necessary information according to the param_code
@@ -91,7 +91,7 @@ getRealtimeECCCwx <- function(location, param_code, start_datetime, end_datetime
         data$approval <- NA
       }
     } else {
-      stop("getRealtimeECCCwx: Column named 'time' or 'date' has not been found.")
+      stop("downloadECCCwx: Column named 'time' or 'date' has not been found.")
     }
   } else {
     data <- data.frame()

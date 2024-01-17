@@ -62,7 +62,7 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
                            "operator" = "WSC",
                            "network" = "Canada Yukon Hydrometric Network",
                            "public" = TRUE,
-                           "source_fx" = "getRealtimeWSC")
+                           "source_fx" = "downloadWSC")
           try(DBI::dbAppendTable(con, "timeseries", ts))
           tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND category = 'continuous'"))[1,1]
 
@@ -90,7 +90,7 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
                            "operator" = "WSC",
                            "network" = "Canada Yukon Hydrometric Network",
                            "public" = TRUE,
-                           "source_fx" = "getRealtimeWSC")
+                           "source_fx" = "downloadWSC")
           try(DBI::dbAppendTable(con, "timeseries", ts))
           tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND category = 'continuous'"))[1,1]
           timeseries$timeseries_id <- tsid
@@ -110,10 +110,10 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
   new_realtime <- list(flow = list(), level = list())
   for (i in WSC_stns){
     try({
-      new_realtime$flow[[i]] <- getRealtimeWSC(i, 47, start_datetime = Sys.Date()-577)
+      new_realtime$flow[[i]] <- downloadWSC(i, 47, start_datetime = Sys.Date()-577)
       if (nrow(new_realtime$flow[[i]]) > 0) new_realtime$flow[[i]]$period <- "00:00:00"})
     try({
-      new_realtime$level[[i]] <- getRealtimeWSC(i, 46, start_datetime = Sys.Date()-577)
+      new_realtime$level[[i]] <- downloadWSC(i, 46, start_datetime = Sys.Date()-577)
       if (nrow(new_realtime$level[[i]]) >0) new_realtime$level[[i]]$period <- "00:00:00"
       })
   }
@@ -145,7 +145,7 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
                                       "operator" = "WSC",
                                       "network" = "Canada Yukon Hydrometric Network",
                                       "public" = TRUE,
-                                      "source_fx" = "getRealtimeWSC")
+                                      "source_fx" = "downloadWSC")
         DBI::dbAppendTable(con, "timeseries", timeseries_info)
         tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND category = 'continuous'"))[1,1]
       } else {
@@ -185,7 +185,7 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
                                       "operator" = "WSC",
                                       "network" = "Canada Yukon Hydrometric Network",
                                       "public" = TRUE,
-                                      "source_fx" = "getRealtimeWSC")
+                                      "source_fx" = "downloadWSC")
         DBI::dbAppendTable(con, "timeseries", timeseries_info)
         tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND category = 'continuous'"))[1,1]
       } else {
@@ -219,7 +219,7 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
         latitude <- tidyhydat::hy_stations(i)$LATITUDE
         longitude <- tidyhydat::hy_stations(i)$LONGITUDE
         name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
-        DBI::dbExecute(con, paste0("INSERT INTO timeseries (location, parameter, unit, category, period_type, param_type, start_datetime, end_datetime, last_new_data, operator, network, public, source_fx) VALUES ('", i, "', 'level', 'm', 'continuous', 'instantaneous', 'hydrometric', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), " 'WSC', 'Canada Yukon Hydrometric Network', TRUE, 'getRealtimeWSC')"))
+        DBI::dbExecute(con, paste0("INSERT INTO timeseries (location, parameter, unit, category, period_type, param_type, start_datetime, end_datetime, last_new_data, operator, network, public, source_fx) VALUES ('", i, "', 'level', 'm', 'continuous', 'instantaneous', 'hydrometric', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), " 'WSC', 'Canada Yukon Hydrometric Network', TRUE, 'downloadWSC')"))
         DBI::dbExecute(con, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", i, "', '", name, "', '", latitude, "', '", longitude, "'"))
         tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND category = 'continuous'"))[1,1]
         DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start_datetime, "' WHERE timeseries_id = ", tsid))
@@ -248,7 +248,7 @@ initial_WSC <- function(con = hydrometConnect(), WSC_stns = "yukon", aquarius = 
         latitude <- tidyhydat::hy_stations(i)$LATITUDE
         longitude <- tidyhydat::hy_stations(i)$LONGITUDE
         name <- stringr::str_to_title(tidyhydat::hy_stations(i)$STATION_NAME)
-        DBI::dbExecute(con, paste0("INSERT INTO timeseries (location, parameter, unit, category, period_type, param_type, start_datetime, end_datetime, last_new_data, operator, network, public, source_fx) VALUES ('", i, "', 'flow', 'm', 'continuous', 'instantaneous', 'hydrometric', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), " 'WSC', 'Canada Yukon Hydrometric Network', TRUE, 'getRealtimeWSC')"))
+        DBI::dbExecute(con, paste0("INSERT INTO timeseries (location, parameter, unit, category, period_type, param_type, start_datetime, end_datetime, last_new_data, operator, network, public, source_fx) VALUES ('", i, "', 'flow', 'm', 'continuous', 'instantaneous', 'hydrometric', '", start_datetime, "', '", end_datetime, "', '", .POSIXct(Sys.time(), "UTC"), " 'WSC', 'Canada Yukon Hydrometric Network', TRUE, 'downloadWSC')"))
         DBI::dbExecute(con, paste0("INSERT OR IGNORE INTO locations (location, name, latitude, longitude) VALUES ('", i, "', '", name, "', '", latitude, "', '", longitude, "'"))
         tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND category = 'continuous'"))[1,1]
         DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start_datetime, "' WHERE timeseries_id = ", tsid))

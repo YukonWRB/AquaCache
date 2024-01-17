@@ -1,21 +1,20 @@
-#' Bring EQWin water quality data into the hydromet database
+#' Get realtime data from the WSC
 #'
-#' @description
-#' `r lifecycle::badge("stable")`
+#'@description
+#'`r lifecycle::badge("stable")`
 #'
-#' Brings in water quality data from the EQWin database.
+#' A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat and tidyhydat.ws options). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
 #'
-#' @param location The location code associated with the snow course.
-#' @param param_code The parameter code as specified in the EQWin table eqparams.
+#' @param location A WSC station number.
+#' @param param_code A WSC parameter code (47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46/16/52 for level primary/secondary/tertiary, 5/41 for water temperature primary/secondary, 18 for accumulated precipitation.)
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
-#' @param EQcon connection to the EQWin database. See EQConnect for details.
 #'
-#' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
+#' @return A data.table object of hydrometric data, with datetimes in UTC-0.
 #' @export
 
-getNewEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
-
+downloadWSC <- function (location, param_code, start_datetime, end_datetime = Sys.time())
+{
   # Checking start_datetime parameter
   tryCatch({
     if (inherits(start_datetime, "character") & nchar(start_datetime) > 10){ #Does not necessarily default to 0 hour.
@@ -47,29 +46,25 @@ getNewEQWin <- function(location, param_code, start_datetime, end_datetime = Sys
     stop("Failed to convert parameter end_datetime to POSIXct.")
   })
 
-  # Set EQWin database connection
-  EQcon <- EQConnect(silent = TRUE)
-  on.exit(DBI::dbDisconnect(EQcon))
-
-  # Get the data
-
-  StnId <- DBI::dbGetQuery(EQcon, paste0("SELECT StnId FROM eqstns WHERE StnCode = '", location, "';"))[1,1]
-  SampleIds <- DBI::dbGetQuery(EQcon, paste0("SELECT SampleId, CollectDateTime, SampleClass FROM eqsampls WHERE StnId = ", StnId, " AND CollectDateTime >= #",  substr(as.character(start_datetime), 1,19), "# AND CollectDateTime <= #", substr(as.character(end_datetime), 1,19), "#;"))
-  if (nrow(SampleIds) > 0){
-    SampleIds$CollectDateTime <- lubridate::force_tz(SampleIds$CollectDateTime, "MST")
-    ParamId <- DBI::dbGetQuery(EQcon, paste0("SELECT ParamId FROM eqparams WHERE ParamCode = '", param_code, "'"))[1,1]
-    samps <- DBI::dbGetQuery(EQcon, paste0("SELECT SampleId, Result FROM eqdetail WHERE SampleId IN (", paste(SampleIds$SampleId, collapse = ", "), ") AND ParamId = ", ParamId, ";"))
-    if (nrow(samps) > 0){
-      result <- merge(samps, SampleIds)
-      result <- result[ -1]
-      names(result) <- c("value", "datetime", "sample_class")
-      #make <DL values the negative of the DL
-      result$value <- as.numeric(gsub("<", "-", result$value))
-    } else {
-      result <- data.frame()
-    }
-  }  else {
-    result <- data.frame()
+  if (nchar(as.character(start_datetime)) == 10){
+    start_datetime <- paste0(start_datetime, " 00:00:00")
   }
-  return(result)
-}
+  if (nchar(as.character(end_datetime)) == 10) {
+    end_datetime <- paste0(end_datetime, " 00:00:00")
+  }
+
+  # Checking param_code
+  if (!(param_code %in%  c(46, 16, 52, 47, 8, 5, 41, 18))){
+    stop("Parameter specified is not one of 46, 16, 52, 47, 8, 5, 41, 18.")
+  }
+
+  # Pull data from WSC
+  baseurl <- "https://wateroffice.ec.gc.ca/services/real_time_data/csv/inline?"
+  location_string <- paste0("stations[]=", location)
+  parameters_string <- paste0("parameters[]=", param_code)
+  datetime_string <- paste0("start_date=", substr(start_datetime, 1, 10), "%20", substr(start_datetime, 12, 19), "&end_date=", substr(end_datetime, 1, 10), "%20", substr(end_datetime, 12, 19))
+  url <- paste0(baseurl, location_string, "&", parameters_string, "&", datetime_string)
+
+  data <- data.table::fread(url, showProgress = FALSE, data.table = FALSE, select = c("Date", "Value/Valeur", "Symbol/Symbole", "Approval/Approbation"), col.names = c("datetime", "value", "grade", "approval"))
+
+} #End of function

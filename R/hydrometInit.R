@@ -206,13 +206,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  remote_param_name TEXT NOT NULL,
                  PRIMARY KEY (source_fx, parameter))")
 
-  params_AQ <- data.frame("source_fx" = "getRealtimeAquarius",
+  params_AQ <- data.frame("source_fx" = "downloadAquarius",
                           "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
                           "remote_param_name" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
-  params_WSC <- data.frame("source_fx" = "getRealtimeWSC",
+  params_WSC <- data.frame("source_fx" = "downloadWSC",
                            "parameter" = c("level", "flow", "water temperature"),
                            "remote_param_name" = c("46", "47", "5"))
-  params_USGS <- data.frame("source_fx" = "getRealtimeNWIS",
+  params_USGS <- data.frame("source_fx" = "downloadNWIS",
                             "parameter" = c("level", "flow", "water temperature"),
                             "remote_param_name" = c("00065", "00060", "00010"))
   params <- rbind(params_AQ, params_WSC, params_USGS)

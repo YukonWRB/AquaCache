@@ -20,8 +20,8 @@ newcon <- hydrometConnect()
 ts_con <- DBI::dbGetQuery(oldcon, "SELECT location, parameter, units, operator, network FROM timeseries WHERE type = 'continuous'")
 ts_con$param_type <- "hydrometric"
 ts_con[ts_con$parameter %in% c("snow depth", "SWE"), "param_type"] <- "meteorological"
-ts_con$source_fx <- "getRealtimeWSC"
-ts_con[ts_con$operator == "WRB" , "source_fx"] <- "getRealtimeAquarius"
+ts_con$source_fx <- "downloadWSC"
+ts_con[ts_con$operator == "WRB" , "source_fx"] <- "downloadAquarius"
 ts_con$source_fx_args <- NA
 ts_con$public <- TRUE
 ts_con$category <- "continuous"
@@ -31,7 +31,7 @@ names(ts_con)[names(ts_con) == "units"] <- "unit"
 
 ts_disc <- DBI::dbGetQuery(oldcon, "SELECT location, parameter, units, operator, network FROM timeseries WHERE type = 'discrete'")
 ts_disc$param_type <- "meteorological"
-ts_disc$source_fx <- "getSnowCourse"
+ts_disc$source_fx <- "downloadSnowCourse"
 ts_disc$source_fx_args <- NA
 ts_disc$public <- TRUE
 ts_disc$category <- "discrete"

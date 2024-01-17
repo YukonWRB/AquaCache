@@ -12,7 +12,7 @@ timeseries_df <- data.frame(location = c("YOWN-0101"),
                             operator = "WRB",
                             network = "YOWN",
                             public = TRUE,
-                            source_fx = "getNewEQWin",
+                            source_fx = "downloadEQWin",
                             source_fx_args = NA,
                             note = NA)
 

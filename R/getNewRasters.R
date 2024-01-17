@@ -33,7 +33,7 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
     id <- meta_ids[i, "raster_series_id"]
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
-    if (source_fx == "getNewHRDPA"){
+    if (source_fx == "downloadHRDPA"){
       prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE description = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "';"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters (there shouldn't be any later ones)
       if (!is.na(prelim)){
         next_instant <- prelim - 1
@@ -79,10 +79,10 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
           rast <- rast[["rast"]]
           #Check if the raster already exists. If it does but description is PRELIMINARY AND the new one is not, delete the prelim one and replace.
           exists <- DBI::dbGetQuery(con, paste0("SELECT reference_id FROM rasters_reference WHERE valid_from = '", valid_from, "' AND raster_series_id = ", id, " AND description = 'PRELIMINARY';"))[1,1]
-          if (!is.na(exists) & description != "PRELIMINARY"){
+          if (!is.na(exists) & is.na(description)){
             DBI::dbExecute(con, paste0("DELETE FROM rasters_reference WHERE reference_id = ", exists, ";")) #This should cascade to the rasters table
           }
-          insertModelRaster(raster = rast, raster_series_id = id, valid_from = valid_from, valid_to = valid_to, description = description, source = source, units = units, model = model, con = con)
+          insertHydrometModelRaster(raster = rast, raster_series_id = id, valid_from = valid_from, valid_to = valid_to, description = description, source = source, units = units, model = model, con = con)
           DBI::dbExecute(con, paste0("UPDATE raster_series_index SET last_new_raster = '", .POSIXct(Sys.time(), tz = "UTC"), "' WHERE raster_series_id = ", id, ";"))
           DBI::dbExecute(con, paste0("UPDATE raster_series_index SET end_datetime = '", valid_to, "' WHERE raster_series_id = ", id, ";"))
 

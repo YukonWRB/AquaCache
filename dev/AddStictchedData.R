@@ -36,7 +36,7 @@ timeseries_df <- data.frame(location = c("8964"),
                             operator = "ECCC",
                             network = "ECCC met",
                             public = TRUE,
-                            source_fx = "getRealtimeECCCwx",
+                            source_fx = "downloadECCCwx",
                             source_fx_args = c("{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'hour'}", "{interval = 'hour'}"),
                             note = "Timeseries includes measurements from multiple  locations. Historical measurements adjusted using overlap to match current location")
 

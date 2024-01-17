@@ -13,10 +13,10 @@
 #' @export
 #'
 
-getNewWSCImages <- function(location, start_datetime, username = Sys.getenv("ECCCUSER"), password = Sys.getenv("ECCCPASS"), url = "https://collaboration.cmc.ec.gc.ca/cmc/hydrometric_additionalData/FieldData/YT/", save_path = NULL) {
+downloadWSCImages <- function(location, start_datetime, username = Sys.getenv("ECCCUSER"), password = Sys.getenv("ECCCPASS"), url = "https://collaboration.cmc.ec.gc.ca/cmc/hydrometric_additionalData/FieldData/YT/", save_path = NULL) {
 
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
-  saved_files <- list.files(paste0(tempdir(), "/getNewWSCImages"))
+  saved_files <- list.files(paste0(tempdir(), "/downloadWSCImages"))
 
   if (length(saved_files) == 0){
     file_exists <- FALSE
@@ -26,7 +26,7 @@ getNewWSCImages <- function(location, start_datetime, username = Sys.getenv("ECC
     ok <- saved_files[saved_files$datetime < Sys.time()+10*60 , ]
     if (nrow(ok) > 0){
       target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
-      tbl <- readRDS(paste0(tempdir(), "/getNewWSCImages/", target_file$file))
+      tbl <- readRDS(paste0(tempdir(), "/downloadWSCImages/", target_file$file))
       file_exists <- TRUE
     } else {
       file_exists <- FALSE
@@ -42,11 +42,11 @@ getNewWSCImages <- function(location, start_datetime, username = Sys.getenv("ECC
     tbl <- data.frame(link = links,
                       location = sub("^([0-9]{2}[A-Za-z]{2}[0-9]{3}).*", "\\1", links),
                       datetime = as.POSIXct(sub(".*_(\\d{8}T\\d{6}Z).*", "\\1", links), format = "%Y%m%dT%H%M%SZ", tz = "UTC"))
-    suppressWarnings(dir.create(paste0(tempdir(), "/getNewWSCImages")))
+    suppressWarnings(dir.create(paste0(tempdir(), "/downloadWSCImages")))
     name <- gsub(" ", "", Sys.time())
     name <- gsub("-", "", name)
     name <- substr(gsub(":", "", name), 1,12)
-    saveRDS(tbl, paste0(tempdir(), "/getNewWSCImages/", name, ".rds"))
+    saveRDS(tbl, paste0(tempdir(), "/downloadWSCImages/", name, ".rds"))
   }
 
   tbl <- tbl[tbl$location == location & tbl$datetime >= start_datetime , ]

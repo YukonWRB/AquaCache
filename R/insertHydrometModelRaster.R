@@ -1,7 +1,7 @@
 #' Add a model-output raster file to the database
 #'
 #' @description
-#' To create a new raster series use function [addHydrometRasterSeries()]. Use this function to add a raster file output by a model (forecast or reanalysis) to the hydromet or snow database (if the later has the necessary tables created) Ensures that database constraints are met. If you need to replace or delete a raster for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first. If the raster is not created by a model use function [insertRaster()] instead.
+#' To create a new raster series use function [addHydrometRasterSeries()]. Use this function to add a raster file output by a model (forecast or reanalysis) to the hydromet or snow database (if the later has the necessary tables created) Ensures that database constraints are met. If you need to replace or delete a raster for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first. If the raster is not created by a model use function [insertHydrometRaster()] instead.
 #'
 #' Depending on size, rasters might be broken up into many tiles. Because of this and the database's spatial capabilities, it's possible to only fetch the tiles you need using [rpostgis::pgGetRast()]. You'll have to specify which reference_id to use as a clause; find the right one in the 'rasters_reference' table. Look at the parameter `boundary` to specify a limited spatial extent, and at `bands` to only fetch certain bands. The rasters themselves live in the 'rasters' table, but the reference id in in the 'rasters_reference' table.
 #'
@@ -10,6 +10,7 @@
 #' @param raster_series_id The raster_series_id for the model, matching an entry in the raster_series_index table.
 #' @param valid_from Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.
 #' @param valid_to Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.
+#' @param description An optional description for the raster.
 #' @param issued The issued datetime of the raster. Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.
 #' @param units The units associated with each band, as a character vector. If left NULL function will attempt to retrieve units from the raster metadata. Otherwise if specified must be a vector of 1 or of length equal to the number of raster bands.
 #' @param model The model which created the raster.
@@ -20,7 +21,7 @@
 #' @return The reference_id of the newly appended raster.
 #' @export
 
-insertModelRaster <- function(con, raster, raster_series_id, valid_from, valid_to, description = NA, issued = NA, units = NULL, model = NA, source = NA, bit.depth = NULL, blocks = NULL)
+insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from, valid_to, description = NA, issued = NA, units = NULL, model = NA, source = NA, bit.depth = NULL, blocks = NULL)
 {
 
   # Checking valid_from parameter

@@ -30,5 +30,5 @@ The synchronize function pulls and replaces data of category 'continuous' and 'd
 
 NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote.
 
-Any timeseries labelled as 'getRealtimeAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[=getRealtimeAquarius]{getRealtimeAquarius()}} for more information.
+Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[=downloadAquarius]{downloadAquarius()}} for more information.
 }

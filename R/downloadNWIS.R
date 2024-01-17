@@ -14,7 +14,7 @@
 #' @return A data.table object of hydrometric data, with datetimes in UTC-0.
 #' @export
 
-getRealtimeNWIS <- function (location, param_code, start_datetime, end_datetime = Sys.time(), modifiedSince = NULL)
+downloadNWIS <- function (location, param_code, start_datetime, end_datetime = Sys.time(), modifiedSince = NULL)
 {
 
   if (!inherits(param_code, "numeric")){

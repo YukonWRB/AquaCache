@@ -20,7 +20,7 @@
 #'
 #' @export
 
-getRealtimeAquarius <- function(location,
+downloadAquarius <- function(location,
                         param_code,
                         start_datetime,
                         end_datetime = Sys.Date(),
@@ -30,13 +30,13 @@ getRealtimeAquarius <- function(location,
 {
   #Check that login and server credentials exist
   if (nchar(server) == 0 | is.null(server)) {
-    stop("getRealtimeAquarius: It looks like you haven't provided a server, or that it can't be found in your .Renviron file if you left the function defaults.")
+    stop("downloadAquarius: It looks like you haven't provided a server, or that it can't be found in your .Renviron file if you left the function defaults.")
   }
   if (nchar(login[1]) == 0 | is.null(login[1])) {
-    stop("getRealtimeAquarius: It looks like you haven't provided a username, or that it can't be found in your .Renviron file if you left the function defaults.")
+    stop("downloadAquarius: It looks like you haven't provided a username, or that it can't be found in your .Renviron file if you left the function defaults.")
   }
   if (nchar(login[2]) == 0 | is.null(login[2])) {
-    stop("getRealtimeAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults.")
+    stop("downloadAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults.")
   }
 
   source(system.file("scripts",  "timeseries_client.R", package = "HydroMetDB")) #This loads the code dependencies

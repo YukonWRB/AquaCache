@@ -16,7 +16,7 @@
 #' @export
 
 
-getSnowCourse <- function(location, param_code, start_datetime, end_datetime = Sys.time(), old_loc = NULL, snowCon = snowConnect())
+downloadSnowCourse <- function(location, param_code, start_datetime, end_datetime = Sys.time(), old_loc = NULL, snowCon = snowConnect())
   {
 
   # Checking start_datetime parameter

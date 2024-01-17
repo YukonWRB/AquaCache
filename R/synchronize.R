@@ -7,7 +7,7 @@
 #'
 #' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote.
 #'
-#'Any timeseries labelled as 'getRealtimeAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [getRealtimeAquarius()] for more information.
+#'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -66,7 +66,7 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     period_type <- all_timeseries$period_type[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
-    if (source_fx == "getNewEQWin" & EQcon == "unset"){
+    if (source_fx == "downloadEQWin" & EQcon == "unset"){
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
     }
@@ -95,7 +95,7 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
-      if (source_fx == "getNewEQWin"){
+      if (source_fx == "downloadEQWin"){
         args_list[["EQcon"]] <- EQcon
       }
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
