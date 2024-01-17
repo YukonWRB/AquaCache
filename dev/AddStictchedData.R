@@ -21,18 +21,17 @@ plot_ts <- function(tables){
 
 }
 
-
 #### ---------------------- Add timeseries ---------------------------------####
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = c("8964"),
-                            parameter = c("dly max air temp", "dly min air temp", "dly mean air temp", "dly tot precip", "dly tot rain", "dly tot snow", "hly tot precip", "air temp"),
-                            unit = c("C", "C", "C", "mm", "mm", "cm", "mm", "C"),
+timeseries_df <- data.frame(location = c("48168"),
+                            parameter = c("mly tot precip"),
+                            unit = c("mm"),
                             category = "continuous",
-                            period_type = c("max", "min", "(min+max)/2", "sum", "sum", "sum", "sum", "instantaneous"),
+                            period_type = c("sum"),
                             param_type = "meteorological",
-                            start_datetime = "2023-11-01",
+                            start_datetime = "?",
                             operator = "ECCC",
                             network = "ECCC met",
                             public = TRUE,
@@ -51,14 +50,14 @@ test <- chooseWeather(location=NULL,
                       coords=c(60.7197, -135.0523),
                       dist=10,
                       interval="day",
-                      start=1950,
+                      start=1900,
                       end=2023,
-                      variable=c("mean_temp"),
+                      variable=c("total_precip"),
                       return_data=TRUE)
 
 test <- weathercan::stations_search(
   coords = c(60.7197, -135.0523),
-  dist = 5,
+  dist = 10,
   interval = "day"
 )
 
@@ -255,7 +254,493 @@ test <- chooseWeather(location=NULL,
                       return_data=TRUE)####
 
 
-####------------------- Get locations data -----------------------------####
+####-------------- Create and import monthly precip data -------------------####
+# Daily air temp data is a combination of the data used for the snow bulletin and stitched together stations. When stations are stitched together, a bias is calculated for the overlap of the two.
+
+#### Whitehorse
+folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/Whitehorse/"
+
+whitehorse <- YGwater::combineWeather(stations = list("2101310", "2101300", "2101400", "2101415", "2101303", "2100907", "2101290"), start='1940-01-01', end='2023-11-01', variables=c("total_precip"), months=NULL)
+
+## Fix up Whitehorse precip
+whitehorse_precip <- whitehorse[whitehorse$variable=="total_precip",]
+# Remove empty dates at start and NAs
+whitehorse_precip <- whitehorse_precip[whitehorse_precip$date >= "1940-09-20",]
+whitehorse_precip <- whitehorse_precip[!(is.na(whitehorse_precip$value)),]
+# Calculate mean monthly values
+whitehorse_precip$yearmonth <- format(whitehorse_precip$date, "%Y-%m")
+whitehorse_precip$year <- format(whitehorse_precip$date, "%Y")
+whitehorse_precip <- whitehorse_precip %>%
+  dplyr::group_by(yearmonth) %>%
+  dplyr::summarise(value = sum(value, na.rm=TRUE),
+                   count = dplyr::n(),
+                   date = min(date))
+# Remove yearmonth with more than 1 day missing?
+whitehorse_precip <- whitehorse_precip[format(whitehorse_precip$date, "%m") %in% c("02") & whitehorse_precip$count >= 28 |
+                                         format(whitehorse_precip$date, "%m") %in% c("01","03","05","07","08","10","12") & whitehorse_precip$count >= 30 |
+                                         format(whitehorse_precip$date, "%m") %in% c("04","06","09","11") & whitehorse_precip$count >= 29, ]
+
+## Pull in snow bulletin csv
+whitehorse_precip_sb <- read.csv(paste0(folder, "whitehorse_precip_sb.csv"))
+# Put into long format
+whitehorse_precip_sb <- whitehorse_precip_sb %>%
+  tidyr::pivot_longer(cols=names(whitehorse_precip_sb[, 2:length(whitehorse_precip_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+whitehorse_precip_sb$month <- sprintf("%02d", match(whitehorse_precip_sb$X, month.name))
+whitehorse_precip_sb$year <- paste0(sub("X", "", whitehorse_precip_sb$year))
+whitehorse_precip_sb$yearmonth <- paste0(whitehorse_precip_sb$year, "-", whitehorse_precip_sb$month)
+# Add date
+whitehorse_precip_sb$date <- as.Date(paste0(whitehorse_precip_sb$yearmonth, "-01"), "%Y-%m-%d")
+
+## Compare wsc to snow bulletin mean temps
+plot_ts(list(whitehorse_precip, whitehorse_precip_sb))
+
+# Combine the two.
+# Only keep snow bulletin Oct 2007 onwards
+whitehorse_precip_sb <- whitehorse_precip_sb[whitehorse_precip_sb$date >= "2007-10-01", ]
+# Where there is overlap, take snow bulletin
+whitehorse_precip_all <- dplyr::left_join(whitehorse_precip, whitehorse_precip_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+
+# Change date to last day, minute, second of month
+whitehorse_precip_all$date <- lubridate::ceiling_date(whitehorse_precip_all$date + lubridate::month(1), "month") - lubridate::days(1)
+
+# Add other columns
+whitehorse_precip_all$timeseries_id <- 663
+whitehorse_precip_all$imputed <- FALSE
+whitehorse_precip_all$period <- "P1M"
+
+# fix date to datetime
+whitehorse_precip_all$datetime <- as.POSIXct(paste(whitehorse_precip_all$date, "23:59:59"),
+                                             format = "%Y-%m-%d %H:%M:%S", tz="MST")
+whitehorse_precip_all <- whitehorse_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
+# Add to db
+con <- HydroMetDB::hydrometConnect()
+test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 663")
+DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 663")
+DBI::dbAppendTable(con, "measurements_continuous", whitehorse_precip_all)
+
+
+#### Dawson
+folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/Dawson/"
+
+dawson <- YGwater::combineWeather(stations = list("2100LRP", "2100402", "2100400", "2100164", "2101062", "2101070"), start='1897-01-01', end='2023-11-01', variables=c("total_precip"), months=NULL)
+
+## Fix up dawson precip
+dawson_precip <- dawson[dawson$variable=="total_precip",]
+# Remove empty dates at start and NAs
+dawson_precip <- dawson_precip[dawson_precip$date >= "1897-09-01",]
+dawson_precip <- dawson_precip[!(is.na(dawson_precip$value)),]
+# Calculate mean monthly values
+dawson_precip$yearmonth <- format(dawson_precip$date, "%Y-%m")
+dawson_precip$year <- format(dawson_precip$date, "%Y")
+dawson_precip <- dawson_precip %>%
+  dplyr::group_by(yearmonth) %>%
+  dplyr::summarise(value = sum(value, na.rm=TRUE),
+                   count = dplyr::n(),
+                   date = min(date, na.rm=TRUE))
+# Remove yearmonth with more than 1 day missing?
+dawson_precip <- dawson_precip[format(dawson_precip$date, "%m") %in% c("02") & dawson_precip$count >= 28 |
+                                 format(dawson_precip$date, "%m") %in% c("01","03","05","07","08","10","12") & dawson_precip$count >= 30 |
+                                 format(dawson_precip$date, "%m") %in% c("04","06","09","11") & dawson_precip$count >= 29, ]
+
+
+## Pull in snow bulletin csv
+dawson_precip_sb <- read.csv(paste0(folder, "dawson_precip_sb.csv"))
+# Put into long format
+dawson_precip_sb <- dawson_precip_sb %>%
+  tidyr::pivot_longer(cols=names(dawson_precip_sb[, 2:length(dawson_precip_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+dawson_precip_sb$month <- sprintf("%02d", match(dawson_precip_sb$X, month.name))
+dawson_precip_sb$year <- paste0(sub("X", "", dawson_precip_sb$year))
+dawson_precip_sb$yearmonth <- paste0(dawson_precip_sb$year, "-", dawson_precip_sb$month)
+# Add date
+dawson_precip_sb$date <- as.Date(paste0(dawson_precip_sb$yearmonth, "-01"), "%Y-%m-%d")
+
+## Compare wsc to snow bulletin mean temps
+plot_ts(list(dawson_precip, dawson_precip_sb))
+
+# Combine the two.
+# Only keep snow bulletin Oct 2007 onwards
+dawson_precip_sb <- dawson_precip_sb[dawson_precip_sb$date >= "2007-10-01", ]
+# Where there is overlap, take snow bulletin
+dawson_precip_all <- dplyr::left_join(dawson_precip, dawson_precip_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+
+# Change date to last day, minute, second of month
+dawson_precip_all$date <- lubridate::ceiling_date(dawson_precip_all$date + lubridate::month(1), "month") - lubridate::days(1)
+
+# Add other columns
+dawson_precip_all$timeseries_id <- 664
+dawson_precip_all$imputed <- FALSE
+dawson_precip_all$period <- "P1M"
+# remove NAs
+dawson_precip_all <- dawson_precip_all[!is.na(dawson_precip_all$value),]
+# fix date to datetime
+dawson_precip_all$datetime <- as.POSIXct(paste(dawson_precip_all$date, "23:59:59"),
+                                         format = "%Y-%m-%d %H:%M:%S")
+dawson_precip_all <- dawson_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
+# Add to db
+con <- HydroMetDB::hydrometConnect()
+test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 664")
+DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 664")
+DBI::dbAppendTable(con, "measurements_continuous", dawson_precip_all)
+
+# update timeseries start date
+# DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(dawson_precip_all$datetime), "' WHERE timeseries_id = 484"))
+
+
+#### Teslin
+folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/Teslin/"
+
+teslin <- YGwater::combineWeather(stations = list("2101102", "2101100", "2101099"), start='1943-01-01', end='2023-11-01', variables=c("total_precip"), months=NULL)
+
+## Fix up teslin precip
+teslin_precip <- teslin[teslin$variable=="total_precip",]
+# Remove empty dates at start and NAs
+teslin_precip <- teslin_precip[teslin_precip$date >= "1943-10-01",]
+teslin_precip <- teslin_precip[!(is.na(teslin_precip$value)),]
+# Calculate mean monthly values
+teslin_precip$yearmonth <- format(teslin_precip$date, "%Y-%m")
+teslin_precip$year <- format(teslin_precip$date, "%Y")
+teslin_precip <- teslin_precip %>%
+  dplyr::group_by(yearmonth) %>%
+  dplyr::summarise(value = sum(value, na.rm=TRUE),
+                   count = dplyr::n(),
+                   date = min(date, na.rm=TRUE))
+# Remove yearmonth with more than 1 day missing?
+teslin_precip <- teslin_precip[format(teslin_precip$date, "%m") %in% c("02") & teslin_precip$count >= 27 |
+                                 format(teslin_precip$date, "%m") %in% c("01","03","05","07","08","10","12") & teslin_precip$count >= 29 |
+                                 format(teslin_precip$date, "%m") %in% c("04","06","09","11") & teslin_precip$count >= 28, ]
+
+
+## Pull in snow bulletin csv
+teslin_precip_sb <- read.csv(paste0(folder, "teslin_precip_sb.csv"))
+# Put into long format
+teslin_precip_sb <- teslin_precip_sb %>%
+  tidyr::pivot_longer(cols=names(teslin_precip_sb[, 2:length(teslin_precip_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+teslin_precip_sb$month <- sprintf("%02d", match(teslin_precip_sb$X, month.name))
+teslin_precip_sb$year <- paste0(sub("X", "", teslin_precip_sb$year))
+teslin_precip_sb$yearmonth <- paste0(teslin_precip_sb$year, "-", teslin_precip_sb$month)
+# Add date
+teslin_precip_sb$date <- as.Date(paste0(teslin_precip_sb$yearmonth, "-01"), "%Y-%m-%d")
+
+## Compare wsc to snow bulletin mean temps
+plot_ts(list(teslin_precip, teslin_precip_sb))
+
+# Combine the two.
+# Only keep snow bulletin Oct 2007 onwards
+teslin_precip_sb <- teslin_precip_sb[teslin_precip_sb$date >= "2008-10-01", ]
+# Where there is overlap, take snow bulletin
+teslin_precip_all <- dplyr::left_join(teslin_precip, teslin_precip_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+
+# Change date to last day, minute, second of month
+teslin_precip_all$date <- lubridate::ceiling_date(teslin_precip_all$date + lubridate::month(1), "month") - lubridate::days(1)
+
+# Add other columns
+teslin_precip_all$timeseries_id <- 665
+teslin_precip_all$imputed <- FALSE
+teslin_precip_all$period <- "P1M"
+# remove NAs
+teslin_precip_all <- teslin_precip_all[!is.na(teslin_precip_all$value),]
+# fix date to datetime
+teslin_precip_all$datetime <- as.POSIXct(paste(teslin_precip_all$date, "23:59:59"),
+                                         format = "%Y-%m-%d %H:%M:%S")
+teslin_precip_all <- teslin_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
+# Add to db
+con <- HydroMetDB::hydrometConnect()
+test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 665")
+DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 665")
+DBI::dbAppendTable(con, "measurements_continuous", teslin_precip_all)
+
+
+#### Carmacks
+folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/Carmacks/"
+
+carmacks <- YGwater::combineWeather(stations = list("2100301", "2100300"), start='1963-01-01', end='2023-11-01', variables=c("total_precip"), months=NULL)
+
+## Fix up carmacks precip
+carmacks_precip <- carmacks[carmacks$variable=="total_precip",]
+# Remove empty dates at start and NAs
+carmacks_precip <- carmacks_precip[carmacks_precip$date >= "1963-08-26",]
+carmacks_precip <- carmacks_precip[!(is.na(carmacks_precip$value)),]
+# Calculate mean monthly values
+carmacks_precip$yearmonth <- format(carmacks_precip$date, "%Y-%m")
+carmacks_precip$year <- format(carmacks_precip$date, "%Y")
+carmacks_precip <- carmacks_precip %>%
+  dplyr::group_by(yearmonth) %>%
+  dplyr::summarise(value = sum(value, na.rm=TRUE),
+                   count = dplyr::n(),
+                   date = min(date, na.rm=TRUE))
+# Remove yearmonth with more than 1 day missing?
+carmacks_precip <- carmacks_precip[format(carmacks_precip$date, "%m") %in% c("02") & carmacks_precip$count >= 27 |
+                                     format(carmacks_precip$date, "%m") %in% c("01","03","05","07","08","10","12") & carmacks_precip$count >= 29 |
+                                     format(carmacks_precip$date, "%m") %in% c("04","06","09","11") & carmacks_precip$count >= 28, ]
+
+
+## Pull in snow bulletin csv
+carmacks_precip_sb <- read.csv(paste0(folder, "carmacks_precip_sb.csv"))
+# Put into long format
+carmacks_precip_sb <- carmacks_precip_sb %>%
+  tidyr::pivot_longer(cols=names(carmacks_precip_sb[, 2:length(carmacks_precip_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+carmacks_precip_sb$month <- sprintf("%02d", match(carmacks_precip_sb$X, month.name))
+carmacks_precip_sb$year <- paste0(sub("X", "", carmacks_precip_sb$year))
+carmacks_precip_sb$yearmonth <- paste0(carmacks_precip_sb$year, "-", carmacks_precip_sb$month)
+# Add date
+carmacks_precip_sb$date <- as.Date(paste0(carmacks_precip_sb$yearmonth, "-01"), "%Y-%m-%d")
+
+## Compare wsc to snow bulletin mean temps
+plot_ts(list(carmacks_precip, carmacks_precip_sb))
+
+# Combine the two.
+# Only keep snow bulletin Oct 2007 onwards
+carmacks_precip_sb <- carmacks_precip_sb[carmacks_precip_sb$date >= "2012-10-01", ]
+# Where there is overlap, take snow bulletin
+carmacks_precip_all <- dplyr::left_join(carmacks_precip, carmacks_precip_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+
+# Change date to last day, minute, second of month
+carmacks_precip_all$date <- lubridate::ceiling_date(carmacks_precip_all$date + lubridate::month(1), "month") - lubridate::days(1)
+
+# Add other columns
+carmacks_precip_all$timeseries_id <- 666
+carmacks_precip_all$imputed <- FALSE
+carmacks_precip_all$period <- "P1M"
+# remove NAs
+carmacks_precip_all <- carmacks_precip_all[!is.na(carmacks_precip_all$value),]
+# fix date to datetime
+carmacks_precip_all$datetime <- as.POSIXct(paste(carmacks_precip_all$date, "23:59:59"),
+                                           format = "%Y-%m-%d %H:%M:%S")
+carmacks_precip_all <- carmacks_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
+# Add to db
+con <- HydroMetDB::hydrometConnect()
+test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 666")
+#DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 666")
+DBI::dbAppendTable(con, "measurements_continuous", carmacks_precip_all)
+
+
+#### Watson Lake
+folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/WatsonLake/"
+
+watsonlake <- YGwater::combineWeather(stations = list("2101204", "2101201", "2101200", "2101222"), start='1938-01-01', end='2023-11-01', variables=c("total_precip"), months=NULL)
+
+## Fix up watsonlake precip
+watsonlake_precip <- watsonlake[watsonlake$variable=="total_precip",]
+# Remove empty dates at start and NAs
+watsonlake_precip <- watsonlake_precip[watsonlake_precip$date >= "1938-10-01",]
+watsonlake_precip <- watsonlake_precip[!(is.na(watsonlake_precip$value)),]
+# Calculate mean monthly values
+watsonlake_precip$yearmonth <- format(watsonlake_precip$date, "%Y-%m")
+watsonlake_precip$year <- format(watsonlake_precip$date, "%Y")
+watsonlake_precip <- watsonlake_precip %>%
+  dplyr::group_by(yearmonth) %>%
+  dplyr::summarise(value = sum(value, na.rm=TRUE),
+                   count = dplyr::n(),
+                   date = min(date, na.rm=TRUE))
+# Remove yearmonth with more than 1 day missing?
+watsonlake_precip <- watsonlake_precip[format(watsonlake_precip$date, "%m") %in% c("02") & watsonlake_precip$count >= 27 |
+                                         format(watsonlake_precip$date, "%m") %in% c("01","03","05","07","08","10","12") & watsonlake_precip$count >= 29 |
+                                         format(watsonlake_precip$date, "%m") %in% c("04","06","09","11") & watsonlake_precip$count >= 28, ]
+
+
+## Pull in snow bulletin csv
+watsonlake_precip_sb <- read.csv(paste0(folder, "watsonlake_precip_sb.csv"))
+# Put into long format
+watsonlake_precip_sb <- watsonlake_precip_sb %>%
+  tidyr::pivot_longer(cols=names(watsonlake_precip_sb[, 2:length(watsonlake_precip_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+watsonlake_precip_sb$month <- sprintf("%02d", match(watsonlake_precip_sb$X, month.name))
+watsonlake_precip_sb$year <- paste0(sub("X", "", watsonlake_precip_sb$year))
+watsonlake_precip_sb$yearmonth <- paste0(watsonlake_precip_sb$year, "-", watsonlake_precip_sb$month)
+# Add date
+watsonlake_precip_sb$date <- as.Date(paste0(watsonlake_precip_sb$yearmonth, "-01"), "%Y-%m-%d")
+
+## Compare wsc to snow bulletin mean temps
+plot_ts(list(watsonlake_precip, watsonlake_precip_sb))
+
+# Combine the two.
+# Only keep snow bulletin Oct 2007 onwards
+watsonlake_precip_sb <- watsonlake_precip_sb[watsonlake_precip_sb$date >= "2007-10-01", ]
+# Where there is overlap, take snow bulletin
+watsonlake_precip_all <- dplyr::left_join(watsonlake_precip, watsonlake_precip_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+
+# Change date to last day, minute, second of month
+watsonlake_precip_all$date <- lubridate::ceiling_date(watsonlake_precip_all$date + lubridate::month(1), "month") - lubridate::days(1)
+
+# Add other columns
+watsonlake_precip_all$timeseries_id <- 667
+watsonlake_precip_all$imputed <- FALSE
+watsonlake_precip_all$period <- "P1M"
+# remove NAs
+watsonlake_precip_all <- watsonlake_precip_all[!is.na(watsonlake_precip_all$value),]
+# fix date to datetime
+watsonlake_precip_all$datetime <- as.POSIXct(paste(watsonlake_precip_all$date, "23:59:59"),
+                                             format = "%Y-%m-%d %H:%M:%S")
+watsonlake_precip_all <- watsonlake_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
+# Add to db
+con <- HydroMetDB::hydrometConnect()
+test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 667")
+#DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 667")
+DBI::dbAppendTable(con, "measurements_continuous", watsonlake_precip_all)
+
+
+#### Mayo
+folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/Mayo/"
+
+mayo <- YGwater::combineWeather(stations = list("2100701", "2100700"), start='1924-01-01', end='2023-11-01', variables=c("total_precip"), months=NULL)
+
+## Fix up mayo precip
+mayo_precip <- mayo[mayo$variable=="total_precip",]
+# Remove empty dates at start and NAs
+mayo_precip <- mayo_precip[mayo_precip$date >= "1925-06-01",]
+mayo_precip <- mayo_precip[!(is.na(mayo_precip$value)),]
+# Calculate mean monthly values
+mayo_precip$yearmonth <- format(mayo_precip$date, "%Y-%m")
+mayo_precip$year <- format(mayo_precip$date, "%Y")
+mayo_precip <- mayo_precip %>%
+  dplyr::group_by(yearmonth) %>%
+  dplyr::summarise(value = sum(value, na.rm=TRUE),
+                   count = dplyr::n(),
+                   date = min(date, na.rm=TRUE))
+# Remove yearmonth with more than 1 day missing?
+mayo_precip <- mayo_precip[format(mayo_precip$date, "%m") %in% c("02") & mayo_precip$count >= 27 |
+                             format(mayo_precip$date, "%m") %in% c("01","03","05","07","08","10","12") & mayo_precip$count >= 29 |
+                             format(mayo_precip$date, "%m") %in% c("04","06","09","11") & mayo_precip$count >= 28, ]
+
+
+## Pull in snow bulletin csv
+mayo_precip_sb <- read.csv(paste0(folder, "mayo_precip_sb.csv"))
+# Put into long format
+mayo_precip_sb <- mayo_precip_sb %>%
+  tidyr::pivot_longer(cols=names(mayo_precip_sb[, 2:length(mayo_precip_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+mayo_precip_sb$month <- sprintf("%02d", match(mayo_precip_sb$X, month.name))
+mayo_precip_sb$year <- paste0(sub("X", "", mayo_precip_sb$year))
+mayo_precip_sb$yearmonth <- paste0(mayo_precip_sb$year, "-", mayo_precip_sb$month)
+# Add date
+mayo_precip_sb$date <- as.Date(paste0(mayo_precip_sb$yearmonth, "-01"), "%Y-%m-%d")
+
+## Compare wsc to snow bulletin mean temps
+plot_ts(list(mayo_precip, mayo_precip_sb))
+
+# Combine the two.
+# Only keep snow bulletin Oct 2007 onwards
+mayo_precip_sb <- mayo_precip_sb[mayo_precip_sb$date >= "2007-10-01", ]
+# Where there is overlap, take snow bulletin
+mayo_precip_all <- dplyr::left_join(mayo_precip, mayo_precip_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+
+# Change date to last day, minute, second of month
+mayo_precip_all$date <- lubridate::ceiling_date(mayo_precip_all$date + lubridate::month(1), "month") - lubridate::days(1)
+
+# Add other columns
+mayo_precip_all$timeseries_id <- 668
+mayo_precip_all$imputed <- FALSE
+mayo_precip_all$period <- "P1M"
+# remove NAs
+mayo_precip_all <- mayo_precip_all[!is.na(mayo_precip_all$value),]
+# fix date to datetime
+mayo_precip_all$datetime <- as.POSIXct(paste(mayo_precip_all$date, "23:59:59"),
+                                       format = "%Y-%m-%d %H:%M:%S")
+mayo_precip_all <- mayo_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
+# Add to db
+con <- HydroMetDB::hydrometConnect()
+test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 668")
+#DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 668")
+DBI::dbAppendTable(con, "measurements_continuous", mayo_precip_all)
+
+
+#### Old Crow
+folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/OldCrow/"
+
+oldcrow <- YGwater::combineWeather(stations = list("2100805", "2100800"), start='1951-01-01', end='2023-11-01', variables=c("total_precip"), months=NULL)
+
+## Fix up oldcrow precip
+oldcrow_precip <- oldcrow[oldcrow$variable=="total_precip",]
+# Remove empty dates at start and NAs
+oldcrow_precip <- oldcrow_precip[oldcrow_precip$date >= "1951-09-16",]
+oldcrow_precip <- oldcrow_precip[!(is.na(oldcrow_precip$value)),]
+# Calculate mean monthly values
+oldcrow_precip$yearmonth <- format(oldcrow_precip$date, "%Y-%m")
+oldcrow_precip$year <- format(oldcrow_precip$date, "%Y")
+oldcrow_precip <- oldcrow_precip %>%
+  dplyr::group_by(yearmonth) %>%
+  dplyr::summarise(value = sum(value, na.rm=TRUE),
+                   count = dplyr::n(),
+                   date = min(date, na.rm=TRUE))
+# Remove yearmonth with more than 1 day missing?
+oldcrow_precip <- oldcrow_precip[format(oldcrow_precip$date, "%m") %in% c("02") & oldcrow_precip$count >= 26 |
+                                   format(oldcrow_precip$date, "%m") %in% c("01","03","05","07","08","10","12") & oldcrow_precip$count >= 27 |
+                                   format(oldcrow_precip$date, "%m") %in% c("04","06","09","11") & oldcrow_precip$count >= 27, ]
+
+
+## Pull in snow bulletin csv
+oldcrow_precip_sb <- read.csv(paste0(folder, "oldcrow_precip_sb.csv"))
+# Put into long format
+oldcrow_precip_sb <- oldcrow_precip_sb %>%
+  tidyr::pivot_longer(cols=names(oldcrow_precip_sb[, 2:length(oldcrow_precip_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+oldcrow_precip_sb$month <- sprintf("%02d", match(oldcrow_precip_sb$X, month.name))
+oldcrow_precip_sb$year <- paste0(sub("X", "", oldcrow_precip_sb$year))
+oldcrow_precip_sb$yearmonth <- paste0(oldcrow_precip_sb$year, "-", oldcrow_precip_sb$month)
+# Add date
+oldcrow_precip_sb$date <- as.Date(paste0(oldcrow_precip_sb$yearmonth, "-01"), "%Y-%m-%d")
+
+## Compare wsc to snow bulletin mean temps
+plot_ts(list(oldcrow_precip, oldcrow_precip_sb))
+
+# Combine the two.
+# Only keep snow bulletin Oct 2007 onwards
+oldcrow_precip_sb <- oldcrow_precip_sb[oldcrow_precip_sb$date >= "2016-10-01", ]
+# Where there is overlap, take snow bulletin
+oldcrow_precip_all <- dplyr::left_join(oldcrow_precip, oldcrow_precip_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+
+# Change date to last day, minute, second of month
+oldcrow_precip_all$date <- lubridate::ceiling_date(oldcrow_precip_all$date + lubridate::month(1), "month") - lubridate::days(1)
+
+# Add other columns
+oldcrow_precip_all$timeseries_id <- 671
+oldcrow_precip_all$imputed <- FALSE
+oldcrow_precip_all$period <- "P1M"
+# remove NAs
+oldcrow_precip_all <- oldcrow_precip_all[!is.na(oldcrow_precip_all$value),]
+# fix date to datetime
+oldcrow_precip_all$datetime <- as.POSIXct(paste(oldcrow_precip_all$date, "23:59:59"),
+                                          format = "%Y-%m-%d %H:%M:%S")
+oldcrow_precip_all <- oldcrow_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
+# Add to db
+con <- HydroMetDB::hydrometConnect()
+DBI::dbAppendTable(con, "measurements_continuous", oldcrow_precip_all)
+
+
+
+####------------- Create and import daily mean air temp data ---------------####
 
 # Stitch data --> timeseries_id | datetime | value
 
@@ -297,7 +782,7 @@ whitehorse_temp_all$period <- 'P1D'
 whitehorse_temp_all <- whitehorse_temp_all[!is.na(whitehorse_temp_all$value),]
 # fix date to datetime
 whitehorse_temp_all$datetime <- as.POSIXct(paste(whitehorse_temp_all$date, "12:00:00"),
-                                       format = "%Y-%m-%d %H:%M:%S")
+                                           format = "%Y-%m-%d %H:%M:%S")
 whitehorse_temp_all <- whitehorse_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
 con <- hydrometConnect()
@@ -313,50 +798,50 @@ DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(white
 folder <- "H:/estewart/SnowBulletin/AddingStitchedClimateData/Dawson/"
 
 dawson <- YGwater::combineWeather(stations = list("2100LRP", "2100402", "2100407", "2100400", "2101062", "2100398"),
-                                start= '1897-01-01',
-                                end='2023-11-01', variables=c("mean_temp", "total_precip", "min_temp", "max_temp"), months=NULL)
+                                  start= '1897-01-01',
+                                  end='2023-11-01', variables=c("mean_temp", "total_precip", "min_temp", "max_temp"), months=NULL)
 
 ## Fix up Dawson temp for csv
-  dawson_temp <- dawson[dawson$variable=="mean_temp",]
-  # Remove empty dates at start
-  dawson_temp <- dawson_temp[dawson_temp$date >= "1897-07-22",]
+dawson_temp <- dawson[dawson$variable=="mean_temp",]
+# Remove empty dates at start
+dawson_temp <- dawson_temp[dawson_temp$date >= "1897-07-22",]
 
 ## Pull in snow bulletin csv
-  dawson_temp_sb <- read.csv(paste0(folder, "Dawson_temp_sb.csv"))
-  # Put into wide format
-  dawson_temp_sb <- dawson_temp_sb %>%
-    tidyr::pivot_longer(cols=names(dawson_temp_sb[, 2:length(dawson_temp_sb)]),
-                        names_to='year',
-                        values_to = 'value')
-  # Fix date
-  dawson_temp_sb$date <- paste0(sub("X", "", dawson_temp_sb$year), sub("2023", "", dawson_temp_sb$date))
-  dawson_temp_sb$date <- as.Date(dawson_temp_sb$date, "%Y-%m-%d")
-  # remove year
-  dawson_temp_sb <- dawson_temp_sb[, c("date", "value")]
+dawson_temp_sb <- read.csv(paste0(folder, "Dawson_temp_sb.csv"))
+# Put into wide format
+dawson_temp_sb <- dawson_temp_sb %>%
+  tidyr::pivot_longer(cols=names(dawson_temp_sb[, 2:length(dawson_temp_sb)]),
+                      names_to='year',
+                      values_to = 'value')
+# Fix date
+dawson_temp_sb$date <- paste0(sub("X", "", dawson_temp_sb$year), sub("2023", "", dawson_temp_sb$date))
+dawson_temp_sb$date <- as.Date(dawson_temp_sb$date, "%Y-%m-%d")
+# remove year
+dawson_temp_sb <- dawson_temp_sb[, c("date", "value")]
 
 ## Compare wsc to snow bulletin mean temps
-  plot_ts(dawson_temp, dawson_temp_sb)
+plot_ts(dawson_temp, dawson_temp_sb)
 
-  # Combine the two. Where there is overlap, take snow bulletin
-  dawson_temp_all <- dplyr::left_join(dawson_temp, dawson_temp_sb, by = "date", suffix = c("_df1", "_df2")) %>%
-    dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
-    dplyr::select(date, value)
-  # Add other columns
-  dawson_temp_all$timeseries_id <- 492
-  dawson_temp_all$imputed <- FALSE
-  dawson_temp_all$period <- 'P1D'
-  # remove NAs
-  dawson_temp_all <- dawson_temp_all[!is.na(dawson_temp_all$value),]
-  # fix date to datetime
-  dawson_temp_all$datetime <- as.POSIXct(paste(dawson_temp_all$date, "12:00:00"),
-                                         format = "%Y-%m-%d %H:%M:%S")
-  dawson_temp_all <- dawson_temp_all[, c("value", "timeseries_id", "datetime", "imputed")]
-  # Add to db
-  con <- hydrometConnect()
-  DBI::dbAppendTable(con, "measurements_continuous", dawson_temp_all)
+# Combine the two. Where there is overlap, take snow bulletin
+dawson_temp_all <- dplyr::left_join(dawson_temp, dawson_temp_sb, by = "date", suffix = c("_df1", "_df2")) %>%
+  dplyr::mutate(value = dplyr::coalesce(value_df2, value_df1)) %>%
+  dplyr::select(date, value)
+# Add other columns
+dawson_temp_all$timeseries_id <- 492
+dawson_temp_all$imputed <- FALSE
+dawson_temp_all$period <- 'P1D'
+# remove NAs
+dawson_temp_all <- dawson_temp_all[!is.na(dawson_temp_all$value),]
+# fix date to datetime
+dawson_temp_all$datetime <- as.POSIXct(paste(dawson_temp_all$date, "12:00:00"),
+                                       format = "%Y-%m-%d %H:%M:%S")
+dawson_temp_all <- dawson_temp_all[, c("value", "timeseries_id", "datetime", "imputed")]
+# Add to db
+con <- hydrometConnect()
+DBI::dbAppendTable(con, "measurements_continuous", dawson_temp_all)
 
 # update timeseries start date
-  DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(dawson_temp_all$datetime), "' WHERE timeseries_id = 492"))
+DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(dawson_temp_all$datetime), "' WHERE timeseries_id = 492"))
 
 
 #### Faro
@@ -400,7 +885,7 @@ faro_temp_all$period <- 'P1D'
 faro_temp_all <- faro_temp_all[!is.na(faro_temp_all$value),]
 # fix date to datetime
 faro_temp_all$datetime <- as.POSIXct(paste(faro_temp_all$date, "12:00:00"),
-                                           format = "%Y-%m-%d %H:%M:%S")
+                                     format = "%Y-%m-%d %H:%M:%S")
 faro_temp_all <- faro_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
 con <- hydrometConnect()
@@ -428,7 +913,7 @@ watsonlake_temp_all$period <- 'P1D'
 watsonlake_temp_all <- watsonlake_temp_all[!is.na(watsonlake_temp_all$value),]
 # fix date to datetime
 watsonlake_temp_all$datetime <- as.POSIXct(paste(watsonlake_temp_all$date, "12:00:00"),
-                                     format = "%Y-%m-%d %H:%M:%S")
+                                           format = "%Y-%m-%d %H:%M:%S")
 watsonlake_temp_all <- watsonlake_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # One last chgeck
 plot_ts(watsonlake_temp_all)
@@ -457,7 +942,7 @@ hainesjunction_temp_all$period <- 'P1D'
 hainesjunction_temp_all <- hainesjunction_temp_all[!is.na(hainesjunction_temp_all$value),]
 # fix date to datetime
 hainesjunction_temp_all$datetime <- as.POSIXct(paste(hainesjunction_temp_all$date, "12:00:00"),
-                                           format = "%Y-%m-%d %H:%M:%S")
+                                               format = "%Y-%m-%d %H:%M:%S")
 hainesjunction_temp_all <- hainesjunction_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # One last chgeck
 plot_ts(hainesjunction_temp_all)
@@ -486,7 +971,7 @@ beavercreek_temp_all$period <- 'P1D'
 beavercreek_temp_all <- beavercreek_temp_all[!is.na(beavercreek_temp_all$value),]
 # fix date to datetime
 beavercreek_temp_all$datetime <- as.POSIXct(paste(beavercreek_temp_all$date, "12:00:00"),
-                                               format = "%Y-%m-%d %H:%M:%S")
+                                            format = "%Y-%m-%d %H:%M:%S")
 beavercreek_temp_all <- beavercreek_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # One last chgeck
 plot_ts(beavercreek_temp_all)
@@ -514,7 +999,7 @@ teslin_temp$period <- 'P1D'
 teslin_temp <- teslin_temp[!is.na(teslin_temp$value),]
 # fix date to datetime
 teslin_temp$datetime <- as.POSIXct(paste(teslin_temp$date, "12:00:00"),
-                                            format = "%Y-%m-%d %H:%M:%S")
+                                   format = "%Y-%m-%d %H:%M:%S")
 teslin_temp <- teslin_temp[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # One last chgeck
 plot_ts(teslin_temp)
@@ -617,7 +1102,7 @@ carmacks_temp_all$period <- 'P1D'
 carmacks_temp_all <- carmacks_temp_all[!is.na(carmacks_temp_all$value),]
 # fix date to datetime
 carmacks_temp_all$datetime <- as.POSIXct(paste(carmacks_temp_all$date, "12:00:00"),
-                                           format = "%Y-%m-%d %H:%M:%S")
+                                         format = "%Y-%m-%d %H:%M:%S")
 carmacks_temp_all <- carmacks_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
 con <- hydrometConnect()
@@ -666,7 +1151,7 @@ mayo_temp_all$period <- 'P1D'
 mayo_temp_all <- mayo_temp_all[!is.na(mayo_temp_all$value),]
 # fix date to datetime
 mayo_temp_all$datetime <- as.POSIXct(paste(mayo_temp_all$date, "12:00:00"),
-                                         format = "%Y-%m-%d %H:%M:%S")
+                                     format = "%Y-%m-%d %H:%M:%S")
 mayo_temp_all <- mayo_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
 con <- HydroMetDB::hydrometConnect()
