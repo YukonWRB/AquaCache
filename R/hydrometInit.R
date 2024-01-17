@@ -195,7 +195,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value TIMESTAMP WITH TIME ZONE,
                  PRIMARY KEY (event))")
 
-  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync", "last_sync_discrete", "last_update_watersheds", "last_update_rasters", "last_update_polygons", "last_vacuum"),
+  internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync", "last_sync_discrete", "last_update_watersheds", "last_new_rasters", "last_new_polygons", "last_vacuum", "last_new_images"),
                                 "value" = NA)
   DBI::dbAppendTable(con, "internal_status", internal_status)
 
@@ -206,13 +206,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  remote_param_name TEXT NOT NULL,
                  PRIMARY KEY (source_fx, parameter))")
 
-  params_AQ <- data.frame("source_fx" = "getRealtimeAquarius",
+  params_AQ <- data.frame("source_fx" = "downloadAquarius",
                           "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
                           "remote_param_name" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
-  params_WSC <- data.frame("source_fx" = "getRealtimeWSC",
+  params_WSC <- data.frame("source_fx" = "downloadWSC",
                            "parameter" = c("level", "flow", "water temperature"),
                            "remote_param_name" = c("46", "47", "5"))
-  params_USGS <- data.frame("source_fx" = "getRealtimeNWIS",
+  params_USGS <- data.frame("source_fx" = "downloadNWIS",
                             "parameter" = c("level", "flow", "water temperature"),
                             "remote_param_name" = c("00065", "00060", "00010"))
   params <- rbind(params_AQ, params_WSC, params_USGS)
@@ -269,7 +269,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS raster_series_index (
                  raster_series_id SERIAL PRIMARY KEY,
-                 model TEXT,
+                 model TEXT UNIQUE NOT NULL,
                  start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  end_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  last_new_raster TIMESTAMP WITH TIME ZONE NOT NULL,

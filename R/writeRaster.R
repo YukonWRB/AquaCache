@@ -3,7 +3,7 @@
 #' Write raster to PostGIS database table.
 #'
 #' @description
-#' This function is not meant to be used by itself: in most cases use [addModelRaster()] or [addRaster()] which will populate reference tables so that your raster can be easily found later.
+#' This function is not meant to be used by itself: in most cases use [insertHydrometModelRaster()] or [insertHydrometRaster()] which will populate reference tables so that your raster can be easily found later.
 #'
 #' Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of [rpostgis::pgWriteRast()]. Will create the raster table if necessary.
 #'
@@ -41,11 +41,7 @@
 #' @keywords internal
 #' @return A list with TRUE for successful import and the rid(s) of the appended entries.
 
-
-# raster <- terra::rast("https://dd.weather.gc.ca/model_hrdpa/2.5km/06/20231217T06Z_MSC_HRDPA_APCP-Accum6h_Sfc_RLatLon0.0225_PT0H.grib2")
-# raster <- raster[[1]]
-
-insertRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, blocks = NULL,
+writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, blocks = NULL,
                         constraints = TRUE) {
 
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {
@@ -96,9 +92,16 @@ insertRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, 
   } else {
     message("Appending to existing table. Dropping any existing raster constraints...")
     try(DBI::dbExecute(con, paste0("SELECT DropRasterConstraints('", rast_table, "','rast',",
-                                    paste(rep("TRUE", 12), collapse = ","),");")))
+                                   paste(rep("TRUE", 12), collapse = ","),");")))
     n.base <- DBI::dbGetQuery(con, paste0("SELECT max(rid) r from ", rast_table, ";"))$r
-    new = F
+    if (is.na(n.base)){
+      n.base <- 0
+      new <- T
+      tmp.query <- paste0("DROP INDEX ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
+      DBI::dbExecute(con, tmp.query)
+    } else {
+      new <- F
+    }
   }
 
   r1 <- raster

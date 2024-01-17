@@ -35,9 +35,9 @@ timeseries_df <- data.frame(location = c("48168"),
                             operator = "ECCC",
                             network = "ECCC met",
                             public = TRUE,
-                            source_fx = NULL,
-                            source_fx_args = c("{interval = 'month'}"),
-                            note = "Timeseries includes measurements from multiple stations. Since Oct. 2007, the monthly precip is taken from the QAQC'd snow bulletin data where available.")
+                            source_fx = "downloadECCCwx",
+                            source_fx_args = c("{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'hour'}", "{interval = 'hour'}"),
+                            note = "Timeseries includes measurements from multiple  locations. Historical measurements adjusted using overlap to match current location")
 
 addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = NULL)
 

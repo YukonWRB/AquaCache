@@ -1,7 +1,7 @@
 #' Add a raster file to the database
 #'
 #' @description
-#' Use this function to add a raster file to the database that wasn't created by a model (use [insertModelRaster()] for that). Ensures that database constraints are met. If you need to replace or delete a raster for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first, remembering to delete the matching entries in the rasters and rasters_model_output tables.
+#' Use this function to add a raster file to the database that wasn't created by a model (use [insertHydrometModelRaster()] for that). Ensures that database constraints are met. If you need to replace or delete a raster for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first, remembering to delete the matching entries in the rasters and rasters_model_output tables.
 #'
 #' Depending on size, rasters might be broken up into many tiles. Because of this and the database's spatial capabilities, it's possible to only fetch the tiles you need using [rpostgis::pgGetRast()]. You'll have to specify which reference_id to use as a clause; find the right one in the 'rasters_reference' table. Look at the parameter `boundary` to specify a limited spatial extent, and at `bands` to only fetch certain bands. The rasters themselves live in the 'rasters' table, but the reference id in in the 'rasters_reference' table.
 #'
@@ -16,7 +16,7 @@
 #' @return The reference_id of the newly appended raster.
 #' @export
 
-insertRaster <- function(con, raster, description, units = NULL, source = NULL, bit.depth = NULL, blocks = NULL)
+insertHydrometRaster <- function(con, raster, description, units = NULL, source = NULL, bit.depth = NULL, blocks = NULL)
 {
 
   if(!("rasters_reference" %in% DBI::dbListTables(con))) {
@@ -36,7 +36,7 @@ insertRaster <- function(con, raster, description, units = NULL, source = NULL, 
                    source TEXT,
                    CONSTRAINT check_model_constraints
                      CHECK (
-                     (type = 'model' AND model IS NOT NULL AND valid_from IS NOT NULL AND valid_to IS NOT NULL AND issued IS NOT NULL) OR
+                     (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
                      (type = 'other' AND description IS NOT NULL)
                      )
                      );")
@@ -54,7 +54,7 @@ insertRaster <- function(con, raster, description, units = NULL, source = NULL, 
                    source VARCHAR(MAX),
                    CONSTRAINT check_model_constraints
                      CHECK (
-                     (type = 'model' AND model IS NOT NULL AND valid_from IS NOT NULL AND valid_to IS NOT NULL AND issued IS NOT NULL) OR
+                     (type = 'model' AND AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
                      (type = 'other' AND description IS NOT NULL)
                      )
                      );")
@@ -62,9 +62,11 @@ insertRaster <- function(con, raster, description, units = NULL, source = NULL, 
       stop("This script is designed to work with either postgreSQL or SQL server databases.")
     }
     add_constraints <- TRUE
+  } else {
+    add_constraints <- FALSE
   }
 
-  #Make sure that if units are provided that there's either one or 1 per band
+  #Make sure that if units are provided that there's either 1 or 1 per band
   if (!is.null(units)){
     if (!inherits(units, "character")){
       stop("Parameter units must be specified as a character vector.")
@@ -80,8 +82,7 @@ insertRaster <- function(con, raster, description, units = NULL, source = NULL, 
   }
 
   # Attempt to write the raster to the database
-  res <- writeRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks,
-                     constraints = TRUE)
+  res <- writeRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks, constraints = TRUE)
 
   if (res$status){
     # band names

@@ -34,16 +34,20 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
   success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
 
   # Run for loop over timeseries rows
-  EQcon <- "unset"
+  EQcon <- NULL #This prevents multiple connections to EQcon...
+  snowCon <- NULL
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
-    if (source_fx == "getEQWin" & EQcon == "unset"){
+    if (source_fx == "downloadEQWin" & is.null(EQcon)){
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
-
+    }
+    if (source_fx == "downloadSnowCourse" & is.null(snowCon)){
+      snowCon <- snowConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
     source_fx_args <- all_timeseries$source_fx_args[i]
     param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
@@ -51,6 +55,13 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
 
     tryCatch({
       args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
+      # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
+      if (source_fx == "downloadEQWin"){
+        args_list[["EQcon"]] <- EQcon
+      }
+      if (source_fx == "downloadSnowCourse"){
+        args_list[["snowCon"]] <- snowCon
+      }
       if (!is.na(source_fx_args)){ #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair){
@@ -70,9 +81,7 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
-      if (source_fx == "getEQWin"){
-        args_list[["EQcon"]] <- EQcon
-      }
+
       ts <- do.call(source_fx, args_list) #Get the data using the args_list
       ts <- ts[!is.na(ts$value) , ]
 
@@ -80,7 +89,7 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
         ts$timeseries_id <- tsid
         DBI::dbWithTransaction(
           con, {
-            if (min(ts$datetime) < last_data_point - 1){ #This might happen because a source_fx is feeding in data before the requested datetime. Example: getSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
+            if (min(ts$datetime) < last_data_point - 1){ #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
               DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
             }
             DBI::dbAppendTable(con, "measurements_discrete", ts)

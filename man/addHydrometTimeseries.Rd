@@ -23,7 +23,7 @@ One or more new entries are created in the table 'timeseries'
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function \code{\link[=addHydrometTimeseriesTemplate]{addHydrometTimeseriesTemplate()}} for help in formatting the data.frames to pass to \code{timeseries_df} and \code{locations_df}.
+This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function \code{\link[=addHydrometTimeseriesTemplate]{addHydrometTimeseriesTemplate()}} for help in formatting the data.frames to pass to \code{timeseries_df} and \code{locations_df}. To add an image series see \code{\link[=addHydrometImageSeries]{addHydrometImageSeries()}}, for raster series see \code{\link[=addHydrometRasterSeries]{addHydrometRasterSeries()}}. For one-off images use \code{\link[=insertHydrometImage]{insertHydrometImage()}} and for rasters \code{\link[=insertHydrometRaster]{insertHydrometRaster()}}. For documents use \code{\link[=insertHydrometDocument]{insertHydrometDocument()}}.
 }
 \details{
 You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.

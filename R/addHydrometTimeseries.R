@@ -3,7 +3,7 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addHydrometTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`.
+#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addHydrometTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`. To add an image series see [addHydrometImageSeries()], for raster series see [addHydrometRasterSeries()]. For one-off images use [insertHydrometImage()] and for rasters [insertHydrometRaster()]. For documents use [insertHydrometDocument()].
 #'
 #' @details
 #' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.

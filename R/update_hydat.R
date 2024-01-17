@@ -88,7 +88,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                     "operator" = "WSC",
                                     "network" = "Canada Yukon Hydrometric Network",
                                     "public" = TRUE,
-                                    "source_fx" = "getRealtimeWSC"
+                                    "source_fx" = "downloadWSC"
             )
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND operator = 'WSC';"))[1,1]
@@ -177,7 +177,7 @@ update_hydat <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "al
                                     "operator" = "WSC",
                                     "network" = "Canada Yukon Hydrometric Network",
                                     "public" = TRUE,
-                                    "source_fx" = "getRealtimeWSC"
+                                    "source_fx" = "downloadWSC"
             )
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND operator = 'WSC';"))[1,1]
