@@ -8,6 +8,7 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param raster The raster object to add to the database, as a [terra::rast()] object, as a file path, or as a valid URL. Can be multi-band. Band names will be taken directly from this raster.
 #' @param description A succinct description for the raster.
+#' @param flag An optional flag for the raster, perhaps used for overwriting preliminary rasters later on.
 #' @param units The units associated with each band, as a character vector. If left NULL function will attempt to retrieve units from the raster metadata. Otherwise if specified must be a vector of 1 or of length equal to the number of raster bands.
 #' @param source The source from which this raster was retrieved (optional but recommended).
 #' @param bit.depth The bit depth of the raster. 32-bit float is '32BF', 32-bit unsigned integer is '32BUI', 32-bit signed integer is '32BSI'. Default to NULL which will parse the data to determine which 32-bit flavor to choose. You **must** specify if your data is greater than 32 bit.
@@ -16,7 +17,7 @@
 #' @return The reference_id of the newly appended raster.
 #' @export
 
-insertHydrometRaster <- function(con, raster, description, units = NULL, source = NULL, bit.depth = NULL, blocks = NULL)
+insertHydrometRaster <- function(con, raster, description, flag = NA, units = NULL, source = NULL, bit.depth = NULL, blocks = NULL)
 {
 
   if(!("rasters_reference" %in% DBI::dbListTables(con))) {
@@ -25,15 +26,18 @@ insertHydrometRaster <- function(con, raster, description, units = NULL, source 
     if (grepl("PostgreSQL", version$version)){
       DBI::dbExecute(con, "CREATE TABLE rasters_reference (
                    reference_id SERIAL PRIMARY KEY,
+                   raster_series_id INTEGER,
                    type TEXT CHECK(type IN ('model', 'other')),
                    model TEXT,
                    description TEXT,
+                   flag TEXT,
                    band_names TEXT NOT NULL,
                    units TEXT,
                    valid_from TIMESTAMP WITH TIME ZONE,
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source TEXT,
+                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
                    CONSTRAINT check_model_constraints
                      CHECK (
                      (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
@@ -43,18 +47,21 @@ insertHydrometRaster <- function(con, raster, description, units = NULL, source 
     } else if (grepl("Microsoft", version$version)) {
       DBI::dbExecute(con, "CREATE TABLE rasters_reference (
                    reference_id INT IDENTITY(1,1) PRIMARY KEY,
+                   raster_series_id INTEGER,
                    type VARCHAR(MAX) CHECK(type IN ('model', 'other')),
                    model VARCHAR(MAX),
-                   description (VARCHAR(MAX),
+                   description VARCHAR(MAX),
+                   flag VARCHAR(MAX),
                    band_names VARCHAR(MAX) NOT NULL,
                    units VARCHAR(MAX),
                    valid_from TIMESTAMP WITH TIME ZONE,
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source VARCHAR(MAX),
+                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
                    CONSTRAINT check_model_constraints
                      CHECK (
-                     (type = 'model' AND AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
+                     (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
                      (type = 'other' AND description IS NOT NULL)
                      )
                      );")
@@ -98,6 +105,8 @@ insertHydrometRaster <- function(con, raster, description, units = NULL, source 
 
     if (add_constraints){
       DBI::dbExecute(con, "ALTER TABLE rasters ADD CONSTRAINT fk_reference_id FOREIGN KEY (reference_id) REFERENCES rasters_reference(reference_id) ON DELETE CASCADE ON UPDATE CASCADE")
+      DBI::dbExecute(con, "COMMENT ON TABLE public.rasters_reference IS 'References rasters in the rasters table, since the later might have rasters broken up in multiple tiles. This table has one reference_id per raster, which may be linked to multiple entries in table rasters.'")
+      DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.flag IS 'Used to flag rasters that require further review or that need to be deleted after a certain period. Reanalysis products in particular can have preliminary issues, in which case PRELIMINARY would be entered here.'")
     }
 
     return (new_id)

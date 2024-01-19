@@ -23,8 +23,9 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
 
 {
   function_start <- Sys.time()
-  message("/n  dailyUpdate start at ", Sys.time())
-  on.exit(DBI::dbDisconnect())
+  message(" ")
+  message("dailyUpdate start at ", Sys.time())
+  on.exit(DBI::dbDisconnect(con))
 
   settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
 
