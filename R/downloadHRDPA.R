@@ -26,7 +26,7 @@ downloadHRDPA <- function(start_datetime, url = "https://dd.weather.gc.ca/model_
   } else {
     saved_files <- data.frame(file = saved_files,
                               datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"))
-    ok <- saved_files[saved_files$datetime > Sys.time()+10*60 , ]
+    ok <- saved_files[saved_files$datetime > Sys.time()-10*60, ]
     if (nrow(ok) > 0){
       target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
       available <- readRDS(paste0(tempdir(), "/downloadHRDPA/", target_file$file))
@@ -80,6 +80,7 @@ downloadHRDPA <- function(start_datetime, url = "https://dd.weather.gc.ca/model_
       file <- list()
       download_url <- paste0(url, "/", available[i, "link"[]])
       rast <- terra::rast(download_url)[[1]]
+      file[["units"]] <- terra::units(rast) #Units is fetched now because the clip operation seems to remove them.
       if (clipped == FALSE){
         if (!is.null(clip)){
           clip <- terra::project(clip, rast) #project clip vector to crs of the raster
@@ -93,8 +94,7 @@ downloadHRDPA <- function(start_datetime, url = "https://dd.weather.gc.ca/model_
       file[["rast"]] <- rast
       file[["valid_from"]] <- available[i, "datetime"]
       file[["valid_to"]] <- available[i, "datetime"] + 60*60*6
-      file[["description"]] <- if (available[i, "prelim"]) "PRELIMINARY" else NA
-      file[["units"]] <- terra::units(rast)
+      file[["flag"]] <- if (available[i, "prelim"]) "PRELIMINARY" else NA
       file[["source"]] <- download_url
       file[["model"]] <- "HRDPA"
       files[[i]] <- file

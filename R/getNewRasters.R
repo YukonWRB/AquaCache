@@ -10,9 +10,6 @@
 #' @export
 #'
 
-# raster <- terra::rast("https://dd.weather.gc.ca/model_hrdpa/2.5km/06/20231217T06Z_MSC_HRDPA_APCP-Accum6h_Sfc_RLatLon0.0225_PT0H.grib2")
-# raster <- raster[[1]]
-
 getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silent=TRUE)) {
 
   # Create table of meta_ids
@@ -34,14 +31,14 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     if (source_fx == "downloadHRDPA"){
-      prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE description = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "';"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters (there shouldn't be any later ones)
+      prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "';"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
       if (!is.na(prelim)){
         next_instant <- prelim - 1
       } else {
         next_instant <- meta_ids[i, "end_datetime"] + 1
       }
     } else {
-      next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime, unless the description field lists PRELIMINARY
+      next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime
     }
 
     tryCatch({
@@ -73,18 +70,18 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
           valid_from <- rast[["valid_from"]]
           valid_to <- rast[["valid_to"]]
           source <- rast[["source"]]
-          description <- rast[["description"]]
+          flag <- rast[["flag"]]
           units <- rast[["units"]]
           model <- rast[["model"]]
           rast <- rast[["rast"]]
-          #Check if the raster already exists. If it does but description is PRELIMINARY AND the new one is not, delete the prelim one and replace.
-          exists <- DBI::dbGetQuery(con, paste0("SELECT reference_id FROM rasters_reference WHERE valid_from = '", valid_from, "' AND raster_series_id = ", id, " AND description = 'PRELIMINARY';"))[1,1]
-          if (!is.na(exists) & is.na(description)){
+          #Check if the raster already exists. If it does but flag is PRELIMINARY AND the new one is not, delete the prelim one and replace.
+          exists <- DBI::dbGetQuery(con, paste0("SELECT reference_id FROM rasters_reference WHERE valid_from = '", valid_from, "' AND raster_series_id = ", id, " AND flag = 'PRELIMINARY';"))[1,1]
+          if (!is.na(exists) & is.na(flag)){
             DBI::dbExecute(con, paste0("DELETE FROM rasters_reference WHERE reference_id = ", exists, ";")) #This should cascade to the rasters table
           }
-          insertHydrometModelRaster(raster = rast, raster_series_id = id, valid_from = valid_from, valid_to = valid_to, description = description, source = source, units = units, model = model, con = con)
+          suppressMessages(insertHydrometModelRaster(raster = rast, raster_series_id = id, valid_from = valid_from, valid_to = valid_to, flag = flag, source = source, units = units, model = model, con = con))
           DBI::dbExecute(con, paste0("UPDATE raster_series_index SET last_new_raster = '", .POSIXct(Sys.time(), tz = "UTC"), "' WHERE raster_series_id = ", id, ";"))
-          DBI::dbExecute(con, paste0("UPDATE raster_series_index SET end_datetime = '", valid_to, "' WHERE raster_series_id = ", id, ";"))
+          DBI::dbExecute(con, paste0("UPDATE raster_series_index SET end_datetime = '", valid_from, "' WHERE raster_series_id = ", id, ";"))
 
           raster_count <- raster_count + 1
         }
@@ -97,7 +94,7 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
     })
   }
   message(count, " out of ", nrow(meta_ids), " raster_series_id's were updated.")
-  message(raster_count, " were added in total.")
+  message(raster_count, " rasters were added in total.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_rasters'"))
   return(success)
 }

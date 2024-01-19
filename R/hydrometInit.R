@@ -557,6 +557,12 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.sample_class IS 'Mostly for aqueous chem samples, to identify the sample as regular, field duplicate, lab duplicate, etc.'
   ")
 
+  # raster_series_index
+  DBI::dbExecute(con, "COMMENT ON TABLE public.raster_series_index IS 'Holds metadata about raster series, such as reanalysis or forecast rasters. '
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.raster_series_index.end_datetime IS 'For rasters that have a valid_from and valid_to time, this is the valid_from of the latest raster in the database..'
+  ")
+
 
 
   # Create a read-only account

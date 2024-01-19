@@ -15,7 +15,7 @@
 #' Adding lines is not supported yet.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
-#' @param geom The geometry object to add to the database, as a [terra::vect()] object. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees.
+#' @param geom The geometry object to add to the database, as a [terra::vect()] object. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons.
 #' @param table The referenced table in the database (as character string), must be under the public schema.
 #' @param geom_col_name The name of the column in which to insert the geometry object.
 #'

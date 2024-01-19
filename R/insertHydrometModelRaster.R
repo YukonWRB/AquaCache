@@ -11,6 +11,7 @@
 #' @param valid_from Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.
 #' @param valid_to Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.
 #' @param description An optional description for the raster.
+#' @param flag An optional flag for the raster, perhaps used for overwriting preliminary rasters later on.
 #' @param issued The issued datetime of the raster. Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.
 #' @param units The units associated with each band, as a character vector. If left NULL function will attempt to retrieve units from the raster metadata. Otherwise if specified must be a vector of 1 or of length equal to the number of raster bands.
 #' @param model The model which created the raster.
@@ -21,7 +22,7 @@
 #' @return The reference_id of the newly appended raster.
 #' @export
 
-insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from, valid_to, description = NA, issued = NA, units = NULL, model = NA, source = NA, bit.depth = NULL, blocks = NULL)
+insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from, valid_to, description = NA, flag = NA, issued = NA, units = NULL, model = NA, source = NA, bit.depth = NULL, blocks = NULL)
 {
 
   # Checking valid_from parameter
@@ -83,12 +84,14 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
                    type TEXT CHECK(type IN ('model', 'other')),
                    model TEXT,
                    description TEXT,
+                   flag TEXT,
                    band_names TEXT NOT NULL,
                    units TEXT,
                    valid_from TIMESTAMP WITH TIME ZONE,
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source TEXT,
+                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
                    CONSTRAINT check_model_constraints
                      CHECK (
                      (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
@@ -101,13 +104,15 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
                    raster_series_id INTEGER,
                    type VARCHAR(MAX) CHECK(type IN ('model', 'other')),
                    model VARCHAR(MAX),
-                   description (VARCHAR(MAX),
+                   description VARCHAR(MAX),
+                   flag VARCHAR(MAX),
                    band_names VARCHAR(MAX) NOT NULL,
                    units VARCHAR(MAX),
                    valid_from TIMESTAMP WITH TIME ZONE,
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source VARCHAR(MAX),
+                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
                    CONSTRAINT check_model_constraints
                      CHECK (
                      (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
@@ -153,7 +158,8 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
                         "valid_to" = valid_to,
                         "issued" = issued,
                         "source" = source,
-                        "description" = description)
+                        "description" = description,
+                        "flag" = flag)
     DBI::dbAppendTable(con, "rasters_reference", entry)
     new_id <- DBI::dbGetQuery(con, "SELECT max(reference_id) FROM rasters_reference")[1,1]
     DBI::dbExecute(con, paste0("UPDATE rasters SET reference_id = ", new_id, " WHERE rid IN (", paste(res$appended_rids, collapse = ","), ");"))
@@ -161,6 +167,8 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
     if (add_constraints){
       DBI::dbExecute(con, "ALTER TABLE rasters ADD CONSTRAINT fk_reference_id FOREIGN KEY (reference_id) REFERENCES rasters_reference(reference_id) ON DELETE CASCADE ON UPDATE CASCADE")
       DBI::dbExecute(con, "ALTER TABLE rasters_reference ADD CONSTRAINT fk_raster_series_id FOREIGN KEY (raster_series_id) REFERENCES raster_series_index(raster_series_id) ON DELETE CASCADE ON UPDATE CASCADE")
+      DBI::dbExecute(con, "COMMENT ON TABLE public.rasters_reference IS 'References rasters in the rasters table, since the later might have rasters broken up in multiple tiles. This table has one reference_id per raster, which may be linked to multiple entries in table rasters.'")
+      DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.flag IS 'Used to flag rasters that require further review or that need to be deleted after a certain period. Reanalysis products in particular can have preliminary issues, in which case PRELIMINARY would be entered here.'")
     }
 
     return (new_id)
