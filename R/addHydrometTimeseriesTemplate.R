@@ -8,6 +8,7 @@
 #' @return A list of three data.frames:
 #' For the timeseries table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `timeseries_df` of [addHydrometTimeseries()].
 #' For the spatial table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `locations_df` of [addHydrometTimeseries()].
+#' For the settings table, a data.frame with column names and options already in the DB so you can check what already exists.
 #' A data.frame is also produced listing the datums present in the database, facilitating your specification of the appropriate datum in the spatial table.
 #' @export
 #'
@@ -29,7 +30,7 @@ addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), fo
 
   # Create the data.frame for timeseries ############
   ts <- DBI::dbGetQuery(con, "SELECT * FROM timeseries")
-  names <- names(ts[!(names(ts) %in% c("timeseries_id", "end_datetime", "last_new_data", "last_daily_calculation"))])
+  names <- names(ts[!(names(ts) %in% c("timeseries_id", "end_datetime", "last_new_data", "last_daily_calculation", "location_id"))])
 
   if (format == "short"){
     ts_df <- data.frame(matrix(ncol = length(names)))
@@ -74,7 +75,10 @@ addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), fo
   others <- seq(1:nrow(datums))[!(seq(1:nrow(datums)) %in% rownums)]
   datums <- datums[c(rownums, others),]
 
-  list <- list("timeseries_table" = ts_df, "locations_table" = locs, "datums" = datums)
+  # Create the settings table
+  settings <- DBI::dbGetQuery(con, "SELECT * FROM settings")
+
+  list <- list("timeseries_table" = ts_df, "locations_table" = locs, "datums" = datums, "settings" = settings)
 
   if (!is.null(save_path)){
     openxlsx::write.xlsx(list, file = paste0(save_path, "/addHydrometTemplate output ", Sys.Date(), ".xlsx"))

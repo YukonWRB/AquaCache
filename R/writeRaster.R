@@ -82,6 +82,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
       {
         DBI::dbExecute(con, rast.tmp.query)
         DBI::dbExecute(con, "COMMENT ON TABLE public.rasters IS 'Holds raster tiles. Rasters may be broken up in multiple tiles, so refer to table rasters_reference to find the reference_ID for each raster. Otherwise this table is designed for extracting rasters using R, hence the r_class and r_proj4 columns.'")
+        DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters.reference_id IS 'Matches a unique entry in table rasters_reference. If a raster is broken up into tiles, each tile will have the same reference_id; this number is what identifies them as being tiles of the same raster.'")
       },
       error = function(e) {
         stop('Check if postgis.raster extension is created in the database.')

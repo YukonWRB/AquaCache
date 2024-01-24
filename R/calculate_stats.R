@@ -30,13 +30,13 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
   }
 
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous';"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous' AND record_rate IN ('1 day', '< 1 day');"))
     timeseries_id <- all_timeseries$timeseries_id
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous' AND timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous' AND timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate IN ('1 day', '< 1 day');"))
     if (length(timeseries_id) != length(all_timeseries$timeseries_id)) {
       #TODO: improve this warning message with which tsid exactly was missing
-      warning("At least one of the timeseries_id you specified was not of category 'continuous' or could not be found in the database.")
+      warning("At least one of the timeseries_id you specified was not of category 'continuous', had a recording rate greater than 1 day, or could not be found in the database.")
     }
     timeseries_id <- all_timeseries$timeseries_id
   }
@@ -128,7 +128,10 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
               backfill <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date > '", last_day_historic, "';"))
               gap_measurements <- rbind(gap_measurements, backfill)
             }
-            gap_measurements <- as.data.frame(fasstr::fill_missing_dates(gap_measurements, "date", pad_ends = FALSE)) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
+
+            #Fill in any missing dates so that they get calculated values where possible
+            full_dates <- seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day")
+            gap_measurements <- merge(gap_measurements, full_dates, by = "date", all = TRUE)
 
             all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date <= '", last_hydat, "';"))
             #Need to rbind only the calculated daily means AFTER last_hydat
@@ -163,7 +166,10 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           if (!((last_day_historic) %in% gap_measurements$date)){ #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
             gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
           }
-          gap_measurements <- as.data.frame(fasstr::fill_missing_dates(gap_measurements, "date", pad_ends = FALSE)) #fills any missing dates with NAs, which will let them be filled later on when calculating stats.
+          #Fill in any missing dates so that they get calculated values where possible
+          full_dates <- seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day")
+          gap_measurements <- merge(gap_measurements, full_dates, by = "date", all = TRUE)
+
           gap_measurements[is.na(gap_measurements$imputed) , "imputed"] <- FALSE
 
           all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "';"))

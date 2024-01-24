@@ -7,6 +7,7 @@
 addHydrometTimeseries(
   timeseries_df,
   locations_df = NULL,
+  settings_df = NULL,
   con = hydrometConnect()
 )
 }
@@ -14,6 +15,8 @@ addHydrometTimeseries(
 \item{timeseries_df}{A data.frame containing the information necessary to add the timeseries (see details for template).}
 
 \item{locations_df}{A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.}
+
+\item{settings_df}{A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }

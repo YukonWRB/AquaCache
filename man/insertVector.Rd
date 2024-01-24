@@ -9,7 +9,7 @@ insertVector(con, geom, table, geom_col_name = "geom")
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees.}
+\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons.}
 
 \item{table}{The referenced table in the database (as character string), must be under the public schema.}
 

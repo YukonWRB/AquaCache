@@ -21,6 +21,7 @@ addHydrometTimeseriesTemplate(
 A list of three data.frames:
 For the timeseries table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter \code{timeseries_df} of \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}}.
 For the spatial table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter \code{locations_df} of \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}}.
+For the settings table, a data.frame with column names and options already in the DB so you can check what already exists.
 A data.frame is also produced listing the datums present in the database, facilitating your specification of the appropriate datum in the spatial table.
 }
 \description{

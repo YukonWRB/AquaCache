@@ -111,37 +111,49 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_conversions (
                  conversion_id SERIAL PRIMARY KEY,
-                 location TEXT NOT NULL,
+                 location_id INTEGER NOT NULL,
                  datum_id_from INTEGER NOT NULL REFERENCES datum_list (datum_id),
                  datum_id_to INTEGER NOT NULL REFERENCES datum_list (datum_id),
                  conversion_m NUMERIC NOT NULL,
                  current BOOLEAN NOT NULL,
-                 UNIQUE (location, datum_id_to, current));")
+                 UNIQUE (location_id, datum_id_to, current));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
-                 location TEXT PRIMARY KEY,
+                 location_id SERIAL PRIMARY KEY,
+                 location TEXT UNIQUE NOT NULL,
                  name TEXT NOT NULL,
                  latitude NUMERIC NOT NULL,
-                 longitude NUMERIC NOT NULL,
+                 longitude NUMERIC NOT NULL
+                 operator TEXT,
+                 owner TEXT,
+                 contact TEXT,
                  point geometry(POINT, 4269),
                  note TEXT)")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
-                 location TEXT NOT NUKK,
+                 document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'other')),
+                 location_ids INTEGER[],
+                 line_ids INTEGER[],
+                 polygon_ids INTEGER[],
+                 authors TEXT[],
+                 url TEXT,
+                 publish_date DATE,
                  description TEXT NOT NULL,
                  format TEXT NOT NULL,
                  document BYTEA NOT NULL);")
+
 
   #The column timeseries_id is auto created for each new entry
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter TEXT NOT NULL,
-                 param_type TEXT NOT NULL, CHECK(param_type IN ('meteorological', 'surface water physical', 'surface water chemistry', 'ground water chemistry', 'ground water physical', 'geochemistry', 'atmospheric chemistry')),
+                 param_type TEXT NOT NULL, CHECK(param_type IN ('meteorological', 'surface water physical', 'surface water chemical', 'ground water chemical', 'ground water physical', 'geochemical', 'atmospheric chemical')),
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
+                 record_rate TEXT NOT NULL,
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
@@ -154,7 +166,13 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  source_fx TEXT,
                  source_fx_args TEXT,
                  note TEXT,
-                 UNIQUE (location, parameter, category, period_type, param_type));")
+                 UNIQUE (location, parameter, category, period_type, param_type, record_rate),
+                 CONSTRAINT check_record_rate_constraints
+                     CHECK (
+                     (category = 'discrete' AND record_rate IS NULL) OR
+                     (category = 'continuous' AND record_rate IN ('< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'))
+                     )
+                 );")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists extrema (
                  timeseries_id INTEGER PRIMARY KEY,
@@ -203,8 +221,10 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "CREATE TABLE if not exists settings (
                  source_fx TEXT NOT NULL,
                  parameter TEXT NOT NULL,
+                 period_type TEXT NOT NULL,
+                 record_rate TEXT,
                  remote_param_name TEXT NOT NULL,
-                 PRIMARY KEY (source_fx, parameter))")
+                 UNIQUE (source_fx, parameter, period_type, record_rate))")
 
   params_AQ <- data.frame("source_fx" = "downloadAquarius",
                           "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
@@ -267,6 +287,19 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  UNIQUE (name, polygon_type));")
   DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
 
+  DBI::dbExecute(con, "CREATE TABLE if not exists lines (
+                 line_id SERIAL PRIMARY KEY,
+                 line_type TEXT NOT NULL CHECK(line_type IN ('stream', 'road', 'train', 'boundary', 'transect', 'other')),
+                 name TEXT NOT NULL,
+                 description TEXT NOT NULL,
+                 geom geometry(LineString, 4269) NOT NULL,
+                 CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
+                 CONSTRAINT enforce_geotype_geom CHECK (geometrytype(geom) = 'LINESTRING'::text),
+                 CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
+                 CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
+                 UNIQUE (name, line_type));")
+  DBI::dbExecute(con, "CREATE INDEX lines_idx ON lines USING GIST (geom);") #Forces use of GIST indexing which is necessary for large lines
+
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS raster_series_index (
                  raster_series_id SERIAL PRIMARY KEY,
                  model TEXT UNIQUE NOT NULL,
@@ -284,10 +317,17 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   #Add in foreign keys ###########
   DBI::dbExecute(con,
                  "ALTER TABLE timeseries
+  ADD CONSTRAINT fk_location_id
+  FOREIGN KEY (location_id)
+  REFERENCES locations(location_id)
+                 ON UPDATE CASCADE ON DELETE CASCADE;")
+
+  DBI::dbExecute(con,
+                 "ALTER TABLE timeseries
   ADD CONSTRAINT fk_location
   FOREIGN KEY (location)
   REFERENCES locations(location)
-                 ON UPDATE CASCADE;")
+                 ON UPDATE CASCADE ON DELETE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE calculated_daily
@@ -332,17 +372,17 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   DBI::dbExecute(con,
                  "ALTER TABLE datum_conversions
-  ADD CONSTRAINT fk_location
-  FOREIGN KEY (location)
-  REFERENCES locations(location)
+  ADD CONSTRAINT fk_location_id
+  FOREIGN KEY (location_id)
+  REFERENCES locations(location_id)
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE images_index
   ADD CONSTRAINT fk_location
-  FOREIGN KEY (location)
-  REFERENCES locations(location)
+  FOREIGN KEY (location_id)
+  REFERENCES locations(location_id)
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
   DBI::dbExecute(con,
@@ -353,16 +393,6 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
 
-  DBI::dbExecute(con, "ALTER TABLE images_index FOREIGN KEY images_index.location REFERENCES locations.location")
-  DBI::dbExecute(con, "ALTER TABLE images FOREIGN KEY images.img_meta_id REFERENCES images_index.img_meta_id")
-
-  DBI::dbExecute(con,
-                 "ALTER TABLE documents
-                 ADD CONSTRAINT fk_location
-                 FOREIGN KEY (location)
-                 REFERENCES locations(location)
-                 ON DELETE CASCADE
-                 ON UPDATE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE thresholds
@@ -382,13 +412,16 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   COMMENT ON COLUMN timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addHydrometTimeseries.';
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.location IS 'Matches to the locations table.';
+  COMMENT ON COLUMN public.timeseries.location_id IS 'Matches to the locations table.';
   ")
   DBI::dbExecute(con, "
   COMMENT ON COLUMN public.timeseries.category IS 'Discrete or continuous. Continuous data is data gathered at regular and frequent intervals (usually max 1 day), while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parametes.';
   ")
   DBI::dbExecute(con, "
   COMMENT ON COLUMN public.timeseries.period_type IS 'One of instantaneous, sum, mean, median, min, max, or (min+max)/2. This last value is used for the ''daily mean'' temperatures at met stations which are in fact not true mean temps.';
+  ")
+  DBI::dbExecute(con, "
+  COMMENT ON COLUMN public.timeseries.record_rate IS 'One of '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'.';
   ")
   DBI::dbExecute(con, "
   COMMENT ON COLUMN public.timeseries.start_datetime IS 'First data point for the timeseries.';
@@ -480,8 +513,15 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   ")
 
   # images
-  DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images or local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images. NOT intended to capture what the instrumentation looks like, only what the conditions at the location are.'
-  ")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images or local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images. NOT intended to capture what the instrumentation looks like, only what the conditions at the location are.'")
+
+  # documents
+  DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, other.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.location_ids IS 'An *array* of one or more location_ids from the locations table. Constraint checking is not currently enforced so be careful!'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.line_ids IS 'An *array* of one or more line_ids from the lines table. Constraint checking is not currently enforced so be careful!'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.polygon_ids IS 'An *array* of one or more polygon_ids from the polygons table. Constraint checking is not currently enforced so be careful!'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.authors IS 'An *array* of one or more authors.'")
 
   # internal_status
   DBI::dbExecute(con, "COMMENT ON TABLE public.internal_status IS 'Holds information about when a certain operation took place on the database using the R functions in the HydroMetDB package.'

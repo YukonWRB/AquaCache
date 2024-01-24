@@ -4,12 +4,23 @@
 \alias{insertHydrometDocument}
 \title{Add document to hydrometric database}
 \usage{
-insertHydrometDocument(path, location, description, con = hydrometConnect())
+insertHydrometDocument(
+  path,
+  locations = NULL,
+  lines = NULL,
+  polygons = NULL,
+  description,
+  con = hydrometConnect()
+)
 }
 \arguments{
 \item{path}{Valid path including extension to the document to upload.}
 
-\item{location}{The location with which to associate the document (must be in the database).}
+\item{locations}{The location(s) with which to associate the document (must be in the database). Leave NULL if associating instead with lines and/or polygons.}
+
+\item{lines}{The line(s) with which to associate the document (must be in the database). Leave NULL if associating instead with locations and/or polygons.}
+
+\item{polygons}{The polygons with which to associate the document (must be in the database). Leave NULL if associating instead with lines and/or locations.}
 
 \item{description}{A text description of what the document is. Please be descriptive!}
 
@@ -22,4 +33,8 @@ TRUE if a document was properly added to the database.
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
 This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See \code{\link[=fetchDocument]{fetchDocument()}} to get a document out again.
+\subsection{Locations, lines, and polygons}{
+
+Any document can be associated with locations (points), lines, polygons, or any combination thereof. For example, to associate a document with location '09EA004', line 'Klondike River Near Dempster Bridge', and polygon '09EA004', you would specify locations = '09EA004', lines = 'Klondike River Near Dempster Bridge', polygons = '09EA004'.
+}
 }

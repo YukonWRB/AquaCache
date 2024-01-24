@@ -11,6 +11,7 @@ insertHydrometModelRaster(
   valid_from,
   valid_to,
   description = NA,
+  flag = NA,
   issued = NA,
   units = NULL,
   model = NA,
@@ -31,6 +32,8 @@ insertHydrometModelRaster(
 \item{valid_to}{Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.}
 
 \item{description}{An optional description for the raster.}
+
+\item{flag}{An optional flag for the raster, perhaps used for overwriting preliminary rasters later on.}
 
 \item{issued}{The issued datetime of the raster. Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.}
 
