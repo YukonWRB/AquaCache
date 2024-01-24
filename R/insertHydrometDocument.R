@@ -5,15 +5,20 @@
 #'
 #' This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See [fetchDocument()] to get a document out again.
 #'
+#' ## Locations, lines, and polygons
+#' Any document can be associated with locations (points), lines, polygons, or any combination thereof. For example, to associate a document with location '09EA004', line 'Klondike River Near Dempster Bridge', and polygon '09EA004', you would specify locations = '09EA004', lines = 'Klondike River Near Dempster Bridge', polygons = '09EA004'.
+#'
 #' @param path Valid path including extension to the document to upload.
-#' @param location The location with which to associate the document (must be in the database).
+#' @param locations The location(s) with which to associate the document (must be in the database). Leave NULL if associating instead with lines and/or polygons.
+#' @param lines The line(s) with which to associate the document (must be in the database). Leave NULL if associating instead with locations and/or polygons.
+#' @param polygons The polygons with which to associate the document (must be in the database). Leave NULL if associating instead with lines and/or locations.
 #' @param description A text description of what the document is. Please be descriptive!
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-insertHydrometDocument <- function(path, location, description, con = hydrometConnect()){
+insertHydrometDocument <- function(path, locations = NULL, lines = NULL, polygons = NULL, description, con = hydrometConnect()){
 
   #Checks
   if (length(path) > 1){

@@ -107,6 +107,9 @@ insertHydrometRaster <- function(con, raster, description, flag = NA, units = NU
       DBI::dbExecute(con, "ALTER TABLE rasters ADD CONSTRAINT fk_reference_id FOREIGN KEY (reference_id) REFERENCES rasters_reference(reference_id) ON DELETE CASCADE ON UPDATE CASCADE")
       DBI::dbExecute(con, "COMMENT ON TABLE public.rasters_reference IS 'References rasters in the rasters table, since the later might have rasters broken up in multiple tiles. This table has one reference_id per raster, which may be linked to multiple entries in table rasters.'")
       DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.flag IS 'Used to flag rasters that require further review or that need to be deleted after a certain period. Reanalysis products in particular can have preliminary issues, in which case PRELIMINARY would be entered here.'")
+      DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.reference_id IS 'Used to identify one or more raster tiles (large rasters may be broken up in tiles for performance) in the table rasters.'")
+      DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.raster_series_id IS 'Identifies a time-series of rasters, the details of which are stored in table raster_series_index.'")
+      DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.model IS 'If the raster is generated from a model such as a climate model enter the name here. This is more useful for one-off rasters, as model timeseries will also list the model in table raster_series_index.'")
     }
 
     return (new_id)

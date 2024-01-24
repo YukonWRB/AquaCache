@@ -117,7 +117,7 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     message("Calculating daily means and statistics where necessary...")
     tryCatch({
       stat_start <- Sys.time()
-      calc_ts <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id, last_daily_calculation, last_new_data FROM timeseries WHERE timeseries_id IN ('", paste(continuous_ts$timeseries_id, collapse = "', '"), "') AND category = 'continuous';"))
+      calc_ts <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id, last_daily_calculation, last_new_data FROM timeseries WHERE timeseries_id IN ('", paste(continuous_ts$timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND record_rate IN ('1 day', '< 1 day');"))
       needs_calc <- calc_ts[is.na(calc_ts$last_daily_calculation) , ] #All of these need a new calculation.
       has_last_new_data <- calc_ts[!is.na(calc_ts$last_new_data) & !is.na(calc_ts$last_daily_calculation) , ] #only a subset of these need new calculation. Those that have a calculation and don't have an entry for new data don't need calculations.
       if (nrow(has_last_new_data) > 0){ #Take subset of has_last_new_data where the last calculation was before new data being added.

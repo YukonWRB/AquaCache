@@ -22,7 +22,7 @@ downloadWSCImages <- function(location, start_datetime, username = Sys.getenv("E
     file_exists <- FALSE
   } else {
     saved_files <- data.frame(file = saved_files,
-                              datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"))
+                              datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"), tz = "UTC")
     ok <- saved_files[saved_files$datetime > Sys.time()-10*60 , ]
     if (nrow(ok) > 0){
       target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]

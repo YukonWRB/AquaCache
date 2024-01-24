@@ -17,14 +17,11 @@
 
 getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all") {
 
-  # Get settings
-  settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
-
   # Create table of timeseries
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)){
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'discrete', or has no function specified in column source_fx.")
     }
@@ -39,6 +36,8 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
   for (i in 1:nrow(all_timeseries)){
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
+    period_type <- all_timeseries$period_type[i]
+    record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     if (source_fx == "downloadEQWin" & is.null(EQcon)){
@@ -50,7 +49,11 @@ getNewDiscrete <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
     source_fx_args <- all_timeseries$source_fx_args[i]
-    param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
+    if (is.na(record_rate)){
+      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
+    } else {
+      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+    }
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
 
     tryCatch({

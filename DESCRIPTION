@@ -1,6 +1,6 @@
 Package: HydroMetDB
 Title: Hydrological database creation and maintenance
-Version: 1.5.0
+Version: 1.5.1
 Authors@R: c(
     person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -24,7 +24,6 @@ Imports:
     dataRetrieval,
     DBI,
     dplyr,
-    fasstr,
     hablar,
     hexView,
     httr,

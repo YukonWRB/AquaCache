@@ -39,12 +39,10 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     }
   }
 
-  settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
-
   if (timeseries_id[1] == "all"){
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type FROM timeseries WHERE source_fx IS NOT NULL")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)){
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
       ifelse ((length(fail) == 1),
@@ -55,23 +53,30 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   }
 
   updated <- 0 #Counter for number of updated timeseries
-  EQcon <- "unset"
+  EQcon <- NULL #This prevents multiple connections to EQcon...
+  snowCon <- NULL
   for (i in 1:nrow(all_timeseries)){
+    category <- all_timeseries$category[i]
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
-    category <- all_timeseries$category[i]
-    if (category == "discrete" & !discrete){
-      next()
-    }
     period_type <- all_timeseries$period_type[i]
+    record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
-    if (source_fx == "downloadEQWin" & EQcon == "unset"){
+    if (source_fx == "downloadEQWin" & is.null(EQcon)){
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
     }
+    if (source_fx == "downloadSnowCourse" & is.null(snowCon)){
+      snowCon <- snowConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
+    }
     source_fx_args <- all_timeseries$source_fx_args[i]
-    param_code <- settings[settings$parameter == parameter & settings$source_fx == source_fx , "remote_param_name"]
+    if (is.na(record_rate)){
+      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
+    } else {
+      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+    }
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
 
     tryCatch({
@@ -97,6 +102,9 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
       }
       if (source_fx == "downloadEQWin"){
         args_list[["EQcon"]] <- EQcon
+      }
+      if (source_fx == "downloadSnowCourse"){
+        args_list[["snowCon"]] <- snowCon
       }
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
       inRemote <- inRemote[!is.na(inRemote$value) , ]

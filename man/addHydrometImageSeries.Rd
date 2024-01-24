@@ -15,7 +15,7 @@ addHydrometImageSeries(
 )
 }
 \arguments{
-\item{location}{The location associated with the image series.}
+\item{location}{The location or location_id associated with the image series. Pass a location code as text and a location_id as a numeric.}
 
 \item{start_datetime}{The datetime (as POSIXct) from which to look for images}
 

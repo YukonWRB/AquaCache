@@ -6,7 +6,7 @@
 #' Retrieves new data corresponding to entries in the table "images_index". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addHydrometTimeseries()] for a description of how to formulate these arguments.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'images_index' table, start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
+#' This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
 #'
 #' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
@@ -18,9 +18,9 @@ getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent=TR
 
   # Create table of meta_ids
   if (image_meta_ids[1] == "all"){
-    meta_ids <- DBI::dbGetQuery(con, "SELECT img_meta_id, location, last_img, source_fx, source_fx_args FROM images_index WHERE img_type = 'auto' AND source_fx IS NOT NULL;")
+    meta_ids <- DBI::dbGetQuery(con, "SELECT img_meta_id, location_id, last_img, source_fx, source_fx_args FROM images_index WHERE img_type = 'auto' AND source_fx IS NOT NULL;")
   } else {
-    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id, location, last_img, source_fx, source_fx_args FROM images_index WHERE img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "') AND img_type = 'auto' AND source_fx IS NOT NULL;"))
+    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id, location_id, last_img, source_fx, source_fx_args FROM images_index WHERE img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "') AND img_type = 'auto' AND source_fx IS NOT NULL;"))
     if (length(image_meta_ids) != nrow(meta_ids)){
       warning("At least one of the image_meta_ids you called for cannot be found in the database or has no function specified in column source_fx of table images_index.")
     }
@@ -32,7 +32,7 @@ getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent=TR
 
   for (i in 1:nrow(meta_ids)){
     id <- meta_ids[i, "img_meta_id"]
-    location <- meta_ids[i, "location"]
+    location <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE location_id = ", meta_ids[i, "location_id"], ";"))[1,1]
     next_instant <- meta_ids[i, "last_img"] + 1 #one second after the last image
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
