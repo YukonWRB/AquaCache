@@ -133,9 +133,9 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
                  document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'other')),
-                 location_ids INTEGER[],
-                 line_ids INTEGER[],
-                 polygon_ids INTEGER[],
+                 has_locations BOOLEAN NOT NULL DEFAULT FALSE,
+                 has_lines BOOLEAN NOT NULL DEFAULT FALSE,
+                 has_polygons BOOLEAN NOT NULL DEFAULT FALSE,
                  authors TEXT[],
                  url TEXT,
                  publish_date DATE,
@@ -312,6 +312,78 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  source_fx_args TEXT);")
 
   #NOTE: Additional raster tables are created upon first use of the raster addition function.
+
+
+  # Create tables to link the documents to locations, lines, and polygons
+  DBI::dbExecute(con, "CREATE TABLE documents_locations (
+  document_id INT REFERENCES documents(document_id),
+  location_id INT REFERENCES locations(location_id),
+  PRIMARY KEY (document_id, location_id)
+);")
+
+  DBI::dbExecute(con, "CREATE TABLE documents_lines (
+  document_id INT REFERENCES documents(document_id),
+  line_id INT REFERENCES lines(line_id),
+  PRIMARY KEY (document_id, line_id)
+);")
+
+  DBI::dbExecute(con, "CREATE TABLE documents_polygons (
+  document_id INT REFERENCES documents(document_id),
+  polygon_id INT REFERENCES polygons(polygon_id),
+  PRIMARY KEY (document_id, polygon_id)
+);")
+
+  # Add in triggers to update boolean columns in documents table
+  # -- Trigger function to update flags for locations
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_location_flag()
+RETURNS TRIGGER AS $$
+  BEGIN
+UPDATE documents
+SET has_locations = TRUE
+WHERE document_id = NEW.document_id;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;")
+
+  # -- Trigger function to update flags for lines
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_line_flag()
+RETURNS TRIGGER AS $$
+  BEGIN
+UPDATE documents
+SET has_lines = TRUE
+WHERE document_id = NEW.document_id;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;")
+
+  # -- Trigger function to update flags for polygons
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_polygon_flag()
+RETURNS TRIGGER AS $$
+  BEGIN
+UPDATE documents
+SET has_polygons = TRUE
+WHERE document_id = NEW.document_id;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;")
+
+  # -- Trigger for 'document_locations' table
+  DBI::dbExecute(con, "CREATE TRIGGER trigger_update_location_flag
+AFTER INSERT ON documents_locations
+FOR EACH ROW
+EXECUTE FUNCTION update_location_flag();")
+
+  # -- Trigger for 'document_lines' table
+  DBI::dbExecute(con, "CREATE TRIGGER trigger_update_line_flag
+AFTER INSERT ON documents_lines
+FOR EACH ROW
+EXECUTE FUNCTION update_line_flag();")
+
+  # -- Trigger for 'document_polygons' table
+  DBI::dbExecute(con, "CREATE TRIGGER trigger_update_polygon_flag
+AFTER INSERT ON documents_polygons
+FOR EACH ROW
+EXECUTE FUNCTION update_polygon_flag();")
 
 
   #Add in foreign keys ###########
