@@ -70,7 +70,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS images_index (
                  img_meta_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
-                 img_type TEXT CHECK(img_type IN ('auto', 'manual')),
+                 img_type TEXT NOT NULL CHECK(img_type IN ('auto', 'manual')),
                  first_img TIMESTAMP WITH TIME ZONE,
                  last_img TIMESTAMP WITH TIME ZONE,
                  last_new_img TIMESTAMP WITH TIME ZONE,
@@ -78,6 +78,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  public_delay INTERVAL,
                  source_fx TEXT,
                  source_fx_args TEXT,
+                 description TEXT,
                  UNIQUE (location, img_type));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
@@ -132,8 +133,9 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
-                 document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'other')),
-                 has_locations BOOLEAN NOT NULL DEFAULT FALSE,
+                 name TEXT UNIQUE NOT NULL,
+                 document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other')),
+                 has_points BOOLEAN NOT NULL DEFAULT FALSE,
                  has_lines BOOLEAN NOT NULL DEFAULT FALSE,
                  has_polygons BOOLEAN NOT NULL DEFAULT FALSE,
                  authors TEXT[],
@@ -144,7 +146,6 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  document BYTEA NOT NULL);")
 
 
-  #The column timeseries_id is auto created for each new entry
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
@@ -274,31 +275,49 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   rpostgis::pgPostGIS(con, raster = TRUE)
 
   # Create spatial-primary tables ########
-  DBI::dbExecute(con, "CREATE TABLE if not exists polygons (
-                 polygon_id SERIAL PRIMARY KEY,
-                 polygon_type TEXT NOT NULL CHECK(polygon_type IN ('drainage_basin', 'buffer', 'waterbody', 'prov_terr', 'country', 'other')),
-                 name TEXT NOT NULL,
-                 description TEXT NOT NULL,
-                 geom geometry(Polygon, 4269) NOT NULL,
-                 CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
-                 CONSTRAINT enforce_geotype_geom CHECK (geometrytype(geom) = 'POLYGON'::text),
-                 CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
-                 CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
-                 UNIQUE (name, polygon_type));")
-  DBI::dbExecute(con, "CREATE INDEX polygons_idx ON polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
 
-  DBI::dbExecute(con, "CREATE TABLE if not exists lines (
-                 line_id SERIAL PRIMARY KEY,
-                 line_type TEXT NOT NULL CHECK(line_type IN ('stream', 'road', 'train', 'boundary', 'transect', 'other')),
-                 name TEXT NOT NULL,
-                 description TEXT NOT NULL,
-                 geom geometry(LineString, 4269) NOT NULL,
-                 CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
-                 CONSTRAINT enforce_geotype_geom CHECK (geometrytype(geom) = 'LINESTRING'::text),
-                 CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
-                 CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
-                 UNIQUE (name, line_type));")
-  DBI::dbExecute(con, "CREATE INDEX lines_idx ON lines USING GIST (geom);") #Forces use of GIST indexing which is necessary for large lines
+  DBI::dbExecute(con, "CREATE TABLE if not exists points_lines_polygons (
+               geom_id SERIAL PRIMARY KEY,
+               geom_type TEXT NOT NULL CHECK(geom_type IN ('ST_Point', 'ST_MultiPoint', 'ST_LineString', 'ST_MultiLineString', 'ST_Polygon', 'ST_MultiPolygon')),
+               layer_name TEXT NOT NULL,
+               attribute_name TEXT NOT NULL,
+               description TEXT,
+               geom GEOMETRY(Geometry, 4269) NOT NULL,
+               CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
+               CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
+               CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
+               UNIQUE (layer_name, attribute_name, geom_type),
+               UNIQUE (layer_name, geom_type)
+               );")
+
+  # -- Create an UPDATE trigger to populate geom_type_auto
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_geom_type()
+RETURNS TRIGGER AS $$
+  BEGIN
+NEW.geom_type := ST_GeometryType(NEW.geom);
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;")
+  DBI::dbExecute(con, "CREATE TRIGGER update_geom_type_trigger
+BEFORE INSERT OR UPDATE ON points_lines_polygons
+FOR EACH ROW
+EXECUTE FUNCTION update_geom_type();
+")
+
+
+  DBI::dbExecute(con, "CREATE INDEX geometry_idx ON points_lines_polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
+  DBI::dbExecute(con, "COMMENT ON TABLE public.points_lines_polygons IS 'Holds points, lines, or polygons as geometry objects that can be references by other tables. For example, the locations table references a geom_id for each location.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.geom IS 'Enforces epsg:4269 (NAD83).';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.name IS 'Non-optional descriptive name';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.description IS 'Optional but highly recommended long-form description of the geometry.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.geom_type IS '*DO NOT TOUCH* Auto-populated by trigger based on the geometry type for each entry.';")
+
+  # Create table to link the documents to geoms (since documents can be associated with n number of geoms)
+  DBI::dbExecute(con, "CREATE TABLE documents_spatial (
+  document_id INT REFERENCES documents(document_id),
+  geom_id INT REFERENCES points_lines_polygons(geom_id),
+  PRIMARY KEY (document_id, geom_id)
+);")
 
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS raster_series_index (
                  raster_series_id SERIAL PRIMARY KEY,
@@ -314,76 +333,6 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   #NOTE: Additional raster tables are created upon first use of the raster addition function.
 
 
-  # Create tables to link the documents to locations, lines, and polygons
-  DBI::dbExecute(con, "CREATE TABLE documents_locations (
-  document_id INT REFERENCES documents(document_id),
-  location_id INT REFERENCES locations(location_id),
-  PRIMARY KEY (document_id, location_id)
-);")
-
-  DBI::dbExecute(con, "CREATE TABLE documents_lines (
-  document_id INT REFERENCES documents(document_id),
-  line_id INT REFERENCES lines(line_id),
-  PRIMARY KEY (document_id, line_id)
-);")
-
-  DBI::dbExecute(con, "CREATE TABLE documents_polygons (
-  document_id INT REFERENCES documents(document_id),
-  polygon_id INT REFERENCES polygons(polygon_id),
-  PRIMARY KEY (document_id, polygon_id)
-);")
-
-  # Add in triggers to update boolean columns in documents table
-  # -- Trigger function to update flags for locations
-  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_location_flag()
-RETURNS TRIGGER AS $$
-  BEGIN
-UPDATE documents
-SET has_locations = TRUE
-WHERE document_id = NEW.document_id;
-RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;")
-
-  # -- Trigger function to update flags for lines
-  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_line_flag()
-RETURNS TRIGGER AS $$
-  BEGIN
-UPDATE documents
-SET has_lines = TRUE
-WHERE document_id = NEW.document_id;
-RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;")
-
-  # -- Trigger function to update flags for polygons
-  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_polygon_flag()
-RETURNS TRIGGER AS $$
-  BEGIN
-UPDATE documents
-SET has_polygons = TRUE
-WHERE document_id = NEW.document_id;
-RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;")
-
-  # -- Trigger for 'document_locations' table
-  DBI::dbExecute(con, "CREATE TRIGGER trigger_update_location_flag
-AFTER INSERT ON documents_locations
-FOR EACH ROW
-EXECUTE FUNCTION update_location_flag();")
-
-  # -- Trigger for 'document_lines' table
-  DBI::dbExecute(con, "CREATE TRIGGER trigger_update_line_flag
-AFTER INSERT ON documents_lines
-FOR EACH ROW
-EXECUTE FUNCTION update_line_flag();")
-
-  # -- Trigger for 'document_polygons' table
-  DBI::dbExecute(con, "CREATE TRIGGER trigger_update_polygon_flag
-AFTER INSERT ON documents_polygons
-FOR EACH ROW
-EXECUTE FUNCTION update_polygon_flag();")
 
 
   #Add in foreign keys ###########
@@ -589,10 +538,8 @@ EXECUTE FUNCTION update_polygon_flag();")
 
   # documents
   DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, other.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.location_ids IS 'An *array* of one or more location_ids from the locations table. Constraint checking is not currently enforced so be careful!'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.line_ids IS 'An *array* of one or more line_ids from the lines table. Constraint checking is not currently enforced so be careful!'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.polygon_ids IS 'An *array* of one or more polygon_ids from the polygons table. Constraint checking is not currently enforced so be careful!'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, protocol, grading scheme, metadata, other'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.has_points IS 'Flag to indicate that the document_spatial has a point entry for this document.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.authors IS 'An *array* of one or more authors.'")
 
   # internal_status
@@ -674,6 +621,91 @@ EXECUTE FUNCTION update_polygon_flag();")
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.raster_series_index.end_datetime IS 'For rasters that have a valid_from and valid_to time, this is the valid_from of the latest raster in the database..'
   ")
+
+
+  #Create triggers and functions ##########
+  # Create functions and triggers to update the boolean flags in the documents table
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_document_flags_after_insert()
+RETURNS TRIGGER AS $$
+  BEGIN
+-- Check the geom_type for the inserted record
+IF (SELECT geom_type FROM points_lines_polygons WHERE geom_id = NEW.geom_id) IN ('ST_Point', 'ST_MultiPoint') THEN
+UPDATE documents
+SET has_points = TRUE
+WHERE document_id = NEW.document_id;
+END IF;
+IF (SELECT geom_type FROM points_lines_polygons WHERE geom_id = NEW.geom_id) IN ('ST_LineString', 'ST_MultiLineString') THEN
+UPDATE documents
+SET has_lines = TRUE
+WHERE document_id = NEW.document_id;
+END IF;
+IF (SELECT geom_type FROM points_lines_polygons WHERE geom_id = NEW.geom_id) IN ('ST_Polygon', 'ST_MultiPolygon') THEN
+UPDATE documents
+SET has_polygons = TRUE
+WHERE document_id = NEW.document_id;
+END IF;
+
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+")
+
+  DBI::dbExecute(con, "CREATE TRIGGER documents_spatial_after_insert
+AFTER INSERT ON documents_spatial
+FOR EACH ROW
+EXECUTE FUNCTION update_document_flags_after_insert();
+               ")
+
+
+
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION update_document_flags_after_delete()
+RETURNS TRIGGER AS $$
+  BEGIN
+-- Check if there are still entries for the document_id with geom_type 'POINT'
+IF NOT EXISTS (
+  SELECT 1
+  FROM documents_spatial ds
+  JOIN points_lines_polygons g ON ds.geom_id = g.geom_id
+  WHERE ds.document_id = OLD.document_id AND g.geom_type IN ('ST_Point', 'ST_MultiPoint')
+) THEN
+UPDATE documents
+SET has_points = FALSE
+WHERE document_id = OLD.document_id;
+END IF;
+
+IF NOT EXISTS (
+  SELECT 1
+  FROM documents_spatial ds
+  JOIN points_lines_polygons g ON ds.geom_id = g.geom_id
+  WHERE ds.document_id = OLD.document_id AND g.geom_type IN ('ST_LineString', 'ST_MultiLineString')
+  ) THEN
+UPDATE documents
+SET has_points = FALSE
+WHERE document_id = OLD.document_id;
+END IF;
+
+IF NOT EXISTS (
+  SELECT 1
+  FROM documents_spatial ds
+  JOIN points_lines_polygons g ON ds.geom_id = g.geom_id
+  WHERE ds.document_id = OLD.document_id AND g.geom_type IN ('ST_Polygon', 'ST_MultiPolygon')
+  ) THEN
+UPDATE documents
+SET has_polygons = FALSE
+WHERE document_id = OLD.document_id;
+END IF;
+
+
+RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+")
+
+  DBI::dbExecute(con, "CREATE TRIGGER documents_spatial_after_delete
+AFTER DELETE ON documents_spatial
+FOR EACH ROW
+EXECUTE FUNCTION update_document_flags_after_delete();
+               ")
 
 
 
