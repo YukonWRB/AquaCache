@@ -71,9 +71,15 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  date DATE NOT NULL,
                  maintenance TEXT NOT NULL,
                  completed BOOLEAN NOT NULL,
+                 date_completed DATE,
+                 CONSTRAINT if_completed_then_date_is_not_null
+                  CHECK (
+                  (completed = FALSE AND date_completed IS NULL) OR
+                  (completed = TRUE AND date_completed IS NOT NULL))
 
                  FOREIGN KEY (location) REFERENCES locations(location))"
   )
+  DBI::dbExecute(con, "CREATE UNIQUE INDEX unique_location_maintenance ON maintenance (location, maintenance) WHERE completed = FALSE")
 
   #### surveys
   DBI::dbExecute(con, "CREATE TABLE if not exists surveys (
@@ -83,7 +89,9 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  survey_date DATE NOT NULL,
                  notes TEXT,
                  sampler_name TEXT,
+                 method TEXT,
                  CONSTRAINT survey_loc UNIQUE (survey_date, location),
+                 CONSTRAINT method_check CHECK (method IN ('average', 'bulk', 'standard')),
 
                  FOREIGN KEY (location) REFERENCES locations(location))"
   )
@@ -111,8 +119,8 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                              "  GROUP BY survey_id",
                              ")",
                              "SELECT surveys.location, locations.name, locations.sub_basin, measurements.survey_id, surveys.target_date, ",
-                             "AVG(swe) AS swe, AVG(depth) AS depth, MIN(sample_datetime) AS sample_datetime, ",
-                             "STDDEV(swe) AS swe_sd, STDDEV(depth) AS depth_sd, ",
+                             "ROUND(AVG(swe),0) AS swe, ROUND(AVG(depth),0) AS depth, MIN(sample_datetime) AS sample_datetime, ",
+                             "ROUND(STDDEV(swe),1) AS swe_sd, ROUND(STDDEV(depth),1) AS depth_sd, ",
                              "COUNT(*) AS sample_count_used, ",
                              "total_count - COUNT(*) AS sample_count_ex, ",
                              "BOOL_OR(measurements.estimate_flag) AS estimate_flag ",
@@ -151,10 +159,11 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
   ## maintenance
   DBI::dbExecute(con, "COMMENT ON TABLE public.maintenance IS 'Keeps a log of snow course maintenance, including what needs to be completed and what has already been done. Populated through auto-increment.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.maintenance.maintenance_id IS 'The unique identifier of the maintenance entry.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.maintenance.location IS 'The snow course for which this maintenance is linked to. A foreign key reffering to location from locations table.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.maintenance.location IS 'The snow course for which this maintenance is linked to. A foreign key reffering to location from locations table. Location and maintenance but be a unique combination when completed = FALSE.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.maintenance.date IS 'The date that the maintenance requirement was noted.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.maintenance.maintenance IS 'The maintenance to be completed. Ex: sign 4 is missing and needs replacing'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.maintenance.completed IS 'TRUE if the maintenance has been completed. FALSE if the maintenance has yet to be completed.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.maintenance.date_completed IS 'The date on which the maintenance was completed. When completed = TRUE, date_completed must be not NULL. When completed = FALSE, date_completed must be NULL'")
 
   ## surveys
   DBI::dbExecute(con, "COMMENT ON TABLE public.surveys IS 'Stores the details of a single snow survey. A snow survey is the collection of multiple samples at a single snow course during a single visit. Does not contain the samples themselves. The table is the connection between the locations and the measurements.'")
@@ -164,17 +173,17 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.survey_date IS 'The date on which the snow survey was completed. Usually within a couple of days of the target date. The location-survey_date combination must be unique.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.notes IS 'General notes on the snow survey. Concatenation of all condition notes from snow survey template (Weather at time of sampling, Sampling conditions, Remarks.)'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.sampler_name IS 'The names of the people who completed the sample. This was not collected prior to the 2024 snow season.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.method IS 'The method used for collecting the survey. Options are standard, bulk and average. The average option indicates that depth and SWE values represent an average of multiple samples. All entries prior to 2024 snow season are calculated averages'")
 
   ## measurements
   DBI::dbExecute(con, "COMMENT ON TABLE public.measurements IS 'Stores the details of a single snow sample. A single snow survey will contain multiple samples, tipically 10. However, preceding 2024, only the average of samples was noted in the database, and as such only a single swe and depth measurement are given per snow survey.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.measurement_id IS 'The unique identifier of the sample. Populated through auto-increment.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.survey_id IS 'The survey to which the measurement is linked. A foreign key referring to survey_id of the surveys table.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.sample_datetime IS 'The date and time on which the sample was collected. This can be the same time for all samples if a time was not given. If a start and end time are given, times will be set to equal increments between start and end time of survey. Survey_id and sample_datetime do not need to be a unique combination because measurement_id will be unique.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.estimate_flag IS 'Completed during QAQC. Is only used when average = TRUE. Indicates that the average measurement was estimated.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.estimate_flag IS 'Completed during QAQC. Is only used when the survey method = average. Indicates that the average measurement was estimated.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.exclude_flag IS 'Completed during QAQC. Instead of removing the sample, it is kept, but with this flag.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.swe IS 'Measured SWE for a single sample or the average of multiple samples if average = TRUE.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.depth IS 'Measured depth for a single sample or the average of multiple samples if average = TRUE.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.average IS 'TRUE if depth and SWE values represent an average of multiple samples. FALSE if SWE and depth values are for a single sample. All entries before the 2024 snow season are calculated averages.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.notes IS 'Notes specific to a sample. Ex: ground ice layer thickness, number of attempts, etc.'")
 
   ## means
