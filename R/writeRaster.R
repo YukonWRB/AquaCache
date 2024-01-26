@@ -1,5 +1,3 @@
-# pgWriteRast - modified version
-
 #' Write raster to PostGIS database table.
 #'
 #' @description

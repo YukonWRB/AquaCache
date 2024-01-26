@@ -12,7 +12,7 @@ fetchDocument(
 )
 }
 \arguments{
-\item{id}{The ID number from column 'document_id' of table 'documents.}
+\item{id}{The ID number from column 'document_id' of table 'documents'.}
 
 \item{con}{A connection to the database.}
 

@@ -6,23 +6,32 @@
 \usage{
 insertHydrometDocument(
   path,
-  locations = NULL,
-  lines = NULL,
-  polygons = NULL,
+  name,
+  type,
   description,
+  authors = NULL,
+  publish_date = NULL,
+  url = NULL,
+  geoms = NULL,
   con = hydrometConnect()
 )
 }
 \arguments{
 \item{path}{Valid path including extension to the document to upload.}
 
-\item{locations}{The location(s) with which to associate the document (must be in the database). Leave NULL if associating instead with lines and/or polygons.}
+\item{name}{A concise but descriptive name to give the document.}
 
-\item{lines}{The line(s) with which to associate the document (must be in the database). Leave NULL if associating instead with locations and/or polygons.}
+\item{type}{Type of document. Must be one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other'.}
 
-\item{polygons}{The polygons with which to associate the document (must be in the database). Leave NULL if associating instead with lines and/or locations.}
+\item{description}{A text description of what the document is. Please be detailed!}
 
-\item{description}{A text description of what the document is. Please be descriptive!}
+\item{authors}{Document author(s) if known. Specify multiple authors as individual elements of a character vector, such as c("author 1", "author 2").}
+
+\item{publish_date}{The date of publication, as a Date object.}
+
+\item{url}{An optional url (could also be a DOI) for the document.}
+
+\item{geoms}{The geom_id(s) with which to associate the document (must be in the database table 'points_lines_polygons'). Leave NULL for a document with no spatial context.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }
@@ -35,6 +44,6 @@ TRUE if a document was properly added to the database.
 This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See \code{\link[=fetchDocument]{fetchDocument()}} to get a document out again.
 \subsection{Locations, lines, and polygons}{
 
-Any document can be associated with locations (points), lines, polygons, or any combination thereof. For example, to associate a document with location '09EA004', line 'Klondike River Near Dempster Bridge', and polygon '09EA004', you would specify locations = '09EA004', lines = 'Klondike River Near Dempster Bridge', polygons = '09EA004'.
+Any document can be associated with locations (points), lines, polygons, or any combination thereof. Please reference the table 'points_lines_polygons' to give the correct geom_id(s) for your desired geoms.
 }
 }

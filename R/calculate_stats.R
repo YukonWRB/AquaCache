@@ -80,18 +80,21 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       }
 
       missing_stats <- data.frame()
-      flag <- FALSE  #This flag is in case there actually isn't an entry in hydat for the station yet. Rare case but it happens! Also is set if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means.
+      flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means.
       if (operator == "WSC" & (last_day_historic < Sys.Date()-30)){ #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
         tmp <- DBI::dbGetQuery(con, paste0("SELECT location, parameter FROM timeseries WHERE timeseries_id = ", i, ";"))
         hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
         if (tmp[, "parameter"] == "flow"){
           last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_FLOWS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
-          if (is.na(last_hydat_year)) {
+          if (is.na(last_hydat_year)) { # There is no data in hydat yet
             flag <- TRUE
           }
           if (!flag) {
             max_mth <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (month) FROM DLY_FLOWS WHERE STATION_NUMBER = '", tmp[, "location"], "' AND year = ", last_hydat_year, ";"))[1,1]
             last_hydat <- as.Date(paste0(last_hydat_year, "-", max_mth, if (max_mth %in% c(1,3,5,7,8,10,12))"-31" else if (max_mth %in% c(4,6,9,11)) "-30" else "28"), format = "%Y-%m-%d")
+          }
+          if (last_day_historic > last_hydat){
+            flag <- TRUE
           }
         } else if (tmp[, "parameter"] == "level") {
           last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_LEVELS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
@@ -101,6 +104,9 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           if (!flag) {
             max_mth <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (month) FROM DLY_LEVELS WHERE STATION_NUMBER = '", tmp[, "location"], "' AND year = ", last_hydat_year, ";"))[1,1]
             last_hydat <- as.Date(paste0(last_hydat_year, "-", max_mth, if (max_mth %in% c(1,3,5,7,8,10,12))"-31" else if (max_mth %in% c(4,6,9,11)) "-30" else "28"), format = "%Y-%m-%d")
+            if (last_day_historic > last_hydat){
+              flag <- TRUE
+            }
           }
         }
         DBI::dbDisconnect(hydat_con)
@@ -167,7 +173,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
           }
           #Fill in any missing dates so that they get calculated values where possible
-          full_dates <- seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day")
+          full_dates <- data.frame("date" = seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day"))
           gap_measurements <- merge(gap_measurements, full_dates, by = "date", all = TRUE)
 
           gap_measurements[is.na(gap_measurements$imputed) , "imputed"] <- FALSE

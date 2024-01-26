@@ -27,8 +27,6 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   message("dailyUpdate start at ", Sys.time())
   on.exit(DBI::dbDisconnect(con))
 
-  settings <- DBI::dbGetQuery(con,  "SELECT source_fx, parameter, remote_param_name FROM settings;")
-
   if (timeseries_id[1] == "all"){
     continuous_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL")
     discrete_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL")
