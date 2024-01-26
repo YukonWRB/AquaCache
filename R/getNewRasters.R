@@ -33,9 +33,9 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
     if (source_fx == "downloadHRDPA"){
       prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "';"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
       if (!is.na(prelim)){
-        next_instant <- prelim - 1
+        next_instant <- prelim - 1 #one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
       } else {
-        next_instant <- meta_ids[i, "end_datetime"] + 1
+        next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime
       }
     } else {
       next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime
@@ -78,6 +78,8 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
           exists <- DBI::dbGetQuery(con, paste0("SELECT reference_id FROM rasters_reference WHERE valid_from = '", valid_from, "' AND raster_series_id = ", id, " AND flag = 'PRELIMINARY';"))[1,1]
           if (!is.na(exists) & is.na(flag)){
             DBI::dbExecute(con, paste0("DELETE FROM rasters_reference WHERE reference_id = ", exists, ";")) #This should cascade to the rasters table
+          } else if (!is.na(exists) & !is.na(flag)){
+            next()
           }
           suppressMessages(insertHydrometModelRaster(raster = rast, raster_series_id = id, valid_from = valid_from, valid_to = valid_to, flag = flag, source = source, units = units, model = model, con = con))
           DBI::dbExecute(con, paste0("UPDATE raster_series_index SET last_new_raster = '", .POSIXct(Sys.time(), tz = "UTC"), "' WHERE raster_series_id = ", id, ";"))

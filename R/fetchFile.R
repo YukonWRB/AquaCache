@@ -22,7 +22,7 @@ fetchImage <- function(id, con = hydrometConnect(silent = TRUE), save_dir = NULL
 #' Extracts a document stored in the hydromet database as BYTEA type. For extracting images see [fetchImage()], and for extracting rasters to R (which automatically sets the CRS) see [rpostgis::pgGetRast()]. Calls function internal package function fetchFile.
 #'
 #'
-#' @param id The ID number from column 'document_id' of table 'documents.
+#' @param id The ID number from column 'document_id' of table 'documents'.
 #' @param con A connection to the database.
 #' @param save_dir A directory in which to write the file.
 #' @param save_name The name to give the file, *without* extension.
