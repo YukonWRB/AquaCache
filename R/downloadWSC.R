@@ -6,7 +6,7 @@
 #' A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat and tidyhydat.ws options). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
 #'
 #' @param location A WSC station number.
-#' @param param_code A WSC parameter code (47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46/16/52 for level primary/secondary/tertiary, 5/41 for water temperature primary/secondary, 18 for accumulated precipitation.)
+#' @param param_code A WSC parameter code. 47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46 for level, 5 for water temperature, 4 for air temperature. See the full list using [tidyhydat::param_id].
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #'
@@ -51,11 +51,6 @@ downloadWSC <- function (location, param_code, start_datetime, end_datetime = Sy
   }
   if (nchar(as.character(end_datetime)) == 10) {
     end_datetime <- paste0(end_datetime, " 00:00:00")
-  }
-
-  # Checking param_code
-  if (!(param_code %in%  c(46, 16, 52, 47, 8, 5, 41, 18))){
-    stop("Parameter specified is not one of 46, 16, 52, 47, 8, 5, 41, 18.")
   }
 
   # Pull data from WSC

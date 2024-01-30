@@ -130,6 +130,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  contact TEXT,
                  geom_id INTEGER NOT NULL,
                  note TEXT,
+                 active BOOLEAN
                  );")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (

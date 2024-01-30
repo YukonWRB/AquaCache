@@ -80,8 +80,8 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       }
 
       missing_stats <- data.frame()
-      flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means.
-      if (operator == "WSC" & (last_day_historic < Sys.Date()-30)){ #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
+      flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
+      if ((operator %in% c("WSC", "Water Survey of Canada")) & (last_day_historic < Sys.Date()-30)){ #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
         tmp <- DBI::dbGetQuery(con, paste0("SELECT location, parameter FROM timeseries WHERE timeseries_id = ", i, ";"))
         hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
         if (tmp[, "parameter"] == "flow"){
@@ -108,6 +108,8 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
               flag <- TRUE
             }
           }
+        } else {
+          flag <- TRUE
         }
         DBI::dbDisconnect(hydat_con)
 
@@ -154,7 +156,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         flag <- TRUE
       }
 
-      if (operator != "WSC" || flag) { #All timeseries where: operator is not WSC and therefore lack superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
+      if ((operator %in% c("WSC", "Water Survey of Canada")) || flag) { #All timeseries where: operator is not WSC and therefore lack superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
         gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
 
         if (nrow(gap_measurements) > 0){ #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
