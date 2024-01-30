@@ -23,10 +23,11 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
 
   #Check that every location in the timeseries_df already exists; if they don't, check they've been specified in locations_df
   new_locs <- NULL
-  exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")
-  if (!all(unique(timeseries_df$location) %in% exist_locs$location)) {
+  exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
+  if (!all(unique(timeseries_df$location) %in% exist_locs)) {
     if (is.null(locations_df)){
-      stop("You didn't specify a locations_df, but not all of the locations in your timeseries_df are already in the database. Either double-check your timeseries_df or give me a locations_df from which to add the missing location(s) ", paste(unique(timeseries_df$location)[!(unique(timeseries_df$location) %in% exist_locs)], collapse = ", "), ".")
+      missing <- timeseries_df$location[!(timeseries_df$location %in% exist_locs)]
+      stop("You didn't specify a locations_df, but not all of the locations in your timeseries_df are already in the database. Either double-check your timeseries_df or give me a locations_df from which to add the missing location(s) ", paste(missing, collapse = ", "), ".")
     } else {
       new_locs <- unique(timeseries_df$location)[!(unique(timeseries_df$location) %in% exist_locs)]
     }
@@ -229,7 +230,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
           if (nrow(ts) > 0){
             if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
               ts$period <- "00:00:00"
-              no_period <- data.frame() # Created here for use later
             } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
               ts <- ts[order(ts$datetime) ,] #Sort ascending
               diffs <- as.numeric(diff(ts$datetime), units = "hours")
@@ -293,17 +293,18 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
               }
 
             }, error = function(e){
-              warning("Unable to calculate daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
+              message("Unable to calculate daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
             })
-          } else { #There is no data to associate with this timeseries. Delete it and see if the location should also be deleted.
+          } else { #There is no data to associated with this timeseries. Delete it and see if the location should also be deleted.
             DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
             loc_necessary <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", loc, "'"))
             if (nrow(loc_necessary) == 0){
-              DBI::dbExecute(con, paste0("DELETE FROM locations WHERE timeseries_id = ", new_tsid, ";"))
+              DBI::dbExecute(con, paste0("DELETE FROM locations WHERE location = '", loc, "';"))
             }
-            warning("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
+            message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
+            next()
           }
-          if (add$operator == "WSC"){
+          if ((add$operator %in% c("WSC", "Water Survey of Canada")) & add$parameter %in% c("level", "flow")){
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
           }
         } else { #Add the non-continuous data
@@ -314,7 +315,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
               DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
               message("Success! Added new discrete data for ", add$location, " and parameter ", add$parameter, ".")
             }, error = function(e) {
-              warning("Unable to add new values to the measurements_discrete table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
+              message("Unable to add new values to the measurements_discrete table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
             })
           } else { #There is no data to associate with this timeseries. Delete it and see if the location should also be deleted.
             DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
@@ -322,11 +323,12 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
             if (nrow(loc_necessary) == 0){
               DBI::dbExecute(con, paste0("DELETE FROM locations WHERE timeseries_id = ", new_tsid, ";"))
             }
-            warning("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
+            message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
+            next()
           }
         } #End of loop adding discrete data
       } else {
-        warning("You didn't specify a source_fx. No data was added to the measurements_continuous or measurements_discrete table, so make sure you go and add that data ASAP. If you made a mistake delete the timeseries from the timeseries table and restart. The timeseries ID for this new entry is ", new_tsid)
+        message("You didn't specify a source_fx. No data was added to the measurements_continuous or measurements_discrete table, so make sure you go and add that data ASAP. If you made a mistake delete the timeseries from the timeseries table and restart. The timeseries ID for this new entry is ", new_tsid)
       }
     }, error = function(e) {
       warning("Failed to add new data for row number ", i, " in the provided timeseries_df data.frame.")

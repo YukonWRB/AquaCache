@@ -1,20 +1,21 @@
 load_all()
 con <- hydrometConnect()
+locations <- DBI::dbGetQuery(con, "SELECT location FROM locations WHERE operator = 'WSC'")[,1]
 
 # Adding timeseries
-timeseries_df <- data.frame(location = c("YOWN-0101"),
-                            parameter = c("iron dissolved", "iron total"),
-                            unit = c("mg/l"),
-                            category = "discrete",
+timeseries_df <- data.frame(location = locations,
+                            parameter = "air temp",
+                            unit = "°C",
+                            category = "continuous",
                             period_type = c("instantaneous"),
-                            param_type = "ground water chemical",
-                            record_rate = NA,
+                            param_type = "surface water physical",
+                            record_rate = "< 1 day",
                             start_datetime = "1980-01-01",
-                            operator = "WRB",
-                            network = "YOWN",
+                            operator = "WSC",
+                            network = "Canada Yukon Hydrometric Network",
                             public = TRUE,
-                            public_delay = c("P1D", NA),
-                            source_fx = "downloadEQWin",
+                            public_delay = NA,
+                            source_fx = "downloadWSC",
                             source_fx_args = NA,
                             note = NA)
 
@@ -36,14 +37,9 @@ settings_df <- data.frame(source_fx = "downloadEQWin",
 
 addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df, settings_df = settings_df)
 
-# Deleting from various tables
-# locs <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE ")
-# DBI::dbExecute(con, "DELETE FROM timeseries WHERE timeseries_id IN ()")
-# DBI::dbExecute(con, "DELETE FROM measurements_continuous WHERE timeseries_id IN (385,386,387,388,389,390,391,392)")
-# DBI::dbExecute(con, "DELETE FROM calculated_daily WHERE timeseries_id IN (385,386,387,388,389,390,391,392)")
-#
 
 
 
 # Check the DB size:
 DBI::dbGetQuery(con, "select pg_size_pretty(pg_database_size('hydromet'));")
+
