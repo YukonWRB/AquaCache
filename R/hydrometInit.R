@@ -128,8 +128,9 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  operator TEXT,
                  owner TEXT,
                  contact TEXT,
-                 point geometry(POINT, 4269),
-                 note TEXT)")
+                 geom_id INTEGER NOT NULL,
+                 note TEXT,
+                 );")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
@@ -276,18 +277,17 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   # Create spatial-primary tables ########
 
-  DBI::dbExecute(con, "CREATE TABLE if not exists points_lines_polygons (
+  DBI::dbExecute(con, "CREATE TABLE if not exists vectors (
                geom_id SERIAL PRIMARY KEY,
                geom_type TEXT NOT NULL CHECK(geom_type IN ('ST_Point', 'ST_MultiPoint', 'ST_LineString', 'ST_MultiLineString', 'ST_Polygon', 'ST_MultiPolygon')),
                layer_name TEXT NOT NULL,
-               attribute_name TEXT NOT NULL,
+               feature_name TEXT NOT NULL,
                description TEXT,
                geom GEOMETRY(Geometry, 4269) NOT NULL,
                CONSTRAINT enforce_dims_geom CHECK (st_ndims(geom) = 2),
                CONSTRAINT enforce_srid_geom CHECK (st_srid(geom) = 4269),
                CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
-               UNIQUE (layer_name, attribute_name, geom_type),
-               UNIQUE (layer_name, geom_type)
+               UNIQUE (layer_name, feature_name, geom_type)
                );")
 
   # -- Create an UPDATE trigger to populate geom_type_auto
@@ -299,23 +299,24 @@ RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;")
   DBI::dbExecute(con, "CREATE TRIGGER update_geom_type_trigger
-BEFORE INSERT OR UPDATE ON points_lines_polygons
+BEFORE INSERT OR UPDATE ON vectors
 FOR EACH ROW
 EXECUTE FUNCTION update_geom_type();
 ")
 
 
-  DBI::dbExecute(con, "CREATE INDEX geometry_idx ON points_lines_polygons USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
-  DBI::dbExecute(con, "COMMENT ON TABLE public.points_lines_polygons IS 'Holds points, lines, or polygons as geometry objects that can be references by other tables. For example, the locations table references a geom_id for each location.';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.geom IS 'Enforces epsg:4269 (NAD83).';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.name IS 'Non-optional descriptive name';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.description IS 'Optional but highly recommended long-form description of the geometry.';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.points_lines_polygons.geom_type IS '*DO NOT TOUCH* Auto-populated by trigger based on the geometry type for each entry.';")
+  DBI::dbExecute(con, "CREATE INDEX geometry_idx ON vectors USING GIST (geom);") #Forces use of GIST indexing which is necessary for large polygons
+  DBI::dbExecute(con, "COMMENT ON TABLE public.vectors IS 'Holds points, lines, or polygons as geometry objects that can be references by other tables. For example, the locations table references a geom_id for each location. Retrieve objects from this table using function HydroMetDB::fetchVector, insert them using HydroMetDB::insertHydrometVector.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.geom IS 'Enforces epsg:4269 (NAD83).';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.layer_name IS 'Non-optional descriptive name for the layer.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.feature_name IS 'Non-optional descriptive name for the feature.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.description IS 'Optional but highly recommended long-form description of the geometry object.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.geom_type IS '*DO NOT TOUCH* Auto-populated by trigger based on the geometry type for each entry.';")
 
   # Create table to link the documents to geoms (since documents can be associated with n number of geoms)
   DBI::dbExecute(con, "CREATE TABLE documents_spatial (
   document_id INT REFERENCES documents(document_id),
-  geom_id INT REFERENCES points_lines_polygons(geom_id),
+  geom_id INT REFERENCES vectors(geom_id),
   PRIMARY KEY (document_id, geom_id)
 );")
 
@@ -336,6 +337,12 @@ EXECUTE FUNCTION update_geom_type();
 
 
   #Add in foreign keys ###########
+  DBI::dbExecute(con,
+                 "ALTER TABLE locations
+  ADD CONSTRAINT fk_geom_id
+  FOREIGN KEY (geom_id)
+  REFERENCES vectors(geom_id)
+                 ON UPDATE CASCADE ON DELETE CASCADE;")
   DBI::dbExecute(con,
                  "ALTER TABLE timeseries
   ADD CONSTRAINT fk_location_id
@@ -629,17 +636,17 @@ EXECUTE FUNCTION update_geom_type();
 RETURNS TRIGGER AS $$
   BEGIN
 -- Check the geom_type for the inserted record
-IF (SELECT geom_type FROM points_lines_polygons WHERE geom_id = NEW.geom_id) IN ('ST_Point', 'ST_MultiPoint') THEN
+IF (SELECT geom_type FROM vectors WHERE geom_id = NEW.geom_id) IN ('ST_Point', 'ST_MultiPoint') THEN
 UPDATE documents
 SET has_points = TRUE
 WHERE document_id = NEW.document_id;
 END IF;
-IF (SELECT geom_type FROM points_lines_polygons WHERE geom_id = NEW.geom_id) IN ('ST_LineString', 'ST_MultiLineString') THEN
+IF (SELECT geom_type FROM vectors WHERE geom_id = NEW.geom_id) IN ('ST_LineString', 'ST_MultiLineString') THEN
 UPDATE documents
 SET has_lines = TRUE
 WHERE document_id = NEW.document_id;
 END IF;
-IF (SELECT geom_type FROM points_lines_polygons WHERE geom_id = NEW.geom_id) IN ('ST_Polygon', 'ST_MultiPolygon') THEN
+IF (SELECT geom_type FROM vectors WHERE geom_id = NEW.geom_id) IN ('ST_Polygon', 'ST_MultiPolygon') THEN
 UPDATE documents
 SET has_polygons = TRUE
 WHERE document_id = NEW.document_id;
@@ -665,7 +672,7 @@ RETURNS TRIGGER AS $$
 IF NOT EXISTS (
   SELECT 1
   FROM documents_spatial ds
-  JOIN points_lines_polygons g ON ds.geom_id = g.geom_id
+  JOIN vectors g ON ds.geom_id = g.geom_id
   WHERE ds.document_id = OLD.document_id AND g.geom_type IN ('ST_Point', 'ST_MultiPoint')
 ) THEN
 UPDATE documents
@@ -676,7 +683,7 @@ END IF;
 IF NOT EXISTS (
   SELECT 1
   FROM documents_spatial ds
-  JOIN points_lines_polygons g ON ds.geom_id = g.geom_id
+  JOIN vectors g ON ds.geom_id = g.geom_id
   WHERE ds.document_id = OLD.document_id AND g.geom_type IN ('ST_LineString', 'ST_MultiLineString')
   ) THEN
 UPDATE documents
@@ -687,7 +694,7 @@ END IF;
 IF NOT EXISTS (
   SELECT 1
   FROM documents_spatial ds
-  JOIN points_lines_polygons g ON ds.geom_id = g.geom_id
+  JOIN vectors g ON ds.geom_id = g.geom_id
   WHERE ds.document_id = OLD.document_id AND g.geom_type IN ('ST_Polygon', 'ST_MultiPolygon')
   ) THEN
 UPDATE documents

@@ -7,51 +7,51 @@
 insertHydrometVector(
   geom,
   layer_name,
-  name = NULL,
+  feature_name = NULL,
   description = NULL,
-  name_col = NULL,
+  feature_name_col = NULL,
   description_col = NULL,
-  table = "points_lines_polygons",
-  geom_col_name = "geom",
+  table = "vectors",
+  geom_col = "geom",
   overwrite = FALSE,
   con = hydrometConnect()
 )
 }
 \arguments{
-\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons.}
+\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.}
 
 \item{layer_name}{The name to give to the vector layer.}
 
-\item{name}{A short but descriptive name to give to the geom attribute. Leave NULL if specified with parameter \code{name_col.} This parameter only works for geoms with a single attribute (row).}
+\item{feature_name}{A short but descriptive name to give to the geom feature. Leave NULL if specified with parameter \code{feature_name_col} instead. This parameter only works for geoms with a single feature (row).}
 
-\item{description}{Optional but highly recommended long-form description of the geometry attribute. Leave NULL is specifying a \code{description_col} instead.}
+\item{description}{Optional but highly recommended long-form description of the geometry feature. Leave NULL is specifying a \code{description_col} instead.}
 
-\item{name_col}{The name of the column containing names to give to the geom attributes. Each attribute (row) will be entered to the database using the string in this column. Leave NULL if specified with parameter \code{name}.}
+\item{feature_name_col}{The name of the column with names to give to the geom features. Each feature (row in the attribute table) will be entered to the database using the string in this column. Leave NULL if specified with parameter \code{feature_name}.}
 
-\item{description_col}{The name of the column containing descriptions associated with the geometry attributes. Each attribute (row) will be entered to the database using the string in this column. Leave NULL if specified with parameter \code{description}.}
+\item{description_col}{The name of the column containing descriptions associated with each feature. Each feature (row in the attribute table) will be entered to the database using the string in this column. Leave NULL if specified with parameter \code{description} instead.}
 
-\item{table}{The referenced table in the database (as character string). If not under the public schema, use format c("schema", "table").}
+\item{table}{The target table in the database (as character string). If not under the public schema, use format c("schema", "table").}
 
-\item{geom_col_name}{The name of the column in which to insert the geometry object.}
+\item{geom_col}{The name of the database table column in which to insert the geometry object.}
 
 \item{overwrite}{If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }
 \value{
-TRUE if the vector was added.
+A boolean vector, one element per feature.Messages will also be printed to the console.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Use this function to add a vector file that is not a drainage basin to the database (see function \code{\link[=insertHydrometBasin]{insertHydrometBasin()}} for those, since they get their own reference table). Ensures that database constraints are met. If you need to replace or delete a vector for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first or using \code{\link[rpostgis:pgWriteGeom]{rpostgis::pgWriteGeom()}} with the necessary parameters.
+Use this function to add a vector file to the database. Ensures that database constraints are met and permits spatial queries. If you need to delete (not overwrite) a vector for any reason you'll have to use SQL (perhaps via R using the DBI package).
 \subsection{Extracting from the database}{
 
-Use function \code{\link[rpostgis:pgGetGeom]{rpostgis::pgGetGeom()}} to retrieve the geometry from the database, specifying in the argument 'clauses' "WHERE geom_id = xx".
+Use function \code{\link[=fetchVector]{fetchVector()}} to retrieve a point, line, or polygon from the database.
 }
 
 \subsection{Attribute tables:}{
 
-The attribute table of the object will be discarded in order to work with the existing database column names and to enable many to many relationships. If you want vector files with multiple attributes with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using \code{\link[=insertHydrometDocument]{insertHydrometDocument()}}.
+The attribute table of the object will be discarded except for the columns specified in parameters \code{feature_name_col} and \code{description_col} to work with the existing database column names and to enable many to many relationships within the database. If you want vector files with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using \code{\link[=insertHydrometDocument]{insertHydrometDocument()}}. Note however that this precludes using the object's spatial attributes within the database!
 }
 }

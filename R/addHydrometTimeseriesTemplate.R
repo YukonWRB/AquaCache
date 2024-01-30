@@ -66,6 +66,9 @@ addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), fo
                      datum_id_to = c(35, 605),
                      conversion_m = c(913.86603, 913.51099),
                      current = c(FALSE, TRUE),
+                     owner = "WSC",
+                     operator = "WSC",
+                     contact = "email@email.com",
                      note = "Optional location note here.")
 
   # Create the datum list table

@@ -38,8 +38,8 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
   }
 
   if (!is.null(locations_df)){
-    if (!all(c("location", "name", "latitude", "longitude", "datum_id_from", "datum_id_to", "conversion_m", "current", "note") %in% names(locations_df))){
-      stop("It looks like you're either missing columns in locations_df or that you have a typo. Please review that you have columns named c('location', 'name', 'latitude', 'longitude', 'datum_id_from', 'datum_id_to', 'conversion_m', 'current', 'note'). Use NA to indicate a column with no applicable value.")
+    if (!all(c("location", "name", "latitude", "longitude", "datum_id_from", "datum_id_to", "conversion_m", "current", "note", "owner", "operator", "contact") %in% names(locations_df))){
+      stop("It looks like you're either missing columns in locations_df or that you have a typo. Please review that you have columns named c('location', 'name', 'latitude', 'longitude', 'datum_id_from', 'datum_id_to', 'conversion_m', 'current', 'note', 'owner', 'operator', 'contact'). Use NA to indicate a column with no applicable value.")
     }
   }
 
@@ -133,19 +133,32 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
       DBI::dbWithTransaction(
         con,
         {
-          #locations table first
+          #vectors table first
+          point <- data.frame("feature_name" = locations_df[locations_df$location == i, "location"],
+                              "description" = locations_df[locations_df$location == i, "name"],
+                              "latitude" = locations_df[locations_df$location == i, "latitude"],
+                              "longitude" = locations_df[locations_df$location == i, "longitude"])
+          point <- terra::vect(point, geom = c("longitude", "latitude"), crs = "epsg:4269")
+
+          insertHydrometVector(point, "Locations", feature_name_col = "feature_name", description_col = "description")
+          geom_id <- DBI::dbGetQuery(con, "SELECT geom_id FROM vectors WHERE layer_name = 'Locations' AND feature_name = '", locations_df[locations_df$location == i, "location"], "';")
+
+
+          #locations table second
           location <- data.frame(location = unique(locations_df[locations_df$location == i, "location"]),
                                  name = unique(locations_df[locations_df$location == i, "name"]),
                                  latitude = unique(locations_df[locations_df$location == i, "latitude"]),
                                  longitude = unique(locations_df[locations_df$location == i, "longitude"]),
-                                 note = locations_df[locations_df$location == i, "note"])
+                                 note = locations_df[locations_df$location == i, "note"],
+                                 operator = locations_df[locations_df$location == i, "operator"],
+                                 owner = locations_df[locations_df$location == i, "owner"],
+                                 contact = locations_df[locations_df$location == i, "contact"],
+                                 geom_id = geom_id)
           DBI::dbAppendTable(con, "locations", location)
-
-          DBI::dbExecute(con, "UPDATE locations SET point = ST_SetSRID(ST_MakePoint(longitude, latitude), 4269) WHERE point IS NULL;")
 
           location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", unique(locations_df[locations_df$location == i, "location"]), "';"))[1,1]
 
-          #now datums table
+          #datums table third
           datum <- data.frame(location_id = location_id,
                               datum_id_from = locations_df[locations_df$location == i, "datum_id_from"],
                               datum_id_to = locations_df[locations_df$location == i, "datum_id_to"],
