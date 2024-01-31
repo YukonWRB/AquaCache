@@ -81,17 +81,19 @@ insertHydrometVector <- function(geom, layer_name, feature_name = NULL, descript
           message("geom object had invalid geometry, fix attempted using terra::makeValid().")
         }
 
+        new_geomtype <- terra::geomtype(sub.geom)
+        db_geomtype <- if (new_geomtype == "polygons") 'ST_Polygon' else if (new_geomtype == "points") 'ST_Point' else if (new_geomtype == "lines")'ST_LineString'
         if (overwrite){
-          new_geomtype <- terra::geomtype(sub.geom)
-          db_geomtype <- if (new_geomtype == "polygons") 'ST_Polygon' else if (new_geomtype == "points") 'ST_Point' else if (new_geomtype == "lines")'ST_LineString'
           exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "' AND geom_type = '", db_geomtype, "';"))
           if (nrow(exist) == 1){
             message("Updating entry for geom_type = ", db_geomtype, ", layer_name = ", layer_name, ", feature_name = ", feat_name, ".")
             sub.geom$geom_id <- exist[1, "geom_id"]
             success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
+            DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           } else if (nrow(exist) == 0){
             message("There is no existing database entry for this mix of geom_type = ", db_geomtype, ", layer_name = ", layer_name, ", feature_name = ", feat_name, ". Writing it without overwrite.")
             success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
+            DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           } else {
             warning("Failed to overwrite existing feature: there seems to be two entries in the database for this mix of geom_type = ", db_geomtype, ", layer_name = ", layer_name, ", feature_name = ", feat_name, ".")
             success[[i]] <- FALSE
@@ -103,6 +105,7 @@ insertHydrometVector <- function(geom, layer_name, feature_name = NULL, descript
             success[[i]] <- FALSE
           } else {
             success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
+            DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           }
         }
        }, error = function(e){

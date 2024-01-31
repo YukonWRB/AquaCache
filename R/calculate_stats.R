@@ -120,7 +120,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             gap_measurements <- gap_measurements %>%
               dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
               dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                               value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else mean(.data$value),
+                               value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))),
                                grade = sort(.data$grade,decreasing=TRUE)[1],
                                approval = sort(.data$approval, decreasing=TRUE)[1],
                                imputed = sort(.data$imputed, decreasing = TRUE)[1],
@@ -163,7 +163,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           gap_measurements <- gap_measurements %>%
             dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
             dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                             value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else mean(.data$value),
+                             value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))),
                              grade = sort(.data$grade, decreasing = TRUE)[1],
                              approval = sort(.data$approval, decreasing = TRUE)[1],
                              imputed = sort(.data$imputed, decreasing = TRUE)[1],
