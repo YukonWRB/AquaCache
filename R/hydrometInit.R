@@ -186,7 +186,6 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', '1-day', '2-day', '3-day', '4-day', '5-day', '6-day', '7-day', 'monthly', 'yearly')),
                  condition TEXT NOT NULL CHECK(condition IN ('open water', 'break-up', 'freeze-up', 'winter')),
                  extrema TEXT NOT NULL CHECK(extrema IN ('minimum', 'maximum')),
-                 uncertainty TEXT,
                  notes TEXT,
                  deemed_primary BOOLEAN NOT NULL,
                  UNIQUE (timeseries_id, agency, year, period_type, condition, extrema));")
@@ -484,10 +483,10 @@ EXECUTE FUNCTION update_geom_type();
   DBI::dbExecute(con, "COMMENT ON TABLE public.measurements_continuous IS 'Stores observations and imputed values for continuous timeseries.'
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.measurements_continuous.source_fx_args IS 'The periodicity of data can change within a timeseries, for example if recording rates go from every 6 hours to hourly.';
+  COMMENT ON COLUMN public.measurements_continuous.period IS 'Greater than 0 for min, max, sum, mean types of measurements. The periodicity of data can change within a timeseries, for example if recording rates go from every 6 hours to hourly.';
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.measurements_continuous.source_fx_args IS 'Imputed values may be user-entered.';
+  COMMENT ON COLUMN public.measurements_continuous.imputed IS 'Imputed values may be user-entered. Imputed values are automatically replaced if/when a value becomes available on the remote data store.';
   ")
 
   # settings

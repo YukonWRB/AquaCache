@@ -34,6 +34,9 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
     timeseries_id <- all_timeseries$timeseries_id
   } else {
     all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous' AND timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate IN ('1 day', '< 1 day');"))
+    if (nrow(all_timeseries) == 0){
+      stop("Calculations are not possible. Perhaps the timeseries_id you specified are not of category continuous or have a record_rate of greater than 1 day.")
+    }
     if (length(timeseries_id) != length(all_timeseries$timeseries_id)) {
       #TODO: improve this warning message with which tsid exactly was missing
       warning("At least one of the timeseries_id you specified was not of category 'continuous', had a recording rate greater than 1 day, or could not be found in the database.")
@@ -120,7 +123,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             gap_measurements <- gap_measurements %>%
               dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
               dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                               value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))),
+                               value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
                                grade = sort(.data$grade,decreasing=TRUE)[1],
                                approval = sort(.data$approval, decreasing=TRUE)[1],
                                imputed = sort(.data$imputed, decreasing = TRUE)[1],
@@ -163,7 +166,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           gap_measurements <- gap_measurements %>%
             dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
             dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                             value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))),
+                             value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
                              grade = sort(.data$grade, decreasing = TRUE)[1],
                              approval = sort(.data$approval, decreasing = TRUE)[1],
                              imputed = sort(.data$imputed, decreasing = TRUE)[1],
