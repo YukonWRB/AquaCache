@@ -11,15 +11,15 @@
 #' @export
 #'
 
-# template <- "C:/Users/estewart/Documents/R/Projects/Dawson_2024-03-01.xlsx"
+# template <- "C:/Users/estewart/Documents/R/Projects/Carmacks_2024-03-01.xlsx"
 # s <- 2
 
 readSnowTemplate <- function(template) {
 
   # For each sheet (survey)
-  # for (s in 2:length(openxlsx::getSheetNames(template))) {
+  for (s in 2:length(openxlsx::getSheetNames(template))) {
 
-  for (s in 2:4) {
+  #for (s in 2:3) {
 
       ##### --------------- Pull in all the data from template -------------- ####
       survey <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(5:11), cols = c(2:4), detectDates=TRUE, colNames=FALSE)
@@ -30,9 +30,9 @@ readSnowTemplate <- function(template) {
 
       estavg <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(12,23), cols = c(11,12), colNames=FALSE)
 
-      notes <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(27:51), cols = c(2:10), colNames=TRUE, skipEmptyRows=FALSE, skipEmptyCols=FALSE)
+      notes <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(27:53), cols = c(2:10), colNames=TRUE, skipEmptyRows=FALSE, skipEmptyCols=FALSE)
 
-      maintenance <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(44:47), cols = c(2:9), colNames=TRUE, skipEmptyRows=FALSE, skipEmptyCols=TRUE)
+      maintenance <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(48:51), cols = c(2:9), colNames=TRUE, skipEmptyRows=FALSE, skipEmptyCols=TRUE)
 
       # Get location id for that sheet
       con <- snowConnect()
@@ -90,31 +90,36 @@ readSnowTemplate <- function(template) {
         snow_cm <- paste0(snow_cm, " cm of fresh snow on surface")
       } else {snow_cm <- NULL}
 
-      # Ground ice layer
-      groundice <- notes[c(11), c(5,9)]
-      names(groundice) <- unlist(notes[c(11), c(2,6)])
+      # Ice layer
+      ice <- unlist(c(notes[c(5,6), 9],
+                      notes[c(11), c(5,9)]
+                      ))
+      names(ice) <- unlist(c(notes[c(5,6), 2],
+                             notes[c(11), c(2,6)]))
+      ice <- ice[!is.na(ice)]
 
-      if (!is.na(groundice[1]) && !is.na(groundice[2])) {
-        groundice <- paste("The ground ice layer under the snow is", groundice[2], "cm thick")
-      } else if (!is.na(groundice[1]) && is.na(groundice[2])) {
-        groundice <- "A ground ice layer is present under the snow"
-      } else {
-        groundice <- NULL
-      }
+      ice_desc <- notes[13, 2]
+      ice_desc <- sub("\n", " ", ice_desc)
+
+      if (length(ice)==0 && is.na(ice_desc) ) {
+        ice_notes <- NA
+      } else if (length(ice)==0 && !is.na(ice_desc)) {
+        ice_notes <- ice_desc
+      } else {ice_notes <- paste0(paste0(names(ice), collapse=". "), ". ", ice_desc)}
 
       # Sampling conditions
-      sampling <- notes[c(13,14,15), c(9)]
-      names(sampling) <- notes[c(13,14,15), c(2)]
+      sampling <- notes[c(17,18,19), c(9)]
+      names(sampling) <- notes[c(17,18,19), c(2)]
       sampling <- sampling[!is.na(sampling)]
       sampling <- paste0(names(sampling), collapse=". ")
       if (sampling == "") { sampling <- NULL }
 
       # Remarks
-      remarks <- notes[22,2]
+      remarks <- notes[26,2]
       if (is.na(remarks)) { remarks = NULL }
 
       # Pull all notes together now
-      notes <- paste(c(airtemp, weather, snow, snow_cm, groundice, sampling, remarks), collapse = ". ")
+      notes <- paste(c(airtemp, weather, snow, snow_cm, sampling, remarks), collapse = ". ")
       if (notes == "") {notes <- NA
       } else {notes <- paste0("At time of sampling: ", notes)}
 
@@ -137,7 +142,7 @@ readSnowTemplate <- function(template) {
       }
 
       ## Combine all together
-      surveys <- c(location, target_date, survey_date, notes, sampler_name, method)
+      surveys <- c(location, target_date, survey_date, notes, sampler_name, method, ice_notes)
 
       ##### ------------------ Create measurements table -------------------- ####
       # Create measurements table (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes)
@@ -177,7 +182,7 @@ readSnowTemplate <- function(template) {
         estimate_flag <- FALSE
         ## Exclude_flag, swe, depth, notes, survey_id
         exclude_flag <- FALSE
-        swe <- round(calculated[1,3] *10)
+        swe <- round(calculated[1,3])
         depth <- round(calculated[2,2])
         if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
           notes <- NA
@@ -248,12 +253,12 @@ readSnowTemplate <- function(template) {
       ##### ------------------ Import into snow database -------------------- ####
 
       ## Begin db transaction
-      dbBegin(con)
+      DBI::dbBegin(con)
 
       tryCatch({
 
         ## Insert into surveys table
-        DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method) VALUES ('",
+        DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method, ice_notes) VALUES ('",
                                      paste(surveys, collapse = "', '"), "')") )
 
         message(paste0("Snow course '", survey[1,2], "' (", loc_id, ") inserted into surveys table."))
@@ -300,15 +305,15 @@ readSnowTemplate <- function(template) {
         }
 
         ## Commit import
-        dbCommit(con)
+        DBI::dbCommit(con)
 
-        dbDisconnect(con)
+        DBI::dbDisconnect(con)
 
         message("SUCCESS: new snow course data for '", survey[1,2], "' (", loc_id, ") imported.")
 
         }, error = function (e) {
           # Rollback transaction if any statement fails
-          dbRollback(con)
+          DBI::dbRollback(con)
           message("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") import rolled back")
         }
       )

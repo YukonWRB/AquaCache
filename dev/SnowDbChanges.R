@@ -15,6 +15,12 @@ DBI::dbDisconnect(con)
   # Remove average column from measurements table
   DBI::dbExecute(con, "ALTER TABLE measurements DROP COLUMN average")
 
+  # Add ice_notes column
+  DBI::dbSendQuery(con, "ALTER TABLE surveys ADD COLUMN ice_notes TEXT")
+
+  # Add comment to new column
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.ice_notes IS 'Notes specific to the description of ice layers within the snow pack or on ground surface below snow.'")
+
 #### Add column to snow database maintenance table ####
 
   # Add column date_completed
