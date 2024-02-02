@@ -90,6 +90,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  notes TEXT,
                  sampler_name TEXT,
                  method TEXT,
+                 ice_notes TEXT,
                  CONSTRAINT survey_loc UNIQUE (survey_date, location),
                  CONSTRAINT method_check CHECK (method IN ('average', 'bulk', 'standard')),
 
@@ -174,6 +175,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.notes IS 'General notes on the snow survey. Concatenation of all condition notes from snow survey template (Weather at time of sampling, Sampling conditions, Remarks.)'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.sampler_name IS 'The names of the people who completed the sample. This was not collected prior to the 2024 snow season.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.method IS 'The method used for collecting the survey. Options are standard, bulk and average. The average option indicates that depth and SWE values represent an average of multiple samples. All entries prior to 2024 snow season are calculated averages'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.ice_notes IS 'Notes specific to the description of ice layers within the snow pack or on ground surface below snow.'")
 
   ## measurements
   DBI::dbExecute(con, "COMMENT ON TABLE public.measurements IS 'Stores the details of a single snow sample. A single snow survey will contain multiple samples, tipically 10. However, preceding 2024, only the average of samples was noted in the database, and as such only a single swe and depth measurement are given per snow survey.'")
