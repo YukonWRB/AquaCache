@@ -4,7 +4,7 @@ locations <- DBI::dbGetQuery(con, "SELECT location FROM locations WHERE operator
 
 # Adding timeseries
 timeseries_df <- data.frame(location = locations,
-                            parameter = "air temp",
+                            parameter = "equipment temp",
                             unit = "°C",
                             category = "continuous",
                             period_type = c("instantaneous"),
@@ -42,4 +42,7 @@ addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df
 
 # Check the DB size:
 DBI::dbGetQuery(con, "select pg_size_pretty(pg_database_size('hydromet'));")
+
+
+DBi::
 
