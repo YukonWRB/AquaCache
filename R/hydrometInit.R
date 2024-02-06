@@ -102,7 +102,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    value NUMERIC NOT NULL,
                    sample_class TEXT,
                    note TEXT,
-                   PRIMARY KEY (timeseries_id, datetime))")
+                   PRIMARY KEY (timeseries_id, datetime, sample_class);")
 
   # And tables that hold metadata for all locations
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
@@ -621,6 +621,8 @@ EXECUTE FUNCTION update_geom_type();
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.datetime IS 'The datetime on which the measurement was taken, or on which the sample was acquired in the field.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.sample_class IS 'Mostly for aqueous chem samples, to identify the sample as regular, field duplicate, lab duplicate, etc.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.value IS 'Values below the detection limit are listed as the negative of the detection limit to keep everything numeric.'
   ")
 
   # raster_series_index

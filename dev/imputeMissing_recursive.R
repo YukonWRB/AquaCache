@@ -114,16 +114,18 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     similar <- similar[, -which(names(similar) %in% c("record_rate_numeric"))]
 
     # Check for suitability for each entry (i.e. does the data exist, rank how well does it track normally)
-    #   Will need to turn the recording rate and mean/max/min into matching the missing data
-    similar$sd_on_existing <- NA
-    similar$missing_data_for_impute <- FALSE
-    similar$avg_offset <- NA
-    data <- list()
-    suppressWarnings( #otherwise it gives warnings every time a value can't be calculated
+    # Turn the recording rate and mean/max/min into something matching the missing data
+
+    calculate_values <- function(similar, start, end, conn = con) {
+      data <- list()
+      similar$sd_on_existing <- NA
+      similar$missing_data_for_impute <- FALSE
+      similar$avg_offset <- NA
+
       for (i in 1:nrow(similar)){
         #Get data from start to end
-        df <- DBI::dbGetQuery(con, paste0("SELECT datetime, value FROM measurements_continuous WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND datetime > '", start, "' AND datetime < '", end, "';"))
-        df <- calculate_period(df, similar[i, "timeseries_id"], con = con)
+        df <- DBI::dbGetQuery(conn, paste0("SELECT datetime, value FROM measurements_continuous WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND datetime > '", start, "' AND datetime < '", end, "';"))
+        df <- calculate_period(df, similar[i, "timeseries_id"], con = conn)
 
         # Check if the timeseries is missing data
         df.periods <- unique(lubridate::period_to_seconds(lubridate::period(df$period)))
@@ -178,14 +180,23 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
         similar[i, "avg_offset"] <- mean(diff, na.rm=TRUE)
         similar[i, "sd_on_existing"] <- stats::sd(diff, na.rm = TRUE)
       }
+
+      return(list(data = data, similar = similar))
+    } #end of function calculate_values
+
+    suppressWarnings( #otherwise it gives warnings every time a value can't be calculated
+      res <- calculate_values(similar, start = start, end = end)
     )
-    similar <- similar[order(similar$distance_meters), ]
+    data <- res$data
+    similar <- res$similar[order(similar$distance_meters), ]
+
+    returns[["matched_data"]] <- data
 
     message("Working with location ", entry$location, ", parameter ", entry$parameter, ", period_type ", entry$period_type, ", and record rate of ", entry$record_rate, ". Look right to see what it looks like.")
     grey_indices <- which(is.na(full_dt$value))
     bot <- min(full_dt$value, na.rm = TRUE)
     top <- max(full_dt$value, na.rm = TRUE)
-    plot(full_dt$datetime, full_dt$value, type = "l", col = "blue", xlab = "datetime", ylab = "value")
+    plot(full_dt$datetime, full_dt$value, type = "l", col = "blue")
     for (i in grey_indices){
       graphics::rect(full_dt[i - 1, "datetime"], bot, full_dt[i + 1, "datetime"], top, col = 'grey', border = NA)
     }
@@ -237,18 +248,21 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       other_method <- TRUE
     } else {
       missing_for_impute <- function(new_tsid = selected$timeseries_id, new_start = start, new_end = end, con = con){
-        exit <- FALSE
+        exit <- "false"
         message("The timeseries you selected is missing data during the imputation period. What would you like to do?")
-        add_impute <- readline(prompt = writeLines(paste("\n1: Exit: I'll impute data for that timeseries and come back",
+        add_impute <- readline(prompt = writeLines(paste("\n1: Impute the missing data now",
                                                          "\n2: Select another timeseries (or linear/cubic interpolation)",
                                                          "\n3: Use the time series as-is",
                                                          "\n4: Exit this function")))
         add_impute <- as.numeric(add_impute)
-        if (!(add_impute %in% 1:3)){
-          while(!(add_impute %in% 1:3)) {
+        if (!(add_impute %in% 1:4)){
+          while(!(add_impute %in% 1:4)) {
             add_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
             add_impute <- as.numeric(add_impute)
           }
+        }
+        if (add_impute == 4){
+          res <- list(exit = "exit")
         }
         if (add_impute == 3){
           similar[similar$timeseries_id == new_tsid, "missing_data_for_impute"] <- FALSE
@@ -257,8 +271,12 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
         else if (add_impute == 2){
           res <- list(exit = exit, selected = select_for_impute())
         } else if (add_impute == 1){
-          exit <- TRUE
-          res <- list(exit = exit, selected = similar[similar$timeseries_id == new_tsid,])
+          new_radius <- readline(prompt = writeLines(paste("\nImputing data for timeseries_id ", new_tsid,
+                                                           "\n  \nHow big should the search radius be (km)?")))
+          new_radius <- as.numeric(new_radius)
+          imputeMissing(tsid = new_tsid, radius = new_radius, start = new_start, end = new_end, imputed = FALSE, con = con)
+          similar[similar$timeseries_id == new_tsid, "missing_data_for_impute"] <- FALSE
+          res <- list(exit = "new_impute", selected = similar[similar$timeseries_id == new_tsid,], new_impute = new_tsid)
         }
         return(res)
       } #End of function missing_for_impute
@@ -288,15 +306,19 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
             other_method <- TRUE
             break()
           }
-          if (missing_for_impute_res$exit){
-            message("Reminder to now go and impute data for timeseries_id ", selected$timeseries_id, "!")
+          if (missing_for_impute_res$exit == "exit"){
+            message("Goodby!")
             return(returns)
           }
+          if (missing_for_impute_res$exit == "new_impute"){
+            replace_tsid <- missing_for_impute_res$new_impute
+            new_calc <- calculate_values(similar[similar$timeseries_id == replace_tsid,], con = con)
+            data[[as.character(replace_tsid)]] <- new_calc$data[[as.character(replace_tsid)]]
+          }
         } #End of while loop: user either selected a timeseries with no missing data or opted to go on with the missing data.
-      } else {
-        other_method <- FALSE
       }
     }
+
   } else {
     # There are no locations within the radius specified! Ask the user if they want linear or cubic.
     message("There were no suitable locations within the radius you specified. Do you want to use another method instead?")

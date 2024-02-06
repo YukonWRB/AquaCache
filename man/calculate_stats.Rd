@@ -13,7 +13,7 @@ calculate_stats(
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'}
+\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'. Specifying 'all' will work on all continuous category timeseries.}
 
 \item{start_recalc}{The day on which to start daily calculations, as a vector of one element OR one vector element per element in \code{tsid} OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.}
 }
