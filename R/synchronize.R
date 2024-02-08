@@ -20,7 +20,7 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all", start_datetime, discrete = FALSE)
+synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE)
 {
 
   on.exit(DBI::dbDisconnect(con))
@@ -28,24 +28,24 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
 
   message("Synchronizing timeseries with synchronize...")
 
-  if (!inherits(start_datetime, "POSIXct")){
+  if (!inherits(start_datetime, "POSIXct")) {
     stop("Parameter start_datetime must be supplied as a POSIXct object.")
   }
 
   #Check length of start_datetime is either 1 of same as timeseries_id
-  if (length(start_datetime) != 1){
-    if (length(start_datetime) != nrow(timeseries_id)){
+  if (length(start_datetime) != 1) {
+    if (length(start_datetime) != nrow(timeseries_id)) {
       stop("There is not exactly one element to start_datetime per valid timeseries_id specified by you in the database. Either you're missing elements to start_datetime or you are looking for timeseries_id that doesn't exist.")
     }
   }
 
-  if (timeseries_id[1] == "all"){
+  if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
   } else {
     all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
-    if (length(timeseries_id) != nrow(all_timeseries)){
+    if (length(timeseries_id) != nrow(all_timeseries)) {
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
-      ifelse ((length(fail) == 1),
+      ifelse((length(fail) == 1),
               warning("Could not find one of the timeseries_ids that you specified: ID ", fail, " is missing from the database."),
               warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )
@@ -55,7 +55,7 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
   updated <- 0 #Counter for number of updated timeseries
   EQcon <- NULL #This prevents multiple connections to EQcon...
   snowCon <- NULL
-  for (i in 1:nrow(all_timeseries)){
+  for (i in 1:nrow(all_timeseries)) {
     category <- all_timeseries$category[i]
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
@@ -63,16 +63,16 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
-    if (source_fx == "downloadEQWin" & is.null(EQcon)){
+    if (source_fx == "downloadEQWin" & is.null(EQcon)) {
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
     }
-    if (source_fx == "downloadSnowCourse" & is.null(snowCon)){
+    if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
       snowCon <- snowConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
     source_fx_args <- all_timeseries$source_fx_args[i]
-    if (is.na(record_rate)){
+    if (is.na(record_rate)) {
       param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
     } else {
       param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
@@ -81,52 +81,52 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
 
     tryCatch({
       args_list <- list(location = loc, param_code = param_code, start_datetime = start_dt)
-      if (!is.na(source_fx_args)){ #add some arguments if they are specified
+      if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair){
+        pairs <- lapply(args, function(pair) {
           gsub("[{}]", "", pair)
         })
-        pairs <- lapply(pairs, function(pair){
+        pairs <- lapply(pairs, function(pair) {
           gsub("\"", "", pair)
         })
-        pairs <- lapply(pairs, function(pair){
+        pairs <- lapply(pairs, function(pair) {
           gsub("'", "", pair)
         })
         pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair){
+        pairs <- lapply(pairs, function(pair) {
           trimws(pair)
         })
-        for (j in 1:length(pairs)){
+        for (j in 1:length(pairs)) {
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
-      if (source_fx == "downloadEQWin"){
+      if (source_fx == "downloadEQWin") {
         args_list[["EQcon"]] <- EQcon
       }
-      if (source_fx == "downloadSnowCourse"){
+      if (source_fx == "downloadSnowCourse") {
         args_list[["snowCon"]] <- snowCon
       }
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
       inRemote <- inRemote[!is.na(inRemote$value) , ]
 
-      if (nrow(inRemote) > 0){
-        if (category == "continuous"){
+      if (nrow(inRemote) > 0) {
+        if (category == "continuous") {
           inDB <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
           #Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
           imputed <- inDB[inDB$imputed == TRUE , ]
           imputed.remains <- data.frame()
-          if (nrow(imputed) > 0){
-            for (i in 1:nrow(imputed)){
-              if (!(imputed[i, "datetime"] %in% inRemote)){
+          if (nrow(imputed) > 0) {
+            for (i in 1:nrow(imputed)) {
+              if (!(imputed[i, "datetime"] %in% inRemote)) {
                 imputed.remains <- rbind(imputed.remains, imputed[i , ])
               }
             }
           }
-        } else if (category == "discrete"){
+        } else if (category == "discrete") {
           inDB <- DBI::dbGetQuery(con, paste0("SELECT target_datetime, datetime, value, sample_class FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
         }
 
-        if (min(inRemote$datetime) > min(inDB$datetime)){ #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
+        if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
           inDB <- inDB[inDB$datetime >= min(inRemote$datetime) , ]
         }
 
@@ -135,10 +135,10 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
         inRemote <- inRemote[order(inRemote$datetime) , ]
 
         # Create a unique datetime key for both data frames
-        if (category == "continuous"){
+        if (category == "continuous") {
           inRemote$key <- paste(inRemote$datetime, inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
           inDB$key <- paste(inDB$datetime, inDB$value, inDB$grade, inDB$approval, sep = "|")
-        } else if (category == "discrete"){
+        } else if (category == "discrete") {
           inRemote$key <- paste(inRemote$target_datetime, inRemote$datetime, inRemote$value, inRemote$sample_class, sep = "|")
           inDB$key <- paste(inDB$target_datetime, inDB$datetime, inDB$value, inDB$sample_class, sep = "|")
         }
@@ -156,17 +156,17 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
         }
         inRemote$key <- NULL
 
-        if (mismatch){
+        if (mismatch) {
           inRemote <- inRemote[inRemote$datetime >= datetime , ]
-          if (category == "continuous"){
+          if (category == "continuous") {
             #assign a period to the data
-            if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
+            if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
               inRemote$period <- "00:00:00"
             } else if ((period_type != "instantaneous") & !("period" %in% names(inRemote))) { #period_types of mean, median, min, max should all have a period
               inRemote <- calculate_period(data = inRemote, timeseries_id = tsid, con = con)
             } else { #Check to make sure that the supplied period can actually be coerced to a period
               check <- lubridate::period(unique(inRemote$period))
-              if (NA %in% check){
+              if (NA %in% check) {
                 inRemote$period <- NA
               }
             }
@@ -178,14 +178,14 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
             con,
             {
               updated <- updated + 1
-              if (category == "continuous"){
-                if (nrow(imputed.remains) > 0){
+              if (category == "continuous") {
+                if (nrow(imputed.remains) > 0) {
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
                 } else {
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
                 }
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
-              } else if (category == "discrete"){
+              } else if (category == "discrete") {
                 DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
                 DBI::dbAppendTable(con, "measurements_discrete", inRemote)
               }
@@ -194,7 +194,7 @@ synchronize <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
               DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
             }
           )
-          if (category == "continuous"){
+          if (category == "continuous") {
             #Recalculate daily means and statistics
             calculate_stats(timeseries_id = tsid,
                             con = con,
