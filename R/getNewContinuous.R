@@ -19,15 +19,15 @@
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 
- getNewContinuous <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all")
+ getNewContinuous <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
 {
 
   # Create table of timeseries
-  if (timeseries_id[1] == "all"){
+  if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
   } else {
     all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
-    if (length(timeseries_id) != nrow(all_timeseries)){
+    if (length(timeseries_id) != nrow(all_timeseries)) {
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'continuous', or has no function specified in column source_fx.")
     }
   }
@@ -36,7 +36,7 @@
   success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
 
   # Run for loop over timeseries rows
-  for (i in 1:nrow(all_timeseries)){
+  for (i in 1:nrow(all_timeseries)) {
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter[i]
     period_type <- all_timeseries$period_type[i]
@@ -44,7 +44,7 @@
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
-    if (is.na(record_rate)){
+    if (is.na(record_rate)) {
       param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
     } else {
       param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
@@ -55,22 +55,22 @@
 
     tryCatch({
       args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
-      if (!is.na(source_fx_args)){ #add some arguments if they are specified
+      if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair){
+        pairs <- lapply(args, function(pair) {
           gsub("[{}]", "", pair)
           })
-        pairs <- lapply(pairs, function(pair){
+        pairs <- lapply(pairs, function(pair) {
           gsub("\"", "", pair)
         })
-        pairs <- lapply(pairs, function(pair){
+        pairs <- lapply(pairs, function(pair) {
           gsub("'", "", pair)
         })
         pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair){
+        pairs <- lapply(pairs, function(pair) {
           trimws(pair)
         })
-        for (j in 1:length(pairs)){
+        for (j in 1:length(pairs)) {
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
@@ -78,15 +78,15 @@
       ts <- do.call(source_fx, args_list) #Get the data using the args_list
       ts <- ts[!is.na(ts$value) , ]
 
-      if (nrow(ts) > 0){
+      if (nrow(ts) > 0) {
         #assign a period to the data
-        if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
+        if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
           ts$period <- "00:00:00"
         } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
           ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
         } else { #Check to make sure that the supplied period can actually be coerced to a period
           check <- lubridate::period(unique(ts$period))
-          if (NA %in% check){
+          if (NA %in% check) {
             ts$period <- NA
           }
         }
@@ -95,7 +95,7 @@
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
         DBI::dbWithTransaction(
           con, {
-            if (min(ts$datetime) < last_data_point - 1){
+            if (min(ts$datetime) < last_data_point - 1) {
               DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
             }
             DBI::dbAppendTable(con, "measurements_continuous", ts)
@@ -113,7 +113,7 @@
 
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_continuous'"))
-  if (nrow(success) > 0){
+  if (nrow(success) > 0) {
     return(success)
   }
 } #End of function

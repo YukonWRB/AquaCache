@@ -15,9 +15,9 @@
 hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
 
   # Overwrite and vacuum if requested ###########
-  if (overwrite){
+  if (overwrite) {
     DBI::dbExecute(con, "DROP EXTENSION postgis CASCADE")
-    for (i in DBI::dbListTables(con)){
+    for (i in DBI::dbListTables(con)) {
       tryCatch({
         DBI::dbExecute(con, paste0("DROP TABLE ", i, " CASCADE"))
       }, error = function(e) {
@@ -103,6 +103,143 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    sample_class TEXT,
                    note TEXT,
                    PRIMARY KEY (timeseries_id, datetime, sample_class);")
+
+
+  # Create and populate tables to hold grade,sample class, and approval descriptions
+  DBI::dbExecute(con, "CREATE TABLE if not exists sample_class (
+                 code TEXT PRIMARY KEY,
+                 description TEXT NOT NULL);")
+  class <- data.frame("code" = c("M", "D", "I", "U"),
+                      "description" = c("Monitoring (routine)", "Duplicate/Replicate or split sample", "Incident response", "Undefined"))
+  DBI::dbAppendTable(con, "sample_class", class)
+  DBI::dbExecute(con,
+                 "ALTER TABLE measurements_discrete
+                 ADD CONSTRAINT fk_class
+                 FOREIGN KEY (sample_class)
+                 REFERENCES sample_class(code)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_sample_class_exists()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sample_class WHERE code = NEW.sample_class) THEN
+        RAISE EXCEPTION 'Invalid sample class code: %', NEW.sample_class;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_sample_class
+BEFORE INSERT OR UPDATE OF sample_class ON measurements_discrete
+FOR EACH ROW
+EXECUTE FUNCTION check_sample_class_exists();
+")
+
+  DBI::dbExecute(con, "CREATE TABLE if not exists grades (
+                 code TEXT PRIMARY KEY,
+                 description TEXT NOT NULL);")
+  grades <- data.frame("code" = c("A", "B", "C", "D", "E", "N", "R", "I", "U", "S", "Z"),
+                       "description" = c("Excellent", "Good", "Fair", "Poor", "Estimated", "Unusable", "Draw down recovery", "Ice", "Undefined", "Sensor issues", "Unknown"))
+  DBI::dbAppendTable(con, "grades", grades)
+  DBI::dbExecute(con,
+                 "ALTER TABLE measurements_continuous
+                 ADD CONSTRAINT fk_grade
+                 FOREIGN KEY (grade)
+                 REFERENCES grades(code)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+  DBI::dbExecute(con,
+                 "ALTER TABLE calculated_daily
+                 ADD CONSTRAINT fk_grade
+                 FOREIGN KEY (grade)
+                 REFERENCES grades(code)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_grade_exists_continuous()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM grades WHERE code = NEW.grade) THEN
+        RAISE EXCEPTION 'Invalid grade code: %', NEW.grade;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_grade_continuous
+BEFORE INSERT OR UPDATE OF grade ON measurements_continuous
+FOR EACH ROW
+EXECUTE FUNCTION check_grade_exists_continuous();
+")
+
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_grade_exists_daily()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM grades WHERE code = NEW.grade) THEN
+        RAISE EXCEPTION 'Invalid grade code: %', NEW.grade;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_grade_daily
+BEFORE INSERT OR UPDATE OF grade ON calculated_daily
+FOR EACH ROW
+EXECUTE FUNCTION check_grade_exists_daily();
+")
+
+
+  DBI::dbExecute(con, "CREATE TABLE if not exists approvals (
+                 code TEXT PRIMARY KEY,
+                 description TEXT NOT NULL);")
+  approvals <- data.frame("code" = c("A", "C", "R", "N", "U", "Z"),
+                          "description" = c("Approved", "Work up complete: ready for review", "Reviewed, pending approval", "Not reviewed", "Undefined", "Unknown"))
+  DBI::dbAppendTable(con, "approvals", approvals)
+  DBI::dbExecute(con,
+                 "ALTER TABLE measurements_continuous
+                 ADD CONSTRAINT fk_approval
+                 FOREIGN KEY (approval)
+                 REFERENCES approvals(code)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+  DBI::dbExecute(con,
+                 "ALTER TABLE calculated_daily
+                 ADD CONSTRAINT fk_approval
+                 FOREIGN KEY (approval)
+                 REFERENCES approvals(code)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE;")
+  #Function and trigger for checking measurements_continuous
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_approval_exists_continuous()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM approvals WHERE code = NEW.approval) THEN
+        RAISE EXCEPTION 'Invalid approval code: %', NEW.approval;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_approval_on_continuous
+BEFORE INSERT OR UPDATE OF approval ON measurements_continuous
+FOR EACH ROW
+EXECUTE FUNCTION check_approval_exists_continuous();
+")
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_approval_exists_daily()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM approvals WHERE code = NEW.approval) THEN
+        RAISE EXCEPTION 'Invalid approval code: %', NEW.approval;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_approval_on_daily
+BEFORE INSERT OR UPDATE OF approval ON calculated_daily
+FOR EACH ROW
+EXECUTE FUNCTION check_approval_exists_daily();
+")
+
 
   # And tables that hold metadata for all locations
   DBI::dbExecute(con, "CREATE TABLE if not exists datum_list (
@@ -248,15 +385,15 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   }, error = function(e) {hydat_path <- NULL})
 
   new_hydat <- FALSE
-  if (!is.null(hydat_path) & exists("local_hydat")){ #If hydat already exists, compare version numbers
+  if (!is.null(hydat_path) & exists("local_hydat")) { #If hydat already exists, compare version numbers
     local_hydat <- gsub("-", "", as.character(local_hydat))
     remote_hydat <- tidyhydat::hy_remote()
-    if (local_hydat != remote_hydat){ #if remote version is more recent, download new version
-      tidyhydat::download_hydat(ask=FALSE)
+    if (local_hydat != remote_hydat) { #if remote version is more recent, download new version
+      tidyhydat::download_hydat(ask = FALSE)
       hydat_path <- tidyhydat::hy_downloaded_db() #reset the hydat path just in case the new DB is not named exactly as the old one (guard against tidyhydat package changes in future)
     }
   } else if (is.null(hydat_path) | !exists("local_hydat")) {# if hydat does not already exist, download fresh to the default location
-    tidyhydat::download_hydat(ask=FALSE)
+    tidyhydat::download_hydat(ask = FALSE)
     hydat_path <- tidyhydat::hy_downloaded_db()
   }
 
@@ -264,7 +401,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   on.exit(DBI::dbDisconnect(hydat))
 
   datums_existing <- DBI::dbGetQuery(con, "SELECT datum_id FROM datum_list")
-  if (nrow(datums_existing) == 0){
+  if (nrow(datums_existing) == 0) {
     datum_list <- DBI::dbReadTable(hydat, "DATUM_LIST")
     names(datum_list) <- c("datum_id", "datum_name_en", "datum_name_fr")
     DBI::dbAppendTable(con, "datum_list", datum_list)

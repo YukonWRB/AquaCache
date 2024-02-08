@@ -19,13 +19,13 @@
 #' @export
 #' @seealso [addHydrometTimeseriesTemplate()] to see templates for timesries_df and locations_df.
 
-addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = hydrometConnect()){
+addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = hydrometConnect()) {
 
   #Check that every location in the timeseries_df already exists; if they don't, check they've been specified in locations_df
   new_locs <- NULL
   exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
   if (!all(unique(timeseries_df$location) %in% exist_locs)) {
-    if (is.null(locations_df)){
+    if (is.null(locations_df)) {
       missing <- timeseries_df$location[!(timeseries_df$location %in% exist_locs)]
       stop("You didn't specify a locations_df, but not all of the locations in your timeseries_df are already in the database. Either double-check your timeseries_df or give me a locations_df from which to add the missing location(s) ", paste(missing, collapse = ", "), ".")
     } else {
@@ -34,12 +34,12 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
   }
 
   #Check the names of timeseries_df and locations_df, if it's not null
-  if (!all(c("location", "parameter", "unit", "category", "period_type", "record_rate", "param_type", "operator", "network", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))){
+  if (!all(c("location", "parameter", "unit", "category", "period_type", "record_rate", "param_type", "operator", "network", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
     stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'unit', 'category', 'period_type', 'record_rate', 'param_type', 'start_datetime', 'operator', 'network', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
   }
 
-  if (!is.null(locations_df)){
-    if (!all(c("location", "name", "latitude", "longitude", "datum_id_from", "datum_id_to", "conversion_m", "current", "note", "owner", "operator", "contact") %in% names(locations_df))){
+  if (!is.null(locations_df)) {
+    if (!all(c("location", "name", "latitude", "longitude", "datum_id_from", "datum_id_to", "conversion_m", "current", "note", "owner", "operator", "contact") %in% names(locations_df))) {
       stop("It looks like you're either missing columns in locations_df or that you have a typo. Please review that you have columns named c('location', 'name', 'latitude', 'longitude', 'datum_id_from', 'datum_id_to', 'conversion_m', 'current', 'note', 'owner', 'operator', 'contact'). Use NA to indicate a column with no applicable value.")
     }
   }
@@ -53,31 +53,31 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
   timeseries_df$record_rate <- as.character(timeseries_df$record_rate)
 
   # Check that cols in the timeseries_df meets constraints
-  if (!all(timeseries_df$category %in% c("discrete", "continuous"))){
+  if (!all(timeseries_df$category %in% c("discrete", "continuous"))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'category' can only be one of 'discrete' or 'continuous'.")
   }
-  if (!all(timeseries_df$param_type %in% c('meteorological', 'surface water physical', 'surface water chemical', 'ground water chemical', 'ground water physical', 'geochemical', 'atmospheric chemical'))){
+  if (!all(timeseries_df$param_type %in% c('meteorological', 'surface water physical', 'surface water chemical', 'ground water chemical', 'ground water physical', 'geochemical', 'atmospheric chemical'))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'param_type' can only be one of 'meteorological', 'surface water physical', 'surface water chemical', 'ground water chemical', 'ground water physical', 'geochemical', 'atmospheric chemical'.")
   }
-  if (!all(timeseries_df$period_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))){
+  if (!all(timeseries_df$period_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'period_type' can only be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.")
   }
   #Check column public_delay can be converted to a period
   check <- lubridate::period(timeseries_df[!is.na(timeseries_df$public_delay), "public_delay"])
-  if (NA %in% check){
+  if (NA %in% check) {
     stop("At least one of your entries to timeseries_df in column 'public_delay' is not NA and cannot be coerced to a duration Use ISO8601 format only, or NA for no entry.")
   }
 
   sub.discrete <- timeseries_df[timeseries_df$category == "discrete", ]
-  if (!all(is.na(sub.discrete$record_rate))){
+  if (!all(is.na(sub.discrete$record_rate))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'record_rate' can only be NULL where column 'category' is 'discrete'.")
   }
   sub.cont <- timeseries_df[timeseries_df$category == "continuous", ]
-  if (!all(sub.cont$record_rate %in% c('< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'))){
+  if (!all(sub.cont$record_rate %in% c('< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'record_rate' can only be one of '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year' where column 'category' is 'continuous'.")
   }
 
-  if (!is.null(settings_df)){
+  if (!is.null(settings_df)) {
     if (!all(names(settings_df) %in% c("source_fx", "parameter", "period_type", "record_rate", "remote_param_name"))) {
       stop("You provided a data.frame for 'settings_df' with incorrect names. Refer to function addHydrometTimeseriesTemplate or to this function's help.")
     }
@@ -88,32 +88,32 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
   }
 
   # Check that the proper entries exist in the settings table. Make entry to DB if necessary/possible
-  for (i in 1:nrow(timeseries_df)){
+  for (i in 1:nrow(timeseries_df)) {
     source_fx <- timeseries_df[i, "source_fx"]
     record_rate <- timeseries_df[i, "record_rate"]
     parameter <- timeseries_df[i, "parameter"]
     period_type <- timeseries_df[i, "period_type"]
 
-    if (is.na(record_rate)){
+    if (is.na(record_rate)) {
       setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate IS NULL AND parameter = '", parameter, "' AND period_type = '", period_type, "';"))
     } else {
       setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate = '", record_rate, "' AND parameter = '", parameter, "' AND period_type = '", period_type, "';"))
     }
-    if (!is.null(settings_df)){ # A df was provided with settings info
+    if (!is.null(settings_df)) { # A df was provided with settings info
       if (nrow(setting) == 1) { # There already is a setting in the DB for that combination
         if(!identical(setting, settings_df[i, ])) {
           stop("There is already an entry to the settings table to handle row ", i, " of the provided timeseries_df. You also provided an entry in settings_df, but it doesn't match what's in the DB already. Please revise your settings_df; modifying the DB entry should only be done after careful consideration as other timeseries likely depend on it.")
         }
-      } else if (nrow(setting) == 0){ # A df was provided, and there is no existing entry for this combination. Make a new entry if possible
-        if (is.na(record_rate)){
+      } else if (nrow(setting) == 0) { # A df was provided, and there is no existing entry for this combination. Make a new entry if possible
+        if (is.na(record_rate)) {
           sub.settings_df <- settings_df[settings_df$source_fx == source_fx & is.na(settings_df$record_rate) & settings_df$parameter == parameter & settings_df$period_type == period_type, ]
         } else {
           sub.settings_df <- settings_df[settings_df$source_fx == source_fx & settings_df$record_rate == record_rate & settings_df$parameter == parameter & settings_df$period_type == period_type, ]
         }
-        if (row.names(sub.settings_df) == "NA"){
+        if (row.names(sub.settings_df) == "NA") {
           sub.settings_df <- data.frame()
         }
-        if (nrow(sub.settings_df) == 1){
+        if (nrow(sub.settings_df) == 1) {
           DBI::dbAppendTable(con, "settings", sub.settings_df)
         } else if (nrow(sub.settings_df) > 1) {
           DBI::dbAppendTable(con, "settings", sub.settings_df[1, ])
@@ -122,15 +122,15 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
         }
       }
     } else { #no df was provided
-      if (nrow(setting) == 0){
+      if (nrow(setting) == 0) {
         stop("There is no existing entry in the 'settings' table for row ", i, " of the supplied timeseries_df. Please provide a data.frame for the settings_df parameter to address this.")
       }
     }
   }
 
   #Add the location info ###########
-  if (!is.null(new_locs)){
-    for (i in new_locs){
+  if (!is.null(new_locs)) {
+    for (i in new_locs) {
       DBI::dbWithTransaction(
         con,
         {
@@ -175,7 +175,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
 
   #Add the timeseries ########
   timeseries_df$location_id <- NA
-  for (i in 1:nrow(timeseries_df)){
+  for (i in 1:nrow(timeseries_df)) {
     timeseries_df[i, "location_id"] <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", timeseries_df[i, "location"], "';"))
     tryCatch({
       add <- timeseries_df[i, -which(names(timeseries_df) == "start_datetime")]
@@ -194,31 +194,31 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
       period_type <- add$period_type
       record_rate <- add$record_rate
       source_fx_args <- add$source_fx_args
-      if (is.na(record_rate)){
+      if (is.na(record_rate)) {
         param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
       } else {
         param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
       }
 
 
-      if (!is.na(add$source_fx)){
+      if (!is.na(add$source_fx)) {
         args_list <- list(location = loc, param_code = param_code, start_datetime = timeseries_df[i, "start_datetime"])
-        if (!is.na(source_fx_args)){#add some arguments if they are specified
+        if (!is.na(source_fx_args)) {#add some arguments if they are specified
           args <- strsplit(source_fx_args, "\\},\\s*\\{")
-          pairs <- lapply(args, function(pair){
+          pairs <- lapply(args, function(pair) {
             gsub("[{}]", "", pair)
           })
-          pairs <- lapply(pairs, function(pair){
+          pairs <- lapply(pairs, function(pair) {
             gsub("\"", "", pair)
           })
-          pairs <- lapply(pairs, function(pair){
+          pairs <- lapply(pairs, function(pair) {
             gsub("'", "", pair)
           })
           pairs <- strsplit(unlist(pairs), "=")
-          pairs <- lapply(pairs, function(pair){
+          pairs <- lapply(pairs, function(pair) {
             trimws(pair)
           })
-          for (j in 1:length(pairs)){
+          for (j in 1:length(pairs)) {
             args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
           }
         }
@@ -226,9 +226,9 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
         ts <- do.call(source_fx, args_list) #Get the data using the args_list
         ts <- ts[!is.na(ts$value) , ]
 
-        if (add$category == "continuous"){
-          if (nrow(ts) > 0){
-            if (period_type == "instantaneous"){ #Period is always 0 for instantaneous data
+        if (add$category == "continuous") {
+          if (nrow(ts) > 0) {
+            if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
               ts$period <- "00:00:00"
             } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
               ts <- ts[order(ts$datetime) ,] #Sort ascending
@@ -254,8 +254,8 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
               }
               # Calculate the duration in days, hours, minutes, and seconds and assign to the right location in ts
               ts$period <- NA
-              if (nrow(changes) > 0){
-                for (j in 1:nrow(changes)){
+              if (nrow(changes) > 0) {
+                for (j in 1:nrow(changes)) {
                   days <- floor(changes$period[j] / 24)
                   remaining_hours <- changes$period[j] %% 24
                   minutes <- floor((remaining_hours - floor(remaining_hours)) * 60)
@@ -270,7 +270,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
               }
             } else { #Check to make sure that the supplied period can actually be coerced to a period
               check <- lubridate::period(unique(ts$period))
-              if (NA %in% check){ #Can't be coerced, so set to NA
+              if (NA %in% check) { #Can't be coerced, so set to NA
                 ts$period <- NA
               }
             }
@@ -285,30 +285,30 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
               warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
             })
             tryCatch({
-              if (add$record_rate %in% c('1 day', '< 1 day')){
+              if (add$record_rate %in% c('1 day', '< 1 day')) {
                 calculate_stats(timeseries_id = new_tsid)
               message("Success! Calculated daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
               } else {
                 message("Not calculating daily statistics for ", add$location, " and parameter ", add$parameter, " as recording rate is greater than 1 day.")
               }
 
-            }, error = function(e){
+            }, error = function(e) {
               message("Unable to calculate daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
             })
           } else { #There is no data to associated with this timeseries. Delete it and see if the location should also be deleted.
             DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
             loc_necessary <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", loc, "'"))
-            if (nrow(loc_necessary) == 0){
+            if (nrow(loc_necessary) == 0) {
               DBI::dbExecute(con, paste0("DELETE FROM locations WHERE location = '", loc, "';"))
             }
             message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
             next()
           }
-          if ((add$operator %in% c("WSC", "Water Survey of Canada")) & add$parameter %in% c("level", "flow")){
+          if ((add$operator %in% c("WSC", "Water Survey of Canada")) & add$parameter %in% c("level", "flow")) {
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
           }
         } else { #Add the non-continuous data
-          if (nrow(ts) > 0){
+          if (nrow(ts) > 0) {
             ts$timeseries_id <- new_tsid
             tryCatch({
               DBI::dbAppendTable(con, "measurements_discrete", ts)
@@ -320,7 +320,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
           } else { #There is no data to associate with this timeseries. Delete it and see if the location should also be deleted.
             DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
             loc_necessary <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", loc, "'"))
-            if (nrow(loc_necessary) == 0){
+            if (nrow(loc_necessary) == 0) {
               DBI::dbExecute(con, paste0("DELETE FROM locations WHERE timeseries_id = ", new_tsid, ";"))
             }
             message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
