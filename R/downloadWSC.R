@@ -13,30 +13,30 @@
 #' @return A data.table object of hydrometric data, with datetimes in UTC-0.
 #' @export
 
-downloadWSC <- function (location, param_code, start_datetime, end_datetime = Sys.time())
+downloadWSC <- function(location, param_code, start_datetime, end_datetime = Sys.time())
 {
   # Checking start_datetime parameter
   tryCatch({
-    if (inherits(start_datetime, "character") & nchar(start_datetime) > 10){ #Does not necessarily default to 0 hour.
+    if (inherits(start_datetime, "character") & nchar(start_datetime) > 10) { #Does not necessarily default to 0 hour.
       start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
-    } else if (inherits(start_datetime, "POSIXct")){
+    } else if (inherits(start_datetime, "POSIXct")) {
       attr(start_datetime, "tzone") <- "UTC"
-    } else if (inherits(start_datetime, "Date") | (inherits(start_datetime, "character") & nchar(start_datetime) == 10)){ #defaults to 0 hour
+    } else if (inherits(start_datetime, "Date") | (inherits(start_datetime, "character") & nchar(start_datetime) == 10)) { #defaults to 0 hour
       start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
     } else {
       stop("Parameter start_datetime could not be coerced to POSIXct.")
     }
-  }, error = function(e){
+  }, error = function(e) {
     stop("Failed to convert parameter start_datetime to POSIXct.")
   })
 
   # Checking end_datetime parameter
   tryCatch({
-    if (inherits(end_datetime, "character") & nchar(end_datetime) > 10){ #Does not necessarily default to 0 hour.
+    if (inherits(end_datetime, "character") & nchar(end_datetime) > 10) { #Does not necessarily default to 0 hour.
       end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
-    } else if (inherits(end_datetime, "POSIXct")){
+    } else if (inherits(end_datetime, "POSIXct")) {
       attr(end_datetime, "tzone") <- "UTC"
-    } else if (inherits(end_datetime, "Date") | (inherits(end_datetime, "character") & nchar(end_datetime) == 10)){ #defaults to very end of day
+    } else if (inherits(end_datetime, "Date") | (inherits(end_datetime, "character") & nchar(end_datetime) == 10)) { #defaults to very end of day
       end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
       end_datetime <- end_datetime + 60*60*23.9999
     } else {
@@ -46,7 +46,7 @@ downloadWSC <- function (location, param_code, start_datetime, end_datetime = Sy
     stop("Failed to convert parameter end_datetime to POSIXct.")
   })
 
-  if (nchar(as.character(start_datetime)) == 10){
+  if (nchar(as.character(start_datetime)) == 10) {
     start_datetime <- paste0(start_datetime, " 00:00:00")
   }
   if (nchar(as.character(end_datetime)) == 10) {
@@ -61,5 +61,28 @@ downloadWSC <- function (location, param_code, start_datetime, end_datetime = Sy
   url <- paste0(baseurl, location_string, "&", parameters_string, "&", datetime_string)
 
   data <- data.table::fread(url, showProgress = FALSE, data.table = FALSE, select = c("Date", "Value/Valeur", "Symbol/Symbole", "Approval/Approbation"), col.names = c("datetime", "value", "grade", "approval"))
+
+  if (nrow(data) > 0) {
+    grade_mapping <- c("-1" = "U",
+                       "10" = "I",
+                       "20" = "E",
+                       "30" = "D",
+                       "40" = "N",
+                       "50" = "U")
+    approval_mapping <- c("Final/Finales" = "A",
+                          "Provisional/Provisoire" = "N")
+    data$grade <- ifelse(data$grade %in% names(grade_mapping),
+                         grade_mapping[data$grade],
+                         "Z")
+    data$approval <- ifelse(data$approval %in% names(approval_mapping),
+                            approval_mapping[data$approval],
+                            "Z")
+
+
+    return(data)
+  } else {
+    data <- data.frame()
+    return(data)
+  }
 
 } #End of function

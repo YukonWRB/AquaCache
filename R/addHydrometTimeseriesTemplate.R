@@ -13,15 +13,15 @@
 #' @export
 #'
 
-addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), format = "short", save_path = NULL){
+addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), format = "short", save_path = NULL) {
 
 
-  if (!is.null(save_path)){
+  if (!is.null(save_path)) {
     if (save_path == "choose") {
       message("Select the output folder for shapefiles...")
       save_path <- as.character(utils::choose.dir(caption="Select Save Folder"))
     }
-    if (!dir.exists(save_path)){
+    if (!dir.exists(save_path)) {
       stop("The save path you're pointint to doesn't exist, R can't access it, or your selection via the interactive menu didn't work. You could try specifying a save path directly.")
     }
     rlang::check_installed("openxlsx", reason = "necessary to output xlsx document.") #This is here because openxlsx is not a 'depends' of this package; it is only necessary for this function and is therefore in "suggests"
@@ -32,24 +32,24 @@ addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), fo
   ts <- DBI::dbGetQuery(con, "SELECT * FROM timeseries")
   names <- names(ts[!(names(ts) %in% c("timeseries_id", "end_datetime", "last_new_data", "last_daily_calculation", "location_id"))])
 
-  if (format == "short"){
+  if (format == "short") {
     ts_df <- data.frame(matrix(ncol = length(names)))
     names(ts_df) <- names
-    for (i in names){
+    for (i in names) {
       ts_df[1,i] <- paste(unique(ts[[i]]), collapse = ", ")
     }
     ts_df[1, "start_datetime"] <- as.POSIXct("2020-01-01 01:01:01")
-  } else if (format == "long"){
+  } else if (format == "long") {
     max_length <- numeric()
-    for (i in names){
+    for (i in names) {
       max_length <- c(max_length, length(unique(ts[[i]])))
     }
     max_length <- max(max_length)
     ts_df <- data.frame(matrix(ncol = length(names), nrow = max_length))
     names(ts_df) <- names
-    for (i in names){
+    for (i in names) {
       data <- unique(ts[[i]])
-      if (length(data) < max_length){
+      if (length(data) < max_length) {
         data <- c(data, rep(NA, max_length - length(data)))
       }
       ts_df[, i] <- data
@@ -83,7 +83,7 @@ addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), fo
 
   list <- list("timeseries_table" = ts_df, "locations_table" = locs, "datums" = datums, "settings" = settings)
 
-  if (!is.null(save_path)){
+  if (!is.null(save_path)) {
     openxlsx::write.xlsx(list, file = paste0(save_path, "/addHydrometTemplate output ", Sys.Date(), ".xlsx"))
   }
   return(list)

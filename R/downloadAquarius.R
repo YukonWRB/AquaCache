@@ -21,11 +21,11 @@
 #' @export
 
 downloadAquarius <- function(location,
-                        param_code,
-                        start_datetime,
-                        end_datetime = Sys.Date(),
-                        login = Sys.getenv(c("AQUSER", "AQPASS")),
-                        server = Sys.getenv("AQSERVER")
+                             param_code,
+                             start_datetime,
+                             end_datetime = Sys.Date(),
+                             login = Sys.getenv(c("AQUSER", "AQPASS")),
+                             server = Sys.getenv("AQSERVER")
 )
 {
   #Check that login and server credentials exist
@@ -41,15 +41,12 @@ downloadAquarius <- function(location,
 
   source(system.file("scripts",  "timeseries_client.R", package = "HydroMetDB")) #This loads the code dependencies
 
-  #Make a data.frame with grade numbers and meanings because AQ doesn't supply them
-  grade_codes <- data.frame(code = c(-55,-50, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 10, 11, 12, 14, 15, 21, 30, 31, 99, 100, 101, 103, 105, 110, 115, 120, 124, 125, 130),
-                            description = c("GW RECOVERY", "WL BLW", "HW-MISS", "MISSING DATA", "OBSTRUCT", "EST-WI", "Unusable", "Unspecified", "Undefined", "ICE", "E", "C", "B", "A", "do not use - Est. Poor", "do not use - Poor", "Qun(>15%)", "Qun(<15%)", "Qun(<7%)", "do not use - Fair", "do not use - Est. Good", "do not use - formerly Good", "do not use - HW-MISS", "MET MISSING", "MET FREEZE", "MET CUML-GAP", "MET POOR", "MET EST-EXTERNAL", "MET EST-GAP", "MET SNOW", "MET FILL-DUPL", "MET FAIR", "MET GOOD"))
   #Make the Aquarius configuration
   config = list(
     server = server,
-    username=login[1],
-    password=login[2],
-    timeSeriesName=paste0(param_code, "@", location)
+    username = login[1],
+    password = login[2],
+    timeSeriesName = paste0(param_code, "@", location)
   )
 
   # Connect to Aquarius server
@@ -58,21 +55,21 @@ downloadAquarius <- function(location,
                      config$password)
   on.exit(timeseries$disconnect())
 
-  if (inherits(start_datetime, "POSIXct")){
+  if (inherits(start_datetime, "POSIXct")) {
     attr(start_datetime, "tzone") <- "UTC"
   }
   start <- as.character(start_datetime)
-  if(nchar(start) == 10){
+  if (nchar(start) == 10) {
     start <- paste0(start, " 00:00:00")
   }
   start <- gsub(" ", "T", start)
   start <- paste0(start, "-00:00")
 
-  if (inherits(end_datetime, "POSIXct")){
+  if (inherits(end_datetime, "POSIXct")) {
     attr(end_datetime, "tzone") <- "UTC"
   }
   end <- as.character(end_datetime)
-  if (nchar(end) == 10){
+  if (nchar(end) == 10) {
     end <- paste0(end, " 23:59:59.9999999")
   }
   end <- gsub(" ", "T", end)
@@ -86,66 +83,112 @@ downloadAquarius <- function(location,
                    value = RawDL$Points$Value$Numeric)
   ts <- ts[!is.na(ts$value) , ]
 
-  if (nrow(ts) > 0){
+  if (nrow(ts) > 0) {
     # format times to POSIXct, fix offset
-    offset <- substr(ts$datetime[1], nchar(ts$datetime[1])-5, nchar(ts$datetime[1]))
+    offset <- substr(ts$datetime[1], nchar(ts$datetime[1]) - 5, nchar(ts$datetime[1]))
     offset <- gsub(":", "", offset)
-    ts$datetime <- paste0(substr(ts$datetime, 1, nchar(ts$datetime)-6), offset)
+    ts$datetime <- paste0(substr(ts$datetime, 1, nchar(ts$datetime) - 6), offset)
     ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%OS%z")
 
     #format approvals, grade times
-    approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment"))]
-    stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1])-5, nchar(approvals$StartTime[1]))
+    approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment", "LevelDescription"))]
+    stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1]) - 5, nchar(approvals$StartTime[1]))
     stoffset <- gsub(":", "", stoffset)
-    approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime)-6), stoffset)
+    approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime) - 6), stoffset)
     approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-    endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1])-5, nchar(approvals$EndTime[1]))
+    endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1]) - 5, nchar(approvals$EndTime[1]))
     endoffset <- gsub(":", "", endoffset)
-    approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime)-6), endoffset)
+    approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime) - 6), endoffset)
     approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
 
-    colnames(approvals) <- c("level", "description", "start_time", "end_time")
+    colnames(approvals) <- c("level", "start_time", "end_time")
+
+    approval_mapping <- c("800" = "N",
+                         "900" = "C",
+                         "950" = "C",
+                         "975" = "R",
+                         "1200" = "A",
+                         "1300" = "A")
+    approvals$level <- ifelse(as.character(approvals$level) %in% names(approval_mapping),
+                                    approval_mapping[as.character(approvals$level)],
+                                    "Z")
 
     grades <- RawDL$Grades
-    stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1])-5, nchar(grades$StartTime[1]))
+    stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1]) - 5, nchar(grades$StartTime[1]))
     stoffset <- gsub(":", "", stoffset)
-    grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime)-6), stoffset)
+    grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime) - 6), stoffset)
     grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-    endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1])-5, nchar(grades$EndTime[1]))
+    endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1]) - 5, nchar(grades$EndTime[1]))
     endoffset <- gsub(":", "", endoffset)
-    grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime)-6), endoffset)
+    grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime) - 6), endoffset)
     grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
 
-    grades <- merge(grades, grade_codes, by.x = "GradeCode", by.y = "code")
-    colnames(grades) <- c("level", "start_time", "end_time", "description")
+    colnames(grades) <- c("level", "start_time", "end_time")
 
+    grade_mapping <- c("-55" = "R",
+                       "-50" = "U",
+                       "-y" = "D",
+                       "-6" = "E",
+                       "-5" = "N",
+                       "-4" = "C",
+                       "-3" = "E",
+                       "-2" = "N",
+                       "-1" = "U",
+                       "0" = "U",
+                       "1" = "I",
+                       "2" = "E",
+                       "3" = "C",
+                       "4" = "B",
+                       "5" = "A",
+                       "10" = "U",
+                       "11" = "U",
+                       "12" = "D",
+                       "14" = "C",
+                       "15" = "B",
+                       "21" = "N",
+                       "30" = "N",
+                       "31" = "N",
+                       "99" = "N",
+                       "100" = "N",
+                       "101" = "U",
+                       "103" = "U",
+                       "105" = "D",
+                       "110" = "E",
+                       "115" = "E",
+                       "120" = "S",
+                       "124" = "U",
+                       "125" = "B",
+                       "130" = "A")
+    grades$level <- ifelse(as.character(grades$level) %in% names(grade_mapping),
+                              grade_mapping[as.character(grades$level)],
+                              "Z")
 
     #Add in grades and approval columns
     ts <- ts[!duplicated(ts) , ] #In unknown circumstances, Aquarius spits out duplicate points.
     ts$grade <- NA
-    for (i in 1:nrow(grades)){
+    for (i in 1:nrow(grades)) {
       if (min(ts$datetime) > grades$start_time[i]) { #if the grade is prior to the first ts point
-        ts[ts$datetime == min(ts$datetime), "grade"] <- grades$description[i]
-      } else if (nrow(ts[ts$datetime == grades$start_time[i],]) !=0) { #if the times line up properly (are snapped to a point)
-        ts[ts$datetime == grades$start_time[i], "grade"] <- grades$description[i]
-      } else if (which.min(abs(ts$datetime - grades$start_time[i])) != nrow(ts)){ #if the times do not line up with anything in ts (not snapped), but not after the ts end
+        ts[ts$datetime == min(ts$datetime), "grade"] <- grades$level[i]
+      } else if (nrow(ts[ts$datetime == grades$start_time[i],]) != 0) { #if the times line up properly (are snapped to a point)
+        ts[ts$datetime == grades$start_time[i], "grade"] <- grades$level[i]
+      } else if (which.min(abs(ts$datetime - grades$start_time[i])) != nrow(ts)) { #if the times do not line up with anything in ts (not snapped), but not after the ts end
         index <- which.min(abs(ts$datetime - grades$start_time[i])) + 1
-        ts[index, "grade"] <- grades$description[i]
+        ts[index, "grade"] <- grades$level[i]
       } # and if the last grade start is after then end of the ts, do nothing with it!
     }
 
     ts$approval <- NA
-    for (i in 1:nrow(approvals)){
+    for (i in 1:nrow(approvals)) {
       if (min(ts$datetime) > approvals$start_time[i]) { #if the approval is prior to the first ts point
-        ts[ts$datetime == min(ts$datetime),]$approval <- approvals$description[i]
-      } else if (nrow(ts[ts$datetime == approvals$start_time[i],]) !=0) { #if the times line up properly (are snapped to a point)
-        ts[ts$datetime == approvals$start_time[i],]$approval <- approvals$description[i]
-      } else if (which.min(abs(ts$datetime - approvals$start_time[i])) != nrow(ts)){ #if the times do not line up with anything in ts (not snapped), but not after the ts end
+        ts[ts$datetime == min(ts$datetime),]$approval <- approvals$level[i]
+      } else if (nrow(ts[ts$datetime == approvals$start_time[i],]) != 0) { #if the times line up properly (are snapped to a point)
+        ts[ts$datetime == approvals$start_time[i],]$approval <- approvals$level[i]
+      } else if (which.min(abs(ts$datetime - approvals$start_time[i])) != nrow(ts)) { #if the times do not line up with anything in ts (not snapped), but not after the ts end
         index <- which.min(abs(ts$datetime - approvals$start_time[i])) + 1
-        ts[index,]$approval <- approvals$description[i]
+        ts[index,]$approval <- approvals$level[i]
       } # and if the last approval start is after then end of the ts, do nothing with it!
     }
-    ts <- tidyr::fill(ts, c(.data$grade, .data$approval), .direction = "down")
+    ts <- tidyr::fill(ts, c("grade", "approval"), .direction = "down")
     attr(ts$datetime, "tzone") <- "UTC"
     return(ts)
   } else {
