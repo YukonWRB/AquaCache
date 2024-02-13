@@ -12,21 +12,21 @@ ui <- fluidPage(
                        textAreaInput("documentAuthors", "Enter the authors of the document (one per line)", cols = 1, placeholder = "Firstname Lastname"),
                        dateInput("documentDate", "Enter the publish date of the document"),
                        textInput("documentURL", "Enter the URL or DOI of the document", placeholder = "Optional but recommended!"),
-                       
                        actionButton("associatePoints", "Associate with locations/points", style = c("margin-bottom: 5px;")),
                        uiOutput("associatedPoints"),
-                       
                        actionButton("associateLines", "Associate with lines", style = c("margin-bottom: 5px;")),
                        uiOutput("associatedLines"),
-                       
                        actionButton("associatePolygons", "Associate with polygons", style = c("margin-bottom: 5px;")),
                        uiOutput("associatedPolygons"),
-                       
                        actionButton("addDocumentBtn", "Add Document to Database", style = c("margin-top: 10px;", "margin-bottom: 15px;"), class = "btn btn-primary")
-                       
               ),
               
-              tabPanel("Add Image", value = "addImage"
+              tabPanel("Add Image", value = "addImage",
+                       fileInput("imageFile", "Choose an image to upload"),
+                       actionButton("associateLocation", "Associate with a location", style = c("margin-bottom: 5px;")),
+                       uiOutput("associatedLocation", style = c("margin-bottom: 10px;")),
+                       shinyWidgets::airDatepickerInput("imageDatetime", "Enter the date and time of the image", timepicker = TRUE, placeholder = "YYYY-MM-DD HH:MM:SS"),
+                       textInput("imageDesc", "Enter a detailled description of the image"),
                        
               ),
               tabPanel("Add Raster", value = "addRaster"

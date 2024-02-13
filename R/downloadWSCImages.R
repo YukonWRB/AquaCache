@@ -18,13 +18,13 @@ downloadWSCImages <- function(location, start_datetime, username = Sys.getenv("E
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
   saved_files <- list.files(paste0(tempdir(), "/downloadWSCImages"))
 
-  if (length(saved_files) == 0){
+  if (length(saved_files) == 0) {
     file_exists <- FALSE
   } else {
     saved_files <- data.frame(file = saved_files,
                               datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"), tz = "UTC")
-    ok <- saved_files[saved_files$datetime > Sys.time()-10*60 , ]
-    if (nrow(ok) > 0){
+    ok <- saved_files[saved_files$datetime > Sys.time() - 10*60 , ]
+    if (nrow(ok) > 0) {
       target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
       tbl <- readRDS(paste0(tempdir(), "/downloadWSCImages/", target_file$file))
       file_exists <- TRUE
@@ -33,7 +33,7 @@ downloadWSCImages <- function(location, start_datetime, username = Sys.getenv("E
     }
   }
   # If there is no file that matches necessary use, download and save for later
-  if (!file_exists){
+  if (!file_exists) {
     links <- rvest::session(url, httr::authenticate(username, password)) |>
       rvest::html_elements("a") |>
       rvest::html_attr("href")
@@ -51,9 +51,9 @@ downloadWSCImages <- function(location, start_datetime, username = Sys.getenv("E
 
   tbl <- tbl[tbl$location == location & tbl$datetime >= start_datetime , ]
 
-  if (nrow(tbl) > 0){
+  if (nrow(tbl) > 0) {
     files <- list()
-    for (i in 1:nrow(tbl)){
+    for (i in 1:nrow(tbl)) {
       download_url <- paste0(url, "/", tbl[i, "link"[]])
       file <- httr::GET(download_url, config = httr::authenticate(username, password))
       file$timestamp <- tbl[i, "datetime"]
