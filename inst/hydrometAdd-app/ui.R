@@ -68,14 +68,26 @@ ui <- fluidPage(
                        conditionalPanel(condition = "input.tabsetPanel1 == 'addTimeseries'",
                                         tabsetPanel(id = "addTimeseriesTabs",
                                                     
-                                                    # Add Data Timeseries sub-tab ############################################################################################################
-                                                    tabPanel("Add Data Timeseries", value = "addDataTimeseries"),
-                                                    
-                                                    # Add Raster Timeseries sub-tab ############################################################################################################
-                                                    tabPanel("Add Raster Timeseries", value = "addRasterTimeseries"),
-                                                    
-                                                    # Add Image Timeseries sub-tab ############################################################################################################
-                                                    tabPanel("Add Image Timeseries", value = "addImageTimeseries")
+                                                    # # Add Data Timeseries sub-tab ############################################################################################################
+                                                    # tabPanel("Add Data Timeseries", value = "addDataTimeseries"),
+                                                    # shinyWidgets::materialSwitch("newDataTSLocation", "Add a new location"), # If the user toggles this the elements below will be shown
+                                                    # uiOutput("existDataTSLocation"), # This will be populated with the location options from the DB if the user doesn't toggle the switch
+                                                    # textInput("newLocCode", "Enter the code for the new location (used to pull in new data)"),
+                                                    # textInput("NewLocName", "Enter the name for the new location"),
+                                                    # numericInput("newLocLat", "Enter the latitude for the new location", value = 0, min = -90, max = 90, step = 0.0001),
+                                                    # numericInput("newLocLon", "Enter the longitude for the new location", value = 0, min = -180, max = 180, step = 0.0001),
+                                                    # numericInput("newLocElev", "Enter the elevation for the new location", value = 0, min = 0, max = 3000, step = 0.001),
+                                                    # uiOutput("newLocDatum"), # This will be populated with the datum options from the DB
+                                                    # 
+                                                    # textInput("newLocNote", "Enter a note for the new location"),
+                                                    # selectizeInput("newLocElev", "Enter the elevation for the new location", choices = c("elevation1", "elevation2", "elevation3"), multiple = FALSE, options = list(maxItems = 1)),
+                                                    # 
+                                                    # 
+                                                    # # Add Raster Timeseries sub-tab ############################################################################################################
+                                                    # tabPanel("Add Raster Timeseries", value = "addRasterTimeseries"),
+                                                    # 
+                                                    # # Add Image Timeseries sub-tab ############################################################################################################
+                                                    # tabPanel("Add Image Timeseries", value = "addImageTimeseries")
                                         )
                        )
               )
