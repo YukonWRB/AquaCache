@@ -10,19 +10,23 @@
 #' @param object Valid path including extension to the document to upload, or an object of class 'response' such as that provided by [downloadWSCImages()].
 #' @param img_meta_id The img_meta_id, from the table images_index, corresponding to the image location and type. Set NULL if there is no img_meta_id yet.
 #' @param datetime The datetime the image was taken at, as a POSIXct object or something that can be coerced to one. If not POSIXct timezone is assumed to be UTC.
-#' @param fetch_datetime The datetime the image was retrieved (optional).
-#' @param location If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric.
-#' @param image_type If no img_meta_id exists yet: the type of image: 'auto', or 'manual'.
+#' @param fetch_datetime The datetime the image was retrieved (optional). If not POSIXct timezone is assumed to be UTC.
+#' @param description A description of the image. Pass as text.
+#' @param location If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.
+#' @param image_type If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
 #' @return TRUE if an image was properly added to the database.
 #' @export
 
-insertHydrometImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, location = NULL, image_type = NULL, con = hydrometConnect()) {
+insertHydrometImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, description = NULL, location = NULL, image_type = NULL, con = hydrometConnect()) {
 
   #Checks
   if (length(location) > 1) {
     stop("You can only specify one location at a time.")
+  }
+  if (nchar(description) < 5) {
+    stop("Minimum character length for 'description' is 5. Try harder.")
   }
   if (!is.null(img_meta_id)) {
     img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE img_meta_id = ", img_meta_id))[1,1]
@@ -71,6 +75,8 @@ insertHydrometImage <- function(object, img_meta_id, datetime, fetch_datetime = 
   if (!inherits(datetime, "POSIXct")) {
     stop("Datetime must be a POSIXct object or something that can be coerced to one.")
   }
+  datetime <- lubridate::floor_date(datetime, "minute")
+  
   if (!is.null(fetch_datetime)) {
     if (inherits(fetch_datetime, "character")) {
       as.POSIXct(fetch_datetime, tz = "UTC")
@@ -92,21 +98,21 @@ insertHydrometImage <- function(object, img_meta_id, datetime, fetch_datetime = 
   #Add to the database and update tables
   exist_img <- DBI::dbGetQuery(con, paste0("SELECT datetime FROM images WHERE datetime = '", datetime, "' AND img_meta_id = ", img_meta_id, ";"))[1,1]
   if (!is.na(exist_img)) {
-    warning("The is already an image in the database for this img_meta_id and datetime ", datetime, ". Deleting the old image and inserting the new one.")
+    warning("There is already an image in the database for this img_meta_id and datetime ", datetime, ". Deleting the old image and inserting the new one.")
     DBI::dbExecute(con, paste0("DELETE FROM images WHERE datetime = '", datetime, "' and img_meta_id = ", img_meta_id, ";"))
   }
   if (!is.null(fetch_datetime)) {
-    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
   } else {
-    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, description, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
   }
   img_times <- DBI::dbGetQuery(con, paste0("SELECT first_img, last_img FROM images_index WHERE img_meta_id = ", img_meta_id, ";"))
 
-  if (img_times[1,1] < datetime) {
-    DBI::dbExecute(con, paste0("UPDATE images_index SET last_img = '", datetime, "' WHERE img_meta_id = ", img_meta_id, ";"))
-  }
-  if (img_times[1,2] > datetime) {
+  if (img_times[1,1] > datetime) {
     DBI::dbExecute(con, paste0("UPDATE images_index SET first_img = '", datetime, "' WHERE img_meta_id = ", img_meta_id, ";"))
+  }
+  if (img_times[1,2] < datetime) {
+    DBI::dbExecute(con, paste0("UPDATE images_index SET last_img = '", datetime, "' WHERE img_meta_id = ", img_meta_id, ";"))
   }
     DBI::dbExecute(con, paste0("UPDATE images_index SET last_new_img = '", as.POSIXct(Sys.time(),tz = "UTC"), "' WHERE img_meta_id = ", img_meta_id, ";"))
   return(TRUE)

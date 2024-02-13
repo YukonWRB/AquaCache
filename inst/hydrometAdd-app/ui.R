@@ -2,8 +2,12 @@
 
 
 ui <- fluidPage(
+  
+  shinyjs::useShinyjs(),
+  
   titlePanel("Hydromet Data Entry App"),
   tabsetPanel(id = "tabsetPanel1",
+              # Add Document tab ############################################################################################################
               tabPanel("Add Document", value = "addDocument",
                        fileInput("documentFile", "Choose a document to upload"),
                        textInput("documentName", "Enter a descriptive name for the document"),
@@ -21,25 +25,56 @@ ui <- fluidPage(
                        actionButton("addDocumentBtn", "Add Document to Database", style = c("margin-top: 10px;", "margin-bottom: 15px;"), class = "btn btn-primary")
               ),
               
+              # Add Image tab ############################################################################################################
               tabPanel("Add Image", value = "addImage",
-                       fileInput("imageFile", "Choose an image to upload"),
+                       fileInput("imageFile", "Choose an image to upload", accept = "image/*"),
                        actionButton("associateLocation", "Associate with a location", style = c("margin-bottom: 5px;")),
                        uiOutput("associatedLocation", style = c("margin-bottom: 10px;")),
-                       shinyWidgets::airDatepickerInput("imageDatetime", "Enter the date and time of the image", timepicker = TRUE, placeholder = "YYYY-MM-DD HH:MM:SS"),
+                       shinyWidgets::airDatepickerInput("imageDatetime", "Enter the date and time the image was taken", timepicker = TRUE, placeholder = "YYYY-MM-DD HH:MM:SS", timepickerOpts = shinyWidgets::timepickerOptions(minutesStep = 15, timeFormat = "HH:mm"), maxDate = Sys.Date() + 1),
                        textInput("imageDesc", "Enter a detailled description of the image"),
-                       
+                       actionButton("addImageBtn", "Add Image to Database", style = c("margin-top: 10px;", "margin-bottom: 15px;"), class = "btn btn-primary")
               ),
-              tabPanel("Add Raster", value = "addRaster"
-                       
+              
+              # Add Raster tab ############################################################################################################
+              tabPanel("Add Raster", value = "addRaster",
+                       shinyFiles::shinyFilesButton("rasterFile", "Choose a raster file to upload", "Select", multiple = FALSE, style = c("margin-top: 15px;", "margin-bottom: 10px;")),
+                       uiOutput("rasterPath"),
+                       textInput("rasterDesc", "Enter a detailled description of the raster"),
+                       textInput("rasterUnits", "Enter the units of the raster", placeholder = "Optional - can get from file if exists"),
+                       textInput("rasterSource", "Enter the source of the raster", placeholder = "Optional but recommended"),
+                       actionButton("addRasterBtn", "Add Raster to Database", style = c("margin-top: 10px;", "margin-bottom: 15px;"), class = "btn btn-primary")
               ),
-              tabPanel("Add Vector", value = "addVector"
+              
+              # Add Vector tab ############################################################################################################
+              tabPanel("Add Vector", value = "addVector",
+                       shinyFiles::shinyFilesButton("vectorFile", "Choose a vector file to upload", "Select", multiple = FALSE, style = c("margin-top: 15px;", "margin-bottom: 10px;")),
+                       uiOutput("vectorPath"),
+                       textInput("layerName", "Enter a name for the vector layer"),
+                       textInput("featureName", "Enter a name for the feature"), # This will be hidden if the number of features for the layer is more than 1
+                       textInput("featureDesc", "Enter a description for the feature"),
+                       actionButton("featureNameCol", "Select the column for feature names", style = c("margin-bottom: 5px;")),
+                       uiOutput("featureNames"),
+                       actionButton("featureDescCol", "Select the column for feature descriptions", style = c("margin-bottom: 5px;")),
+                       uiOutput("featureDescs"),
                        
+                       actionButton("addVectorBtn", "Add Vector to Database", style = c("margin-top: 10px;", "margin-bottom: 15px;"), class = "btn btn-primary")
               ),
+              
+              
+              
+              
+              # Add Timeseries tab ############################################################################################################
               tabPanel("Add Timeseries", value = "addTimeseries",
                        conditionalPanel(condition = "input.tabsetPanel1 == 'addTimeseries'",
                                         tabsetPanel(id = "addTimeseriesTabs",
+                                                    
+                                                    # Add Data Timeseries sub-tab ############################################################################################################
                                                     tabPanel("Add Data Timeseries", value = "addDataTimeseries"),
+                                                    
+                                                    # Add Raster Timeseries sub-tab ############################################################################################################
                                                     tabPanel("Add Raster Timeseries", value = "addRasterTimeseries"),
+                                                    
+                                                    # Add Image Timeseries sub-tab ############################################################################################################
                                                     tabPanel("Add Image Timeseries", value = "addImageTimeseries")
                                         )
                        )

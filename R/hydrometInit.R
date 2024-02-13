@@ -57,7 +57,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  q50 NUMERIC,
                  q25 NUMERIC,
                  q10 NUMERIC,
-                 PRIMARY KEY (timeseries_id, date))")
+                 PRIMARY KEY (timeseries_id, date));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
                    image_id SERIAL PRIMARY KEY,
@@ -66,7 +66,8 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    fetch_datetime TIMESTAMP WITH TIME ZONE,
                    format TEXT NOT NULL,
                    file BYTEA NOT NULL,
-                 description TEXT)")
+                   description TEXT,
+                   UNIQUE (img_meta_id, datetime));")
 
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS images_index (
                  img_meta_id SERIAL PRIMARY KEY,

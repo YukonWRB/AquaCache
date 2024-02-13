@@ -9,6 +9,7 @@ insertHydrometImage(
   img_meta_id,
   datetime,
   fetch_datetime = NULL,
+  description = NULL,
   location = NULL,
   image_type = NULL,
   con = hydrometConnect()
@@ -21,11 +22,13 @@ insertHydrometImage(
 
 \item{datetime}{The datetime the image was taken at, as a POSIXct object or something that can be coerced to one. If not POSIXct timezone is assumed to be UTC.}
 
-\item{fetch_datetime}{The datetime the image was retrieved (optional).}
+\item{fetch_datetime}{The datetime the image was retrieved (optional). If not POSIXct timezone is assumed to be UTC.}
 
-\item{location}{If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric.}
+\item{description}{A description of the image. Pass as text.}
 
-\item{image_type}{If no img_meta_id exists yet: the type of image: 'auto', or 'manual'.}
+\item{location}{If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.}
+
+\item{image_type}{If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }
