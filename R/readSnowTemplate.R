@@ -11,7 +11,7 @@
 #' @export
 #'
 
-# template <- "C:/Users/estewart/Documents/R/Projects/Carmacks_2024-03-01.xlsx"
+# template <- "C:/Users/estewart/Documents/R/Projects/SLakes_2024-03-01.xlsx"
 # s <- 2
 
 readSnowTemplate <- function(template) {
@@ -19,7 +19,7 @@ readSnowTemplate <- function(template) {
   # For each sheet (survey)
   for (s in 2:length(openxlsx::getSheetNames(template))) {
 
-  #for (s in 2:3) {
+  #for (s in c(2,3,5)) {
 
       ##### --------------- Pull in all the data from template -------------- ####
       survey <- openxlsx::read.xlsx(xlsxFile = template, sheet = s, rows = c(5:11), cols = c(2:4), detectDates=TRUE, colNames=FALSE)
@@ -102,10 +102,12 @@ readSnowTemplate <- function(template) {
       ice_desc <- sub("\n", " ", ice_desc)
 
       if (length(ice)==0 && is.na(ice_desc) ) {
-        ice_notes <- NA
+        ice_notes <- NULL
       } else if (length(ice)==0 && !is.na(ice_desc)) {
         ice_notes <- ice_desc
-      } else {ice_notes <- paste0(paste0(names(ice), collapse=". "), ". ", ice_desc)}
+      } else if (length(ice)!=0 && is.na(ice_desc)) {
+        ice_notes <- paste0(names(ice), collapse=". ")
+        } else {ice_notes <- paste0(paste0(names(ice), collapse=". "), ". ", ice_desc)}
 
       # Sampling conditions
       sampling <- notes[c(17,18,19), c(9)]
@@ -163,7 +165,9 @@ readSnowTemplate <- function(template) {
           }
 
         # Create times vector
-        times <- seq.int(from = as.numeric(survey[6,2]), to = as.numeric(survey[7,2]), length.out=length(measurement$`Snow.Depth.(cm)`))
+        times <- seq.int(from = as.numeric(survey[6,2]),
+                         to = as.numeric(survey[7,2]),
+                         length.out=length(measurement[,1]))
         # Create sample_datetime vector
         sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + times*24*3600
         ## Estimate_flag
@@ -171,7 +175,7 @@ readSnowTemplate <- function(template) {
         ## Exclude_flag, swe, depth, notes, survey_id
         exclude_flag <- !is.na(measurement$Exclude.flag)
         swe <- round(measurement$SWE *10)
-        depth <- round(measurement$`Snow.Depth.(cm)`)
+        depth <- round(measurement[,1])
         notes <- measurement$`Sample.notes.(see.details)`
         survey_id <- rep(surv_id, times=length(sample_datetime))
         ### Bulk
