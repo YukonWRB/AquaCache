@@ -117,7 +117,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
           imputed.remains <- data.frame()
           if (nrow(imputed) > 0) {
             for (i in 1:nrow(imputed)) {
-              if (!(imputed[i, "datetime"] %in% inRemote)) {
+              if (!(imputed[i, "datetime"] %in% inRemote$datetime)) {
                 imputed.remains <- rbind(imputed.remains, imputed[i , ])
               }
             }

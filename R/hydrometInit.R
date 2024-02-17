@@ -37,7 +37,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  grade TEXT,
                  approval TEXT,
                  period INTERVAL,
-                 imputed BOOLEAN NOT NULL,
+                 imputed BOOLEAN NOT NULL DEFAULT FALSE,
                  PRIMARY KEY (timeseries_id, datetime))
                  ")
 
@@ -48,7 +48,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value NUMERIC,
                  grade TEXT,
                  approval TEXT,
-                 imputed BOOLEAN,
+                 imputed BOOLEAN NOT NULL DEFAULT FALSE,
                  percent_historic_range NUMERIC,
                  max NUMERIC,
                  min NUMERIC,
@@ -57,6 +57,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  q50 NUMERIC,
                  q25 NUMERIC,
                  q10 NUMERIC,
+                 mean NUMERIC,
                  PRIMARY KEY (timeseries_id, date));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
@@ -644,13 +645,15 @@ EXECUTE FUNCTION update_geom_type();
   # calculated_daily
   DBI::dbExecute(con, "COMMENT ON TABLE public.calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the HydroMetDB package function calculate_stats.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed.'
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed, or, for daily means provided solely in the HYDAT database, that a value was imputed directly to this table.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.percent_historic_range IS 'The percent of historical range for that measurement compared to all previous records for the same day of year (not including the current measurement). Only populated once a minimum of three values exist for the current day of year (including the current value). February 29 values are the mean of February 28 and March 1.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.max IS 'Historical max for the day of year, excluding current measurement.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.min IS 'Historical min for the day of year, excluding current measurement.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.q50 IS 'Historical 50th quantile or median, excluding current measurement.'
   ")
 
   # forecasts

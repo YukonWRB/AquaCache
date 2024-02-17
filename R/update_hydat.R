@@ -114,11 +114,25 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
                             start_recalc = min(new_flow$date))
             message("Found historical flow daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats.")
           } else { #There is a corresponding tsid in the database
-            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade FROM calculated_daily WHERE timeseries_id = ", tsid_flow))
+            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", tsid_flow))
             if (nrow(existing) > 0) { #There is an entry in timeseries table AND existing data in calculated_daily
+              #Find out if any imputed data should be left alone
+              imputed <- existing[existing$imputed == TRUE , ]
+              imputed.remains <- data.frame()
+              if (nrow(imputed) > 0) {
+                for (i in 1:nrow(imputed)) {
+                  if (!(imputed[i, "date"] %in% new_flow$date)) {
+                    imputed.remains <- rbind(imputed.remains, imputed[i , ])
+                  }
+                }
+              }
+              
               # Create a unique key for both data frames
-              new_flow$key <- paste(new_flow$date, new_flow$value, new_flow$grade, sep = "|")
-              existing$key <- paste(existing$date, existing$value, existing$grade, sep = "|")
+              # order both data.frames by date to compare them
+              new_flow <- new_flow[order(new_flow$date), ]
+              existing <- existing[order(existing$date), ]
+              new_flow$key <- paste(new_flow$date, new_flow$value, new_flow$grade, new_flow$approval, sep = "|")
+              existing$key <- paste(existing$date, existing$value, existing$grade, existing$approval, sep = "|")
 
               # Check for mismatches using set operations
               mismatch_keys <- setdiff(new_flow$key, existing$key)
@@ -141,8 +155,13 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
                 DBI::dbWithTransaction(
                   con,
                   {
-                    DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "';"))
-                    DBI::dbAppendTable(con, "calculated_daily", new_flow)
+                    if (nrow(imputed.remains) > 0) {
+                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
+                      DBI::dbAppendTable(con, "calculated_daily", new_flow)
+                    } else {
+                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "';"))
+                      DBI::dbAppendTable(con, "calculated_daily", new_flow)
+                    }
                     start <- min(existing$date, new_flow$date)
                     DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
                   }
@@ -203,11 +222,24 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
                             start_recalc = min(new_level$date))
             message("Found historical level daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats.")
           } else {
-            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade FROM calculated_daily WHERE timeseries_id = ", tsid_level))
+            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", tsid_level))
             if (nrow(existing) > 0) { #There is an entry in timeseries table AND existing data
+              #Find out if any imputed data should be left alone
+              imputed <- existing[existing$imputed == TRUE , ]
+              imputed.remains <- data.frame()
+              if (nrow(imputed) > 0) {
+                for (i in 1:nrow(imputed)) {
+                  if (!(imputed[i, "date"] %in% new_flow$date)) {
+                    imputed.remains <- rbind(imputed.remains, imputed[i , ])
+                  }
+                }
+              }
               # Create a unique key for both data frames
-              new_level$key <- paste(new_level$date, new_level$value, new_level$grade, sep = "|")
-              existing$key <- paste(existing$date, existing$value, existing$grade, sep = "|")
+              # Order both data.frames by date to compare them
+              new_level <- new_level[order(new_level$date), ]
+              existing <- existing[order(existing$date), ]
+              new_level$key <- paste(new_level$date, new_level$value, new_level$grade, new_level$approval, sep = "|")
+              existing$key <- paste(existing$date, existing$value, existing$grade, existing$approval, sep = "|")
 
               # Check for mismatches using set operations
               mismatch_keys <- setdiff(new_level$key, existing$key)
@@ -230,8 +262,13 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
                 DBI::dbWithTransaction(
                   con,
                   {
-                    DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "';"))
-                    DBI::dbAppendTable(con, "calculated_daily", new_level)
+                    if (nrow(imputed.remains) > 0) {
+                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
+                      DBI::dbAppendTable(con, "calculated_daily", new_level)
+                    } else {
+                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "';"))
+                      DBI::dbAppendTable(con, "calculated_daily", new_level)
+                    }
                     start <- min(min(existing$date), new_level$date)
                     DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_level, ";"))
                   }

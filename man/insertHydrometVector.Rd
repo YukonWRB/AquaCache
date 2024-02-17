@@ -18,7 +18,7 @@ insertHydrometVector(
 )
 }
 \arguments{
-\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.}
+\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object or as a file path to a shapefile, geopackage or something else that terra::vect() van use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.}
 
 \item{layer_name}{The name to give to the vector layer.}
 

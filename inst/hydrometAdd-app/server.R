@@ -501,7 +501,6 @@ server <- function(input, output, session) {
   })
   
   
-  
   # Server logic dealing with data time series upload #################################
   
   # Server logic dealing with raster timeseries upload #################################

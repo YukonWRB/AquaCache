@@ -11,6 +11,7 @@ imputeMissing(
   end,
   extra_params = NULL,
   imputed = TRUE,
+  daily = FALSE,
   con = hydrometConnect(silent = TRUE)
 )
 }
@@ -27,11 +28,20 @@ imputeMissing(
 
 \item{imputed}{Should already imputed data be imputed again?}
 
+\item{daily}{Should the imputation be done on a the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous.}
+
 \item{con}{A connection to the database.}
 }
 \value{
 Imputed values added to the database.
 }
 \description{
-Impute missing values using either nearby timeseries or using linear or spline interpollation. If using nearby timeseries, they can be of same or of other parameters, as specified with parameter 'extra_params'. User interaction is necessary to select the most appropriate timeseries and to review the result of imputation before updating the database.
+\subsection{Note}{
+
+See function \code{\link[=predictMissing]{predictMissing()}} for machine learning predictions, especially useful if there are no timeseries than be be used with a direct relationship such as predicting flow using level, or level using multiple other level stations.
+
+Impute missing values using either a nearby timeseries or using linear or spline interpolation on the time-series itself. If using nearby timeseries, they can be of same or of other parameters, as specified with parameter 'extra_params'. User interaction is necessary to select the most appropriate timeseries and to review the result of imputation before updating the database.
+
+Imputing long periods of missing data using spline or linear interpolation on the timeseries itself is not recommended. If this is the only feasible option presented by this function because no nearby timeseries can be used for imputation, we recommend using \code{\link[=predictMissing]{predictMissing()}} instead.
+}
 }
