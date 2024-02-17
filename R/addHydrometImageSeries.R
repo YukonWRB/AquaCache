@@ -19,39 +19,41 @@ addHydrometImageSeries <- function(location, start_datetime, source_fx, source_f
 
   on.exit(DBI::dbDisconnect(con))
 
-  if (inherits(location, "character")){
+  if (inherits(location, "character")) {
       location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", location,  "';"))[1,1]
-      if (is.na(location_id)){
+      if (is.na(location_id)) {
         stop("The location you specified does not exist. Reminder that you should specify the location code or location_id, not the name.")
       }
   } else if (inherits(location, "numeric")) {
     location_id <- location
     check <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location_id = ", location_id))[1,1]
-    if (is.na(check)){
+    if (is.na(check)) {
       stop("The location_id you specified does not exist.")
     }
   } else {
     stop("Parameter 'location' must be either a character or numeric vector of length 1.")
   }
 
+  geom_id <- DBI::dbGetQuery(con, paste0("SELECT geom_id FROM locations WHERE location_id = ", location_id))[1,1]
 
-  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = '", location_id, "' AND img_type = 'auto'"))[1,1]
-  if (!is.na(exists)){
+  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE geom_id = '", geom_id, "' AND img_type = 'auto'"))[1,1]
+  if (!is.na(exists)) {
     stop("There is already an entry for that location or location_id and for images of type 'auto' in the images_index table.")
   }
-  insert <- data.frame(location_id = location_id,
+  insert <- data.frame(geom_id = geom_id,
                        img_type = "auto",
                        public = public,
                        first_img = start_datetime,
                        last_img = start_datetime,
                        public_delay = public_delay,
                        source_fx = source_fx,
-                       source_fx_args = source_fx_args)
+                       source_fx_args = source_fx_args,
+                       description = "Image series automatically taken from a web or server location.")
 
   DBI::dbAppendTable(con, "images_index", insert)
-  res <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = '", location_id, "' AND img_type = 'auto'"))[1,1]
+  res <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE geom_id = '", geom_id, "' AND img_type = 'auto'"))[1,1]
   added <- getNewImages(image_meta_ids = res, con = con)
-  if (length(added) == 0){
+  if (length(added) == 0) {
     warning("Failed to find or add new images. The new entry to table images_index has been deleted.")
     DBI::dbExecute(con, paste0("DELETE FROM images_index WHERE img_meta_id = ", res, ";"))
   } else {

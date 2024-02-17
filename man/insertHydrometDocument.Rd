@@ -31,7 +31,7 @@ insertHydrometDocument(
 
 \item{url}{An optional url (could also be a DOI) for the document.}
 
-\item{geoms}{The geom_id(s) with which to associate the document (must be in the database table 'points_lines_polygons'). Leave NULL for a document with no spatial context.}
+\item{geoms}{The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }
@@ -44,6 +44,6 @@ TRUE if a document was properly added to the database.
 This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See \code{\link[=fetchDocument]{fetchDocument()}} to get a document out again.
 \subsection{Locations, lines, and polygons}{
 
-Any document can be associated with locations (points), lines, polygons, or any combination thereof. Please reference the table 'points_lines_polygons' to give the correct geom_id(s) for your desired geoms.
+Any document can be associated with locations (points), lines, polygons, or any combination thereof. Please reference the table 'vectors' to give the correct geom_id(s) for your desired geoms.
 }
 }

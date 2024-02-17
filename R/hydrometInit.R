@@ -37,7 +37,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  grade TEXT,
                  approval TEXT,
                  period INTERVAL,
-                 imputed BOOLEAN NOT NULL,
+                 imputed BOOLEAN NOT NULL DEFAULT FALSE,
                  PRIMARY KEY (timeseries_id, datetime))
                  ")
 
@@ -48,7 +48,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  value NUMERIC,
                  grade TEXT,
                  approval TEXT,
-                 imputed BOOLEAN,
+                 imputed BOOLEAN NOT NULL DEFAULT FALSE,
                  percent_historic_range NUMERIC,
                  max NUMERIC,
                  min NUMERIC,
@@ -57,7 +57,8 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  q50 NUMERIC,
                  q25 NUMERIC,
                  q10 NUMERIC,
-                 PRIMARY KEY (timeseries_id, date))")
+                 mean NUMERIC,
+                 PRIMARY KEY (timeseries_id, date));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
                    image_id SERIAL PRIMARY KEY,
@@ -65,11 +66,12 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                    fetch_datetime TIMESTAMP WITH TIME ZONE,
                    format TEXT NOT NULL,
-                   file BYTEA NOT NULL)")
+                   file BYTEA NOT NULL,
+                   description TEXT,
+                   UNIQUE (img_meta_id, datetime));")
 
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS images_index (
                  img_meta_id SERIAL PRIMARY KEY,
-                 location TEXT NOT NULL,
                  img_type TEXT NOT NULL CHECK(img_type IN ('auto', 'manual')),
                  first_img TIMESTAMP WITH TIME ZONE,
                  last_img TIMESTAMP WITH TIME ZONE,
@@ -79,7 +81,8 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  source_fx TEXT,
                  source_fx_args TEXT,
                  description TEXT,
-                 UNIQUE (location, img_type));")
+                 geom_id INTEGER NOT NULL,
+                 UNIQUE (geom_id, img_type));")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
                    timeseries_id INTEGER,
@@ -545,9 +548,9 @@ EXECUTE FUNCTION update_geom_type();
 
   DBI::dbExecute(con,
                  "ALTER TABLE images_index
-  ADD CONSTRAINT fk_location
-  FOREIGN KEY (location_id)
-  REFERENCES locations(location_id)
+  ADD CONSTRAINT fk_geom_id
+  FOREIGN KEY (geom_id)
+  REFERENCES vectors(geom_id)
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
   DBI::dbExecute(con,
@@ -586,7 +589,7 @@ EXECUTE FUNCTION update_geom_type();
   COMMENT ON COLUMN public.timeseries.period_type IS 'One of instantaneous, sum, mean, median, min, max, or (min+max)/2. This last value is used for the ''daily mean'' temperatures at met stations which are in fact not true mean temps.';
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.record_rate IS 'One of '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'.';
+  COMMENT ON COLUMN public.timeseries.record_rate IS 'For continuous timeseries, one of < 1 day, 1 day, 1 week, 4 weeks, 1 month, year. For discrete timeseries, NULL.';
   ")
   DBI::dbExecute(con, "
   COMMENT ON COLUMN public.timeseries.start_datetime IS 'First data point for the timeseries.';
@@ -642,13 +645,15 @@ EXECUTE FUNCTION update_geom_type();
   # calculated_daily
   DBI::dbExecute(con, "COMMENT ON TABLE public.calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the HydroMetDB package function calculate_stats.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed.'
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed, or, for daily means provided solely in the HYDAT database, that a value was imputed directly to this table.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.percent_historic_range IS 'The percent of historical range for that measurement compared to all previous records for the same day of year (not including the current measurement). Only populated once a minimum of three values exist for the current day of year (including the current value). February 29 values are the mean of February 28 and March 1.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.max IS 'Historical max for the day of year, excluding current measurement.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.min IS 'Historical min for the day of year, excluding current measurement.'
+  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.q50 IS 'Historical 50th quantile or median, excluding current measurement.'
   ")
 
   # forecasts
@@ -678,7 +683,7 @@ EXECUTE FUNCTION update_geom_type();
   ")
 
   # images
-  DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images or local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images. NOT intended to capture what the instrumentation looks like, only what the conditions at the location are.'")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images of local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images. NOT intended to capture what the instrumentation looks like, only what the conditions at the location are.'")
 
   # documents
   DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")

@@ -43,6 +43,3 @@ addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df
 # Check the DB size:
 DBI::dbGetQuery(con, "select pg_size_pretty(pg_database_size('hydromet'));")
 
-
-DBi::
-

@@ -117,7 +117,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
           imputed.remains <- data.frame()
           if (nrow(imputed) > 0) {
             for (i in 1:nrow(imputed)) {
-              if (!(imputed[i, "datetime"] %in% inRemote)) {
+              if (!(imputed[i, "datetime"] %in% inRemote$datetime)) {
                 imputed.remains <- rbind(imputed.remains, imputed[i , ])
               }
             }
@@ -179,13 +179,17 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
             {
               updated <- updated + 1
               if (category == "continuous") {
-                if (nrow(imputed.remains) > 0) {
+                # Now delete entries in measurements_continuous and calculated_daily that are no longer in the remote data and/or that need to be replaced
+                if (nrow(imputed.remains) > 0) { # Don't delete imputed data points unless there's new data to replace it!
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
+                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "');"))
                 } else {
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
+                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "');"))
                 }
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
               } else if (category == "discrete") {
+                # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
                 DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
                 DBI::dbAppendTable(con, "measurements_discrete", inRemote)
               }

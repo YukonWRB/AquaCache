@@ -20,10 +20,10 @@
 insertHydrometRaster <- function(con, raster, description, flag = NA, units = NULL, source = NULL, bit.depth = NULL, blocks = NULL)
 {
 
-  if(!("rasters_reference" %in% DBI::dbListTables(con))) {
+  if (!("rasters_reference" %in% DBI::dbListTables(con))) {
     message("rasters_reference does not already exist. Creating it.")
     version <- DBI::dbGetQuery(con, "SELECT version()")
-    if (grepl("PostgreSQL", version$version)){
+    if (grepl("PostgreSQL", version$version)) {
       DBI::dbExecute(con, "CREATE TABLE rasters_reference (
                    reference_id SERIAL PRIMARY KEY,
                    raster_series_id INTEGER,
@@ -72,14 +72,18 @@ insertHydrometRaster <- function(con, raster, description, flag = NA, units = NU
   } else {
     add_constraints <- FALSE
   }
+  
+  if (inherits(raster, "character")) {
+    raster <- terra::rast(raster)
+  }
 
   #Make sure that if units are provided that there's either 1 or 1 per band
-  if (!is.null(units)){
-    if (!inherits(units, "character")){
+  if (!is.null(units)) {
+    if (!inherits(units, "character")) {
       stop("Parameter units must be specified as a character vector.")
     }
-    if (length(units) > 1){
-      if (length(units) != length(names(raster))){
+    if (length(units) > 1) {
+      if (length(units) != length(names(raster))) {
         stop("The parameter units was provided, but there isn't exactly one element or one element per band in the raster.")
       }
       units <- paste(units, collapse = ", ")
@@ -91,7 +95,7 @@ insertHydrometRaster <- function(con, raster, description, flag = NA, units = NU
   # Attempt to write the raster to the database
   res <- writeRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks, constraints = TRUE)
 
-  if (res$status){
+  if (res$status) {
     # band names
     bnds <- DBI::dbQuoteString(con, paste0("{{",paste(names(raster),collapse = "},{"),"}}"))
     entry <- data.frame("type" = "other",
@@ -103,7 +107,7 @@ insertHydrometRaster <- function(con, raster, description, flag = NA, units = NU
     new_id <- DBI::dbGetQuery(con, "SELECT max(reference_id) FROM rasters_reference")[1,1]
     DBI::dbExecute(con, paste0("UPDATE rasters SET reference_id = ", new_id, " WHERE rid IN (", paste(res$appended_rids, collapse = ","), ");"))
 
-    if (add_constraints){
+    if (add_constraints) {
       DBI::dbExecute(con, "ALTER TABLE rasters ADD CONSTRAINT fk_reference_id FOREIGN KEY (reference_id) REFERENCES rasters_reference(reference_id) ON DELETE CASCADE ON UPDATE CASCADE")
       DBI::dbExecute(con, "COMMENT ON TABLE public.rasters_reference IS 'References rasters in the rasters table, since the later might have rasters broken up in multiple tiles. This table has one reference_id per raster, which may be linked to multiple entries in table rasters.'")
       DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.flag IS 'Used to flag rasters that require further review or that need to be deleted after a certain period. Reanalysis products in particular can have preliminary issues, in which case PRELIMINARY would be entered here.'")

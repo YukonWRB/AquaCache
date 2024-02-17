@@ -131,12 +131,12 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             gap_measurements <- gap_measurements[,c(3:7)]
             names(gap_measurements) <- c("date", "value", "grade", "approval", "imputed")
 
-            if (!(last_hydat %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
-              gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
+            if (!((last_hydat + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
+              gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
             }
 
             if (last_day_historic < min(gap_measurements$date)) { #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with calculated_daily values.
-              backfill <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date > '", last_day_historic, "';"))
+              backfill <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "';"))
               gap_measurements <- rbind(gap_measurements, backfill)
             }
 
@@ -177,9 +177,9 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
                              .groups = "drop")
           gap_measurements <- gap_measurements[,c(3:7)]
           names(gap_measurements) <- c("date", "value", "grade", "approval", "imputed")
-
-          if (!((last_day_historic) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
-            gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
+          
+          if (!((last_day_historic + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
+            gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
           }
           #Fill in any missing dates so that they get calculated values where possible
           full_dates <- data.frame("date" = seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day"))
@@ -262,7 +262,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         }
 
         if (nrow(missing_stats) > 0) {
-          missing_stats$max <- missing_stats$min <- missing_stats$q90 <- missing_stats$q75 <- missing_stats$q50 <- missing_stats$q25 <- missing_stats$q10 <- missing_stats$percent_historic_range <- NA
+          missing_stats$max <- missing_stats$min <- missing_stats$q90 <- missing_stats$q75 <- missing_stats$q50 <- missing_stats$q25 <- missing_stats$q10 <- missing_stats$percent_historic_range <- missing_stats$mean <- NA
           for (k in 1:nrow(missing_stats)) {
             date <- missing_stats$date[k]
             doy <- missing_stats$dayofyear[k]
@@ -270,7 +270,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             past <- all_stats[all_stats$dayofyear == doy & all_stats$date < date, "value"] #Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
             past <- past[!is.na(past)]
             if (length(past) >= 1) {
-              missing_stats[k, c("max", "min", "q90", "q75", "q50", "q25", "q10")] <- c(max(past), min(past), stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10)))
+              missing_stats[k, c("max", "min", "q90", "q75", "q50", "q25", "q10", "mean")] <- c(max(past), min(past), stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10)), mean(past))
               if (length(past) > 1 & !is.na(current)) { #need at least 2 measurements to calculate a percent historic, plus a current measurement!
                 missing_stats[k, "percent_historic_range"] <- ((current - min(past)) / (max(past) - min(past))) * 100
               }
@@ -289,7 +289,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
                   feb_29 <- feb_29[!feb_29$date == l ,]
                 }
               } else {
-                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10")] <- c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)))
+                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean")] <- c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)))
               }
             }
             feb_29 <- hablar::rationalize(feb_29)
@@ -304,6 +304,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
 
     if (nrow(missing_stats) > 0) { #This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.
       tryCatch({
+        missing_stats <- missing_stats[order(missing_stats$date), ]
         # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no stats even if they are between the start and end date of missing_stats.
         delete_query <- paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", i, " AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "'")
         remaining_dates <- as.Date(setdiff(seq.Date(min(as.Date(missing_stats$date)), max(as.Date(missing_stats$date)), by = "day"), as.Date(missing_stats$date)), origin = "1970-01-01")
