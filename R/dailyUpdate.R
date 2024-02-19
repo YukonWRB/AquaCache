@@ -19,7 +19,7 @@
 #' @export
 
 #TODO: snow_db_path should instead be a path or connection identifiers living in the .Renviron file.
-dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all")
+dailyUpdate <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
 
 {
   function_start <- Sys.time()
@@ -36,7 +36,7 @@ dailyUpdate <- function(con = hydrometConnect(silent=TRUE), timeseries_id = "all
     discrete_ts <- all_timeseries[all_timeseries$category == "discrete" , ]
     if (length(timeseries_id) != nrow(all_timeseries)) {
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
-      ifelse ((length(fail) == 1),
+      ifelse((length(fail) == 1),
               warning("Could not find one of the timeseries_ids that you specified: ID ", fail, " is missing from the database."),
               warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )

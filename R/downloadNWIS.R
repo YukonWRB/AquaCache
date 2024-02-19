@@ -97,17 +97,17 @@ downloadNWIS <- function(location, param_code, start_datetime, end_datetime = Sy
       data$approval <- ifelse(data$approval %in% names(approval_mapping),
                               approval_mapping[data$approval],
                               "Z")
-
+      
       #After that it's the grade, maybe.Anything that's not clearly a grade gets Z, unknown
       data$grade <- trimws(gsub("^[APR](.*)", "\\1", data$combined))
-data$grade[data$grade == ""] <- "U"
+      data$grade[data$grade == ""] <- "U"
       grade_mapping <- c("e" = "E",
                          "ice" = "I",
                          "Ice i" = "I",
                          "<" = "E",
                          ">" = "E")
       data$grade <- ifelse(data$grade %in% names(grade_mapping),
-                           approval_mapping[data$grade],
+                           grade_mapping[data$grade],
                            "Z")
 
       data <- data[, -which(names(data) == "combined")]
