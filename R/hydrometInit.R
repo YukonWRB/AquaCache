@@ -81,8 +81,9 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  source_fx TEXT,
                  source_fx_args TEXT,
                  description TEXT,
-                 geom_id INTEGER NOT NULL,
-                 UNIQUE (geom_id, img_type));")
+                 location_id INTEGER NOT NULL,
+                 UNIQUE (location_id, img_type));")
+  DBI::dbExecute(con, "COMMENT ON TABLE images_index IS 'Index for images table. Each location at which there is one or more image gets an entry here; images in table images are linked to this table using the img_meta_id.'")
 
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
                    timeseries_id INTEGER,
@@ -548,11 +549,12 @@ EXECUTE FUNCTION update_geom_type();
 
   DBI::dbExecute(con,
                  "ALTER TABLE images_index
-  ADD CONSTRAINT fk_geom_id
-  FOREIGN KEY (geom_id)
-  REFERENCES vectors(geom_id)
+  ADD CONSTRAINT fk_location_id
+  FOREIGN KEY (location_id)
+  REFERENCES locations(location_id)
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
+  
   DBI::dbExecute(con,
                  "ALTER TABLE images
   ADD CONSTRAINT fk_img_meta_id
