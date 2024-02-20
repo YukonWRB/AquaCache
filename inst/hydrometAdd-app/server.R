@@ -195,7 +195,7 @@ server <- function(input, output, session) {
   locations <- reactiveValues()
   selectedLocation <- reactiveValues()
   
-  locations$locations <- DBI::dbGetQuery(con, "SELECT location, name, owner, operator, geom_id FROM locations;")
+  locations$locations <- DBI::dbGetQuery(con, "SELECT location, name, owner, operator, location_id FROM locations;")
   observeEvent(input$associateLocation, {
     showModal(modalDialog(
       title = "Associate image with a location",
@@ -222,9 +222,9 @@ server <- function(input, output, session) {
                  collapse = "<br>")
       )
     })
-    selectedLocation$img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE geom_id = ", selectedLocation$location$geom_id, " AND img_type = 'manual';"))[1,1]
+    selectedLocation$img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", selectedLocation$location$location_id, " AND img_type = 'manual';"))[1,1]
     if (is.na(selectedLocation$img_meta_id)) { # Create a new entry to images_index since none exists
-      new_img_idx <- data.frame(geom_id = selectedLocation$location$geom_id,
+      new_img_idx <- data.frame(location_id = selectedLocation$location$location_id,
                                 public = TRUE,
                                 description = "Image location index added via hydrometApp.",
                                 img_type = "manual",
@@ -232,7 +232,7 @@ server <- function(input, output, session) {
                                 last_img = Sys.time()
       )
       DBI::dbAppendTable(con, "images_index", new_img_idx)
-      selectedLocation$img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE geom_id = ", selectedLocation$location$geom_id, " AND img_type = 'manual';"))[1,1]
+      selectedLocation$img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", selectedLocation$location$location_id, " AND img_type = 'manual';"))[1,1]
     }
   })
   observeEvent(input$addImageBtn, {
@@ -296,7 +296,6 @@ server <- function(input, output, session) {
         easyClose = TRUE
       ))
     }
-    
   })
   
   # Server logic dealing with raster upload #####################################
