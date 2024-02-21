@@ -13,7 +13,7 @@ update_hydat(
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
-\item{timeseries_id}{Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries from operator 'WSC'.}
+\item{timeseries_id}{Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries where the import function is downloadWSC.}
 
 \item{force_update}{Set TRUE if you want to force a check of each location against the local copy of HYDAT.}
 }

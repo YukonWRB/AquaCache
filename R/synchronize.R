@@ -12,7 +12,7 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
-#' @param discrete Should discrete data also be synchronized?
+#' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
 #'
 #' @return Updated entries in the hydro database.
 #' @export
@@ -40,9 +40,17 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
   }
 
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
+    if (discrete) {
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
+    } else {
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
+    }
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+    if (discrete) {
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+    } else {
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
+    }
     if (length(timeseries_id) != nrow(all_timeseries)) {
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
       ifelse((length(fail) == 1),
@@ -144,13 +152,20 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
         }
 
         # Check for mismatches using set operations
-        mismatch_keys <- setdiff(inRemote$key, inDB$key)
+        mismatch_keys <- inDB$key[!(inDB$key %in% inRemote$key)]
 
-        # Check where the discrepancy is
+        # Check where the discrepancy is in both data frames
         if (length(mismatch_keys) > 0) {
           mismatch <- TRUE
-          datetime <- inRemote[inRemote$key %in% mismatch_keys, "datetime"]
-          datetime <- min(datetime)
+          datetime_remote <- inRemote[inRemote$key %in% mismatch_keys, "datetime"]
+          if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist for the mismatch point. Delete from that point on in the DB
+            datetime_db <- inDB[inDB$key %in% mismatch_keys, "datetime"]
+            datetime_db <- min(datetime_db)
+            datetime <- inDB[which(inDB$datetime == datetime_db) - 1, "datetime"]
+          } else {
+            datetime_remote <- min(datetime_remote)
+            datetime <- datetime_remote
+          }
         } else {
           mismatch <- FALSE
         }
