@@ -84,9 +84,9 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       missing_stats <- data.frame()
       flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
       if ((source_fx == "downloadWSC") & (last_day_historic < Sys.Date() - 30)) { #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
-        tmp <- DBI::dbGetQuery(con, paste0("SELECT location, parameter FROM timeseries WHERE timeseries_id = ", i, ";"))
+        tmp <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter = p.param_code WHERE t.timeseries_id = ", i, ";"))
         hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
-        if (tmp[, "parameter"] == "flow") {
+        if (tmp[, "param_name"] == "water flow") {
           last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_FLOWS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
           if (is.na(last_hydat_year)) { # There is no data in hydat yet
             flag <- TRUE
@@ -98,7 +98,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           if (last_day_historic > last_hydat) {
             flag <- TRUE
           }
-        } else if (tmp[, "parameter"] == "level") {
+        } else if (tmp[, "param_name"] == "water level") {
           last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_LEVELS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
           if (is.na(last_hydat_year)) {
             flag <- TRUE

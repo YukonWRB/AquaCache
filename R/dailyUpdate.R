@@ -28,10 +28,10 @@ dailyUpdate <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
   on.exit(DBI::dbDisconnect(con))
 
   if (timeseries_id[1] == "all") {
-    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL")
-    discrete_ts <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL")
+    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, last_daily_calculation FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL")
+    discrete_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, end_datetime, last_daily_calculation, category FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, last_daily_calculation, category FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
     continuous_ts <- all_timeseries[all_timeseries$category == "continuous" , ]
     discrete_ts <- all_timeseries[all_timeseries$category == "discrete" , ]
     if (length(timeseries_id) != nrow(all_timeseries)) {

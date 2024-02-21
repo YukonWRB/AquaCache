@@ -86,22 +86,23 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
 
       if (nrow(new_flow) > 0) {
         tryCatch({
-          tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = 'flow' AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
+          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE parameter = 'water flow'")[1,1]
+          tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = ", param_code, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_flow) == 0 | is.na(tsid_flow)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
-                                    "parameter" = "flow",
+                                    "parameter" = param_code,
                                     "unit" = "m3/s",
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
                                     "record_rate" = "1 day",
-                                    "param_type" = "hydrometric",
+                                    "param_type" = "surface water",
                                     "start_datetime" = min(new_flow$date),
                                     "end_datetime" = max(new_flow$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
                                     "public" = TRUE,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
-            tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND source_fx = 'downloadWSC';"))[1,1]
+            tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = ", param_code, " AND source_fx = 'downloadWSC';"))[1,1]
 
             new_flow$approval <- "A"
             new_flow$imputed <- FALSE
@@ -192,22 +193,23 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
 
       if (nrow(new_level) > 0) {
         tryCatch({
-          tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = 'level' AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
+          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE parameter = 'water level'")[1,1]
+          tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = ", param_code, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_level) == 0 | is.na(tsid_level)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
-                                    "parameter" = "level",
+                                    "parameter" = param_code,
                                     "unit" = "m",
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
                                     "record_rate" = "1 day",
-                                    "param_type" = "surface water physical",
+                                    "param_type" = "surface water",
                                     "start_datetime" = min(new_level$date),
                                     "end_datetime" = max(new_level$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
                                     "public" = TRUE,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
-            tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND source_fx = 'downloadWSC';"))[1,1]
+            tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = ", param_code, " AND source_fx = 'downloadWSC';"))[1,1]
 
             new_level$approval <- "A"
             new_level$imputed <- FALSE
