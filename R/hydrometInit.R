@@ -391,8 +391,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
-                 parameter TEXT NOT NULL,
-                 param_type TEXT NOT NULL, CHECK(param_type IN ('meteorological', 'surface water physical', 'surface water chemical', 'ground water chemical', 'ground water physical', 'geochemical', 'atmospheric chemical')),
+                 parameter INTEGER NOT NULL,
+                 param_type TEXT NOT NULL, CHECK(param_type IN ('surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological')),
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
@@ -457,6 +457,13 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "
   COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addHydrometTimeseries for usage.';
   ")
+  
+  # parameters table #################
+  DBI::dbExecute(con, "CREATE TABLE parameters (
+               param_code SERIAL PRIMARY KEY,
+               param_name TEXT NOT NULL,
+               param_group TEXT NOT NULL,
+               description TEXT)")
 
   # extrema table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists extrema (
@@ -558,7 +565,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
   # settings table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists settings (
                  source_fx TEXT NOT NULL,
-                 parameter TEXT NOT NULL,
+                 parameter INTEGER NOT NULL,
                  period_type TEXT NOT NULL,
                  record_rate TEXT,
                  remote_param_name TEXT NOT NULL,
@@ -569,23 +576,11 @@ EXECUTE FUNCTION check_approval_exists_daily();
   COMMENT ON COLUMN public.settings.source_fx IS 'The R function (from the HydroMetDB package) to use for fetching data.';
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.settings.source_fx IS 'Parameter names used in the timeseries table.';
+  COMMENT ON COLUMN public.settings.parameter IS 'Parameter integer codes used in the timeseries table.';
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.settings.source_fx IS 'The parameter name or code to pass to the parameter param_code of the R function specified in source_fx.';
+  COMMENT ON COLUMN public.settings.remote_param_name IS 'The parameter name or code to pass to the parameter param_code of the R function specified in source_fx.';
   ")
-  params_AQ <- data.frame("source_fx" = "downloadAquarius",
-                          "parameter" = c("level", "flow", "SWE", "snow depth", "distance", "water temperature", "air temperature"),
-                          "remote_param_name" = c("Stage.Corrected", "Discharge.Corrected", "SWE.Corrected", "Snow Depth.Corrected", "Distance.Corrected", "Water Temp.Corrected", "Air Temp.Corrected"))
-  params_WSC <- data.frame("source_fx" = "downloadWSC",
-                           "parameter" = c("level", "flow", "water temperature"),
-                           "remote_param_name" = c("46", "47", "5"))
-  params_USGS <- data.frame("source_fx" = "downloadNWIS",
-                            "parameter" = c("level", "flow", "water temperature"),
-                            "remote_param_name" = c("00065", "00060", "00010"))
-  params <- rbind(params_AQ, params_WSC, params_USGS)
-  try(DBI::dbAppendTable(con, "settings", params))
-
 
   #Populate datum_list table from hydat database #############
   #Check hydat version, update if needed.
@@ -695,6 +690,15 @@ EXECUTE FUNCTION update_geom_type();
   FOREIGN KEY (location_id)
   REFERENCES locations(location_id)
                  ON UPDATE CASCADE ON DELETE CASCADE;")
+  
+  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_parameter FOREIGN KEY (parameter) REFERENCES parameters(param_code) ON UPDATE CASCADE ON DELETE CASCADE;")
+  
+  DBI::dbExecute(con,
+                 "ALTER TABLE timeseries
+  ADD CONSTRAINT fk_location_id
+  FOREIGN KEY (location_id)
+  REFERENCES locations(location_id)
+                 ON UPDATE CASCADE ON DELETE CASCADE;")
 
   DBI::dbExecute(con,
                  "ALTER TABLE timeseries
@@ -768,7 +772,6 @@ EXECUTE FUNCTION update_geom_type();
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
 
-
   DBI::dbExecute(con,
                  "ALTER TABLE thresholds
                  ADD CONSTRAINT fk_timeseries_id
@@ -776,8 +779,7 @@ EXECUTE FUNCTION update_geom_type();
                  REFERENCES timeseries(timeseries_id)
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
-
-
+  
 
   #Create triggers and functions ########################################
   # Create functions and triggers to update the boolean flags in the documents table
