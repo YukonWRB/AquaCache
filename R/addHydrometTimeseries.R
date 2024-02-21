@@ -21,6 +21,18 @@
 
 addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = hydrometConnect()) {
 
+  
+  #Check the names of timeseries_df and locations_df, if it's not null
+  if (!all(c("location", "parameter", "unit", "category", "period_type", "record_rate", "param_type", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
+    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'unit', 'category', 'period_type', 'record_rate', 'param_type', 'start_datetime', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
+  }
+  
+  if (!is.null(locations_df)) {
+    if (!all(c("location", "name", "latitude", "longitude", "datum_id_from", "datum_id_to", "conversion_m", "current", "note", "contact", "network", "project") %in% names(locations_df))) {
+      stop("It looks like you're either missing columns in locations_df or that you have a typo. Please review that you have columns named c('location', 'name', 'latitude', 'longitude', 'datum_id_from', 'datum_id_to', 'conversion_m', 'current', 'note', 'contact', 'network', 'project'). Use NA to indicate a column with no applicable value.")
+    }
+  }
+  
   #Check that every location in the timeseries_df already exists; if they don't, check they've been specified in locations_df
   new_locs <- NULL
   exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
@@ -30,17 +42,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
       stop("You didn't specify a locations_df, but not all of the locations in your timeseries_df are already in the database. Either double-check your timeseries_df or give me a locations_df from which to add the missing location(s) ", paste(missing, collapse = ", "), ".")
     } else {
       new_locs <- unique(timeseries_df$location)[!(unique(timeseries_df$location) %in% exist_locs)]
-    }
-  }
-
-  #Check the names of timeseries_df and locations_df, if it's not null
-  if (!all(c("location", "parameter", "unit", "category", "period_type", "record_rate", "param_type", "operator", "network", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
-    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'unit', 'category', 'period_type', 'record_rate', 'param_type', 'start_datetime', 'operator', 'network', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
-  }
-
-  if (!is.null(locations_df)) {
-    if (!all(c("location", "name", "latitude", "longitude", "datum_id_from", "datum_id_to", "conversion_m", "current", "note", "owner", "operator", "contact") %in% names(locations_df))) {
-      stop("It looks like you're either missing columns in locations_df or that you have a typo. Please review that you have columns named c('location', 'name', 'latitude', 'longitude', 'datum_id_from', 'datum_id_to', 'conversion_m', 'current', 'note', 'owner', 'operator', 'contact'). Use NA to indicate a column with no applicable value.")
     }
   }
 
@@ -86,8 +87,26 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
     settings_df$period_type <- tolower(settings_df$period_type)
     settings_df$record_rate <- as.character(settings_df$record_rate) #to align with what comes out of the DB
   }
+  
+  # Check that the networks already exists. If not, stop and alert user to add it first. #########################
+  new_networks <- unique(locations_df$network)
+  exist_networks <- DBI::dbGetQuery(con, "SELECT name FROM networks")[,1]
+  if (!all(new_networks %in% exist_networks)) {
+    missing <- new_networks[!(new_networks %in% exist_networks)]
+    stop("Not all of the networks in your locations_df are already in the database. Please add the following network(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing networks: ", paste(exist_networks$name, collapse = ", "), ".")
+  }
+  # Check that the projects already exists. If not, stop and alert user to add it first. #########################
+  new_projects <- unique(locations_df$project)
+  if (!is.na(new_projects)) {
+    exist_projects <- DBI::dbGetQuery(con, "SELECT name FROM projects")[,1]
+    if (!all(new_projects %in% exist_projects)) {
+      missing <- new_projects[!(new_projects %in% exist_projects)]
+      stop("Not all of the projects in your locations_df are already in the database. Please add the following project(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing projects: ", paste(exist_projects$name, collapse = ", "), ".")
+    }
+  }
+  
 
-  # Check that the proper entries exist in the settings table. Make entry to DB if necessary/possible
+  # Check that the proper entries exist in the settings table. Make entry to DB if necessary/possible ################
   for (i in 1:nrow(timeseries_df)) {
     source_fx <- timeseries_df[i, "source_fx"]
     record_rate <- timeseries_df[i, "record_rate"]
@@ -100,10 +119,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
       setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate = '", record_rate, "' AND parameter = '", parameter, "' AND period_type = '", period_type, "';"))
     }
     if (!is.null(settings_df)) { # A df was provided with settings info
-      if (nrow(setting) == 1) { # There already is a setting in the DB for that combination
-        if(!identical(setting, settings_df[i, ])) {
-          stop("There is already an entry to the settings table to handle row ", i, " of the provided timeseries_df. You also provided an entry in settings_df, but it doesn't match what's in the DB already. Please revise your settings_df; modifying the DB entry should only be done after careful consideration as other timeseries likely depend on it.")
-        }
+      if (nrow(setting) == 1) { # There already is a setting in the DB for that combination, so do nothing
       } else if (nrow(setting) == 0) { # A df was provided, and there is no existing entry for this combination. Make a new entry if possible
         if (is.na(record_rate)) {
           sub.settings_df <- settings_df[settings_df$source_fx == source_fx & is.na(settings_df$record_rate) & settings_df$parameter == parameter & settings_df$period_type == period_type, ]
@@ -128,7 +144,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
     }
   }
 
-  #Add the location info ###########
+  #Add the location, networks, projects, and datums info ###################################################################
   if (!is.null(new_locs)) {
     for (i in new_locs) {
       DBI::dbWithTransaction(
@@ -142,7 +158,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
           point <- terra::vect(point, geom = c("longitude", "latitude"), crs = "epsg:4269")
 
           insertHydrometVector(point, "Locations", feature_name_col = "feature_name", description_col = "description")
-          geom_id <- DBI::dbGetQuery(con, "SELECT geom_id FROM vectors WHERE layer_name = 'Locations' AND feature_name = '", locations_df[locations_df$location == i, "location"], "';")
+          geom_id <- DBI::dbGetQuery(con, paste0("SELECT geom_id FROM vectors WHERE layer_name = 'Locations' AND feature_name = '", locations_df[locations_df$location == i, "location"], "';"))
 
 
           #locations table second
@@ -151,15 +167,30 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
                                  latitude = unique(locations_df[locations_df$location == i, "latitude"]),
                                  longitude = unique(locations_df[locations_df$location == i, "longitude"]),
                                  note = locations_df[locations_df$location == i, "note"],
-                                 operator = locations_df[locations_df$location == i, "operator"],
-                                 owner = locations_df[locations_df$location == i, "owner"],
                                  contact = locations_df[locations_df$location == i, "contact"],
                                  geom_id = geom_id)
           DBI::dbAppendTable(con, "locations", location)
+          
+          location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", unique(locations_df[locations_df$location == i, "location"]), "';"))[1,1]
+          
+          # networks table third
+          if (!is.na(locations_df[locations_df$location == i, "network"])) {
+            network_id <- DBI::dbGetQuery(con, paste0("SELECT network_id FROM networks WHERE name = '", unique(locations_df[locations_df$location == i, "network"]), "';"))[1,1]
+            tbl <- data.frame(location_id = location_id, network_id = network_id)
+            DBI::dbAppendTable(con, "locations_networks", tbl)
+          }
+          
+          # projects table fourth
+          if (!is.na(locations_df[locations_df$location == i, "project"])) {
+            project_id <- DBI::dbGetQuery(con, paste0("SELECT project_id FROM projects WHERE name = '", unique(locations_df[locations_df$location == i, "project"]), "';"))[1,1]
+            tbl <- data.frame(location_id = location_id, project_id = project_id)
+            DBI::dbAppendTable(con, "locations_projects", tbl)
+          }
+          
 
           location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", unique(locations_df[locations_df$location == i, "location"]), "';"))[1,1]
 
-          #datums table third
+          #datums table fifth
           datum <- data.frame(location_id = location_id,
                               datum_id_from = locations_df[locations_df$location == i, "datum_id_from"],
                               datum_id_to = locations_df[locations_df$location == i, "datum_id_to"],
@@ -173,17 +204,16 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
   }
 
 
-  #Add the timeseries ########
+  #Add the timeseries #######################################################################################################
   timeseries_df$location_id <- NA
   for (i in 1:nrow(timeseries_df)) {
     timeseries_df[i, "location_id"] <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", timeseries_df[i, "location"], "';"))
     tryCatch({
       add <- timeseries_df[i, -which(names(timeseries_df) == "start_datetime")]
-      start_datetime <- timeseries_df[i, "start_datetime"]
       tryCatch({
         DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
         message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", add$parameter, ", category ", add$category, ", param_type ", add$param_type, ", and period_type ", add$period_type, ".")
-      }, error = function (e) {
+      }, error = function(e) {
         message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and this function automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries.")
       })
       new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter = '", add$parameter, "' AND category = '", add$category, "' AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
@@ -199,7 +229,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
       } else {
         param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
       }
-
 
       if (!is.na(add$source_fx)) {
         args_list <- list(location = loc, param_code = param_code, start_datetime = timeseries_df[i, "start_datetime"])
@@ -243,7 +272,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
                   consecutive_count <- consecutive_count + 1
                   if (consecutive_count == 3) { # At three consecutive new measurements it's starting to look like a pattern
                     last_diff <- smoothed_diffs[j]
-                    change <- data.frame(datetime = ts$datetime[j-3],
+                    change <- data.frame(datetime = ts$datetime[j - 3],
                                          period = last_diff)
                     changes <- rbind(changes, change)
                     consecutive_count <- 0
@@ -263,7 +292,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
                   ts[ts$datetime == changes$datetime[j], "period"] <- paste("P", days, "DT", floor(remaining_hours), "H", minutes, "M", seconds, "S", sep = "")
                 }
                 #carry non-na's forward and backwards, if applicable
-                ts$period <- zoo::na.locf(zoo::na.locf(ts$period, na.rm = FALSE), fromLast=TRUE)
+                ts$period <- zoo::na.locf(zoo::na.locf(ts$period, na.rm = FALSE), fromLast = TRUE)
 
               } else { #In this case there were too few measurements to conclusively determine a period, so set to NA. They can be calculated once more data gets added.
                 ts$period <- NA
@@ -286,14 +315,15 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
             })
             tryCatch({
               if (add$record_rate %in% c('1 day', '< 1 day')) {
-                calculate_stats(timeseries_id = new_tsid)
+                calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = NULL)
               message("Success! Calculated daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
               } else {
                 message("Not calculating daily statistics for ", add$location, " and parameter ", add$parameter, " as recording rate is greater than 1 day.")
               }
-
             }, error = function(e) {
               message("Unable to calculate daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
+            }, warning = function(e) {
+              message("May have failed to calculate daily means and statistics for ", add$location, " and parameter ", add$parameter, ".")
             })
           } else { #There is no data to associated with this timeseries. Delete it and see if the location should also be deleted.
             DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
@@ -304,7 +334,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
             message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
             next()
           }
-          if ((add$operator %in% c("WSC", "Water Survey of Canada")) & add$parameter %in% c("level", "flow")) {
+          if ((add$source_fx == "downloadWSC") & add$parameter %in% c("level", "flow")) {
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
           }
         } else { #Add the non-continuous data
@@ -333,7 +363,8 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
     }, error = function(e) {
       warning("Failed to add new data for row number ", i, " in the provided timeseries_df data.frame.")
     })
-  } #End of loop iterating over each new  timeseries entry
+  
+    } #End of loop iterating over each new  timeseries entry
 
 
   #TODO: calculate or find polygons for any locations that have flow or level. Modify function getWatersheds.

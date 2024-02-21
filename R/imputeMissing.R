@@ -242,9 +242,9 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
 
   # look for timeseries within the radius (in table nrby) that might have data that can be used to impute the missing values
   if (!is.null(extra_params)) { # if there are extra parameters, look for those as well
-    similar <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, parameter, period_type, operator, record_rate FROM timeseries WHERE location IN ('", paste(nrby$location, collapse = "', '"), "') AND parameter IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND timeseries_id != ", tsid, " AND start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, parameter, period_type, record_rate FROM timeseries WHERE location IN ('", paste(nrby$location, collapse = "', '"), "') AND parameter IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND timeseries_id != ", tsid, " AND start_datetime < '", min(exist.values$datetime), "';"))
   } else { # if there are no extra parameters, look for the same parameter at nearby locations
-    similar <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, parameter, period_type, operator, record_rate FROM timeseries WHERE location IN ('", paste(nrby$location, collapse = "', '"), "') AND parameter = '", entry$parameter, "' AND timeseries_id != ", tsid, " AND start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, parameter, period_type, record_rate FROM timeseries WHERE location IN ('", paste(nrby$location, collapse = "', '"), "') AND parameter = '", entry$parameter, "' AND timeseries_id != ", tsid, " AND start_datetime < '", min(exist.values$datetime), "';"))
   }
 
 

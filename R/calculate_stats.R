@@ -51,9 +51,9 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
       last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
-      tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, operator FROM timeseries WHERE timeseries_id = ", i, ";"))
+      tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, source_fx FROM timeseries WHERE timeseries_id = ", i, ";"))
       period_type <- tmp[1,1]
-      operator <- tmp[1,2]  #operator is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
+      source_fx <- tmp[1,2]  #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
 
       if (!is.null(start_recalc)) { #start_recalc is specified (not NULL)
         if (!is.na(earliest_day_measurements)) {
@@ -81,8 +81,9 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         next()
       }
 
+      missing_stats <- data.frame()
       flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
-      if ((operator %in% c("WSC", "Water Survey of Canada")) & (last_day_historic < Sys.Date() - 30)) { #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
+      if ((source_fx == "downloadWSC") & (last_day_historic < Sys.Date() - 30)) { #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
         tmp <- DBI::dbGetQuery(con, paste0("SELECT location, parameter FROM timeseries WHERE timeseries_id = ", i, ";"))
         hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
         if (tmp[, "parameter"] == "flow") {
@@ -161,7 +162,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         flag <- TRUE
       }
 
-      if (!(operator %in% c("WSC", "Water Survey of Canada")) || flag) { #All timeseries where: operator is not WSC and therefore lack superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
+      if (!(source_fx == "downloadWSC") || flag) { #All timeseries where: operator is not WSC and therefore lack superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
         gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
 
         if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
@@ -270,15 +271,15 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
               current <- missing_stats$value[k]
               min <- min(past)
               max <- max(past)
-              values <- c(list("max" = max, "min" = min, .Internal(mean(past))), as.list(stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10), names = FALSE)))
+              values <- c(list("max" = max, "min" = min, mean(past)), as.list(stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10), names = FALSE)))
               data.table::set(missing_stats, i = k, j = c("max", "min", "mean", "q90", "q75", "q50", "q25", "q10"), value = values)
               if (length(past) > 1 & !is.na(current)) { #need at least 2 measurements to calculate a percent historic, plus a current measurement!
-                missing_stats[k, "percent_historic_range" := ((current - min) / (max - min)) * 100]
+                data.table::set(missing_stats, i = k, j = "percent_historic_range", value = (((current - min) / (max - min)) * 100))
               }
             }
           }
-          missing_stats[, "dayofyear" := NULL]
-
+          data.table::set(missing_stats, j = "dayofyear", value = NULL)
+          
           #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st.
           if (nrow(feb_29) > 0 & !(substr(as.character(as.Date(.POSIXct(Sys.time(), "UTC"))), 6, 10) %in% c("02-29", "03-01,", "03-02"))) {
             for (l in feb_29$date) {
@@ -289,7 +290,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
                   feb_29 <- feb_29[!feb_29$date == l ,]
                 }
               } else {
-                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean")] <- c(.Internal(mean(c(before$percent_historic_range, after$percent_historic_range))), .Internal(mean(c(before$max, after$max))), .Internal(mean(c(before$min, after$min))), .Internal(mean(c(before$q90, after$q90))), .Internal(mean(c(before$q75, after$q75))), .Internal(mean(c(before$q50, after$q50))), .Internal(mean(c(before$q25, after$q25))), .Internal(mean(c(before$q10, after$q10))), .Internal(mean(c(before$mean, after$mean))))
+                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean")] <- c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)))
               }
             }
             feb_29 <- hablar::rationalize(feb_29)
@@ -324,6 +325,5 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         warning("calculate_stats: failed to append new statistics for timeseries_id ", i, ".")
       }) #End of tryCatch for removing/adding to DB
     }
-
   } # End of for loop calculating means and stats for each station in timeseries table
 }

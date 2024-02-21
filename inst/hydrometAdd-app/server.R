@@ -195,7 +195,7 @@ server <- function(input, output, session) {
   locations <- reactiveValues()
   selectedLocation <- reactiveValues()
   
-  locations$locations <- DBI::dbGetQuery(con, "SELECT location, name, owner, operator, location_id FROM locations;")
+  locations$locations <- DBI::dbGetQuery(con, "SELECT location, name, latitude, longitude, location_id FROM locations;")
   observeEvent(input$associateLocation, {
     showModal(modalDialog(
       title = "Associate image with a location",
@@ -206,7 +206,7 @@ server <- function(input, output, session) {
       )
     ))
     output$locationsTable <- DT::renderDT({
-      DT::datatable(locations$locations[, c("location", "name", "owner", "operator")], 
+      DT::datatable(locations$locations[, c("location", "name", "latitude", "longitude")], 
                     selection = "single",
                     rownames = FALSE
       )

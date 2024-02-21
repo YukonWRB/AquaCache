@@ -13,13 +13,13 @@
 #' @export
 #'
 
-addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), format = "short", save_path = NULL) {
+addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent = TRUE), format = "short", save_path = NULL) {
 
 
   if (!is.null(save_path)) {
     if (save_path == "choose") {
       message("Select the output folder for shapefiles...")
-      save_path <- as.character(utils::choose.dir(caption="Select Save Folder"))
+      save_path <- as.character(utils::choose.dir(caption = "Select Save Folder"))
     }
     if (!dir.exists(save_path)) {
       stop("The save path you're pointint to doesn't exist, R can't access it, or your selection via the interactive menu didn't work. You could try specifying a save path directly.")
@@ -66,8 +66,8 @@ addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent=TRUE), fo
                      datum_id_to = c(35, 605),
                      conversion_m = c(913.86603, 913.51099),
                      current = c(FALSE, TRUE),
-                     owner = "WSC",
-                     operator = "WSC",
+                     network = "Network name",
+                     project = "Project name",
                      contact = "email@email.com",
                      note = "Optional location note here.")
 

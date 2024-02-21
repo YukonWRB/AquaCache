@@ -6,7 +6,7 @@
 #' First checks the local version of HYDAT using function [hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in parameter timeseries_id, will also update the internal_status table with the HYDAT version used for the update.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
-#' @param timeseries_id Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries from operator 'WSC'.
+#' @param timeseries_id Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries where the import function is downloadWSC.
 #' @param force_update Set TRUE if you want to force a check of each location against the local copy of HYDAT.
 #'
 #' @return Updated daily means where HYDAT values were replaced by updated values, and TRUE if a new version of hydat was found.
@@ -38,9 +38,9 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
   if (new_hydat | force_update) {
     #Get the required timeseries_ids
     if (timeseries_id[1] == "all") {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, period_type FROM timeseries WHERE category = 'continuous' AND operator = 'WSC';")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, period_type FROM timeseries WHERE category = 'continuous' AND source_fx = 'downloadWSC';")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND operator = 'WSC';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id,period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx = 'downloadWSC';"))
       if (length(timeseries_id) != nrow(all_timeseries)) {
         fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
         if ((length(fail) == 1)) {
@@ -86,7 +86,7 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
 
       if (nrow(new_flow) > 0) {
         tryCatch({
-          tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = 'flow' AND location = '", i, "' AND operator = 'WSC' AND category = 'continuous'"))[1,1]
+          tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = 'flow' AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_flow) == 0 | is.na(tsid_flow)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
                                     "parameter" = "flow",
@@ -98,12 +98,10 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
                                     "start_datetime" = min(new_flow$date),
                                     "end_datetime" = max(new_flow$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                                    "operator" = "WSC",
-                                    "network" = "Canada Yukon Hydrometric Network",
                                     "public" = TRUE,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
-            tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND operator = 'WSC';"))[1,1]
+            tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'flow' AND source_fx = 'downloadWSC';"))[1,1]
 
             new_flow$approval <- "A"
             new_flow$imputed <- FALSE
@@ -194,7 +192,7 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
 
       if (nrow(new_level) > 0) {
         tryCatch({
-          tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = 'level' AND location = '", i, "' AND operator = 'WSC' AND category = 'continuous'"))[1,1]
+          tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = 'level' AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_level) == 0 | is.na(tsid_level)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
                                     "parameter" = "level",
@@ -206,12 +204,10 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
                                     "start_datetime" = min(new_level$date),
                                     "end_datetime" = max(new_level$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                                    "operator" = "WSC",
-                                    "network" = "Canada Yukon Hydrometric Network",
                                     "public" = TRUE,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
-            tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND operator = 'WSC';"))[1,1]
+            tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = 'level' AND source_fx = 'downloadWSC';"))[1,1]
 
             new_level$approval <- "A"
             new_level$imputed <- FALSE
