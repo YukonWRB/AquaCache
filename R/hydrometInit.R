@@ -678,6 +678,12 @@ EXECUTE FUNCTION update_geom_type();
 
 
   #Add in foreign keys ###########
+  DBI::dbExecute(con, "ALTER TABLE settings 
+                 ADD CONSTRAINT fk_parameter
+                 FOREIGN KEY (parameter)
+                 REFERENCES parameters(param_code)
+                 ON UPDATE CASCADE ON DELETE CASCADE;")
+  
   DBI::dbExecute(con,
                  "ALTER TABLE locations
   ADD CONSTRAINT fk_geom_id
