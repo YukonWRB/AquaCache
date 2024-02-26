@@ -24,11 +24,11 @@ imputeMissing(
 
 \item{end}{The end datetime (as POSIXct object) to which to fill in missing values (can use local or other time zone).}
 
-\item{extra_params}{Optional extra parameters to consider when imputing values. For example, you may choose to use wind speeds at 1 or 10 meters to impute speeds at 5 meters.}
+\item{extra_params}{Optional extra parameters (by name, which must match exactly an entry in the database) to consider when imputing values. For example, you may choose to use wind speeds at 1 or 10 meters to impute speeds at 5 meters.}
 
 \item{imputed}{Should already imputed data be imputed again?}
 
-\item{daily}{Should the imputation be done on a the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous.}
+\item{daily}{Should the imputation be done on the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous to modify.}
 
 \item{con}{A connection to the database.}
 }

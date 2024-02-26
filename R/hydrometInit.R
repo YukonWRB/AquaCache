@@ -462,7 +462,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE parameters (
                param_code SERIAL PRIMARY KEY,
                param_name TEXT NOT NULL,
-               param_group TEXT NOT NULL,
+               group TEXT NOT NULL,
+               sub-group TEXT,
                description TEXT)")
 
   # extrema table #################
@@ -678,6 +679,12 @@ EXECUTE FUNCTION update_geom_type();
 
 
   #Add in foreign keys ###########
+  DBI::dbExecute(con, "ALTER TABLE settings 
+                 ADD CONSTRAINT fk_parameter
+                 FOREIGN KEY (parameter)
+                 REFERENCES parameters(param_code)
+                 ON UPDATE CASCADE ON DELETE CASCADE;")
+  
   DBI::dbExecute(con,
                  "ALTER TABLE locations
   ADD CONSTRAINT fk_geom_id

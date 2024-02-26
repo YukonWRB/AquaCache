@@ -12,14 +12,14 @@
 #' @param radius The radius in kilometers within which to search for similar timeseries.
 #' @param start The start datetime (as POSIXct object) from which to fill in missing values (can use local or other time zone).
 #' @param end The end datetime (as POSIXct object) to which to fill in missing values (can use local or other time zone).
-#' @param extra_params Optional extra parameters to consider when imputing values. For example, you may choose to use wind speeds at 1 or 10 meters to impute speeds at 5 meters.
+#' @param extra_params Optional extra parameters (by name, which must match exactly an entry in the database) to consider when imputing values. For example, you may choose to use wind speeds at 1 or 10 meters to impute speeds at 5 meters.
 #' @param imputed Should already imputed data be imputed again?
-#' @param daily Should the imputation be done on a the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous.
+#' @param daily Should the imputation be done on the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous to modify.
 #' @param con A connection to the database.
 #'
 #' @return Imputed values added to the database.
 #' @export
-#'
+
 
 imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed = TRUE, daily = FALSE, con = hydrometConnect(silent = TRUE)) {
 
@@ -29,14 +29,14 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
 
   returns <- list() #holds the objects to return
   
-  if (inherits(start, "date") || inherits(start, "character")) {
+  if (inherits(start, "Date") || inherits(start, "character")) {
     start <- as.POSIXct(start, tz = "UTC")
   } else if (inherits(start, "POSIXct")) {
     attr(start, "tzone") <- "UTC"
   } else {
     stop("start must be a date, character, or posixct.")
   }
-  if (inherits(end, "date") || inherits(end, "character")) {
+  if (inherits(end, "Date") || inherits(end, "character")) {
     end <- as.POSIXct(end, tz = "UTC")
   } else if (inherits(end, "POSIXct")) {
     attr(end, "tzone") <- "UTC"
@@ -46,7 +46,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   
   
 
-  entry <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, category, period_type, record_rate FROM timeseries WHERE timeseries_id = ", tsid, ";"))
+  entry <- DBI::dbGetQuery(con, paste0("SELECT t.location, p.param_name AS parameter, t.category, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on T.parameter = p.param_code WHERE t.timeseries_id = ", tsid, ";"))
   if (entry$category != "continuous") {
     stop("This function is not designed to work with discrete category timeseries.")
   }
@@ -242,11 +242,20 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
 
   # look for timeseries within the radius (in table nrby) that might have data that can be used to impute the missing values
   if (!is.null(extra_params)) { # if there are extra parameters, look for those as well
-    similar <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, parameter, period_type, record_rate FROM timeseries WHERE location IN ('", paste(nrby$location, collapse = "', '"), "') AND parameter IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND timeseries_id != ", tsid, " AND start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter = p.param_code WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
+    
   } else { # if there are no extra parameters, look for the same parameter at nearby locations
-    similar <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, parameter, period_type, record_rate FROM timeseries WHERE location IN ('", paste(nrby$location, collapse = "', '"), "') AND parameter = '", entry$parameter, "' AND timeseries_id != ", tsid, " AND start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter = p.param_code WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
   }
 
+  message("Working with location ", entry$location, ", parameter ", entry$parameter, ", period_type ", entry$period_type, ", and record rate of ", entry$record_rate, ". Look right to see what it looks like.")
+  grey_indices <- which(is.na(full_dt$value))
+  bot <- min(full_dt$value, na.rm = TRUE)
+  top <- max(full_dt$value, na.rm = TRUE)
+  plot(full_dt$datetime, full_dt$value, type = "l", col = "blue", xlab = "datetime", ylab = "value")
+  for (i in grey_indices) {
+    graphics::rect(full_dt[i - 1, "datetime"], bot, full_dt[i + 1, "datetime"], top, col = 'grey', border = NA)
+  }
 
   if (nrow(similar) > 0) {
     similar <- merge(similar, nrby, by = "location")
@@ -344,15 +353,6 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     )
     similar <- similar[!is.na(similar$avg_offset),]
     similar <- similar[order(similar$distance_meters), ]
-
-    message("Working with location ", entry$location, ", parameter ", entry$parameter, ", period_type ", entry$period_type, ", and record rate of ", entry$record_rate, ". Look right to see what it looks like.")
-    grey_indices <- which(is.na(full_dt$value))
-    bot <- min(full_dt$value, na.rm = TRUE)
-    top <- max(full_dt$value, na.rm = TRUE)
-    plot(full_dt$datetime, full_dt$value, type = "l", col = "blue", xlab = "datetime", ylab = "value")
-    for (i in grey_indices) {
-      graphics::rect(full_dt[i - 1, "datetime"], bot, full_dt[i + 1, "datetime"], top, col = 'grey', border = NA)
-    }
 
     select_for_impute <- function() {
       message("Timeseries that can be used for imputation:")
@@ -560,19 +560,12 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     with <- data # with will be data with imputed values
     indices <- which(with$imputed) # indices of imputed values
     with[-c(indices, indices - 1, indices + 1), "value"] <- NA # Leave only the imputed values plus a point before and after, so the lines plot
-
-    # plot(without$datetime, without$value, type = "l", col = "blue", xlab = "datetime", ylab = "value")
-    # graphics::lines(with$datetime, with$value, col = "red", lwd = 3)
-    # # plot without$datetime,value as solid blue points
-    # graphics::points(with$datetime, with$value, col = "red", pch = 20)
-    # graphics::points(without$datetime, without$value, col = "blue", pch = 20)
-    
-    plotly::plot_ly(data = with, x = ~datetime, y = ~value, type = "scatter", mode = "lines", line = list(color = "red"), marker = list(color = "red"), name = c("Imputed")) %>%
-      plotly::add_trace(data = without, x = ~datetime, y = ~value, type = "scatter", line = list(color = "blue"), marker = list(color = "blue"), name = "Existing")
+    suppressMessages({
+      plotly::plot_ly(data = without, x = ~datetime, y = ~value, type = "scatter", mode = "lines", line = list(color = "blue"), marker = list(color = "blue", size = 4), name = c("Existing")) %>%
+      plotly::add_trace(data = with, x = ~datetime, y = ~value, type = "scatter", line = list(color = "red", size = 0.1), marker = list(color = "red", size = 8), name = "Imputed")
+    })
   }
   
- 
-
   print(plot_fx(data = imputed))
   message("Look right for the result. Does it look ok?")
   commit <- readline(prompt = writeLines(paste("\n1: Yes, and please modify the timeseries in the database",
@@ -593,7 +586,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   }
   
   if (commit == 1) {
-    message("Commiting the results to the DB and modifying tables. Please be patient")
+    message("Commiting the results to the DB and modifying tables. Please be patient. A message will be shown when finished.")
     to_push <- imputed[imputed$imputed == TRUE, ]
     to_push$timeseries_id <- tsid
     to_push$grade <- "U"
@@ -624,5 +617,4 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   if (commit == 3) {
     message("This part of the function doesn't work yet.")
   }
-  return(returns)
 }
