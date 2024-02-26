@@ -462,7 +462,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE parameters (
                param_code SERIAL PRIMARY KEY,
                param_name TEXT NOT NULL,
-               param_group TEXT NOT NULL,
+               group TEXT NOT NULL,
+               sub-group TEXT,
                description TEXT)")
 
   # extrema table #################
