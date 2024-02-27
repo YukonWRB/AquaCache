@@ -11,7 +11,7 @@
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
-#' @param start_datetime The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
+#' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
 #'
 #' @return Updated entries in the hydro database.
@@ -23,14 +23,18 @@
 synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE)
 {
 
+  if (inherits(start_datetime, "Date")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else if (inherits(start_datetime, "character")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else if (!inherits(start_datetime, "POSIXct")) {
+    stop("start_datetime must be a Date, character, or POSIXct object.")
+  }
+  
   on.exit(DBI::dbDisconnect(con))
   start <- Sys.time()
 
   message("Synchronizing timeseries with synchronize...")
-
-  if (!inherits(start_datetime, "POSIXct")) {
-    stop("Parameter start_datetime must be supplied as a POSIXct object.")
-  }
 
   #Check length of start_datetime is either 1 of same as timeseries_id
   if (length(start_datetime) != 1) {
