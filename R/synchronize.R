@@ -158,13 +158,17 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
         if (length(mismatch_keys) > 0) {
           mismatch <- TRUE
           datetime_remote <- inRemote[inRemote$key %in% mismatch_keys, "datetime"]
-          if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist for the mismatch point. Delete from that point on in the DB
+          if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist or is different for the mismatch point. Delete from that point on in the DB
             datetime_db <- inDB[inDB$key %in% mismatch_keys, "datetime"]
             datetime_db <- min(datetime_db)
-            datetime <- inDB[which(inDB$datetime == datetime_db) - 1, "datetime"]
+            index <- which(inDB$datetime == datetime_db)
+            if (index > 1) {
+              datetime <- inDB[index - 1, "datetime"]
+            } else if (index == 1) {
+              datetime <- inDB[index, "datetime"]
+            }
           } else {
-            datetime_remote <- min(datetime_remote)
-            datetime <- datetime_remote
+            datetime <- min(datetime_remote)
           }
         } else {
           mismatch <- FALSE
@@ -197,10 +201,10 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
                 # Now delete entries in measurements_continuous and calculated_daily that are no longer in the remote data and/or that need to be replaced
                 if (nrow(imputed.remains) > 0) { # Don't delete imputed data points unless there's new data to replace it!
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
-                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "');"))
+                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
                 } else {
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
-                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "');"))
+                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
                 }
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
               } else if (category == "discrete") {
@@ -222,7 +226,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
         }
       }
     }, error = function(e) {
-      warning("synchronize failed on location ", loc, " and parameter ", parameter, " (timeseries_id ", tsid, ").")
+      warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ").")
     }
     )
   }
