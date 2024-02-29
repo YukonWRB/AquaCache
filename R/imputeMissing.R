@@ -10,8 +10,8 @@
 #'
 #' @param tsid The target timeseries_id.
 #' @param radius The radius in kilometers within which to search for similar timeseries.
-#' @param start The start datetime (as POSIXct object) from which to fill in missing values (can use local or other time zone).
-#' @param end The end datetime (as POSIXct object) to which to fill in missing values (can use local or other time zone).
+#' @param start The start datetime (as POSIXct, Date, or character) from which to fill in missing values. If specifying a POSIXct the time zone will be respected.
+#' @param end The end datetime (as POSIXct, Date, or character) to which to fill in missing values. If specifying a POSIXct the time zone will be respected.
 #' @param extra_params Optional extra parameters (by name, which must match exactly an entry in the database) to consider when imputing values. For example, you may choose to use wind speeds at 1 or 10 meters to impute speeds at 5 meters.
 #' @param imputed Should already imputed data be imputed again?
 #' @param daily Should the imputation be done on the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous to modify.
@@ -247,6 +247,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   } else { # if there are no extra parameters, look for the same parameter at nearby locations
     similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter = p.param_code WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
   }
+  
 
   message("Working with location ", entry$location, ", parameter ", entry$parameter, ", period_type ", entry$period_type, ", and record rate of ", entry$record_rate, ". Look right to see what it looks like.")
   grey_indices <- which(is.na(full_dt$value))
@@ -257,6 +258,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     graphics::rect(full_dt[i - 1, "datetime"], bot, full_dt[i + 1, "datetime"], top, col = 'grey', border = NA)
   }
 
+  no_similar <- FALSE
   if (nrow(similar) > 0) {
     similar <- merge(similar, nrby, by = "location")
 
@@ -269,211 +271,219 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     similar <- similar[similar$record_rate_numeric <= entry$record_rate_numeric , ]
     similar <- similar[, -which(names(similar) %in% c("record_rate_numeric"))]
 
-    # Check suitability for each entry (i.e. does the data all exist, rank how well it tracks normally)
-    #   Will need to turn the recording rate and mean/max/min into matching the missing data
-    similar$avg_offset <- NA
-    similar$sd_on_offset <- NA
-    similar$missing_data_for_impute <- FALSE
-    data <- list()
-    suppressWarnings( #otherwise it gives warnings every time a value can't be calculated
-      for (i in 1:nrow(similar)) {
-        #Get data from start to end
-        df <- DBI::dbGetQuery(con, paste0("SELECT datetime, value FROM measurements_continuous WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND datetime >= '", start, "' AND datetime <= '", end, "';"))
-        if (daily) {
-          to_add <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND date >= '", as.Date(start), "' AND date <= '", if (nrow(df) > 0) as.Date(min(df$datetime)) else as.Date(end), "';"))
-          if (nrow(to_add) > 0) {
-            to_add$datetime <- as.POSIXct(to_add$date)
-            to_add$date <- NULL
-            df <- rbind(df, to_add)
+    if (nrow(similar) > 0) {
+      # Check suitability for each entry (i.e. does the data all exist, rank how well it tracks normally)
+      #   Will need to turn the recording rate and mean/max/min into matching the missing data
+      similar$avg_offset <- NA
+      similar$sd_on_offset <- NA
+      similar$missing_data_for_impute <- FALSE
+      data <- list()
+      suppressWarnings( #otherwise it gives warnings every time a value can't be calculated
+        for (i in 1:nrow(similar)) {
+          #Get data from start to end
+          df <- DBI::dbGetQuery(con, paste0("SELECT datetime, value FROM measurements_continuous WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND datetime >= '", start, "' AND datetime <= '", end, "';"))
+          if (daily) {
+            to_add <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND date >= '", as.Date(start), "' AND date <= '", if (nrow(df) > 0) as.Date(min(df$datetime)) else as.Date(end), "';"))
+            if (nrow(to_add) > 0) {
+              to_add$datetime <- as.POSIXct(to_add$date)
+              to_add$date <- NULL
+              df <- rbind(df, to_add)
+            }
           }
+          if (nrow(df) == 0) {
+            similar[i, "missing_data_for_impute"] <- TRUE
+            next
+          }
+          df <- calculate_period(df, similar[i, "timeseries_id"], con = con)
+          
+          # Check if the timeseries is missing data
+          df.periods <- unique(lubridate::period_to_seconds(lubridate::period(df$period)))
+          if (length(df.periods) > 1) {
+            df.period <- min(df.periods)
+          } else {
+            df.period <- df.periods
+          }
+          
+          full <- data.frame("datetime" = seq.POSIXt(min(df$datetime), max(df$datetime), by = df.period))
+          
+          if (nrow(full) != nrow(df)) {
+            similar[i, "missing_data_for_impute"] <- TRUE
+          }
+          
+          #Make into mean/max/min if necessary and match the period of the target ts
+          calculated <- data.frame(datetime = full_dt$datetime,
+                                   value = NA)
+          if (entry$period_type == "instantaneous") {
+            for (j in 1:nrow(full_dt)) {
+              calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+            }
+          } else if (entry$period_type == "sum") {
+            for (j in 1:nrow(full_dt)) {
+              calculated[j, "value"] <- hablar::rationalize(sum(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+            }
+          } else if (entry$period_type == "min") {
+            for (j in 1:nrow(full_dt)) {
+              calculated[j, "value"] <- hablar::rationalize(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+            }
+          } else if (entry$period_type == "max") {
+            for (j in 1:nrow(full_dt)) {
+              calculated[j, "value"] <- hablar::rationalize(max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+            }
+          } else if (entry$period_type == "mean") {
+            for (j in 1:nrow(full_dt)) {
+              calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+            }
+          } else if (entry$period_type == "median") {
+            for (j in 1:nrow(full_dt)) {
+              calculated[j, "value"] <- hablar::rationalize(stats::median(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+            }
+          } else if (entry$period_type == "(min+max)/2") {
+            for (j in 1:nrow(full_dt)) {
+              calculated[j, "value"] <- hablar::rationalize(mean(c(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE), max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))))
+            }
+          }
+          
+          diff <- calculated$value - full_dt$value
+          
+          similar[i, "avg_offset"] <- mean(diff, na.rm = TRUE)
+          similar[i, "sd_on_offset"] <- stats::sd(diff, na.rm = TRUE)
+          
+          if (is.na(similar[i, "avg_offset"])) {
+            next
+          }
+          data[[as.character(similar[i, "timeseries_id"])]] <- calculated
         }
-        if (nrow(df) == 0) {
-          similar[i, "missing_data_for_impute"] <- TRUE
-          next
-        }
-        df <- calculate_period(df, similar[i, "timeseries_id"], con = con)
-
-        # Check if the timeseries is missing data
-        df.periods <- unique(lubridate::period_to_seconds(lubridate::period(df$period)))
-        if (length(df.periods) > 1) {
-          df.period <- min(df.periods)
-        } else {
-          df.period <- df.periods
-        }
-
-        full <- data.frame("datetime" = seq.POSIXt(min(df$datetime), max(df$datetime), by = df.period))
-
-        if (nrow(full) != nrow(df)) {
-          similar[i, "missing_data_for_impute"] <- TRUE
-        }
-
-        #Make into mean/max/min if necessary and match the period of the target ts
-        calculated <- data.frame(datetime = full_dt$datetime,
-                                 value = NA)
-        if (entry$period_type == "instantaneous") {
-          for (j in 1:nrow(full_dt)) {
-            calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
-          }
-        } else if (entry$period_type == "sum") {
-          for (j in 1:nrow(full_dt)) {
-            calculated[j, "value"] <- hablar::rationalize(sum(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
-          }
-        } else if (entry$period_type == "min") {
-          for (j in 1:nrow(full_dt)) {
-            calculated[j, "value"] <- hablar::rationalize(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
-          }
-        } else if (entry$period_type == "max") {
-          for (j in 1:nrow(full_dt)) {
-            calculated[j, "value"] <- hablar::rationalize(max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
-          }
-        } else if (entry$period_type == "mean") {
-          for (j in 1:nrow(full_dt)) {
-            calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
-          }
-        } else if (entry$period_type == "median") {
-          for (j in 1:nrow(full_dt)) {
-            calculated[j, "value"] <- hablar::rationalize(stats::median(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
-          }
-        } else if (entry$period_type == "(min+max)/2") {
-          for (j in 1:nrow(full_dt)) {
-            calculated[j, "value"] <- hablar::rationalize(mean(c(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE), max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))))
-          }
-        }
-
-        diff <- calculated$value - full_dt$value
-
-        similar[i, "avg_offset"] <- mean(diff, na.rm = TRUE)
-        similar[i, "sd_on_offset"] <- stats::sd(diff, na.rm = TRUE)
+      )
+      similar <- similar[!is.na(similar$avg_offset),]
+      similar <- similar[order(similar$distance_meters), ]
+      
+      select_for_impute <- function() {
+        message("Timeseries that can be used for imputation:")
+        print(similar[ , -which(names(similar) == "avg_offset")], row.names = FALSE)
         
-        if (is.na(similar[i, "avg_offset"])) {
-          next()
-        }
-        data[[as.character(similar[i, "timeseries_id"])]] <- calculated
-      }
-    )
-    similar <- similar[!is.na(similar$avg_offset),]
-    similar <- similar[order(similar$distance_meters), ]
-
-    select_for_impute <- function() {
-      message("Timeseries that can be used for imputation:")
-      print(similar[ , -which(names(similar) == "avg_offset")], row.names = FALSE)
-
-      choice <- readline(prompt =
-                           writeLines(paste("\nChoose a timeseries by selecting its timeseries_id",
-                                            "\nEnter 0 to impute without other data (you can choose from several other options)",
-                                            "\nHit Escape to restart."
-                           )))
-      choice <- as.numeric(choice)
-
-      if (choice == 0) {
-        res <- data.frame()
-      } else if (!(choice %in% similar$timeseries_id)) {
-        while (!(choice %in% similar$timeseries_id)) {
-          choice <- readline(prompt =
-                               writeLines(paste("\nThat isn't an acceptable choice. Try again."
-                               )))
-          choice <- as.numeric(choice)
-        }
-      }
-
-      res <- similar[similar$timeseries_id == choice, ]
-      return(res)
-    }
-
-    selected <- select_for_impute()
-    if (nrow(selected) == 0) {
-      message("Which other method would you like to try?")
-      other_impute <- readline(prompt = writeLines(paste("\n1: Linear inerpolation",
-                                                       "\n2: Cubic spline interpolation",
-                                                       "\n3: Stop! I'd like to exit"
-      )))
-      other_impute <- as.numeric(other_impute)
-
-      if (other_impute == 3) {
-        return(returns)
-      }
-      if (!(other_impute %in% 1:2)) {
-        while (!(other_impute %in% 1:2)) {
-          other_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
-          other_impute <- as.numeric(other_impute)
-        }
-      }
-      other_method <- TRUE
-    } else {
-      missing_for_impute <- function(new_tsid = selected$timeseries_id, new_start = start, new_end = end, con = con) {
-        exit <- FALSE
-        message("The timeseries you selected is missing data during the imputation period. What would you like to do?")
-        add_impute <- readline(prompt = writeLines(paste("\n1: Exit: I'll impute data for that timeseries and come back",
-                                                         "\n2: Select another timeseries (or linear/cubic interpolation)",
-                                                         "\n3: Use the time series as-is",
-                                                         "\n4: Exit this function")))
-        add_impute <- as.numeric(add_impute)
-        if (!(add_impute %in% 1:3)) {
-          while (!(add_impute %in% 1:3)) {
-            add_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
-            add_impute <- as.numeric(add_impute)
+        choice <- readline(prompt =
+                             writeLines(paste("\nChoose a timeseries by selecting its timeseries_id",
+                                              "\nEnter 0 to impute without other data (you can choose from several other options)",
+                                              "\nHit Escape to restart."
+                             )))
+        choice <- as.numeric(choice)
+        
+        if (choice == 0) {
+          res <- data.frame()
+        } else if (!(choice %in% similar$timeseries_id)) {
+          while (!(choice %in% similar$timeseries_id)) {
+            choice <- readline(prompt =
+                                 writeLines(paste("\nThat isn't an acceptable choice. Try again."
+                                 )))
+            choice <- as.numeric(choice)
           }
         }
-        if (add_impute == 3) {
-          similar[similar$timeseries_id == new_tsid, "missing_data_for_impute"] <- FALSE
-          res <- list(exit = exit, selected = similar[similar$timeseries_id == new_tsid,])
-        }
-        else if (add_impute == 2) {
-          res <- list(exit = exit, selected = select_for_impute())
-        } else if (add_impute == 1) {
-          exit <- TRUE
-          res <- list(exit = exit, selected = similar[similar$timeseries_id == new_tsid,])
-        }
+        
+        res <- similar[similar$timeseries_id == choice, ]
         return(res)
-      } #End of function missing_for_impute
-
-      if (selected$missing_data_for_impute) {
-        other_method <- FALSE
-        while (selected$missing_data_for_impute) {
-          missing_for_impute_res <- missing_for_impute()
-          selected <- missing_for_impute_res$selected
-          if (nrow(missing_for_impute_res$selected) == 0) {
-            message("Which other method would you like to try?")
-            other_impute <- readline(prompt = writeLines(paste("\n1: Linear inerpolation",
-                                                               "\n2: Cubic spline interpolation",
-                                                               "\n3: Stop! I'd like to exit"
-            )))
-            other_impute <- as.numeric(other_impute)
-
-            if (other_impute == 3) {
-              return(returns)
-            }
-            if (!(other_impute %in% 1:2)) {
-              while (!(other_impute %in% 1:2)) {
-                other_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
-                other_impute <- as.numeric(other_impute)
-              }
-            }
-            other_method <- TRUE
-            break()
-          }
-          if (missing_for_impute_res$exit) {
-            message("Reminder to now go and impute data for timeseries_id ", selected$timeseries_id, "!")
-            return(returns)
-          }
-        } #End of while loop: user either selected a timeseries with no missing data or opted to go on with the missing data.
-      } else {
-        other_method <- FALSE
       }
+      
+      selected <- select_for_impute()
+      if (nrow(selected) == 0) {
+        message("Which other method would you like to try?")
+        other_impute <- readline(prompt = writeLines(paste("\n1: Linear inerpolation",
+                                                           "\n2: Cubic spline interpolation",
+                                                           "\n3: Stop! I'd like to exit"
+        )))
+        other_impute <- as.numeric(other_impute)
+        
+        if (other_impute == 3) {
+          return(returns)
+        }
+        if (!(other_impute %in% 1:2)) {
+          while (!(other_impute %in% 1:2)) {
+            other_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
+            other_impute <- as.numeric(other_impute)
+          }
+        }
+        other_method <- TRUE
+      } else {
+        missing_for_impute <- function(new_tsid = selected$timeseries_id, new_start = start, new_end = end, con = con) {
+          exit <- FALSE
+          message("The timeseries you selected is missing data during the imputation period. What would you like to do?")
+          add_impute <- readline(prompt = writeLines(paste("\n1: Exit: I'll impute data for that timeseries and come back",
+                                                           "\n2: Select another timeseries (or linear/cubic interpolation)",
+                                                           "\n3: Use the time series as-is",
+                                                           "\n4: Exit this function")))
+          add_impute <- as.numeric(add_impute)
+          if (!(add_impute %in% 1:3)) {
+            while (!(add_impute %in% 1:3)) {
+              add_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
+              add_impute <- as.numeric(add_impute)
+            }
+          }
+          if (add_impute == 3) {
+            similar[similar$timeseries_id == new_tsid, "missing_data_for_impute"] <- FALSE
+            res <- list(exit = exit, selected = similar[similar$timeseries_id == new_tsid,])
+          }
+          else if (add_impute == 2) {
+            res <- list(exit = exit, selected = select_for_impute())
+          } else if (add_impute == 1) {
+            exit <- TRUE
+            res <- list(exit = exit, selected = similar[similar$timeseries_id == new_tsid,])
+          }
+          return(res)
+        } #End of function missing_for_impute
+        
+        if (selected$missing_data_for_impute) {
+          other_method <- FALSE
+          while (selected$missing_data_for_impute) {
+            missing_for_impute_res <- missing_for_impute()
+            selected <- missing_for_impute_res$selected
+            if (nrow(missing_for_impute_res$selected) == 0) {
+              message("Which other method would you like to try?")
+              other_impute <- readline(prompt = writeLines(paste("\n1: Linear inerpolation",
+                                                                 "\n2: Cubic spline interpolation",
+                                                                 "\n3: Stop! I'd like to exit"
+              )))
+              other_impute <- as.numeric(other_impute)
+              
+              if (other_impute == 3) {
+                return(returns)
+              }
+              if (!(other_impute %in% 1:2)) {
+                while (!(other_impute %in% 1:2)) {
+                  other_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
+                  other_impute <- as.numeric(other_impute)
+                }
+              }
+              other_method <- TRUE
+              break()
+            }
+            if (missing_for_impute_res$exit) {
+              message("Reminder to now go and impute data for timeseries_id ", selected$timeseries_id, "!")
+              return()
+            }
+          } #End of while loop: user either selected a timeseries with no missing data or opted to go on with the missing data.
+        } else {
+          other_method <- FALSE
+        }
+      }
+    } else {
+      no_similar <- TRUE
     }
   } else {
+    no_similar <- TRUE
+  }
+  
+  if (no_similar) {
     # There are no locations within the radius specified! Ask the user if they want linear or cubic.
     message("There were no suitable locations within the radius you specified. Do you want to use another method instead?")
     other_impute <- readline(prompt = writeLines(paste("\n1: Yes, linear inerpolation",
-                                                     "\n2: Yes, cubic spline interpolation",
-                                                     "\n3: No, I'd like to exit"
+                                                       "\n2: Yes, cubic spline interpolation",
+                                                       "\n3: No, I'd like to exit"
     )))
     other_impute <- as.numeric(other_impute)
-
+    
     if (other_impute == 3) {
       return(returns)
     }
-
+    
     if (!(other_impute %in% 1:2)) {
       while (!(other_impute %in% 1:2)) {
         other_impute <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
@@ -493,7 +503,6 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       values <- stats::approx(full_dt$datetime, full_dt$value, method = "linear", n = nrow(full_dt))$y
       for (i in 1:nrow(imputed)) {
         if (is.na(imputed[i, "value"])) {
-          datetime <- imputed[i, "datetime"]
           imputed[i, "value"] <- values[i]
           imputed[i, "imputed"] <- TRUE
         }
@@ -503,7 +512,6 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       values <- stats::spline(full_dt$datetime, full_dt$value, n = nrow(full_dt))$y
       for (i in 1:nrow(imputed)) {
         if (is.na(imputed[i, "value"])) {
-          datetime <- imputed[i, "datetime"]
           imputed[i, "value"] <- values[i]
           imputed[i, "imputed"] <- TRUE
         }
@@ -599,12 +607,18 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       DBI::dbAppendTable(con, "calculated_daily", to_push)
       calculate_stats(con = con, timeseries_id = tsid, start_recalc = min(to_push$date))
     } else {
-      #re-enter the period as ISO8601
-      days <- floor(period / (24 * 3600))
-      remaining_hours <- period %% (24 * 3600)
-      minutes <- floor((remaining_hours - floor(remaining_hours)) * 60)
-      seconds <- round(((remaining_hours - floor(remaining_hours)) * 60 - minutes) * 60)
-      to_push$period <- paste("P", days, "DT", floor(remaining_hours), "H", minutes, "M", seconds, "S", sep = "")
+      if (entry$period_type != "instantaneous") {
+        #re-enter the period as ISO8601
+        days <- floor(period / 86400)
+        remainder <- period %% 86400
+        hours <- floor(remainder / 3600)
+        remainder <- remainder %% 3600
+        minutes <- floor(remainder / 60)
+        seconds <- remainder %% 60
+        to_push$period <- paste("P", days, "DT", hours, "H", minutes, "M", seconds, "S", sep = "")
+        } else {
+        to_push$period <- "PT0S"
+      }
       
       DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime IN ('", paste(to_push$datetime, collapse = "', '"), "')")) #delete is here in case previously imputed values are being over-written
       DBI::dbAppendTable(con, "measurements_continuous", to_push)

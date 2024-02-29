@@ -132,12 +132,12 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
     if (is.na(target_date) | length(target_date) == 0) {
       message(paste0("Snow survey target date is missing for snow course '", survey[1,2], "' (", loc_id, ") and must be given."))
       message("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
-      next()
+      next
     }
     if (is.na(survey_date) | length(survey_date) == 0) {
       message(paste0("Snow survey sampling date is missing for snow course '", survey[1,2], "' (", loc_id, ") and must be given."))
       message("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
-      next()
+      next
     }
     
     ## Combine all together
@@ -157,7 +157,7 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
       warning("FAILED to create new entry for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
       next_flag <<- TRUE
     })
-    if (next_flag) {next()}
+    if (next_flag) {next}
     
     
     message(paste0("New survey for snow course '", survey[1,2], "' (", loc_id, ") and target date ", target_date, " inserted into surveys table."))
@@ -185,7 +185,7 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
       if (survey[7,2] < survey[6,2]) {
         message("End time of sampling for snow course '", survey[1,2], "' (", loc_id, ") is before start time.")
         message("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
-        next()
+        next
       }
       
       # Create times vector

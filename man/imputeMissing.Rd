@@ -20,9 +20,9 @@ imputeMissing(
 
 \item{radius}{The radius in kilometers within which to search for similar timeseries.}
 
-\item{start}{The start datetime (as POSIXct object) from which to fill in missing values (can use local or other time zone).}
+\item{start}{The start datetime (as POSIXct, Date, or character) from which to fill in missing values. If specifying a POSIXct the time zone will be respected.}
 
-\item{end}{The end datetime (as POSIXct object) to which to fill in missing values (can use local or other time zone).}
+\item{end}{The end datetime (as POSIXct, Date, or character) to which to fill in missing values. If specifying a POSIXct the time zone will be respected.}
 
 \item{extra_params}{Optional extra parameters (by name, which must match exactly an entry in the database) to consider when imputing values. For example, you may choose to use wind speeds at 1 or 10 meters to impute speeds at 5 meters.}
 
