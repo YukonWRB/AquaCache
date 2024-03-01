@@ -28,7 +28,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     message("Select the path to the folder where you want this report saved.")
     workbook <- rstudioapi::selectFile(caption = "Select the target workbook", path = file.path(Sys.getenv("USERPROFILE"),"Desktop"), filter = "Excel files  (*.xlsx)")
   } else {
-    if (!dir.exists(workbook)) {
+    if (!file.exists(workbook)) {
       stop("The workbook path points to a non-existent file.")
     }
   }
