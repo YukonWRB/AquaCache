@@ -4,18 +4,20 @@
 \alias{readSnowWorkbook}
 \title{Read snow workbook and import into Snow database}
 \usage{
-readSnowWorkbook(workbook, con = snowConnect(silent = TRUE))
+readSnowWorkbook(workbook, overwrite = FALSE, con = snowConnect(silent = TRUE))
 }
 \arguments{
 \item{workbook}{The name of the workbook (excel workbook) containing the snow data.}
 
+\item{overwrite}{If \code{TRUE}, will overwrite existing data in the snow database if there's already an entry for the same survey date, target date, and location (regardless of parameters).}
+
 \item{con}{A connection to the snow database.}
 }
 \value{
-Does not return any object.
+Does not return any object. The function is designed to import data into the snow database.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
 
-Reads snow workbooks created with \code{\link[YGwater:createSnowTemplate]{YGwater::createSnowTemplate()}}, performs some QA/QC, and imports the data to the snow database.
+Reads snow workbooks created with \code{\link[YGwater:createSnowTemplate]{YGwater::createSnowTemplate()}}, performs some QA/QC, and imports the data to the snow database. Designed with significant error catching and logging. As the function works through the workbook it may fail on any sheet but will continue to the next sheet until all have been processed. Warning messages will be shown alerting the user explaining the issue and the workbook sheet involved. These warning messages are designed primarily for error catching when this function is run programmatically, but are nevertheless useful for manual use as well.
 }

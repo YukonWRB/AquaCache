@@ -12,6 +12,8 @@ imputeMissing(
   extra_params = NULL,
   imputed = TRUE,
   daily = FALSE,
+  min_gap = 1,
+  max_gap = Inf,
   con = hydrometConnect(silent = TRUE)
 )
 }
@@ -29,6 +31,10 @@ imputeMissing(
 \item{imputed}{Should already imputed data be imputed again?}
 
 \item{daily}{Should the imputation be done on the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous to modify.}
+
+\item{min_gap}{An optional integer specifying the minimum number of missing points to interpolate. This can be useful when you want to use a certain method to impute only short gaps, and use another method for longer gaps.}
+
+\item{max_gap}{An optional integer specifying the maximum number of missing points to interpolate. This can be useful when you want to use a certain method to impute only short gaps, and use another method for longer gaps.}
 
 \item{con}{A connection to the database.}
 }
