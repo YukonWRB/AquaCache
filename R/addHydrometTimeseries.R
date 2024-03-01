@@ -332,7 +332,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
               DBI::dbExecute(con, paste0("DELETE FROM locations WHERE location = '", loc, "';"))
             }
             message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
-            next()
+            next
           }
           if ((add$source_fx == "downloadWSC") & add$parameter %in% c("level", "flow")) {
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
@@ -354,7 +354,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
               DBI::dbExecute(con, paste0("DELETE FROM locations WHERE timeseries_id = ", new_tsid, ";"))
             }
             message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
-            next()
+            next
           }
         } #End of loop adding discrete data
       } else {

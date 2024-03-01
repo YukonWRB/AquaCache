@@ -60,7 +60,7 @@ getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent = 
       }
       imgs <- do.call(source_fx, args_list) #Get the data using the args_list
       if (is.null(imgs)) {
-        next()
+        next
       }
 
       for (j in 1:length(imgs)) {

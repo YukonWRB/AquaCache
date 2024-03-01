@@ -3,16 +3,17 @@
 #' @description
 #' `r lifecycle::badge("experimental")`
 #'
-#' Reads snow workbooks created with [YGwater::createSnowTemplate()], performs some QA/QC, and imports the data to the snow database.
+#' Reads snow workbooks created with [YGwater::createSnowTemplate()], performs some QA/QC, and imports the data to the snow database. Designed with significant error catching and logging. As the function works through the workbook it may fail on any sheet but will continue to the next sheet until all have been processed. Warning messages will be shown alerting the user explaining the issue and the workbook sheet involved. These warning messages are designed primarily for error catching when this function is run programmatically, but are nevertheless useful for manual use as well.
 #'
 #' @param workbook The name of the workbook (excel workbook) containing the snow data.
+#' @param overwrite If `TRUE`, will overwrite existing data in the snow database if there's already an entry for the same survey date, target date, and location (regardless of parameters).
 #' @param con A connection to the snow database.
-#' @return Does not return any object.
+#' @return Does not return any object. The function is designed to import data into the snow database.
 #'
 #' @export
 #'
 
-readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
+readSnowWorkbook <- function(workbook, overwrite = FALSE, con = snowConnect(silent = TRUE)) {
   
   
   #initial checks
@@ -23,7 +24,7 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
   workbook_names <- openxlsx::getSheetNames(workbook)
   
   # For each sheet (survey)
-  for (s in 2:length(workbook_names)) {
+  for (s in 2:length(workbook_names)) { #first sheet is the summary sheet
     
     ##### --------------- Pull in all the data from workbook -------------- ####
     survey <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(5:11), cols = c(2:4), detectDates = TRUE, colNames = FALSE)
@@ -130,14 +131,12 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
     
     # Check that target_date and survey_date are not empty
     if (is.na(target_date) | length(target_date) == 0) {
-      message(paste0("Snow survey target date is missing for snow course '", survey[1,2], "' (", loc_id, ") and must be given."))
-      message("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
-      next()
+      warning("FAILED for ", survey[1,2], "' (", loc_id, "), snow survey target date is missing and must be given.")
+      next
     }
     if (is.na(survey_date) | length(survey_date) == 0) {
-      message(paste0("Snow survey sampling date is missing for snow course '", survey[1,2], "' (", loc_id, ") and must be given."))
-      message("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
-      next()
+      warning("FAILED for ", survey[1,2], "' (", loc_id, "), snow survey sampling date is missing for and must be given.")
+      next
     }
     
     ## Combine all together
@@ -146,28 +145,42 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
     ## Insert into surveys table
     next_flag <- FALSE #Will be used to skip to next sheet if there is an error
     tryCatch({
-      if (is.null(ice_notes)) {
-        DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method) VALUES ('",
-                                   paste(surveys, collapse = "', '"), "')") )
+      # See if the survey has been entered already
+      exists <- DBI::dbGetQuery(con, paste0("SELECT survey_id FROM surveys WHERE location = '", location, "' ",
+                                            "AND target_date = '", target_date, "' ",
+                                            "AND survey_date = '", survey_date, "'") )
+      if (nrow(exists) == 0) {
+        if (is.null(ice_notes)) {
+          DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method) VALUES ('", paste(surveys, collapse = "', '"), "')") )
+        } else {
+          DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method, ice_notes) VALUES ('", paste(surveys, collapse = "', '"), "')") )
+        }
+        message(paste0("New survey for snow course '", survey[1,2], "' (", loc_id, ") and target date ", target_date, " inserted into surveys table."))
+      } else if (nrow(exists) == 1 && !overwrite) {
+        message("Survey already exists for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, " and overwrite is FALSE. Skipping to next sheet.")
+        next_flag <- TRUE
+      } else if (nrow(exists) == 1 && overwrite) {
+        # Update the survey entry
+        if (is.null(ice_notes)) {
+          DBI::dbExecute(con, paste0("UPDATE surveys SET notes = '", notes, "', sampler_name = '", sampler_name, "', method = '", method, "' WHERE location = '", location, "' AND target_date = '", target_date, "' AND survey_date = '", survey_date, "'"))
+          } else {
+          DBI::dbExecute(con, paste0("UPDATE surveys SET notes = '", notes, "', sampler_name = '", sampler_name, "', method = '", method, "', ice_notes = '", ice_notes, "' WHERE location = '", location, "' AND target_date = '", target_date, "' AND survey_date = '", survey_date, "'"))
+          }
+        message("Surveys table for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, " updated.")
       } else {
-        DBI::dbExecute(con, paste0("INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method, ice_notes) VALUES ('",
-                                   paste(surveys, collapse = "', '"), "')") )
+        warning("FAILED to create new entry for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
+        next_flag <<- TRUE
       }
     }, error = function(e) {
       warning("FAILED to create new entry for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
       next_flag <<- TRUE
     })
-    if (next_flag) {next()}
-    
-    
-    message(paste0("New survey for snow course '", survey[1,2], "' (", loc_id, ") and target date ", target_date, " inserted into surveys table."))
+    if (next_flag) {next}
     
     # Get survey id
     surv_id <- DBI::dbGetQuery(con, paste0("SELECT survey_id FROM surveys WHERE location = '", location, "' ",
                                            "AND target_date = '", target_date, "' ",
                                            "AND survey_date = '", survey_date, "'") )[1,1]
-    
-    
     
     
     ##### ------------------ Create measurements table -------------------- ####
@@ -183,9 +196,12 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
       }
       # Check that end time is after stat time
       if (survey[7,2] < survey[6,2]) {
-        message("End time of sampling for snow course '", survey[1,2], "' (", loc_id, ") is before start time.")
-        message("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
-        next()
+        warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") end time is before start time.")
+        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+        if (nrow(check) == 0) {
+          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+        }
+        next
       }
       
       # Create times vector
@@ -237,24 +253,36 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
     # Check for empty SWE or depth
     if (method %in% c("average", "bulk")) {
       if (is.na(swe) | length(swe) == 0) {
-        warning("SWE is missing for snow coarse '", survey[1,2], "' (", loc_id, ") and must be given.")
-        warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
+        warning("FAILED: SWE is missing for snow coarse '", survey[1,2], "' (", loc_id, ") and must be given.")
+        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+        if (nrow(check) == 0) {
+          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+        }
         next
       }
       if (is.na(depth) | length(depth) == 0) {
-        warning("Snow depth is missing for snow coarse '", survey[1,2], "' (", loc_id, ") and must be given.")
-        warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
+        warning("FAILED: now depth is missing for snow coarse '", survey[1,2], "' (", loc_id, ") and must be given.")
+        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+        if (nrow(check) == 0) {
+          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+        }
         next
       }
     } else if (method == "standard") {
       if (length(swe) < length(sample_datetime)) {
-        warning("SWE is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
-        warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
+        warning("FAILED: SWE is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
+        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+        if (nrow(check) == 0) {
+          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+        }
         next
       }
       if (length(depth) < length(sample_datetime)) {
-        warning("Snow depth is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
-        warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") not imported")
+        warning("FAILED: snow depth is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
+        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+        if (nrow(check) == 0) {
+          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+        }
         next
       }
     }
@@ -289,13 +317,14 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
       } else if (method %in% c("average", "bulk")) {
         survey_id <- surv_id
       }
-      
+      if (overwrite) {
+        DBI::dbExecute(con, paste0("DELETE FROM measurements WHERE survey_id = '", surv_id, "'"))
+      }
       meas_statement <- sprintf("INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;", paste(sprintf("('%s', '%s', '%s', '%s', %d, %d, '%s')", survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes), collapse = ", "))
       
       DBI::dbExecute(con, meas_statement)
       
       message(paste0("Snow course '", survey[1,2], "' (", loc_id, ") inserted into measurements table."))
-      
       
       ## Changes to maintenance table
       # For those with completed = FALSE
@@ -323,21 +352,18 @@ readSnowWorkbook <- function(workbook, con = snowConnect(silent = TRUE)) {
       
       ## Commit import
       DBI::dbCommit(con)
-      
-      DBI::dbDisconnect(con)
-      
       message("SUCCESS: new snow course data for '", survey[1,2], "' (", loc_id, ") imported.")
-      
     }, error = function(e) {
       # Rollback transaction if any statement fails
       DBI::dbRollback(con)
       
-      DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+      # Check if there are measurements for that survey_id. If not, delete the survey_id from surveys table.
+      check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+      if (nrow(check) == 0) {
+        DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+      }
       warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, "). Import rolled back")
     }
     )
-    
-    
   }
-  
 }

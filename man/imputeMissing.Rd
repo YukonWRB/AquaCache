@@ -12,6 +12,8 @@ imputeMissing(
   extra_params = NULL,
   imputed = TRUE,
   daily = FALSE,
+  min_gap = 1,
+  max_gap = Inf,
   con = hydrometConnect(silent = TRUE)
 )
 }
@@ -20,15 +22,19 @@ imputeMissing(
 
 \item{radius}{The radius in kilometers within which to search for similar timeseries.}
 
-\item{start}{The start datetime (as POSIXct object) from which to fill in missing values (can use local or other time zone).}
+\item{start}{The start datetime (as POSIXct, Date, or character) from which to fill in missing values. If specifying a POSIXct the time zone will be respected.}
 
-\item{end}{The end datetime (as POSIXct object) to which to fill in missing values (can use local or other time zone).}
+\item{end}{The end datetime (as POSIXct, Date, or character) to which to fill in missing values. If specifying a POSIXct the time zone will be respected.}
 
 \item{extra_params}{Optional extra parameters (by name, which must match exactly an entry in the database) to consider when imputing values. For example, you may choose to use wind speeds at 1 or 10 meters to impute speeds at 5 meters.}
 
 \item{imputed}{Should already imputed data be imputed again?}
 
 \item{daily}{Should the imputation be done on the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous to modify.}
+
+\item{min_gap}{An optional integer specifying the minimum number of missing points to interpolate. This can be useful when you want to use a certain method to impute only short gaps, and use another method for longer gaps.}
+
+\item{max_gap}{An optional integer specifying the maximum number of missing points to interpolate. This can be useful when you want to use a certain method to impute only short gaps, and use another method for longer gaps.}
 
 \item{con}{A connection to the database.}
 }

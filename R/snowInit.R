@@ -17,9 +17,9 @@
 
 snowInit <- function(con = snowConnect(), overwrite = FALSE) {
 
-  if (overwrite){
+  if (overwrite) {
     DBI::dbExecute(con, "DROP EXTENSION postgis CASCADE")
-    for (i in DBI::dbListTables(con)){
+    for (i in DBI::dbListTables(con)) {
       tryCatch({
         DBI::dbExecute(con, paste0("DROP TABLE ", i, " CASCADE"))
       }, error = function(e) {
@@ -45,7 +45,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  CONSTRAINT enforce_dims_geom2 CHECK (st_ndims(polygon) = 2),
                  CONSTRAINT enforce_geotype_geom2 CHECK (geometrytype(polygon) = 'POLYGON'::text),
                  CONSTRAINT enforce_srid_geom2 CHECK (st_srid(polygon) = 4269),
-                 CONSTRAINT enforce_valid_geom2 CHECK (st_isvalid(polygon)))")#,
+                 CONSTRAINT enforce_valid_geom2 CHECK (st_isvalid(polygon)))")
 
   #### locations
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
@@ -60,8 +60,8 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  longitude NUMERIC,
                  notes TEXT,
 
-                 FOREIGN KEY (basin) REFERENCES basins(basin),
-                 FOREIGN KEY (sub_basin) REFERENCES sub_basins(sub_basin))"
+                 FOREIGN KEY (basin) REFERENCES basins(basin) ON UPDATE CASCADE,
+                 FOREIGN KEY (sub_basin) REFERENCES sub_basins(sub_basin) ON UPDATE CASCADE)"
   )
 
   #### maintenance
@@ -77,7 +77,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                   (completed = FALSE AND date_completed IS NULL) OR
                   (completed = TRUE AND date_completed IS NOT NULL))
 
-                 FOREIGN KEY (location) REFERENCES locations(location))"
+                 FOREIGN KEY (location) REFERENCES locations(location) ON UPDATE CASCADE)"
   )
   DBI::dbExecute(con, "CREATE UNIQUE INDEX unique_location_maintenance ON maintenance (location, maintenance) WHERE completed = FALSE")
 
@@ -94,7 +94,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  CONSTRAINT survey_loc UNIQUE (survey_date, location),
                  CONSTRAINT method_check CHECK (method IN ('average', 'bulk', 'standard')),
 
-                 FOREIGN KEY (location) REFERENCES locations(location))"
+                 FOREIGN KEY (location) REFERENCES locations(location) ON UPDATE CASCADE)"
   )
 
   #### measurements
@@ -109,7 +109,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  average BOOLEAN,
                  notes TEXT,
 
-                 FOREIGN KEY (survey_id) REFERENCES surveys(survey_id))"
+                 FOREIGN KEY (survey_id) REFERENCES surveys(survey_id) ON DELETE CASCADE ON UPDATE CASCADE)"
   )
 
   #### means (view)
