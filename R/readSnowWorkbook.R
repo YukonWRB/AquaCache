@@ -48,6 +48,12 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     notes <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(27:53), cols = c(2:10), colNames = TRUE, skipEmptyRows = FALSE, skipEmptyCols = FALSE)
     maintenance <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(48:51), cols = c(2:9), colNames = TRUE, skipEmptyRows = FALSE, skipEmptyCols = TRUE)
     
+    # Check for empty sheets
+    if (all(is.na(survey[c(3,4,6,7), 2])) & nrow(measurement) == 0 & all(is.na(calculated[c(2,3), c(2,3)])) & all(is.na(notes[, c(3,5,7)])) & ncol(maintenance) == 1) {
+      message("Sheet ", s, ", ", survey[1,2], " is empty. Skipping to next sheet.")
+      next
+    }
+    
     # Get location id for that sheet
     next_flag <- FALSE #Will be used to skip to next sheet if there is an error
     tryCatch({
@@ -204,26 +210,30 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
                                            "AND survey_date = '", survey_date, "'") )[1,1]
     
     
+    # CHECK start time and end times
+    # If no start time, set it to noon
+    if (is.na(survey[6,2])) {
+      survey[6,2] <- "0.5"
+    }
+    # If no end time, set it to start time
+    if (is.na(survey[7,2])) {
+      survey[7,2] <- survey[6,2]
+    }
+    # Check that end time is after stat time
+    if (survey[7,2] < survey[6,2]) {
+      warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") end time is before start time.")
+      check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+      if (nrow(check) == 0) {
+        DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+      }
+      next
+    }
+    
     ##### ------------------ Create measurements table -------------------- ####
     # Create measurements table (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes)
     
     ### Standard
     if (method == "standard") {
-      ## Sample_datetime
-      # CHECK start time and end times
-      # If no end time, set it to start time
-      if (is.na(survey[7,2])) {
-        survey[7,2] <- survey[6,2]
-      }
-      # Check that end time is after stat time
-      if (survey[7,2] < survey[6,2]) {
-        warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") end time is before start time.")
-        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
-        if (nrow(check) == 0) {
-          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
-        }
-        next
-      }
       
       # Create times vector
       times <- seq.int(from = as.numeric(survey[6,2]),
