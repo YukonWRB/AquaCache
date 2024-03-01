@@ -5,7 +5,7 @@
 #'
 #' Reads snow workbooks created with [YGwater::createSnowTemplate()], performs some QA/QC, and imports the data to the snow database. Designed with significant error catching and logging. As the function works through the workbook it may fail on any sheet but will continue to the next sheet until all have been processed. Warning messages will be shown alerting the user explaining the issue and the workbook sheet involved. These warning messages are designed primarily for error catching when this function is run programmatically, but are nevertheless useful for manual use as well.
 #'
-#' @param workbook The name of the workbook (excel workbook) containing the snow data.
+#' @param workbook The path to the workbook (.xlsx) containing the snow data. Default "choose" lets you pick the file interactively.
 #' @param overwrite If `TRUE`, will overwrite existing data in the snow database if there's already an entry for the same survey date, target date, and location (regardless of parameters).
 #' @param con A connection to the snow database.
 #' @return Does not return any object. The function is designed to import data into the snow database.
@@ -13,13 +13,27 @@
 #' @export
 #'
 
-readSnowWorkbook <- function(workbook, overwrite = FALSE, con = snowConnect(silent = TRUE)) {
+readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowConnect(silent = TRUE)) {
   
+  on.exit(DBI::dbDisconnect(con))
   
   #initial checks
   rlang::check_installed("openxlsx", reason = "necessary to read workbooks")
   
-  on.exit(DBI::dbDisconnect(con))
+  if (workbook == "choose") {
+    if (!interactive()) {
+      stop("You must specify a save path when running in non-interactive mode.")
+    }
+    rlang::check_installed("rstudioapi", reason = "necessary for interactive file selection")
+    message("Select the path to the folder where you want this report saved.")
+    workbook <- rstudioapi::selectFile(caption = "Select the target workbook", path = file.path(Sys.getenv("USERPROFILE"),"Desktop"), filter = "Excel files  (*.xlsx)")
+  } else {
+    if (!dir.exists(workbook)) {
+      stop("The workbook path points to a non-existent file.")
+    }
+  }
+  
+  
   
   workbook_names <- openxlsx::getSheetNames(workbook)
   
@@ -38,18 +52,25 @@ readSnowWorkbook <- function(workbook, overwrite = FALSE, con = snowConnect(sile
     next_flag <- FALSE #Will be used to skip to next sheet if there is an error
     tryCatch({
       loc_id <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE name = '", survey[1,2], "'"))[1,1]
+      if (is.na(loc_id)) {
+        next_flag <- TRUE
+      }
     }, error = function(e) {
       warning("Unable to retrieve location id from the Snow DB using the following snow course name given in workbook: ", survey[1,2], ". This location name does not exist in the database. Check for typos in the name or request that location be added.")
       warning("FAILED: new snow course data for '", survey[1,2], "' was not imported")
       next_flag <<- TRUE
     }
     )
-    if (next_flag) {next}
+    if (next_flag) {
+      warning("Failed to retrieve a location for ", survey[1,2], ". Skipping to next sheet. If this is a new location it must be entered into the database. If not, check the location name at the top of the sheet as it must match the database entry.")
+      next
+      }
     
     ##### --------------------- Create surveys table ---------------------- ####
     location <- loc_id
     target_date <- survey[2, 2]
     survey_date <- survey[3, 2]
+    sampler_name <- survey[4, 2]
     
     if (is.na(estavg[2,2])) {
       method <- survey[5,2]

@@ -52,6 +52,7 @@ Suggests:
     openxlsx,
     plotly,
     rmarkdown,
+    rstudioapi,
     sf,
     shiny,
     shinyFiles,
