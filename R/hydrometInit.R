@@ -885,7 +885,35 @@ FOR EACH ROW
 EXECUTE FUNCTION update_document_flags_after_delete();
                ")
 
-
+  # Create view table(s) ########################################
+  DBI::dbExecute(con, "CREATE OR REPLACE VIEW measurements_hourly AS
+SELECT
+    timeseries_id,
+    date_trunc('hour', datetime) AS datetime,
+    AVG(value) AS value,
+    (
+        SELECT grade 
+        FROM unnest(array_agg(grade)) AS unq(grade)
+        GROUP BY grade
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    ) AS grade,
+    (
+        SELECT approval 
+        FROM unnest(array_agg(approval)) AS unq(approval)
+        GROUP BY approval
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    ) AS approval,
+    BOOL_OR(imputed) AS imputed
+FROM
+    measurements_continuous
+GROUP BY
+    timeseries_id,
+    date_trunc('hour', datetime)
+ORDER BY
+    datetime;
+")
 
   # Create a read-only account ########################################
   tryCatch({
