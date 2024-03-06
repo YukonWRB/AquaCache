@@ -153,7 +153,8 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
   # sample_class table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists sample_class (
                  code TEXT PRIMARY KEY,
-                 description TEXT NOT NULL);")
+                 description TEXT NOT NULL,
+                 description_fr TEXT);")
   class <- data.frame("code" = c("M", "D", "I", "U"),
                       "description" = c("Monitoring (routine)", "Duplicate/Replicate or split sample", "Incident response", "Undefined"))
   DBI::dbAppendTable(con, "sample_class", class)
@@ -183,7 +184,8 @@ EXECUTE FUNCTION check_sample_class_exists();
   # grades table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists grades (
                  code TEXT PRIMARY KEY,
-                 description TEXT NOT NULL);")
+                 description TEXT NOT NULL,
+                 description_fr TEXT);")
   grades <- data.frame("code" = c("A", "B", "C", "D", "E", "N", "R", "I", "U", "S", "Z"),
                        "description" = c("Excellent", "Good", "Fair", "Poor", "Estimated", "Unusable", "Draw down recovery", "Ice", "Undefined", "Sensor issues", "Unknown"))
   DBI::dbAppendTable(con, "grades", grades)
@@ -237,7 +239,8 @@ EXECUTE FUNCTION check_grade_exists_daily();
   # approvals table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists approvals (
                  code TEXT PRIMARY KEY,
-                 description TEXT NOT NULL);")
+                 description TEXT NOT NULL,
+                 description_fr TEXT);")
   approvals <- data.frame("code" = c("A", "C", "R", "N", "U", "Z"),
                           "description" = c("Approved", "Work up complete: ready for review", "Reviewed, pending approval", "Not reviewed", "Undefined", "Unknown"))
   DBI::dbAppendTable(con, "approvals", approvals)
@@ -323,6 +326,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  location_id SERIAL PRIMARY KEY,
                  location TEXT UNIQUE NOT NULL,
                  name TEXT NOT NULL,
+                 name_fr TEXT,
                  latitude NUMERIC NOT NULL,
                  longitude NUMERIC NOT NULL
                  contact TEXT,
@@ -336,7 +340,9 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists networks (
                  network_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
+                 name_fr TEXT,
                  description TEXT NOT NULL,
+                 description_fr TEXT,
                  type TEXT NOT NULL CHECK(type IN ('research', 'monitoring', 'other'))
                  );")
   tbl <- data.frame(name = c("Canada Yukon Hydrometric Network", "ECCC Meteorology Network", "Small Stream Network", "Snow Survey Network", "National Streamflow Network (US)", "Yukon Observational Well Network", "Highway Observation Network", "Yukon Water Quality Network - Water Licence Data", "Yukon Water Quality Network - Groundwater Monitoring", "Yukon Water Quality Network - Surface Water Monitoring"),
@@ -355,7 +361,9 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists projects (
                  project_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
+                 name_fr TEXT,
                  description TEXT NOT NULL,
+                 description_fr TEXT,
                  type TEXT NOT NULL CHECK(type IN ('research', 'monitoring', 'other', 'incident response'))
                  );")
   
@@ -371,6 +379,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
+                 name_fr TEXT,
                  document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other')),
                  has_points BOOLEAN NOT NULL DEFAULT FALSE,
                  has_lines BOOLEAN NOT NULL DEFAULT FALSE,
@@ -461,9 +470,14 @@ EXECUTE FUNCTION check_approval_exists_daily();
   # parameters table #################
   DBI::dbExecute(con, "CREATE TABLE parameters (
                param_code SERIAL PRIMARY KEY,
-               param_name TEXT NOT NULL,
-               param_group TEXT NOT NULL,
-               description TEXT)")
+               param_name TEXT UNIQUE NOT NULL,
+               param_name_fr TEXT UNIQUE NOT NULL,
+               group TEXT NOT NULL,
+               group_fr TEXT NOT NULL,
+               sub_group TEXT,
+               sub_group_fr TEXT,
+               description TEXT
+               description_fr TEXT);")
 
   # extrema table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists extrema (
@@ -678,6 +692,12 @@ EXECUTE FUNCTION update_geom_type();
 
 
   #Add in foreign keys ###########
+  DBI::dbExecute(con, "ALTER TABLE settings 
+                 ADD CONSTRAINT fk_parameter
+                 FOREIGN KEY (parameter)
+                 REFERENCES parameters(param_code)
+                 ON UPDATE CASCADE ON DELETE CASCADE;")
+  
   DBI::dbExecute(con,
                  "ALTER TABLE locations
   ADD CONSTRAINT fk_geom_id

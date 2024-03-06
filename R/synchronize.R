@@ -11,7 +11,7 @@
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
-#' @param start_datetime The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
+#' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
 #'
 #' @return Updated entries in the hydro database.
@@ -23,14 +23,18 @@
 synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE)
 {
 
+  if (inherits(start_datetime, "Date")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else if (inherits(start_datetime, "character")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else if (!inherits(start_datetime, "POSIXct")) {
+    stop("start_datetime must be a Date, character, or POSIXct object.")
+  }
+  
   on.exit(DBI::dbDisconnect(con))
   start <- Sys.time()
 
   message("Synchronizing timeseries with synchronize...")
-
-  if (!inherits(start_datetime, "POSIXct")) {
-    stop("Parameter start_datetime must be supplied as a POSIXct object.")
-  }
 
   #Check length of start_datetime is either 1 of same as timeseries_id
   if (length(start_datetime) != 1) {
@@ -133,43 +137,52 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
         } else if (category == "discrete") {
           inDB <- DBI::dbGetQuery(con, paste0("SELECT target_datetime, datetime, value, sample_class FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
         }
-
-        if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
-          inDB <- inDB[inDB$datetime >= min(inRemote$datetime) , ]
-        }
-
-        #order both timeseries to compare them
-        inDB <- inDB[order(inDB$datetime) , ]
-        inRemote <- inRemote[order(inRemote$datetime) , ]
-
-        # Create a unique datetime key for both data frames
-        if (category == "continuous") {
-          inRemote$key <- paste(inRemote$datetime, inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
-          inDB$key <- paste(inDB$datetime, inDB$value, inDB$grade, inDB$approval, sep = "|")
-        } else if (category == "discrete") {
-          inRemote$key <- paste(inRemote$target_datetime, inRemote$datetime, inRemote$value, inRemote$sample_class, sep = "|")
-          inDB$key <- paste(inDB$target_datetime, inDB$datetime, inDB$value, inDB$sample_class, sep = "|")
-        }
-
-        # Check for mismatches using set operations
-        mismatch_keys <- inDB$key[!(inDB$key %in% inRemote$key)]
-
-        # Check where the discrepancy is in both data frames
-        if (length(mismatch_keys) > 0) {
-          mismatch <- TRUE
-          datetime_remote <- inRemote[inRemote$key %in% mismatch_keys, "datetime"]
-          if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist for the mismatch point. Delete from that point on in the DB
-            datetime_db <- inDB[inDB$key %in% mismatch_keys, "datetime"]
-            datetime_db <- min(datetime_db)
-            datetime <- inDB[which(inDB$datetime == datetime_db) - 1, "datetime"]
-          } else {
-            datetime_remote <- min(datetime_remote)
-            datetime <- datetime_remote
+        
+        if (nrow(inDB) > 0) {
+          if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
+            inDB <- inDB[inDB$datetime >= min(inRemote$datetime) , ]
           }
+          
+          #order both timeseries to compare them
+          inDB <- inDB[order(inDB$datetime) , ]
+          inRemote <- inRemote[order(inRemote$datetime) , ]
+          
+          # Create a unique datetime key for both data frames
+          if (category == "continuous") {
+            inRemote$key <- paste(inRemote$datetime, inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
+            inDB$key <- paste(inDB$datetime, inDB$value, inDB$grade, inDB$approval, sep = "|")
+          } else if (category == "discrete") {
+            inRemote$key <- paste(inRemote$target_datetime, inRemote$datetime, inRemote$value, inRemote$sample_class, sep = "|")
+            inDB$key <- paste(inDB$target_datetime, inDB$datetime, inDB$value, inDB$sample_class, sep = "|")
+          }
+          
+          # Check for mismatches using set operations
+          mismatch_keys <- inDB$key[!(inDB$key %in% inRemote$key)]
+          
+          # Check where the discrepancy is in both data frames
+          if (length(mismatch_keys) > 0) {
+            mismatch <- TRUE
+            datetime_remote <- inRemote[inRemote$key %in% mismatch_keys, "datetime"]
+            if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist or is different for the mismatch point. Delete from that point on in the DB
+              datetime_db <- inDB[inDB$key %in% mismatch_keys, "datetime"]
+              datetime_db <- min(datetime_db)
+              index <- which(inDB$datetime == datetime_db)
+              if (index > 1) {
+                datetime <- inDB[index - 1, "datetime"]
+              } else if (index == 1) {
+                datetime <- inDB[index, "datetime"]
+              }
+            } else {
+              datetime <- min(datetime_remote)
+            }
+          } else {
+            mismatch <- FALSE
+          }
+          inRemote$key <- NULL
         } else {
-          mismatch <- FALSE
+          mismatch <- TRUE
+          datetime <- min(inRemote$datetime)
         }
-        inRemote$key <- NULL
 
         if (mismatch) {
           inRemote <- inRemote[inRemote$datetime >= datetime , ]
@@ -197,10 +210,10 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
                 # Now delete entries in measurements_continuous and calculated_daily that are no longer in the remote data and/or that need to be replaced
                 if (nrow(imputed.remains) > 0) { # Don't delete imputed data points unless there's new data to replace it!
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
-                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "');"))
+                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
                 } else {
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
-                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "');"))
+                  DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
                 }
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
               } else if (category == "discrete") {
@@ -209,7 +222,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
                 DBI::dbAppendTable(con, "measurements_discrete", inRemote)
               }
               #make the new entry into table timeseries
-              end <- max(max(inDB$datetime), max(inRemote$datetime))
+              end <- if (nrow(inDB) > 0) max(max(inDB$datetime), max(inRemote$datetime)) else max(inRemote$datetime)
               DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
             }
           )
@@ -222,7 +235,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
         }
       }
     }, error = function(e) {
-      warning("synchronize failed on location ", loc, " and parameter ", parameter, " (timeseries_id ", tsid, ").")
+      warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ").")
     }
     )
   }

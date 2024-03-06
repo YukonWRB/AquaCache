@@ -79,7 +79,7 @@ getNewRasters <- function(raster_series_ids = "all", con = hydrometConnect(silen
           if (!is.na(exists) & is.na(flag)){
             DBI::dbExecute(con, paste0("DELETE FROM rasters_reference WHERE reference_id = ", exists, ";")) #This should cascade to the rasters table
           } else if (!is.na(exists) & !is.na(flag)){
-            next()
+            next
           }
           suppressMessages(insertHydrometModelRaster(raster = rast, raster_series_id = id, valid_from = valid_from, valid_to = valid_to, flag = flag, source = source, units = units, model = model, con = con))
           DBI::dbExecute(con, paste0("UPDATE raster_series_index SET last_new_raster = '", .POSIXct(Sys.time(), tz = "UTC"), "' WHERE raster_series_id = ", id, ";"))

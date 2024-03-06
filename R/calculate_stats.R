@@ -57,7 +57,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
 
       if (!is.null(start_recalc)) { #start_recalc is specified (not NULL)
         if (!is.na(earliest_day_measurements)) {
-          last_day_historic <- if (length(last_day_historic) > 0) min(earliest_day_measurements, (if (length(start_recalc) == 1) start_recalc else start_recalc[i])) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in calculated_daily yet
+          last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, (if (length(start_recalc) == 1) start_recalc else start_recalc[i])) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in calculated_daily yet
         } else {
           earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
           if (start_recalc < earliest_day_historic) {
@@ -78,7 +78,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
 
       if (is.na(last_day_historic)) {
         message("Skipping calculations for timeseries ", i, " as it looks like nothing needs to be calculated.")
-        next()
+        next
       }
 
       missing_stats <- data.frame()

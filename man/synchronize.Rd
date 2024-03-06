@@ -16,7 +16,7 @@ synchronize(
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
-\item{start_datetime}{The datetime (as a POSIXct) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
+\item{start_datetime}{The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
 
 \item{discrete}{Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.}
 }
