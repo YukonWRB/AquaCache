@@ -186,7 +186,7 @@ readSnowTemplate <- function(template) {
         estimate_flag <- FALSE
         ## Exclude_flag, swe, depth, notes, survey_id
         exclude_flag <- FALSE
-        swe <- round(calculated[1,3])
+        swe <- round(calculated[2,3]*10)
         depth <- round(calculated[2,2])
         if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
           notes <- NA

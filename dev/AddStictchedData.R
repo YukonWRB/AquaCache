@@ -21,6 +21,22 @@ plot_ts <- function(tables){
 
 }
 
+### ------------------------  Add new precip data ------------------------  ####
+con <- hydrometConnect()
+
+precip_all <- read.csv("Precip_March.csv")
+
+# Fix datetime
+precip_all$datetime <- lubridate::ceiling_date(as.Date(paste0(precip_all$year, "-", precip_all$month, "-01")), "month") - lubridate::days(1)
+        
+precip_all$datetime <- as.POSIXct(paste(precip_all$datetime, "23:59:59"),
+                                  format = "%Y-%m-%d %H:%M:%S", tz="MST") 
+
+# Remove cols
+precip_all <- precip_all[, c("timeseries_id", "datetime", "value", "grade", "approval", "period", "imputed")]
+
+DBI::dbAppendTable(con, "measurements_continuous", precip_all)
+
 #### ---------------------- Add timeseries ---------------------------------####
 con <- hydrometConnect()
 
