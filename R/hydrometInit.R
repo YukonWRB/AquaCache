@@ -325,8 +325,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
                  location_id SERIAL PRIMARY KEY,
                  location TEXT UNIQUE NOT NULL,
-                 name TEXT NOT NULL,
-                 name_fr TEXT,
+                 name TEXT UNIQUE NOT NULL,
+                 name_fr UNIQUE TEXT,
                  latitude NUMERIC NOT NULL,
                  longitude NUMERIC NOT NULL
                  contact TEXT,
@@ -340,7 +340,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists networks (
                  network_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
-                 name_fr TEXT,
+                 name_fr TEXT TUNIQUE,
                  description TEXT NOT NULL,
                  description_fr TEXT,
                  type TEXT NOT NULL CHECK(type IN ('research', 'monitoring', 'other'))
@@ -361,7 +361,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists projects (
                  project_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
-                 name_fr TEXT,
+                 name_fr TEXT UNIQUE,
                  description TEXT NOT NULL,
                  description_fr TEXT,
                  type TEXT NOT NULL CHECK(type IN ('research', 'monitoring', 'other', 'incident response'))
@@ -379,7 +379,6 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
-                 name_fr TEXT,
                  document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other')),
                  has_points BOOLEAN NOT NULL DEFAULT FALSE,
                  has_lines BOOLEAN NOT NULL DEFAULT FALSE,

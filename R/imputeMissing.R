@@ -292,30 +292,10 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       
     }
   }
-  p %>%
-    plotly::add_lines(data = full_dt, x = ~datetime, y = ~value, type = "scatter", mode = "lines", name = "Existing", color = I("blue"), showlegend = TRUE) %>%
+  p <- p %>%
+    plotly::add_trace(data = full_dt, x = ~datetime, y = ~value, type = "scatter", mode = "lines+markers", name = "Existing", line = list(color = "blue"), marker = list(color = "blue", size = 2), showlegend = TRUE) %>%
     plotly::layout(xaxis = list(title = "Date", showgrid = FALSE, showline = TRUE), yaxis = list(title = "value", showgrid = FALSE, showline = TRUE), legend = list(x = mean(top, bot), y = 0.5))
-  
-  # plot(full_dt$datetime, full_dt$value, type = "l", col = "blue", xlab = "datetime", ylab = "value")
-  # 
-  # for (i in seq_along(lengths$lengths)) {
-  #   if (lengths$values[i]) {  # If stretch is NA
-  #     length_na <- lengths$lengths[i]
-  #     start_pos <- positions[i] - lengths$lengths[i] + 1
-  #     end_pos <- positions[i + 1] - lengths$lengths[i + 1]
-  #     
-  #     # Determine color based on imputation criteria
-  #     color <- if (length_na >= min_gap && length_na <= max_gap) "red" else "yellow2"
-  #     
-  #     if (start_pos > 1 && end_pos < nrow(full_dt)) {
-  #       rect(full_dt[start_pos - 1, "datetime"], bot, full_dt[end_pos + 1, "datetime"], top, col = color, border = NA)
-  #     } else if (start_pos == 1) {  # Handling for start of data
-  #       rect(full_dt[start_pos, "datetime"], bot, full_dt[end_pos + 1, "datetime"], top, col = color, border = NA)
-  #     } else if (end_pos == nrow(full_dt)) {  # Handling for end of data
-  #       rect(full_dt[start_pos - 1, "datetime"], bot, full_dt[end_pos, "datetime"], top, col = color, border = NA)
-  #     }
-  #   }
-  # }
+  print(p)
 
   no_similar <- FALSE
   if (nrow(similar) > 0) {
@@ -555,7 +535,6 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   
   
   impute_function <- function(df, min_gap, max_gap, method, selected = NULL, list = NULL) { #selected and list are only used for the direct interpolation method
-    df <- df
     df$imputed <- FALSE  # Initialize the 'imputed' column
     lengths <- rle(is.na(df$value))  # Run-length encoding to find consecutive NAs
     positions <- cumsum(lengths$lengths)  # Positions of changes
@@ -570,21 +549,25 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       if (lengths$values[i] && lengths$lengths[i] <= max_gap && lengths$lengths[i] >= min_gap) {  # Check for NA stretch less than max_gap
         start_pos <- positions[i] - lengths$lengths[i] + 1
         end_pos <- positions[i + 1] - lengths$lengths[i + 1]
-        if (end_pos < nrow(df) - 1) {  # Avoid out-of-bounds
+        if (end_pos < nrow(df)) {  # Avoid out-of-bounds
           if (method == "linear") { # Linear interpolation for the stretch of NAs
             y_values <- stats::approx(x = c(start_pos - 1, end_pos + 1), 
                                       y = df$value[c(start_pos - 1, end_pos + 1)], 
                                       xout = seq(start_pos, end_pos), 
                                       method = "linear")$y
           } else if (method == "spline") {
-            if (start_pos - 50 < 0) {
-              start_pos <- 1
+            if (start_pos - 20 < 1) {
+              start_pos_spline <- 1
+            } else {
+              start_pos_spline <- start_pos - 20
             }
-            if (end_pos + 50 > nrow(df)) {
-              end_pos <- nrow(df)
+            if (end_pos + 20 > nrow(df)) {
+              end_pos_spline <- nrow(df)
+            } else {
+              end_pos_spline <- end_pos + 20
             }
-            y_values <- stats::spline(x = c(start_pos - 50, end_pos + 50), 
-                                      y = df$value[c(start_pos - 1, end_pos + 1)], 
+            y_values <- stats::spline(x = c(start_pos_spline:end_pos_spline), 
+                                      y = df$value[c(start_pos_spline:end_pos_spline)], 
                                       xout = seq(start_pos, end_pos))$y
           } else if (method == "direct") {
             dt_start <- df[start_pos, "datetime"]
@@ -645,13 +628,13 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     with <- data # with will be data with imputed values
     indices <- which(with$imputed) # indices of imputed values
     with[-c(indices, indices - 1, indices + 1), "value"] <- NA # Leave only the imputed values plus a point before and after, so the lines plot
-    suppressMessages({
-      plotly::plot_ly(data = without, x = ~datetime, y = ~value, type = "scatter", mode = "lines", line = list(color = "blue"), marker = list(color = "blue", size = 3), name = c("Existing")) %>%
-      plotly::add_trace(data = with, x = ~datetime, y = ~value, type = "scatter", line = list(color = "red", size = 0.1), marker = list(color = "red", size = 6), name = "Imputed")
-    })
+     p <- plotly::plot_ly(data = without, x = ~datetime, y = ~value, type = "scatter", mode = "lines+markers", line = list(color = "blue"), marker = list(color = "blue", size = 3), name = c("Existing")) %>%
+      plotly::add_trace(data = with, x = ~datetime, y = ~value, type = "scatter", mode = "lines+markers", line = list(color = "red", size = 0.1), marker = list(color = "red", size = 6), name = "Imputed")
+     return(p)
   }
   
   print(plot_fx(data = imputed))
+  
   message("Look right for the result. Does it look ok?")
   commit <- readline(prompt = writeLines(paste("\n1: Yes, and please modify the timeseries in the database",
                                                "\n2: Yes, but please ONLY return the result",
