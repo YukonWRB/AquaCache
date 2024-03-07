@@ -7,14 +7,14 @@
 #'
 #' Some continuous measurement data may have a period of greater than 1 day. In these cases it would be impossible to calculate daily statistics, so this function explicitly excludes data points with a period greater than P1D.
 #'
-#' This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation. It *must* be used with a database created by this package, or one with identical table and column names.
+#' This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation or in another function. It *must* be used with a database created by this package, or one with identical table and column names.
 #'
 #' @details
 #' Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'. Specifying 'all' will work on all continuous category timeseries.
-#' @param start_recalc The day on which to start daily calculations, as a vector of one element OR one vector element per element in `tsid` OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.
+#' @param start_recalc The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.
 #'
 #' @return Updated entries in the 'calculated_daily' table.
 #' @export
@@ -23,8 +23,8 @@
 calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id, start_recalc = NULL) {
 
   if (!is.null(start_recalc)) {
-    if ((length(timeseries_id) != length(start_recalc)) & (length(start_recalc) != 1)) {
-      stop("It looks like you're trying to specify a start date for recalculations, but there isn't exactly one vector element OR one element per elment in the parameter tsid")
+    if (length(start_recalc) != 1) {
+      stop("It looks like you're trying to specify a start date for recalculations, this has to be a vector of length 1.")
     }
     if (!inherits(start_recalc, "Date")) start_recalc <- as.Date(start_recalc)
   }
@@ -50,16 +50,21 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
   for (i in timeseries_id) {
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
       last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
+      earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
+      if (length(earliest_day_historic) == 0) earliest_day_historic <- earliest_day_measurements
       tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, source_fx FROM timeseries WHERE timeseries_id = ", i, ";"))
       period_type <- tmp[1,1]
       source_fx <- tmp[1,2]  #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
 
       if (!is.null(start_recalc)) { #start_recalc is specified (not NULL)
         if (!is.na(earliest_day_measurements)) {
-          last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, (if (length(start_recalc) == 1) start_recalc else start_recalc[i])) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in calculated_daily yet
+          if (earliest_day_historic < earliest_day_measurements) {
+            last_day_historic <- max(earliest_day_historic, start_recalc)
+          } else {
+            last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, start_recalc) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in calculated_daily yet
+          }
         } else {
-          earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
           if (start_recalc < earliest_day_historic) {
             last_day_historic <- earliest_day_historic
           } else {
@@ -306,7 +311,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
     if (nrow(missing_stats) > 0) { #This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.
       tryCatch({
         missing_stats <- missing_stats[order(missing_stats$date), ]
-        # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no stats even if they are between the start and end date of missing_stats.
+        # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no calculated stats even if they are between the start and end date of missing_stats.
         delete_query <- paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", i, " AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "'")
         remaining_dates <- as.Date(setdiff(seq.Date(min(as.Date(missing_stats$date)), max(as.Date(missing_stats$date)), by = "day"), as.Date(missing_stats$date)), origin = "1970-01-01")
         if (length(remaining_dates) > 0) {
