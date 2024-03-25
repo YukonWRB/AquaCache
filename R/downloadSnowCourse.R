@@ -68,6 +68,7 @@ downloadSnowCourse <- function(location, param_code, start_datetime, end_datetim
     old_meas$value <- old_meas$value + round(offset, 1) #apply offset to old data
     old_meas <- old_meas[!(old_meas$target_datetime %in% meas$target_datetime),] #discard overlapping old data
     meas <- rbind(meas, old_meas) #combine
+    meas[meas$value < 0 , "value"] <- 0
   } else {
     #Get measurements for that location beginning after the start_datetime
     meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, sample_datetime, ", param_code, ", estimate_flag FROM means WHERE location = '", location, "' AND sample_datetime > '", start_datetime, "';"))
