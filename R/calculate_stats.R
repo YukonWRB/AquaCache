@@ -295,11 +295,11 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
                   feb_29 <- feb_29[!feb_29$date == l ,]
                 }
               } else {
-                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean")] <- c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)))
+                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean")] <- suppressWarnings(c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)))) # warnings suppressed because of the possibility of NA values
               }
             }
             feb_29 <- hablar::rationalize(feb_29)
-            missing_stats <- rbind(missing_stats, feb_29)
+            missing_stats <- rbind(missing_stats, feb_29, fill = TRUE)
           }
           missing_stats$timeseries_id <- i
         }
