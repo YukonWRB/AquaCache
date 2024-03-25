@@ -67,6 +67,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  q25 NUMERIC,
                  q10 NUMERIC,
                  mean NUMERIC,
+                 doy_count INTEGER,
                  PRIMARY KEY (timeseries_id, date));")
   DBI::dbExecute(con, "COMMENT ON TABLE public.calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the HydroMetDB package function calculate_stats.'
   ")
@@ -85,6 +86,7 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.q50 IS 'Historical 50th quantile or median, excluding current measurement.'
   ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.q25 IS 'Number of measurements existing in the calculated_daily table for each day including historic and current measurement.'")
 
   # images table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
@@ -336,8 +338,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  longitude NUMERIC NOT NULL
                  contact TEXT,
                  geom_id INTEGER NOT NULL,
-                 note TEXT,
-                 active BOOLEAN
+                 note TEXT
                  );")
   
   

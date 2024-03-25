@@ -251,6 +251,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           first_instance_no_stats <- first_instance_no_stats[ , !(names(first_instance_no_stats) == "dayofyear")]
           first_instance_no_stats$timeseries_id <- i
           first_instance_no_stats$max <- first_instance_no_stats$min <- first_instance_no_stats$value
+          first_instance_no_stats$doy_count <- 1
           first_instance_no_stats <- first_instance_no_stats[!is.na(first_instance_no_stats$value) , ]
           DBI::dbWithTransaction(
             con,
@@ -276,8 +277,8 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
               current <- missing_stats$value[k]
               min <- min(past)
               max <- max(past)
-              values <- c(list("max" = max, "min" = min, mean(past)), as.list(stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10), names = FALSE)))
-              data.table::set(missing_stats, i = k, j = c("max", "min", "mean", "q90", "q75", "q50", "q25", "q10"), value = values)
+              values <- c(list("max" = max, "min" = min, "mean" = mean(past)), as.list(stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10), names = FALSE)), "doy_count" = length(past) + 1)
+              data.table::set(missing_stats, i = k, j = c("max", "min", "mean", "q90", "q75", "q50", "q25", "q10", "doy_count"), value = values)
               if (length(past) > 1 & !is.na(current)) { #need at least 2 measurements to calculate a percent historic, plus a current measurement!
                 data.table::set(missing_stats, i = k, j = "percent_historic_range", value = (((current - min) / (max - min)) * 100))
               }
@@ -295,7 +296,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
                   feb_29 <- feb_29[!feb_29$date == l ,]
                 }
               } else {
-                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean")] <- suppressWarnings(c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)))) # warnings suppressed because of the possibility of NA values
+                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean", "doy_count")] <- suppressWarnings(c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)), mean(c(before$doy_count, after$doy_count)))) # warnings suppressed because of the possibility of NA values
               }
             }
             feb_29 <- hablar::rationalize(feb_29)
