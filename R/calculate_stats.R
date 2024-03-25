@@ -121,7 +121,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         DBI::dbDisconnect(hydat_con)
 
         if (!flag) {
-          gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime > '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+          gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
 
           if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date
             gap_measurements <- gap_measurements %>%
@@ -139,8 +139,34 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
               gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
             }
 
-            if (last_day_historic < min(gap_measurements$date)) { #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with calculated_daily values.
-              backfill <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "';"))
+            if (last_day_historic < min(gap_measurements$date)) { #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with HYDAT values where they exist, taking from the database first for any imputed values and then directly from HYDAT.
+              
+              backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
+              
+              grade_mapping <- c("-1" = "U",
+                                 "10" = "I",
+                                 "20" = "E",
+                                 "30" = "D",
+                                 "40" = "N",
+                                 "50" = "U")
+      
+                backfill <- if (tmp[, "param_name"] == "water flow") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location'"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1)) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1))
+                backfill <- backfill[ , c("Date", "Value", "Symbol")]
+                names(backfill) <- c("date", "value", "grade")
+                backfill <- backfill[!is.na(backfill$value) , ]
+                backfill$grade <- ifelse(backfill$grade %in% names(grade_mapping),
+                                         grade_mapping[backfill$grade],
+                                         "Z")
+                backfill$approval  <- "A"
+                backfill$imputed  <- FALSE
+                
+                backfill_imputed <- backfill_imputed[!backfill_imputed$date %in% backfill[!is.na(backfill$value), "date"], ] #Remove any entries with values that are already in the backfill and not NA, even if they've been imputed
+                # Remove any entries in backfill_imputed that are already in backfill but are NA
+                backfill <- backfill[!backfill$date %in% backfill_imputed$date, ]
+                backfill <- rbind(backfill, backfill_imputed)
+                #TODO values in backfill should take precedence over values in backfill_imputed
+                
+              
               gap_measurements <- rbind(gap_measurements, backfill)
             }
 
@@ -167,7 +193,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
         flag <- TRUE
       }
 
-      if (!(source_fx == "downloadWSC") || flag) { #All timeseries where: operator is not WSC and therefore lack superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
+      if (!(source_fx == "downloadWSC") || flag) { #All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
         gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
 
         if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
@@ -197,7 +223,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
           all_stats <- rbind(all_stats, gap_measurements[, c("date", "value")])
           missing_stats <- gap_measurements
         } else { #There is no new measurement data, but stats may still need to be calculated
-          missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval FROM calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
+          missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
           if (nrow(missing_stats) > 0) {
             all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, ";"))
           }
