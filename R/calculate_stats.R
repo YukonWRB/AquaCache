@@ -38,7 +38,6 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       stop("Calculations are not possible. Perhaps the timeseries_id you specified are not of category continuous or have a record_rate of greater than 1 day.")
     }
     if (length(timeseries_id) != length(all_timeseries$timeseries_id)) {
-      #TODO: improve this warning message with which tsid exactly was missing
       warning("At least one of the timeseries_id you specified was not of category 'continuous', had a recording rate greater than 1 day, or could not be found in the database.")
     }
     timeseries_id <- all_timeseries$timeseries_id
@@ -150,7 +149,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
                                  "40" = "N",
                                  "50" = "U")
       
-                backfill <- if (tmp[, "param_name"] == "water flow") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location'"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1)) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1))
+                backfill <- if (tmp[, "param_name"] == "water flow") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1)) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1))
                 backfill <- backfill[ , c("Date", "Value", "Symbol")]
                 names(backfill) <- c("date", "value", "grade")
                 backfill <- backfill[!is.na(backfill$value) , ]
@@ -160,12 +159,11 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
                 backfill$approval  <- "A"
                 backfill$imputed  <- FALSE
                 
-                backfill_imputed <- backfill_imputed[!backfill_imputed$date %in% backfill[!is.na(backfill$value), "date"], ] #Remove any entries with values that are already in the backfill and not NA, even if they've been imputed
+                #Remove any entries with values that are already in backfill and not NA, even if they've been imputed
+                backfill_imputed <- backfill_imputed[!backfill_imputed$date %in% backfill[!is.na(backfill$value), "date"], ] 
                 # Remove any entries in backfill_imputed that are already in backfill but are NA
                 backfill <- backfill[!backfill$date %in% backfill_imputed$date, ]
                 backfill <- rbind(backfill, backfill_imputed)
-                #TODO values in backfill should take precedence over values in backfill_imputed
-                
               
               gap_measurements <- rbind(gap_measurements, backfill)
             }
@@ -178,16 +176,44 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             gap_measurements[is.na(gap_measurements$grade) , "grade"] <- "U"
             gap_measurements[is.na(gap_measurements$approval) , "approval"] <- "U"
 
-            all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date <= '", last_hydat, "';"))
+            all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", last_hydat, "';"))
             #Need to rbind only the calculated daily means AFTER last_hydat
             all_stats <- rbind(all_stats, gap_measurements[gap_measurements$date >= last_hydat, c("date", "value")])
             missing_stats <- gap_measurements
           } else { #There is no new measurement data, but stats may still need to be calculated because of new HYDAT data
-            missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
+            
+            all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
+            
+            grade_mapping <- c("-1" = "U",
+                               "10" = "I",
+                               "20" = "E",
+                               "30" = "D",
+                               "40" = "N",
+                               "50" = "U")
+            
+            all_hydat <- if (tmp[, "param_name"] == "water flow") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"])) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"]))
+            all_hydat <- all_hydat[ , c("Date", "Value", "Symbol")]
+            names(all_hydat) <- c("date", "value", "grade")
+            all_hydat <- all_hydat[!is.na(all_hydat$value) , ]
+            all_hydat$grade <- ifelse(all_hydat$grade %in% names(grade_mapping),
+                                     grade_mapping[all_hydat$grade],
+                                     "Z")
+            all_hydat$approval  <- "A"
+            all_hydat$imputed  <- FALSE
+            
+            #Remove any entries with values that are already in all_hydat and not NA, even if they've been imputed
+            all_imputed <- all_imputed[!all_imputed$date %in% all_hydat[!is.na(all_hydat$value), "date"], ]
+            # Remove any entries in all_imputed that are already in all_hydat but are NA
+            all_hydat <- all_hydat[!all_hydat$date %in% all_imputed$date, ]
+            
+            all <- rbind(all_hydat, all_imputed)
+            
+            missing_stats <- all[all$date >= last_day_historic , ]
+            
             if (nrow(missing_stats) > 0) {
-              all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, ";"))
+              all_stats <- all[, c("date", "value")]
             }
-          }
+          } 
         }
       } else {
         flag <- TRUE
@@ -274,11 +300,11 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
 
         if (nrow(first_instance_no_stats) > 0) { #Add a min and max for the first instance, delete + append, then remove it from missing_stats for calculations
           missing_stats <- missing_stats[!(missing_stats$date %in% first_instance_no_stats$date) , ]
+          first_instance_no_stats <- first_instance_no_stats[!is.na(first_instance_no_stats$value) , ]
           first_instance_no_stats <- first_instance_no_stats[ , !(names(first_instance_no_stats) == "dayofyear")]
           first_instance_no_stats$timeseries_id <- i
           first_instance_no_stats$max <- first_instance_no_stats$min <- first_instance_no_stats$value
           first_instance_no_stats$doy_count <- 1
-          first_instance_no_stats <- first_instance_no_stats[!is.na(first_instance_no_stats$value) , ]
           DBI::dbWithTransaction(
             con,
             {
@@ -303,7 +329,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
               current <- missing_stats$value[k]
               min <- min(past)
               max <- max(past)
-              values <- c(list("max" = max, "min" = min, "mean" = mean(past)), as.list(stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10), names = FALSE)), "doy_count" = length(past) + 1)
+              values <- c(list("max" = max, "min" = min, "mean" = mean(past)), as.list(stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10), names = FALSE)), "doy_count" = if (!is.na(current)) length(past) + 1 else length(past))
               data.table::set(missing_stats, i = k, j = c("max", "min", "mean", "q90", "q75", "q50", "q25", "q10", "doy_count"), value = values)
               if (length(past) > 1 & !is.na(current)) { #need at least 2 measurements to calculate a percent historic, plus a current measurement!
                 data.table::set(missing_stats, i = k, j = "percent_historic_range", value = (((current - min) / (max - min)) * 100))
@@ -317,12 +343,12 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
             for (l in feb_29$date) {
               before <- missing_stats[missing_stats$date == l - 1 , ]
               after <- missing_stats[missing_stats$date == l + 1 , ]
-              if (nrow(before) == 0 | nrow(after) == 0) { #If TRUE then can't do anything except for passing the value forward
+              if (nrow(before) == 0 & nrow(after) == 0) { #If TRUE then can't do anything except for passing the value forward
                 if (is.na(feb_29[feb_29$date == l, "value"])) { #If there's no value and can't do anything else then drop the row
                   feb_29 <- feb_29[!feb_29$date == l ,]
                 }
               } else {
-                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean", "doy_count")] <- suppressWarnings(c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)), mean(c(before$doy_count, after$doy_count)))) # warnings suppressed because of the possibility of NA values
+                feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean", "doy_count")] <- suppressWarnings(c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)), min(c(before$doy_count, after$doy_count)))) # warnings suppressed because of the possibility of NA values
               }
             }
             feb_29 <- hablar::rationalize(feb_29)
