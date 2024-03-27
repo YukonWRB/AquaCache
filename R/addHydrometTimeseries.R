@@ -54,7 +54,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
 
   #modify some columns
   timeseries_df$parameter <- tolower(timeseries_df$parameter)
-  timeseries_df[timeseries_df$parameter == "swe", "parameter"] <- "SWE"
   timeseries_df$category <- tolower(timeseries_df$category)
   timeseries_df$period_type <- tolower(timeseries_df$period_type)
   timeseries_df$param_type <- tolower(timeseries_df$param_type)
@@ -91,7 +90,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
     }
     #modify some col names
     settings_df$parameter <- tolower(settings_df$parameter)
-    settings_df[settings_df$parameter == "swe", "parameter"] <- "SWE"
     settings_df$period_type <- tolower(settings_df$period_type)
     settings_df$record_rate <- as.character(settings_df$record_rate) #to align with what comes out of the DB
   }
