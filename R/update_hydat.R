@@ -86,7 +86,7 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
 
       if (nrow(new_flow) > 0) {
         tryCatch({
-          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE parameter = 'water flow'")[1,1]
+          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE param_name = 'water flow'")[1,1]
           tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = ", param_code, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_flow) == 0 | is.na(tsid_flow)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
@@ -193,7 +193,7 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
 
       if (nrow(new_level) > 0) {
         tryCatch({
-          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE parameter = 'water level'")[1,1]
+          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE param_name = 'water level'")[1,1]
           tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = ", param_code, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_level) == 0 | is.na(tsid_level)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,

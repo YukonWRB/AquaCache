@@ -2,17 +2,17 @@ load_all()
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = "09AA-M3",
-                            parameter = c("total precip", "air temp"),
-                            unit = c("mm", "°C"),
+timeseries_df <- data.frame(location = "09AH005",
+                            parameter = c("water level", "water flow"),
+                            unit = c("m", "m³/s"),
                             category = "continuous",
                             period_type = c("instantaneous"),
-                            param_type = "meteorological",
+                            param_type = "surface water",
                             record_rate = "< 1 day",
-                            start_datetime = "1980-01-01",
+                            start_datetime = "1950-01-01",
                             public = TRUE,
                             public_delay = NA,
-                            source_fx = "downloadAquarius",
+                            source_fx = "downloadWSC",
                             source_fx_args = NA,
                             note = NA)
 
@@ -35,7 +35,7 @@ settings_df <- data.frame(source_fx = "downloadAquarius",
                           record_rate = "< 1 day",
                           remote_param_name = c("Precip Total.Corrected", "Air Temp.Corrected"))
 
-addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = locations_df)
+addHydrometTimeseries(timeseries_df = timeseries_df)
 
 
 

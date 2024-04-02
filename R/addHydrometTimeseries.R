@@ -63,8 +63,8 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
   if (!all(timeseries_df$category %in% c("discrete", "continuous"))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'category' can only be one of 'discrete' or 'continuous'.")
   }
-  if (!all(timeseries_df$param_type %in% c('meteorological', 'surface water physical', 'surface water chemical', 'ground water chemical', 'ground water physical', 'geochemical', 'atmospheric chemical'))) {
-    stop("One of the rows in your timeseries_df has a disallowed value: column 'param_type' can only be one of 'meteorological', 'surface water physical', 'surface water chemical', 'ground water chemical', 'ground water physical', 'geochemical', 'atmospheric chemical'.")
+  if (!all(timeseries_df$param_type %in% c('surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'))) {
+    stop("One of the rows in your timeseries_df has a disallowed value: column 'param_type' can only be one of 'surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'.")
   }
   if (!all(timeseries_df$period_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'period_type' can only be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.")
@@ -94,22 +94,25 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
     settings_df$record_rate <- as.character(settings_df$record_rate) #to align with what comes out of the DB
   }
   
-  # Check that the networks already exists. If not, stop and alert user to add it first. #########################
-  new_networks <- unique(locations_df$network)
-  exist_networks <- DBI::dbGetQuery(con, "SELECT name FROM networks")[,1]
-  if (!all(new_networks %in% exist_networks)) {
-    missing <- new_networks[!(new_networks %in% exist_networks)]
-    stop("Not all of the networks in your locations_df are already in the database. Please add the following network(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing networks: ", paste(exist_networks$name, collapse = ", "), ".")
-  }
-  # Check that the projects already exists. If not, stop and alert user to add it first. #########################
-  new_projects <- unique(locations_df$project)
-  if (!is.na(new_projects)) {
-    exist_projects <- DBI::dbGetQuery(con, "SELECT name FROM projects")[,1]
-    if (!all(new_projects %in% exist_projects)) {
-      missing <- new_projects[!(new_projects %in% exist_projects)]
-      stop("Not all of the projects in your locations_df are already in the database. Please add the following project(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing projects: ", paste(exist_projects$name, collapse = ", "), ".")
+  if (!is.null(locations_df)) {
+    # Check that the networks already exists. If not, stop and alert user to add it first. #########################
+    new_networks <- unique(locations_df$network)
+    exist_networks <- DBI::dbGetQuery(con, "SELECT name FROM networks")[,1]
+    if (!all(new_networks %in% exist_networks)) {
+      missing <- new_networks[!(new_networks %in% exist_networks)]
+      stop("Not all of the networks in your locations_df are already in the database. Please add the following network(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing networks: ", paste(exist_networks$name, collapse = ", "), ".")
+    }
+    # Check that the projects already exists. If not, stop and alert user to add it first. #########################
+    new_projects <- unique(locations_df$project)
+    if (!is.na(new_projects)) {
+      exist_projects <- DBI::dbGetQuery(con, "SELECT name FROM projects")[,1]
+      if (!all(new_projects %in% exist_projects)) {
+        missing <- new_projects[!(new_projects %in% exist_projects)]
+        stop("Not all of the projects in your locations_df are already in the database. Please add the following project(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing projects: ", paste(exist_projects$name, collapse = ", "), ".")
+      }
     }
   }
+  
   
 
   # Check that the proper entries exist in the settings table. Make entry to DB if necessary/possible ################
@@ -334,6 +337,10 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
             }, error = function(e) {
               warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
             })
+            if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "water flow")) {
+              message("Adding historical data from HYDAT database")
+              suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
+            }
             tryCatch({
               if (add$record_rate %in% c('1 day', '< 1 day')) {
                 calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = NULL)
@@ -358,9 +365,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
             }
             message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
             next
-          }
-          if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "water flow")) {
-            suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
           }
         } else { #Add the non-continuous data
           if (nrow(ts) > 0) {

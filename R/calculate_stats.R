@@ -46,6 +46,7 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
 
   #calculate daily means or sums for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
+  hydat_checked <- FALSE
   for (i in timeseries_id) {
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
       last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
@@ -88,6 +89,11 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
       missing_stats <- data.frame()
       flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
       if ((source_fx == "downloadWSC") & (last_day_historic < Sys.Date() - 30)) { #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
+        # Check to make sure HYDAT is installed and up to date
+        if (!hydat_checked) {
+          hydat_check(silent = TRUE)
+          hydat_checked <- TRUE
+        }
         tmp <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter = p.param_code WHERE t.timeseries_id = ", i, ";"))
         hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
         if (tmp[, "param_name"] == "water flow") {
