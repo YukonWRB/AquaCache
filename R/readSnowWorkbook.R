@@ -54,6 +54,10 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       next
     }
     
+    # Remove empty rows in measurement, or rows where only a note is present without depth AND swe values
+    measurement <- measurement[!is.na(measurement$`Snow.Depth.(cm)`) & !is.na(measurement$SWE), ]
+    
+    
     # Get location id for that sheet
     next_flag <- FALSE #Will be used to skip to next sheet if there is an error
     tryCatch({
@@ -393,7 +397,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       if (nrow(check) == 0) {
         DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
       }
-      warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, "). Import rolled back")
+      warning("FAILED to add new snow course data for '", survey[1,2], "' (", loc_id, "). Import rolled back.")
     }
     )
   }
