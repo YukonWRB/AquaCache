@@ -52,16 +52,16 @@ downloadSnowCourse <- function(location, param_code, start_datetime, end_datetim
 
   if (!is.null(old_loc)) {
     #Check if there are new measurements at the old station
-    old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, sample_datetime, ", param_code, ", estimate_flag FROM means WHERE location = '", old_loc, "' AND sample_datetime > '", start_datetime, "';"))
+    old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, ", param_code, ", estimate_flag FROM means WHERE location = '", old_loc, "' AND survey_date > '", start_datetime, "';"))
   } else {
     old_meas <- data.frame()
   }
 
   if (nrow(old_meas) > 0) { #There's some new data at the old location, so recalculate an offset and apply backwards.
     #Get all old and new data
-    old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, sample_datetime, ", param_code, ", estimate_flag FROM means WHERE location = '", old_loc, "';"))
+    old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, ", param_code, ", estimate_flag FROM means WHERE location = '", old_loc, "';"))
     names(old_meas) <- c("target_datetime", "datetime", "value", "note")
-    meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, sample_datetime, ", param_code, ", estimate_flag FROM means WHERE location = '", location, "';"))
+    meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, ", param_code, ", estimate_flag FROM means WHERE location = '", location, "';"))
     names(meas) <- c("target_datetime", "datetime", "value", "note")
     common_datetimes <- as.Date(intersect(old_meas$target_datetime, meas$target_datetime), origin = "1970-01-01")
     offset <- mean(meas$value[meas$target_datetime %in% common_datetimes] - old_meas$value[old_meas$target_datetime %in% common_datetimes])
@@ -71,11 +71,11 @@ downloadSnowCourse <- function(location, param_code, start_datetime, end_datetim
     meas[meas$value < 0 , "value"] <- 0
   } else {
     #Get measurements for that location beginning after the start_datetime
-    meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, sample_datetime, ", param_code, ", estimate_flag FROM means WHERE location = '", location, "' AND sample_datetime > '", start_datetime, "';"))
+    meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, ", param_code, ", estimate_flag FROM means WHERE location = '", location, "' AND survey_date > '", start_datetime, "';"))
     names(meas) <- c("target_datetime", "datetime", "value", "note")
   }
   if (nrow(meas) > 0) {
-    meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC")
+    meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "MST")
     meas$note <- as.character(meas$note)
     meas$note[meas$note == "TRUE"] <- "estimated"
     meas$note[meas$note == "FALSE"] <- NA

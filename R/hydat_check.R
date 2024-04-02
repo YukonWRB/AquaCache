@@ -13,9 +13,6 @@
 
 hydat_check <- function(silent = FALSE){
 
-  #initial checks
-  rlang::check_installed("tidyhydat", reason = "Package tidyhydat is required to use function hydat_check") #This is here because tidyhydat is not a 'depends' of this package; it is only necessary for this function and is therefore in "suggests"
-
   tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
   }, error = function(e) {hydat_path <- NULL})
   new_hydat <- FALSE

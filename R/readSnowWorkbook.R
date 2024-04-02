@@ -191,7 +191,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
         }
         message(paste0("New survey for snow course '", survey[1,2], "' (", loc_id, ") and target date ", target_date, " inserted into surveys table."))
       } else if (nrow(exists) == 1 && !overwrite) {
-        message("Survey already exists for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, " and overwrite is FALSE. Skipping to next sheet.")
+        message("Survey already exists for survey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, " and overwrite is FALSE. Skipping to next sheet.")
         next_flag <- TRUE
       } else if (nrow(exists) == 1 && overwrite) {
         # Update the survey entry
@@ -200,13 +200,13 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
           } else {
           DBI::dbExecute(con, paste0("UPDATE surveys SET notes = '", notes, "', sampler_name = '", sampler_name, "', method = '", method, "', ice_notes = '", ice_notes, "' WHERE location = '", location, "' AND target_date = '", target_date, "' AND survey_date = '", survey_date, "'"))
           }
-        message("Surveys table for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, " updated.")
+        message("Surveys table for survey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, " updated.")
       } else {
-        warning("FAILED to create new entry for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
+        warning("FAILED to create new entry for survey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
         next_flag <<- TRUE
       }
     }, error = function(e) {
-      warning("FAILED to create new entry for servey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
+      warning("FAILED to create new entry for survey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
       next_flag <<- TRUE
     })
     if (next_flag) {next}
@@ -226,13 +226,34 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     if (is.na(survey[7,2])) {
       survey[7,2] <- survey[6,2]
     }
+    
+    # Deal with start/end datetime
+    survey[6,2] <- gsub(" ", "", survey[6,2])
+    survey[6,2] <- gsub(":", "", survey[6,2])
+    survey[7,2] <- gsub(" ", "", survey[7,2])
+    survey[7,2] <- gsub(":", "", survey[7,2])
+    # Remove AM/PM if exists and adjust for PM
+    if (grepl("AM", survey[6,2], ignore.case = TRUE)) {
+      survey[6,2] <- gsub("AM", "", survey[6,2])
+    } else if (grepl("PM", survey[6,2], ignore.case = TRUE)) {
+      survey[6,2] <- gsub("PM", "", survey[6,2])
+      survey[6,2] <- as.numeric(survey[6,2]) + 12
+    }
+    if (grepl("AM", survey[7,2], ignore.case = TRUE)) {
+      survey[7,2] <- gsub("AM", "", survey[7,2])
+    } else if (grepl("PM", survey[7,2], ignore.case = TRUE)) {
+      survey[7,2] <- gsub("PM", "", survey[7,2])
+      survey[7,2] <- as.numeric(survey[7,2]) + 12
+    }
+    
+    
     # Check that end time is after stat time
     if (survey[7,2] < survey[6,2]) {
-      warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") end time is before start time.")
       check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
       if (nrow(check) == 0) {
         DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
       }
+      warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") end time is before start time.")
       next
     }
     
