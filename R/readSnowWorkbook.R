@@ -55,10 +55,10 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     }
     
     # Remove empty rows in measurement, or rows where only a note is present without depth AND swe values
-    measurement <- measurement[!(is.na(measurement$`Snow.Depth.(cm)`) & is.na(measurement$SWE)), ]
+    measurement <- measurement[!(is.na(measurement[,1]) & is.na(measurement[,2])), ]
     
     # If snow depth is 0, SWE must also be 0. It might be NA.
-    measurement$SWE[measurement$`Snow.Depth.(cm)` == 0] <- 0
+    measurement[measurement[,1] == 0, 2] <- 0
     
     
     # Get location id for that sheet
