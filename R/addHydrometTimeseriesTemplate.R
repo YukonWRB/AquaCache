@@ -1,6 +1,6 @@
 #' Templates to add timeseries to hydrometric database
 #'
-#' Additional arguments to pass to the function specified in source_fx should take the form of "{param1 = arg1/}, {param2 = 'arg2'}", with each parameter:argument pair enclosed in curly brackets (which aren't being rendered in the help file). The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
+#' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}", with each parameter:argument pair enclosed in curly brackets (which aren't being rendered in the help file). The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param format "long" or "short", only applies to the timeseries table. If long, will return one row per unique parameter with the total data.frame length equal to the parameter with the highest count. If short will return a single row, with unique parameter values concatenated in a single cell per parameter.

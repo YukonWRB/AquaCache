@@ -21,7 +21,7 @@ addHydrometImageSeries(
 
 \item{source_fx}{The function to use for fetching new images. Must be an existing function in this package.}
 
-\item{source_fx_args}{Additional arguments to pass to the function, in the form "{param1 = arg1}, {param2 = 'arg2'}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!}
+\item{source_fx_args}{Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!}
 
 \item{public}{Should the images be publicly visible?}
 

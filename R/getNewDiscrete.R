@@ -64,6 +64,7 @@ getNewDiscrete <- function(con = hydrometConnect(silent = TRUE), timeseries_id =
       }
       if (source_fx == "downloadSnowCourse") {
         args_list[["snowCon"]] <- snowCon
+        args_list[["hydroCon"]] <- con
       }
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")

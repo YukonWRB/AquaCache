@@ -8,7 +8,7 @@
 #' @details
 #' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
 #'
-#' Additional arguments to pass to the function specified in source_fx should take the form of "{{param1 = arg1}}, {{param2 = 'arg2'}}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
+#' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
 #' @param locations_df A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.

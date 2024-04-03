@@ -5,7 +5,7 @@
 #' @param location The location or location_id associated with the image series. Pass a location code as text and a location_id as a numeric.
 #' @param start_datetime The datetime (as POSIXct) from which to look for images
 #' @param source_fx The function to use for fetching new images. Must be an existing function in this package.
-#' @param source_fx_args Additional arguments to pass to the function, in the form "{param1 = arg1}, {param2 = 'arg2'}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
+#' @param source_fx_args Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
 #' @param public Should the images be publicly visible?
 #' @param public_delay A period in ISO 8601 format by which to delay public visibility of images.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
