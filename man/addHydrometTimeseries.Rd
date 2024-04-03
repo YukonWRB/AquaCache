@@ -31,7 +31,7 @@ This function facilitates the addition of one or multiple timeseries to the data
 \details{
 You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
 
-Additional arguments to pass to the function specified in source_fx should take the form of "{{param1 = arg1}}, {{param2 = 'arg2'}}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
+Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 }
 \seealso{
 \code{\link[=addHydrometTimeseriesTemplate]{addHydrometTimeseriesTemplate()}} to see templates for timesries_df and locations_df.
