@@ -157,7 +157,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
               inRemote$key <- paste(inRemote$datetime, inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
               inDB$key <- paste(inDB$datetime, inDB$value, inDB$grade, inDB$approval, sep = "|")
             } else if (category == "discrete") {
-              inRemote$key <- paste(inRemote$target_datetime, inRemote$datetime, inRemote$value, inDB$note, inRemote$sample_class, sep = "|")
+              inRemote$key <- paste(inRemote$target_datetime, inRemote$datetime, inRemote$value, inRemote$note, inRemote$sample_class, sep = "|")
               inDB$key <- paste(inDB$target_datetime, inDB$datetime, inDB$value, inDB$note, inDB$sample_class, sep = "|")
             }
             
@@ -168,7 +168,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
             if (length(mismatch_keys) > 0) {
               mismatch <- TRUE
               datetime_remote <- inRemote[inRemote$key %in% mismatch_keys, "datetime"]
-              if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist or is different for the mismatch point. Delete from that point on in the DB
+              if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist anymore or is different for the mismatch point. Delete from that point on in the DB
                 datetime_db <- inDB[inDB$key %in% mismatch_keys, "datetime"]
                 datetime_db <- min(datetime_db)
                 index <- which(inDB$datetime == datetime_db)
