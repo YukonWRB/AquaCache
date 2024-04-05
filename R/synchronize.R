@@ -239,10 +239,10 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
                             start_recalc = as.Date(substr(datetime, 1, 10)))
           }
         } else { # There was data in the remote but no mismatch
-          DBI::dbExecute(con, paste0("UPDATE timeseries SET ', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
         }
       } else { # There was no new data in remote
-        DBI::dbExecute(con, paste0("UPDATE timeseries SET ', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
       }
     }, error = function(e) {
       warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ").")
