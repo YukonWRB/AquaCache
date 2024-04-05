@@ -45,15 +45,15 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
 
   if (timeseries_id[1] == "all") {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
     }
   } else {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
     }
     if (length(timeseries_id) != nrow(all_timeseries)) {
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
@@ -228,7 +228,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
                 DBI::dbAppendTable(con, "measurements_discrete", inRemote)
               }
               #make the new entry into table timeseries
-              end <- if (nrow(inDB) > 0) max(max(inDB$datetime), max(inRemote$datetime)) else max(inRemote$datetime)
+              end <- max(inRemote$datetime)
               DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
             }
           )
@@ -238,7 +238,11 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
                             con = con,
                             start_recalc = as.Date(substr(datetime, 1, 10)))
           }
+        } else { # There was data in the remote but no mismatch
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET ', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
         }
+      } else { # There was no new data in remote
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET ', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
       }
     }, error = function(e) {
       warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ").")
