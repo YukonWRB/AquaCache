@@ -406,7 +406,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter INTEGER NOT NULL,
-                 param_type TEXT NOT NULL,
+                 param_type INTEGER NOT NULL,
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
