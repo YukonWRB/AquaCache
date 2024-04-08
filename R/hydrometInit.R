@@ -406,7 +406,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter INTEGER NOT NULL,
-                 param_type TEXT NOT NULL, CHECK(param_type IN ('surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological')),
+                 param_type TEXT NOT NULL,
                  unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
@@ -482,6 +482,14 @@ EXECUTE FUNCTION check_approval_exists_daily();
                sub_group TEXT,
                sub_group_fr TEXT,
                description TEXT
+               description_fr TEXT);")
+  
+  # param_types table #################
+  DBI::dbExecute(con, "CREATE TABLE param_types (
+               param_type_code SERIAL PRIMARY KEY,
+               param_type TEXT UNIQUE NOT NULL,
+               param_type_fr TEXT UNIQUE NOT NULL,
+               description TEXT,
                description_fr TEXT);")
 
   # extrema table #################
@@ -717,6 +725,8 @@ EXECUTE FUNCTION update_geom_type();
                  ON UPDATE CASCADE ON DELETE CASCADE;")
   
   DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_parameter FOREIGN KEY (parameter) REFERENCES parameters(param_code) ON UPDATE CASCADE ON DELETE CASCADE;")
+  
+  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_param_type FOREIGN KEY (param_type) REFERENCES param_types(param_type_code) ON UPDATE CASCADE ON DELETE CASCADE;")
   
   DBI::dbExecute(con,
                  "ALTER TABLE timeseries
