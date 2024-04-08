@@ -162,30 +162,19 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
             }
             
             # Check for mismatches using set operations
-            mismatch_keys <- inDB$key[!(inDB$key %in% inRemote$key)]
+            mismatch_keys <- inRemote$key[!(inRemote$key %in% inDB$key)]
             
             # Check where the discrepancy is in both data frames
             if (length(mismatch_keys) > 0) {
               mismatch <- TRUE
-              datetime_remote <- inRemote[inRemote$key %in% mismatch_keys, "datetime"]
-              if (length(datetime_remote) == 0) { #Means that the remote data doesn't exist anymore or is different for the mismatch point. Delete from that point on in the DB
-                datetime_db <- inDB[inDB$key %in% mismatch_keys, "datetime"]
-                datetime_db <- min(datetime_db)
-                index <- which(inDB$datetime == datetime_db)
-                if (index > 1) {
-                  datetime <- inDB[index - 1, "datetime"]
-                } else if (index == 1) {
-                  datetime <- inDB[index, "datetime"]
-                }
-              } else {
-                datetime <- min(datetime_remote)
-              }
+              # Find the most recent datetime in the remote data that is not in the DB. This will be the datetime to start replacing from in the local.
+              datetime <- min(inRemote[inRemote$key %in% mismatch_keys, "datetime"])
             } else {
               mismatch <- FALSE
             }
             inRemote$key <- NULL
           }
-        } else {
+        } else { # There's no data in the DB but there is some in the remote. Automatic mismatch.
           mismatch <- TRUE
           datetime <- min(inRemote$datetime)
         }
