@@ -92,7 +92,6 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
           if (length(tsid_flow) == 0 | is.na(tsid_flow)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
                                     "parameter" = param_code,
-                                    "unit" = "m3/s",
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
                                     "record_rate" = "1 day",
@@ -200,7 +199,6 @@ update_hydat <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "
           if (length(tsid_level) == 0 | is.na(tsid_level)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
                                     "parameter" = param_code,
-                                    "unit" = "m",
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
                                     "record_rate" = "1 day",
