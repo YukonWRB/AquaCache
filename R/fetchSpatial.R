@@ -32,8 +32,8 @@ fetchVector <- function(geom_id = NULL, layer_name = NULL, feature_name = NULL, 
   if (is.null(geom_id) & is.null(layer_name) & is.null(feature_name) & is.null(geom_type)) {
     stop("You need to specify at least one of the NULL parameters.")
   }
-  if (!is.null(geom_type)){
-    if (length(geom_type) > 1){
+  if (!is.null(geom_type)) {
+    if (length(geom_type) > 1) {
       stop("You can only select one geom_type at a time.")
     } else if (!(geom_type %in% c('ST_Point', 'ST_MultiPoint', 'ST_LineString', 'ST_MultiLineString', 'ST_Polygon', 'ST_MultiPolygon'))) {
       stop("Parameter geom_type is not one of the possible choices. Refer to the help file.")
@@ -60,9 +60,9 @@ fetchVector <- function(geom_id = NULL, layer_name = NULL, feature_name = NULL, 
 
 
   #Check if query resulted in multiple geom_types
-  if (length(unique(tbl$geom_type)) > 1){
+  if (length(unique(tbl$geom_type)) > 1) {
+    warning("Your query resulted in more than one geometry type: ", paste(unique(tbl$geom_type), collapse = ", AND "), " were returned. Refer to the returned table and refine your search")
     return(tbl)
-    stop("Your query resulted in more than one geometry type: ", paste(unique(tbl$geom_type), collapse = ", AND "), " were returned. Refer to the returned table and refine your search")
   }
 
   return <- rpostgis::pgGetGeom(con, query = paste0("SELECT  ", paste(return_cols, collapse = ", "), ", ", geom_col, " AS geom FROM ", table, " WHERE geom_id IN (", paste(tbl$geom_id, collapse = ", "), ");"))
