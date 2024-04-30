@@ -12,7 +12,7 @@
 #' The attribute table of the object will be discarded except for the columns specified in parameters `feature_name_col` and `description_col` to work with the existing database column names and to enable many to many relationships within the database. If you want vector files with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using [insertHydrometDocument()]. Note however that this precludes using the object's spatial attributes within the database!
 #'
 #' @param geom The geometry object to add to the database, as a [terra::vect()] object or as a file path to a shapefile, geopackage or something else that terra::vect() van use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.
-#' @param layer_name The name to give to the vector layer.
+#' @param layer_name The name to give to the vector layer, which defines which layer_name it gets assigned to in the database. This should always be an existing layer_name unless you have a good reason to create a new one.
 #' @param feature_name A short but descriptive name to give to the geom feature. Leave NULL if specified with parameter `feature_name_col` instead. This parameter only works for geoms with a single feature (row).
 #' @param description Optional but highly recommended long-form description of the geometry feature. Leave NULL is specifying a `description_col` instead.
 #' @param feature_name_col The name of the column with names to give to the geom features. Each feature (row in the attribute table) will be entered to the database using the string in this column. Leave NULL if specified with parameter `feature_name`.
@@ -23,11 +23,25 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
 #' @return A boolean vector, one element per feature.Messages will also be printed to the console.
-#'
+#' @export
 
-insertHydrometVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = hydrometConnect()) {
+insertHydrometVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = hydrometConnect(silent = TRUE)) {
 
   on.exit(DBI::dbDisconnect(con))
+  
+  exist_layer_names <- DBI::dbGetQuery(con, "SELECT DISTINCT layer_name FROM vectors")
+  
+  if (!layer_name %in% exist_layer_names$layer_name) {
+    message("The layer_name you specified does not exist yet. Are you sure you want to create it? The current entries are:\n", paste(exist_layer_names$layer_name, collapse = "\n"))
+    commit <- readline(prompt = writeLines(paste("\n1: Definitely not",
+                                                 "\n2: Maybe?",
+                                                 "\n3: Yes, I want to create it."
+    )))
+    commit <- as.numeric(commit)
+    if (commit != 3) {
+      stop("Allright, come back when you're ready.")
+    }
+  }
 
   if (inherits(geom, "character")) {
     geom <- terra::vect(geom)
