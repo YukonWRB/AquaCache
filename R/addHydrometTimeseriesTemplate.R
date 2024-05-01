@@ -5,11 +5,13 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param format "long" or "short", only applies to the timeseries table. If long, will return one row per unique parameter with the total data.frame length equal to the parameter with the highest count. If short will return a single row, with unique parameter values concatenated in a single cell per parameter.
 #' @param save_path Specify a save path (folder) if you want an xlsx document with column headers as required by function [addHydrometTimeseries()]. "choose" lets you choose interactively.
+#' 
 #' @return A list of three data.frames:
 #' For the timeseries table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `timeseries_df` of [addHydrometTimeseries()].
 #' For the spatial table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `locations_df` of [addHydrometTimeseries()].
 #' For the settings table, a data.frame with column names and options already in the DB so you can check what already exists.
 #' A data.frame is also produced listing the datums present in the database, facilitating your specification of the appropriate datum in the spatial table.
+#' 
 #' @export
 #'
 

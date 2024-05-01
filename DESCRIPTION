@@ -1,6 +1,6 @@
 Package: HydroMetDB
 Title: Hydrological database creation and maintenance
-Version: 1.8.12
+Version: 1.8.13
 Authors@R: c(
     person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -57,10 +57,10 @@ Suggests:
     shinyFiles,
     shinyjs,
     testthat (>= 3.0.0)
-VignetteBuilder: 
-    knitr
 Remotes:
     github::ropensci/weathercan
+VignetteBuilder: 
+    knitr
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

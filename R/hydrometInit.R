@@ -407,7 +407,6 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  location TEXT NOT NULL,
                  parameter INTEGER NOT NULL,
                  param_type INTEGER NOT NULL,
-                 unit TEXT NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
                  record_rate TEXT NOT NULL,
@@ -476,6 +475,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE TABLE parameters (
                param_code SERIAL PRIMARY KEY,
                param_name TEXT UNIQUE NOT NULL,
+               unit TEXT UNIQUE NOT NULL,
                param_name_fr TEXT UNIQUE NOT NULL,
                group TEXT NOT NULL,
                group_fr TEXT NOT NULL,

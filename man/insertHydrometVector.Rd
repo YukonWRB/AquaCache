@@ -14,13 +14,13 @@ insertHydrometVector(
   table = "vectors",
   geom_col = "geom",
   overwrite = FALSE,
-  con = hydrometConnect()
+  con = hydrometConnect(silent = TRUE)
 )
 }
 \arguments{
 \item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object or as a file path to a shapefile, geopackage or something else that terra::vect() van use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.}
 
-\item{layer_name}{The name to give to the vector layer.}
+\item{layer_name}{The name to give to the vector layer, which defines which layer_name it gets assigned to in the database. This should always be an existing layer_name unless you have a good reason to create a new one.}
 
 \item{feature_name}{A short but descriptive name to give to the geom feature. Leave NULL if specified with parameter \code{feature_name_col} instead. This parameter only works for geoms with a single feature (row).}
 
