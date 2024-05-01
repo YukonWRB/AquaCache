@@ -26,7 +26,6 @@
 #' @export
 
 insertHydrometVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = hydrometConnect(silent = TRUE)) {
-
   on.exit(DBI::dbDisconnect(con))
   
   exist_layer_names <- DBI::dbGetQuery(con, "SELECT DISTINCT layer_name FROM vectors")
@@ -61,6 +60,8 @@ insertHydrometVector <- function(geom, layer_name, feature_name = NULL, descript
     if (!(feature_name_col %in% names(geom))) {
       stop("You specified a non-existent column for 'feature_name_col.'")
     }
+    # Aggregate on the feature_name_col
+    geom <- terra::aggregate(geom, by = feature_name_col)
   }
   if (!is.null(feature_name) & nrow(geom) > 1) {
     stop("You specified the parameter 'feature_name' but this only works for vector files with one feature. Please review the help file.")
@@ -97,28 +98,37 @@ insertHydrometVector <- function(geom, layer_name, feature_name = NULL, descript
           message("geom object had invalid geometry, fix attempted using terra::makeValid().")
         }
 
-        new_geomtype <- terra::geomtype(sub.geom)
-        db_geomtype <- if (new_geomtype == "polygons") 'ST_Polygon' else if (new_geomtype == "points") 'ST_Point' else if (new_geomtype == "lines") 'ST_LineString'
         if (overwrite) {
-          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "' AND geom_type = '", db_geomtype, "';"))
+          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
           if (nrow(exist) == 1) {
-            message("Updating entry for geom_type = ", db_geomtype, ", layer_name = ", layer_name, ", feature_name = ", feat_name, ".")
+            message("Updating entry for layer_name = ", layer_name, ", feature_name = ", feat_name, ".")
             sub.geom$geom_id <- exist[1, "geom_id"]
             success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
             DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           } else if (nrow(exist) == 0) {
-            message("There is no existing database entry for this mix of geom_type = ", db_geomtype, ", layer_name = ", layer_name, ", feature_name = ", feat_name, ". Writing it without overwrite.")
+            message("There is no existing database entry for this mix of layer_name = ", layer_name, ", feature_name = ", feat_name, ". Writing it without overwrite.")
             success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
             DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
-          } else {
-            warning("Failed to overwrite existing feature: there seems to be two entries in the database for this mix of geom_type = ", db_geomtype, ", layer_name = ", layer_name, ", feature_name = ", feat_name, ".")
-            success[[i]] <- FALSE
           }
         } else { #overwrite if FALSE
-          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "' AND geom_type = '", db_geomtype, "';"))
+          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
           if (nrow(exist) != 0) {
-            warning("Not writing geom_type = ", db_geomtype, ", layer_name = ", layer_name, ", feature_name = ", feat_name, ". There is already an entry matching this but parameter overwrite is FALSE.")
-            success[[i]] <- FALSE
+            message("There is already an entry for layer_name = ", layer_name, " and feature_name = ", feat_name, " but you didn't ask to overwrite it. Would you like to aggregate the database feature with the new one?")
+            agg <- readline(prompt = writeLines(paste("\n1: Yes",
+                                                      "\n2: No way!"
+            )))
+            agg <- as.numeric(agg)
+            if (agg != 1) {
+              warning("Not writing layer_name = ", layer_name, ", feature_name = ", feat_name, ". There is already an entry matching this but parameter overwrite is FALSE.")
+              success[[i]] <- FALSE
+            } else {
+              message("Seeing if I can aggregate the layers together and update the existing vector entry...")
+              sub.geom <- terra::aggregate(rbind(exist, sub.geom), by = "feature_name")
+              sub.geom$geom_id <- exist[1, "geom_id"]
+              success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
+              DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
+              message("Succeeded in adding to the existing vector!")
+            }
           } else {
             success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
             DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))

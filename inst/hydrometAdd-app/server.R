@@ -12,9 +12,9 @@ server <- function(input, output, session) {
   vectors <- reactiveValues()
   selectedVectors <- reactiveValues()
   # points, lines, polygons
-  vectors$points <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type = 'ST_Point';")
-  vectors$lines <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type = 'ST_LineString';")
-  vectors$polygons <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type = 'ST_Polygon';")
+  vectors$points <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Point', 'ST_MultiPoint');")
+  vectors$lines <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_LineString', 'ST_MultiLineString');")
+  vectors$polygons <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Polygon', 'ST_MultiPolygon');")
   
   # Select points in pop-up and window
   observeEvent(input$associatePoints, {
@@ -379,9 +379,13 @@ server <- function(input, output, session) {
       if (vector$rows > 1) {
         shinyjs::show("featureNameCol")
         shinyjs::show("featureDescCol")
-      } else {
         shinyjs::hide("featureName")
         shinyjs::hide("featureDesc")
+      } else {
+        shinyjs::show("featureName")
+        shinyjs::show("featureDesc")
+        shinyjs::hide("featureNameCol")
+        shinyjs::hide("featureDescCol")
       }
     })
   })
