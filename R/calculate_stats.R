@@ -48,30 +48,43 @@ calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id,
   leap_list <- (seq(1800, 2100, by = 4))
   hydat_checked <- FALSE
   for (i in timeseries_id) {
+    start_recalc_i <- start_recalc
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
       last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
       earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
-      if (length(earliest_day_historic) == 0) earliest_day_historic <- earliest_day_measurements
+      
+      # Below lines deal with timeseries that don't have daily values but should, or don't have them far enough in the past
+      if (is.na(earliest_day_historic)) {
+        earliest_day_historic <- earliest_day_measurements
+        last_day_historic <- earliest_day_measurements
+        start_recalc_i <- earliest_day_measurements
+      } else if (earliest_day_measurements < earliest_day_historic) {
+        start_recalc_i <- earliest_day_measurements
+      }
+      
+      if (length(earliest_day_historic) == 0) {
+        earliest_day_historic <- earliest_day_measurements
+      }
       tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, source_fx FROM timeseries WHERE timeseries_id = ", i, ";"))
       period_type <- tmp[1,1]
       source_fx <- tmp[1,2]  #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
 
-      if (!is.null(start_recalc)) { #start_recalc is specified (not NULL)
+      if (!is.null(start_recalc_i)) { #start_recalc_i is specified (not NULL)
         if (!is.na(earliest_day_measurements)) {
           if (earliest_day_historic < earliest_day_measurements) {
-            last_day_historic <- max(earliest_day_historic, start_recalc)
+            last_day_historic <- max(earliest_day_historic, start_recalc_i)
           } else {
-            last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, start_recalc) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in calculated_daily yet
+            last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, start_recalc_i) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in calculated_daily yet
           }
         } else {
-          if (start_recalc < earliest_day_historic) {
+          if (start_recalc_i < earliest_day_historic) {
             last_day_historic <- earliest_day_historic
           } else {
-            last_day_historic <- start_recalc
+            last_day_historic <- start_recalc_i
           }
         }
-      } else { #start_recalc is NULL
+      } else { #start_recalc_i is NULL
         if (!is.na(last_day_historic) & !is.na(earliest_day_measurements)) {
           last_day_historic <- last_day_historic - 2 # recalculate the last two days of historic data in case new data has come in
         } else if (is.na(last_day_historic) & !is.na(earliest_day_measurements)) { #say, a new timeseries that isn't in hydat yet or one that's just being added and has no calculations yet
