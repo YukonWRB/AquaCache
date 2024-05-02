@@ -48,14 +48,20 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     notes <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(27:53), cols = c(2:10), colNames = TRUE, skipEmptyRows = FALSE, skipEmptyCols = FALSE)
     maintenance <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(48:51), cols = c(2:9), colNames = TRUE, skipEmptyRows = FALSE, skipEmptyCols = TRUE)
     
-    # Check for empty sheets
-    if (all(is.na(survey[c(3,4,6,7), 2])) & nrow(measurement) == 0 & all(is.na(calculated[c(2,3), c(2,3)])) & all(is.na(notes[, c(3,5,7)])) & ncol(maintenance) == 1) {
+    # Remove empty rows in measurement, or rows where only a note is present without depth AND swe values
+    measurement <- measurement[!(is.na(measurement[,1]) & is.na(measurement[,2])), ]
+    
+    # Remarks
+    remarks <- notes[26,2]
+    if (is.na(remarks)) { 
+      remarks <- NULL
+    }
+    
+    # Check for empty sheets and no remarks
+    if (all(is.na(survey[c(3,4,6,7), 2])) & nrow(measurement) == 0 & all(is.na(calculated[c(2,3), c(2,3)])) & all(is.na(notes[, c(3,5,7)])) & ncol(maintenance) == 1 & is.null(remarks)) {
       message("Sheet ", s, ", ", survey[1,2], " is empty. Skipping to next sheet.")
       next
     }
-    
-    # Remove empty rows in measurement, or rows where only a note is present without depth AND swe values
-    measurement <- measurement[!(is.na(measurement[,1]) & is.na(measurement[,2])), ]
     
     # If snow depth is 0, SWE must also be 0. It might be NA.
     measurement[measurement[,1] == 0, 2] <- 0
@@ -148,17 +154,15 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     sampling <- paste0(names(sampling), collapse = ". ")
     if (sampling == "") { sampling <- NULL }
     
-    # Remarks
-    remarks <- notes[26,2]
-    if (is.na(remarks)) { remarks = NULL }
-    
     # Pull all notes together now
     notes <- paste(c(airtemp, weather, snow, snow_cm, sampling, remarks), collapse = ". ")
-    if (notes == "") {notes <- NA
-    } else {notes <- paste0("At time of sampling: ", notes)}
+    if (notes == "") {
+      notes <- NA
+    } else {
+      notes <- paste0("At time of sampling: ", notes)
+    }
     
-    
-    ## CHECKS
+      ## CHECKS
     # Remove apostrophes in text.
     notes <- gsub("'", "", notes)
     sampler_name <- gsub("'", "", sampler_name)
@@ -169,7 +173,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       next
     }
     if (is.na(survey_date) | length(survey_date) == 0) {
-      warning("FAILED for ", survey[1,2], "' (", loc_id, "), snow survey sampling date is missing for and must be given.")
+      warning("FAILED for ", survey[1,2], "' (", loc_id, "), snow survey sampling date is missing and must be given.")
       next
     }
     
@@ -253,97 +257,104 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       if (nrow(check) == 0) {
         DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
       }
-      warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") end time is before start time.")
+      warning("FAILED: new snow course data for '", survey[1,2], "' (", loc_id, ") end time is before start time. Removed the entry just added to the surveys table.")
       next
     }
     
     ##### ------------------ Create measurements table -------------------- ####
-    # Create measurements table (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes)
     
-    ### Standard
-    if (method == "standard") {
+    if (nrow(measurement) > 0) {
+      # Create measurements table (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notess
+      ### Standard
+      if (method == "standard") {
+        
+        # Create times vector
+        times <- seq.int(from = as.numeric(survey[6,2]),
+                         to = as.numeric(survey[7,2]),
+                         length.out = length(measurement[,1]))
+        # Create sample_datetime vector
+        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + times * 24 * 3600
+        ## Estimate_flag
+        estimate_flag <- rep(FALSE, times = length(sample_datetime))
+        ## Exclude_flag, swe, depth, notes, survey_id
+        exclude_flag <- !is.na(measurement$Exclude.flag)
+        swe <- round(measurement$SWE * 10)
+        depth <- round(measurement[,1])
+        notes <- measurement$`Sample.notes.(see.details)`
+        survey_id <- rep(surv_id, times = length(sample_datetime))
+      } else if (method == "bulk") {  ### Bulk workflow
+        ## Sample_datetime
+        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24*3600
+        ## Estimate_flag (Can only be given to averages)
+        estimate_flag <- FALSE
+        ## Exclude_flag, swe, depth, notes, survey_id
+        exclude_flag <- FALSE
+        swe <- round(calculated[2,3]*10)
+        depth <- round(calculated[2,2])
+        if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
+          notes <- NA
+        } else {notes <- paste0("Sample ", row.names(measurement[!is.na(measurement$`Sample.notes.(see.details)`),]), ": ", measurement[!is.na(measurement$`Sample.notes.(see.details)`),3], collapse = ". ")}
+        survey_id <- surv_id
+        ### Average
+      } else if (method == "average") {
+        ## Sample_datetime
+        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24*3600
+        ## Estimate_flag (Can only be given to averages)
+        estimate_flag <- TRUE
+        ## Exclude_flag, swe, depth, notes
+        exclude_flag <- FALSE
+        swe <- round(calculated[2,3] * 10)
+        depth <- round(calculated[2,2])
+        if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
+          notes <- NA
+        } else {notes <- paste0("Sample ", row.names(measurement[!is.na(measurement$`Sample.notes.(see.details)`),]), ": ", measurement[!is.na(measurement$`Sample.notes.(see.details)`),3], collapse = ". ")}
+        survey_id <- surv_id
+      }
       
-      # Create times vector
-      times <- seq.int(from = as.numeric(survey[6,2]),
-                       to = as.numeric(survey[7,2]),
-                       length.out = length(measurement[,1]))
-      # Create sample_datetime vector
-      sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + times * 24 * 3600
-      ## Estimate_flag
-      estimate_flag <- rep(FALSE, times = length(sample_datetime))
-      ## Exclude_flag, swe, depth, notes, survey_id
-      exclude_flag <- !is.na(measurement$Exclude.flag)
-      swe <- round(measurement$SWE * 10)
-      depth <- round(measurement[,1])
-      notes <- measurement$`Sample.notes.(see.details)`
-      survey_id <- rep(surv_id, times = length(sample_datetime))
-    } else if (method == "bulk") {  ### Bulk workflow
-      ## Sample_datetime
-      sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24*3600
-      ## Estimate_flag (Can only be given to averages)
-      estimate_flag <- FALSE
-      ## Exclude_flag, swe, depth, notes, survey_id
-      exclude_flag <- FALSE
-      swe <- round(calculated[2,3]*10)
-      depth <- round(calculated[2,2])
-      if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
-        notes <- NA
-      } else {notes <- paste0("Sample ", row.names(measurement[!is.na(measurement$`Sample.notes.(see.details)`),]), ": ", measurement[!is.na(measurement$`Sample.notes.(see.details)`),3], collapse = ". ")}
-      survey_id <- surv_id
-      ### Average
-    } else if (method == "average") {
-      ## Sample_datetime
-      sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24*3600
-      ## Estimate_flag (Can only be given to averages)
-      estimate_flag <- TRUE
-      ## Exclude_flag, swe, depth, notes
-      exclude_flag <- FALSE
-      swe <- round(calculated[2,3] * 10)
-      depth <- round(calculated[2,2])
-      if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
-        notes <- NA
-      } else {notes <- paste0("Sample ", row.names(measurement[!is.na(measurement$`Sample.notes.(see.details)`),]), ": ", measurement[!is.na(measurement$`Sample.notes.(see.details)`),3], collapse = ". ")}
-      survey_id <- surv_id
-    }
-    
-    ## CHECKS
-    # Remove apostrophes in text.
-    notes <- gsub("'", "", notes)
-    # Check for empty SWE or depth
-    if (method %in% c("average", "bulk")) {
-      if (is.na(swe) | length(swe) == 0) {
-        warning("FAILED: SWE is missing for snow coarse '", survey[1,2], "' (", loc_id, ") and must be given.")
-        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
-        if (nrow(check) == 0) {
-          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+      ## CHECKS
+      # Remove apostrophes in text.
+      notes <- gsub("'", "", notes)
+      # Check for empty SWE or depth
+      if (method %in% c("average", "bulk")) {
+        if (is.na(swe) | length(swe) == 0) {
+          warning("FAILED: SWE is missing for snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
+          check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+          if (nrow(check) == 0) {
+            DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+          }
+          next
         }
-        next
-      }
-      if (is.na(depth) | length(depth) == 0) {
-        warning("FAILED: now depth is missing for snow coarse '", survey[1,2], "' (", loc_id, ") and must be given.")
-        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
-        if (nrow(check) == 0) {
-          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+        if (is.na(depth) | length(depth) == 0) {
+          warning("FAILED: now depth is missing for snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
+          check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+          if (nrow(check) == 0) {
+            DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+          }
+          next
         }
-        next
-      }
-    } else if (method == "standard") {
-      if (length(swe) < length(sample_datetime)) {
-        warning("FAILED: SWE is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
-        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
-        if (nrow(check) == 0) {
-          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+      } else if (method == "standard") {
+        if (length(swe) < length(sample_datetime)) {
+          warning("FAILED: SWE is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
+          check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+          if (nrow(check) == 0) {
+            DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+          }
+          next
         }
-        next
-      }
-      if (length(depth) < length(sample_datetime)) {
-        warning("FAILED: snow depth is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
-        check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
-        if (nrow(check) == 0) {
-          DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+        if (length(depth) < length(sample_datetime)) {
+          warning("FAILED: snow depth is missing for 1 or more samples of snow course '", survey[1,2], "' (", loc_id, ") and must be given.")
+          check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
+          if (nrow(check) == 0) {
+            DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";"))
+          }
+          next
         }
-        next
       }
+    } else if (ncol(maintenance) == 2) {
+      message("There were no measurements for this survey but maintenance notes were present. Adding these notes to the maintenance table but nothing in the measurements table.")
+    } else {
+      message("There were no measurements or maintenance notes for this survey.")
+      next
     }
     
     
@@ -356,7 +367,6 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     if (ncol(maintenance) == 1) {
       maintenance$X2 <- NA
     }
-    
     # x : needs to be completed
     # completed = TRUE : has been completed
     
