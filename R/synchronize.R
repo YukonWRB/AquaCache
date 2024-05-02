@@ -38,11 +38,14 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
 
   #Check length of start_datetime is either 1 of same as timeseries_id
   if (length(start_datetime) != 1) {
-    if (length(start_datetime) != nrow(timeseries_id)) {
+    if (length(start_datetime) != length(timeseries_id)) {
       stop("There is not exactly one element to start_datetime per valid timeseries_id specified by you in the database. Either you're missing elements to start_datetime or you are looking for timeseries_id that doesn't exist.")
     }
+  } else {
+    timeseries_id <- unique(timeseries_id)
   }
 
+  
   if (timeseries_id[1] == "all") {
     if (discrete) {
       all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
@@ -55,8 +58,8 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
     } else {
       all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
     }
-    if (length(timeseries_id) != nrow(all_timeseries)) {
-      fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
+    if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
+      fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]
       ifelse((length(fail) == 1),
               warning("Could not find one of the timeseries_ids that you specified: ID ", fail, " is missing from the database."),
               warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
@@ -240,7 +243,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
   }
 
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_sync';"))
-  message("Found ", updated, " timeseries to refresh out of the ", nrow(all_timeseries), " provided.")
+  message("Found ", updated, " timeseries to refresh out of the ", nrow(all_timeseries), " unique numbers provided.")
   diff <- Sys.time() - start
   message("Total elapsed time for synchronize: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
 
