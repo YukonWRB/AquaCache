@@ -231,27 +231,74 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       survey[7,2] <- survey[6,2]
     }
     
-    # Deal with start/end datetime
+    # Deal with start/end datetime. There are lots of ways these can be specified: HH:mm, HHmm, HH:mm PM, etc. Also, the Excel representation might be in fractions of a day! These all need to be coerced to a fraction of a day for later work.
     survey[6,2] <- gsub(" ", "", survey[6,2])
     survey[6,2] <- gsub(":", "", survey[6,2])
     survey[7,2] <- gsub(" ", "", survey[7,2])
     survey[7,2] <- gsub(":", "", survey[7,2])
+    
     # Remove AM/PM if exists and adjust for PM
     if (grepl("AM", survey[6,2], ignore.case = TRUE)) {
       survey[6,2] <- gsub("AM", "", survey[6,2])
+      survey[6,2] <- as.numeric(survey[6,2])
+      if (survey[6,2] > 1) { #Means we're dealing with HH:mm
+        minutes <- substr(survey[6,2], nchar(survey[6,2] - 1, nchar(survey[6,2])))
+        hours <- substr(survey[6,2], 1, nchar(survey[6,2] - 2))
+        survey[6,2] <- hours/24 + minutes/1440
+      }
     } else if (grepl("PM", survey[6,2], ignore.case = TRUE)) {
       survey[6,2] <- gsub("PM", "", survey[6,2])
-      survey[6,2] <- as.numeric(survey[6,2]) + 12
+      survey[6,2] <- as.numeric(survey[6,2])
+      # Now we either have a fraction of a day (less than 1) or hour:minute notation
+      if (survey[6,2] > 1) { #fraction of a day
+        minutes <- substr(survey[6,2], nchar(survey[6,2] - 1, nchar(survey[6,2])))
+        hours <- substr(survey[6,2], 1, nchar(survey[6,2] - 2))
+        survey[6,2] <- hours/24 + minutes/1440
+        if (survey[6,2] < 0.5) { # Making sure it didn't get specified as something like 1400 PM
+          survey[6,2] <- survey[6,2] + 0.5
+        }
+      } 
     }
+    if (!is.numeric(survey[6,2])) {
+      survey[6,2] <- as.numeric(survey[6,2])
+    }
+    if (survey[6,2] > 1) {
+      minutes <- as.numeric(substr(survey[6,2], nchar(survey[6,2]) - 1, nchar(survey[6,2])))
+      hours <- as.numeric(substr(survey[6,2], 1, nchar(survey[6,2]) - 2))
+      survey[6,2] <- hours/24 + minutes/1440
+    }
+    
     if (grepl("AM", survey[7,2], ignore.case = TRUE)) {
       survey[7,2] <- gsub("AM", "", survey[7,2])
+      survey[7,2] <- as.numeric(survey[7,2])
+      if (survey[7,2] > 1) { #Means we're dealing with HH:mm
+        minutes <- substr(survey[7,2], nchar(survey[7,2] - 1, nchar(survey[7,2])))
+        hours <- substr(survey[7,2], 1, nchar(survey[7,2] - 2))
+        survey[7,2] <- hours/24 + minutes/1440
+      }
     } else if (grepl("PM", survey[7,2], ignore.case = TRUE)) {
       survey[7,2] <- gsub("PM", "", survey[7,2])
-      survey[7,2] <- as.numeric(survey[7,2]) + 12
+      survey[7,2] <- as.numeric(survey[7,2])
+      # Now we either have a fraction of a day (less than 1) or hour:minute notation
+      if (survey[7,2] > 1) { #fraction of a day
+        minutes <- substr(survey[7,2], nchar(survey[7,2] - 1, nchar(survey[7,2])))
+        hours <- substr(survey[7,2], 1, nchar(survey[7,2] - 2))
+        survey[7,2] <- hours/24 + minutes/1440
+        if (survey[7,2] < 0.5) { # Making sure it didn't get specified as something like 1400 PM
+          survey[7,2] <- survey[7,2] + 0.5
+        }
+      } 
     }
-    
-    
-    # Check that end time is after stat time
+    if (!is.numeric(survey[7,2])) {
+      survey[7,2] <- as.numeric(survey[7,2])
+    }
+    if (survey[7,2] > 1) {
+      minutes <- as.numeric(substr(survey[7,2], nchar(survey[7,2]) - 1, nchar(survey[7,2])))
+      hours <- as.numeric(substr(survey[7,2], 1, nchar(survey[7,2]) - 2))
+      survey[7,2] <- hours/24 + minutes/1440
+    }
+
+    # Check that end time is after start time
     if (survey[7,2] < survey[6,2]) {
       check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
       if (nrow(check) == 0) {
@@ -269,8 +316,8 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       if (method == "standard") {
         
         # Create times vector
-        times <- seq.int(from = as.numeric(survey[6,2]),
-                         to = as.numeric(survey[7,2]),
+        times <- seq.int(from = survey[6,2],
+                         to = survey[7,2],
                          length.out = length(measurement[,1]))
         # Create sample_datetime vector
         sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + times * 24 * 3600
@@ -284,7 +331,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
         survey_id <- rep(surv_id, times = length(sample_datetime))
       } else if (method == "bulk") {  ### Bulk workflow
         ## Sample_datetime
-        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24*3600
+        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + survey[6,2] * 24 * 3600
         ## Estimate_flag (Can only be given to averages)
         estimate_flag <- FALSE
         ## Exclude_flag, swe, depth, notes, survey_id
@@ -298,7 +345,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
         ### Average
       } else if (method == "average") {
         ## Sample_datetime
-        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24*3600
+        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + survey[6,2] * 24*3600
         ## Estimate_flag (Can only be given to averages)
         estimate_flag <- TRUE
         ## Exclude_flag, swe, depth, notes
