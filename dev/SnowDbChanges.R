@@ -56,4 +56,56 @@ DBI::dbDisconnect(con)
   DBI::dbExecute(con, paste0("DELETE FROM surveys WHERE survey_id IN ('", paste(surv_id, collapse = "', '"), "')") )
 
 
+# Update surveys constraint
+  con <- HydroMetDB::snowConnect()
+  DBI::dbExecute(con, "ALTER TABLE surveys DROP CONSTRAINT method_check")
+  
+  DBI::dbExecute(con, "ALTER TABLE surveys ADD CONSTRAINT method_check CHECK (method IN ('average', 'bulk', 'standard', 'no sample'))")
+  
+##### Adding snow pillow/scale data to db ####
+  ## Pull in table I created
+  table <- read.csv("//Env-fs/env-data/corp/water/Hydrology/11_SnowMet_Network/01_Automated_Stations/51_Data_Exports/Discrete SD & SWE for Snow DB import/All.csv")
 
+  surveys <- table
+  #### Make survey table
+  ## Set survey_date as date
+  surveys$survey_date2 <- as.Date(surveys$survey_date)
+    # Function to calculate closest first of the month
+    library(lubridate)
+    find_closest_first <- function(date) {
+    # Get the first day of the current month
+    first_current_month <- floor_date(date, "month")
+    
+    # Get the first day of the next month
+    first_next_month <- ceiling_date(date, "month")
+    
+    # Calculate which is closer to the survey_date
+    if (date - first_current_month <= first_next_month - date) {
+      return(first_current_month)
+    } else {
+      return(first_next_month)
+    }
+  }
+  # Using sapply to apply the function to each date in the survey_date column
+    surveys$target_date <- as.Date(unlist(lapply(surveys$survey_date2, find_closest_first)))
+  ## Subset to columns of interest
+  surveys <- surveys[, c("location", "target_date", "survey_date", "method")]
+  # remove duplicates
+  surveys <- surveys[!duplicated(surveys),]
+  
+  #### Make measurements table
+  measurements <- table
+  # Get swe and depth into same row (widen)
+  measurements <- measurements %>% 
+    tidyr::pivot_wider(
+      names_from = parameter,
+      values_from = value
+    )
+  # Add estimate_flag and exclude_flag
+  measurements$estimate_flag <- FALSE
+  measurements$exclude_flag <- FALSE
+  # Keep columns of interest and rename
+  measurements <- measurements[, c("survey_date", "")]
+  
+  
+    
