@@ -92,7 +92,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
                  method TEXT,
                  ice_notes TEXT,
                  CONSTRAINT survey_loc UNIQUE (survey_date, location),
-                 CONSTRAINT method_check CHECK (method IN ('average', 'bulk', 'standard')),
+                 CONSTRAINT method_check CHECK (method IN ('average', 'bulk', 'standard', 'no sample')),
 
                  FOREIGN KEY (location) REFERENCES locations(location) ON UPDATE CASCADE)"
   )
@@ -178,7 +178,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
   DBI::dbExecute(con, "COMMENT ON COLUMN public.surveys.ice_notes IS 'Notes specific to the description of ice layers within the snow pack or on ground surface below snow.'")
 
   ## measurements
-  DBI::dbExecute(con, "COMMENT ON TABLE public.measurements IS 'Stores the details of a single snow sample. A single snow survey will contain multiple samples, tipically 10. However, preceding 2024, only the average of samples was noted in the database, and as such only a single swe and depth measurement are given per snow survey.'")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.measurements IS 'Stores the details of a single snow sample. A single snow survey will contain multiple samples, typically 10. However, preceding 2024, only the average of samples was noted in the database, and as such only a single swe and depth measurement are given per snow survey.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.measurement_id IS 'The unique identifier of the sample. Populated through auto-increment.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.survey_id IS 'The survey to which the measurement is linked. A foreign key referring to survey_id of the surveys table.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements.sample_datetime IS 'The date and time on which the sample was collected. This can be the same time for all samples if a time was not given. If a start and end time are given, times will be set to equal increments between start and end time of survey. Survey_id and sample_datetime do not need to be a unique combination because measurement_id will be unique.'")
