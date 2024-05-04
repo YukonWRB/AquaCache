@@ -177,6 +177,15 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       next
     }
     
+    # Change method to 'no sample' if there is nothing in the measurement table
+    if (nrow(measurement) == 0 & method != "no sample") {
+      method <- "no sample"
+      message("No measurements were found on sheet ", s, " but the method was set to something other than 'no sample'. Setting it to 'no sample'.")
+    }
+    if (nrow(measurement) > 0 & method == "no sample") {
+      stop("The measurement method for sheet ", s, " is set to 'no sample' but there *are* measurement values reported. Please fix this and try again.")
+    }
+    
     ## Combine all together
     surveys <- c(location, target_date, survey_date, notes, sampler_name, method, ice_notes)
     
@@ -311,7 +320,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     ##### ------------------ Create measurements table -------------------- ####
     
     if (nrow(measurement) > 0) {
-      # Create measurements table (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notess
+      # Create measurements table (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes
       ### Standard
       if (method == "standard") {
         
@@ -331,12 +340,12 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
         survey_id <- rep(surv_id, times = length(sample_datetime))
       } else if (method == "bulk") {  ### Bulk workflow
         ## Sample_datetime
-        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + survey[6,2] * 24 * 3600
+        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24 * 3600
         ## Estimate_flag (Can only be given to averages)
         estimate_flag <- FALSE
         ## Exclude_flag, swe, depth, notes, survey_id
         exclude_flag <- FALSE
-        swe <- round(calculated[2,3]*10)
+        swe <- round(calculated[2,3] * 10)
         depth <- round(calculated[2,2])
         if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
           notes <- NA
@@ -345,7 +354,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
         ### Average
       } else if (method == "average") {
         ## Sample_datetime
-        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + survey[6,2] * 24*3600
+        sample_datetime <- as.POSIXct(paste0(survey_date, " 00:00:00 Etc/GMT-7")) + as.numeric(survey[6,2]) * 24 * 3600
         ## Estimate_flag (Can only be given to averages)
         estimate_flag <- TRUE
         ## Exclude_flag, swe, depth, notes
@@ -359,8 +368,6 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       }
       
       ## CHECKS
-      # Remove apostrophes in text.
-      notes <- gsub("'", "", notes)
       # Check for empty SWE or depth
       if (method %in% c("average", "bulk")) {
         if (is.na(swe) | length(swe) == 0) {
@@ -398,9 +405,9 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
         }
       }
     } else if (ncol(maintenance) == 2) {
-      message("There were no measurements for this survey but maintenance notes were present. Adding these notes to the maintenance table but nothing in the measurements table.")
+      message("There were no measurements for survey ", survey[1,2], " on sheet ", s, " but maintenance notes were present. Adding these notes to the maintenance table but nothing in the measurements table.")
     } else {
-      message("There were no measurements or maintenance notes for this survey.")
+      message("There were no measurements or maintenance notes for survey ", survey[1,2], " on sheet ", s, ".")
       next
     }
     
@@ -430,23 +437,32 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
       ## Insert into measurements table
       if (method == "standard") {
         survey_id <- rep(surv_id, times = length(sample_datetime))
-      } else if (method %in% c("average", "bulk")) {
+      } else if (method %in% c("average", "bulk", "no sample")) {
         survey_id <- surv_id
       }
       if (overwrite) {
-        DBI::dbExecute(con, paste0("DELETE FROM measurements WHERE survey_id = '", surv_id, "'"))
+        DBI::dbExecute(con, paste0("DELETE FROM measurements WHERE survey_id = '", surv_id, "';"))
+        exist_meas <- data.frame()
+      } else {
+        exist_meas <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements WHERE survey_id = ", surv_id, "';"))
       }
-      meas_statement <- sprintf("INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;", paste(sprintf("('%s', '%s', '%s', '%s', %d, %d, '%s')", survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes), collapse = ", "))
-      
-      DBI::dbExecute(con, meas_statement)
-      
-      message(paste0("Snow course '", survey[1,2], "' (", loc_id, ") inserted into measurements table."))
+      if (nrow(measurement) > 0 & nrow(exist_meas) == 0) {
+        meas_statement <- sprintf("INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;", paste(sprintf("('%s', '%s', '%s', '%s', %d, %d, '%s')", survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes), collapse = ", "))
+        DBI::dbExecute(con, meas_statement)
+        if (overwrite) {
+          message(paste0("Measurements for snow course '", survey[1,2], "' (", loc_id, ") updated."))
+        } else {
+          message(paste0("Measurements for snow course '", survey[1,2], "' (", loc_id, ") inserted into measurements table."))
+        }
+      } else if (nrow(measurement) > 0 & nrow(exist_meas) > 0) {
+        message("There are measurements in the worksheet for snow course '", survey[1,2], "' (", loc_id, ") AND in the database, but you didn't ask to overwrite. No measurements were written or updated in the database.")
+      }
       
       ## Changes to maintenance table
       # For those with completed = FALSE
       for (m in maint_db$maintenance) {
         # check if maintenance x has been removed in workbook
-        if (is.na(maintenance[maintenance$`Maintenance.required.(x.if.applicable)` == m,][1,2]) ) {
+        if (is.na(maintenance[maintenance$`Maintenance.required.(x.if.applicable)` == m,][1,2])) {
           # If it has been removed, change to completed = TRUE and add date_completed
           DBI::dbExecute(con, paste0("UPDATE maintenance SET completed = TRUE, date_completed = '", date,
                                      "' WHERE location = '", loc_id,
@@ -482,4 +498,5 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     }
     )
   }
+  message("Done reading in workbook at ", workbook, ".")
 }
