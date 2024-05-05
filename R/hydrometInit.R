@@ -929,6 +929,69 @@ GROUP BY
 ORDER BY
     datetime;
 ")
+  
+  # Views for timeseries metadata
+  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_en AS",
+                            "SELECT ts.timeseries_id, ptypes.param_type AS parameter_type, params.group AS parameter_group, ts.category, params.param_name AS parameter_name, params.unit, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude, ts.public",
+                            "FROM timeseries AS ts ",
+                            "JOIN locations AS loc ON ts.location_id = loc.location_id ",
+                            "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
+                            "LEFT JOIN param_types AS ptypes ON ts.param_type = ptypes.param_type_code",
+                            "ORDER BY ts.timeseries_id;"))
+  
+  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_fr AS",
+                            "SELECT ts.timeseries_id, ptypes.param_type_fr AS type_de_paramètre, params.group_fr AS groupe_de_paramètres, ts.category, params.param_name_fr AS nom_paramètre, params.unit AS unités, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS début, ts.end_datetime AS fin, ts.note, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude, ts.public",
+                            "FROM timeseries AS ts ",
+                            "JOIN locations AS loc ON ts.location_id = loc.location_id ",
+                            "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
+                            "LEFT JOIN param_types AS ptypes ON ts.param_type = ptypes.param_type_code",
+                            "ORDER BY ts.timeseries_id;"))
+  
+  # View for location metadata
+  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_en AS
+SELECT
+    loc.location_id,
+    loc.location AS location_code,
+    loc.name AS name,
+    loc.latitude,
+    loc.longitude,
+    dc.conversion_m AS elevation,
+    dl.datum_name_en AS datum,
+    loc.note,
+    array_agg(DISTINCT proj.name) AS projects,
+    array_agg(DISTINCT net.name) AS networks
+FROM locations AS loc
+LEFT JOIN locations_projects AS loc_proj ON loc.location_id = loc_proj.location_id
+LEFT JOIN projects AS proj ON loc_proj.project_id = proj.project_id
+LEFT JOIN locations_networks AS loc_net ON loc.location_id = loc_net.location_id
+LEFT JOIN networks AS net ON loc_net.network_id = net.network_id
+LEFT JOIN datum_conversions AS dc ON loc.location_id = dc.location_id AND dc.current = TRUE
+LEFT JOIN datum_list AS dl ON dc.datum_id_to = dl.datum_id
+GROUP BY loc.location_id, loc.location, loc.name, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_en;
+"
+  )
+  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_fr AS
+SELECT
+    loc.location_id,
+    loc.location AS code_de_site,
+    loc.name_fr AS nom,
+    loc.latitude,
+    loc.longitude,
+    dc.conversion_m AS altitude,
+    dl.datum_name_fr AS datum,
+    loc.note,
+    array_agg(DISTINCT proj.name_fr) AS projets,
+    array_agg(DISTINCT net.name_fr) AS réseaux
+FROM locations AS loc
+LEFT JOIN locations_projects AS loc_proj ON loc.location_id = loc_proj.location_id
+LEFT JOIN projects AS proj ON loc_proj.project_id = proj.project_id
+LEFT JOIN locations_networks AS loc_net ON loc.location_id = loc_net.location_id
+LEFT JOIN networks AS net ON loc_net.network_id = net.network_id
+LEFT JOIN datum_conversions AS dc ON loc.location_id = dc.location_id AND dc.current = TRUE
+LEFT JOIN datum_list AS dl ON dc.datum_id_to = dl.datum_id
+GROUP BY loc.location_id, loc.location, loc.name_fr, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_fr;
+"
+  )
 
   # Create a read-only account ########################################
   tryCatch({
