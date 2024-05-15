@@ -2,18 +2,18 @@
 #'
 #' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals.
 #'
-#' @param data The data.frame for which to calculate periodicity. Must contain at minimum columns named 'datetime' and 'value', with only 'datetime' needing to have  NAs.
+#' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
-#' @return A list of two objects: a data.frame with calculated periods and a Boolean delete flag, true if rows were fetched from the database (and thus need to be deleted prior to appending) or false if no data needs to be replaced
+#' @return A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
 #' @export
 
 calculate_period <- function(data, timeseries_id, con = hydrometConnect())
 {
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
   names <- names(data)
-  no_period <- DBI::dbGetQuery(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", timeseries_id, ") AND datetime NOT IN ('", paste(data$datetime, collapse = "', '"), "');"))
+  no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", timeseries_id, ") AND datetime NOT IN ('", paste(data$datetime, collapse = "', '"), "');"))
   if (nrow(no_period) > 0) {
     data <- rbind(data, no_period)
   }
@@ -42,7 +42,6 @@ calculate_period <- function(data, timeseries_id, con = hydrometConnect())
   }
 
   # Calculate the duration in days, hours, minutes, and seconds and assign to the right location in data
-  data$period <- NA
   if (nrow(changes) > 0) {
     for (j in 1:nrow(changes)) {
       days <- floor(changes$period[j] / 24)
@@ -55,7 +54,7 @@ calculate_period <- function(data, timeseries_id, con = hydrometConnect())
     data$period <- zoo::na.locf(zoo::na.locf(data$period, na.rm = FALSE), fromLast = TRUE)
 
   } else { #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
-    no_period <- DBI::dbGetQuery(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
+    no_period <- dbGetQueryDTy(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
     no_period$period <- NA
     data <- rbind(data, no_period)
     data <- data[order(data$datetime), ]
