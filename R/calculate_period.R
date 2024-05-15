@@ -54,7 +54,7 @@ calculate_period <- function(data, timeseries_id, con = hydrometConnect())
     data$period <- zoo::na.locf(zoo::na.locf(data$period, na.rm = FALSE), fromLast = TRUE)
 
   } else { #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
-    no_period <- dbGetQueryDTy(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
+    no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
     no_period$period <- NA
     data <- rbind(data, no_period)
     data <- data[order(data$datetime), ]

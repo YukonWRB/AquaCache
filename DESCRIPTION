@@ -45,7 +45,8 @@ Imports:
     tools,
     weathercan,
     zoo
-Suggests: 
+Suggests:
+    YGwater,
     DT,
     knitr,
     openxlsx,
