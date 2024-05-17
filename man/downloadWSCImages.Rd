@@ -10,6 +10,7 @@ downloadWSCImages(
   username = Sys.getenv("ECCCUSER"),
   password = Sys.getenv("ECCCPASS"),
   url = "https://collaboration.cmc.ec.gc.ca/cmc/hydrometric_additionalData/FieldData/YT/",
+  port = NULL,
   save_path = NULL
 )
 }
@@ -22,7 +23,9 @@ downloadWSCImages(
 
 \item{password}{Password to use for protected login.}
 
-\item{url}{The URL from which to get new images}
+\item{url}{The URL or SFTP server from which to get new images,}
+
+\item{port}{The port to use for SFTP connections.}
 
 \item{save_path}{Optional; path in which to save the image.}
 }
@@ -30,5 +33,5 @@ downloadWSCImages(
 A list object of type 'response' containing the image (object$content) and metadata regarding the object and how/when it was fetched.
 }
 \description{
-Fetches auto images from the WSC. Default URL is for the Yukon, adjust for other cameras/locations. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}
+Fetches auto images from the WSC/ECCC website or from the NuPoint SFTP website. Default is for ECCC and URL is for the Yukon, adjust for other cameras/locations. To fetch directly from NuPoint specify the SFTP server in the URL, add  the required username/password as variables in the .Renviron file, and point to the with the parameters below. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}
 }

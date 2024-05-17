@@ -482,7 +482,10 @@ EXECUTE FUNCTION check_approval_exists_daily();
                sub_group TEXT,
                sub_group_fr TEXT,
                description TEXT
-               description_fr TEXT);")
+               description_fr TEXT,
+               plot_default_y_orientation TEXT NOT NULL CHECK(plot_default_y_orientation IN ('normal', 'inverted')),
+                 plot_default_floor NUMERIC,
+                 plot_default_ceiling NUMERIC);")
   
   # param_types table #################
   DBI::dbExecute(con, "CREATE TABLE param_types (

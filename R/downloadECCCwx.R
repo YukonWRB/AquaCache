@@ -11,7 +11,7 @@
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param interval The interval to pass to [weathercan::weather_dl()], one of "hour", "day", "month".
 #'
-#' @return A data.table object of hydrometric data, with datetimes in UTC-0.
+#' @return A data.frame of hydrometric data, with datetimes in UTC-0.
 #' @export
 
 
