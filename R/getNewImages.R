@@ -62,12 +62,23 @@ getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent = 
       if (is.null(imgs)) {
         next
       }
-
-      for (j in 1:length(imgs)) {
-        img <- imgs[[j]]
-        insertHydrometImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = Sys.time(), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertHydrometImage
-        image_count <- image_count + 1
+      
+      # Here, the output should be either of class "response", as results from downloadWSCImages, or data.frame, as results from downloadNupointImages.
+      if (inherits(imgs, "response")) {
+        for (j in 1:length(imgs)) {
+          img <- imgs[[j]]
+          insertHydrometImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertHydrometImage
+          image_count <- image_count + 1
+        }
+      } else if (inherits(imgs, "data.frame")) {
+        for (j in 1:nrow(imgs)) {
+          insertHydrometImage(object = imgs[j, "file"], img_meta_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertHydrometImage
+          image_count <- image_count + 1
+        }
+      } else {
+        stop("Can't work with an object of class ", class(img), ". This likely occured because the output of the image fetch function used for img_meta_id ", id, " is not yielding the expected output.")
       }
+      
       count <- count + 1
       success <- c(success, id)
     }, error = function(e) {
