@@ -14,8 +14,6 @@
 
 AquaCacheApp <- function() {
   
-  Sys.getenv()
-  
   rlang::check_installed("shiny", reason = "to run this app.")
   rlang::check_installed("DT", reason = "to create interactive tables within the app.")
   rlang::check_installed("shinyFiles", reason = "to allow file uploads within the app.")
