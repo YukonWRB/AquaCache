@@ -4,8 +4,6 @@
 
 server <- function(input, output, session) {
   
-  con <- HydroMetDB::hydrometConnect()
-  
   options(shiny.maxRequestSize = 100*1024^2)
   
   # Server logic dealing with document upload #####################################
@@ -13,11 +11,11 @@ server <- function(input, output, session) {
   selectedVectors <- reactiveValues()
   document_types <- reactiveValues()
   # points, lines, polygons
-  vectors$points <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Point', 'ST_MultiPoint');")
-  vectors$lines <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_LineString', 'ST_MultiLineString');")
-  vectors$polygons <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Polygon', 'ST_MultiPolygon');")
+  vectors$points <- DBI::dbGetQuery(pool, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Point', 'ST_MultiPoint');")
+  vectors$lines <- DBI::dbGetQuery(pool, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_LineString', 'ST_MultiLineString');")
+  vectors$polygons <- DBI::dbGetQuery(pool, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Polygon', 'ST_MultiPolygon');")
   # document types
-  document_types$types <- DBI::dbGetQuery(con, "SELECT document_type_id, document_type_en FROM document_types;")
+  document_types$types <- DBI::dbGetQuery(pool, "SELECT document_type_id, document_type_en FROM document_types;")
   
   observeEvent(input$tabsetPanel1 == "addDocument", {
     types <- setNames(document_types$types$document_type_id, document_types$types$document_type_en)
@@ -115,7 +113,7 @@ server <- function(input, output, session) {
       ))
       return()
     }
-    exist_name <- DBI::dbGetQuery(con, paste0("SELECT name FROM documents WHERE name = '", input$documentName, "';"))
+    exist_name <- DBI::dbGetQuery(pool, paste0("SELECT name FROM documents WHERE name = '", input$documentName, "';"))
     if (nrow(exist_name) != 0) {
       output$documentUploadStatus <- showModal(modalDialog(
         title = "Document Upload Status",
@@ -170,7 +168,7 @@ server <- function(input, output, session) {
                                publish_date = input$documentDate,
                                url = if (input$documentURL == "") NULL else input$documentURL,
                                geoms = if (length(geom_ids) == 0) NULL else geom_ids,
-                               con = con
+                               con = pool
         )
         output$documentUploadStatus <- showModal(modalDialog(
           title = "Document Upload Status",
@@ -207,7 +205,7 @@ server <- function(input, output, session) {
   locations <- reactiveValues()
   selectedLocation <- reactiveValues()
   
-  locations$locations <- DBI::dbGetQuery(con, "SELECT location, name, latitude, longitude, location_id FROM locations;")
+  locations$locations <- DBI::dbGetQuery(pool, "SELECT location, name, latitude, longitude, location_id FROM locations;")
   observeEvent(input$associateLocation, {
     showModal(modalDialog(
       title = "Associate image with a location",
@@ -234,7 +232,7 @@ server <- function(input, output, session) {
                  collapse = "<br>")
       )
     })
-    selectedLocation$img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", selectedLocation$location$location_id, " AND img_type = 'manual';"))[1,1]
+    selectedLocation$img_meta_id <- DBI::dbGetQuery(pool, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", selectedLocation$location$location_id, " AND img_type = 'manual';"))[1,1]
     if (is.na(selectedLocation$img_meta_id)) { # Create a new entry to images_index since none exists
       new_img_idx <- data.frame(location_id = selectedLocation$location$location_id,
                                 public = TRUE,
@@ -243,8 +241,8 @@ server <- function(input, output, session) {
                                 first_img = Sys.time(),
                                 last_img = Sys.time()
       )
-      DBI::dbAppendTable(con, "images_index", new_img_idx)
-      selectedLocation$img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", selectedLocation$location$location_id, " AND img_type = 'manual';"))[1,1]
+      DBI::dbAppendTable(pool, "images_index", new_img_idx)
+      selectedLocation$img_meta_id <- DBI::dbGetQuery(pool, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", selectedLocation$location$location_id, " AND img_type = 'manual';"))[1,1]
     }
   })
   observeEvent(input$addImageBtn, {
@@ -265,7 +263,7 @@ server <- function(input, output, session) {
       return()
     }
     # Check if the combination of image_meta_id and datetime exists in the images table. If it does, ask the user via  modal if it should be overwritten.
-    img_exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images WHERE img_meta_id = ", selectedLocation$img_meta_id, " AND datetime = '", lubridate::floor_date(input$imageDatetime, "minute"), "';"))
+    img_exists <- DBI::dbGetQuery(pool, paste0("SELECT img_meta_id FROM images WHERE img_meta_id = ", selectedLocation$img_meta_id, " AND datetime = '", lubridate::floor_date(input$imageDatetime, "minute"), "';"))
     if (nrow(img_exists) > 0) {
       output$imageUploadStatus <- showModal(modalDialog(
         title = "Image Upload Status",
@@ -282,7 +280,7 @@ server <- function(input, output, session) {
                             datetime = input$imageDatetime,
                             description = input$imageDesc,
                             image_type = "manual",
-                            con = con
+                            con = pool
         )
         output$imageUploadStatus <- showModal(modalDialog(
           title = "Image Upload Status",
@@ -300,7 +298,7 @@ server <- function(input, output, session) {
                           datetime = input$imageDatetime,
                           description = input$imageDesc,
                           image_type = "manual",
-                          con = con
+                          con = pool
       )
       output$imageUploadStatus <- showModal(modalDialog(
         title = "Image Upload Status",
@@ -349,7 +347,7 @@ server <- function(input, output, session) {
       "Please be patient, this could take a while!",
       easyClose = TRUE
     ))
-    insertHydrometRaster(con = con,
+    insertHydrometRaster(con = pool,
                          raster = raster$path,
                          description = input$rasterDesc,
                          units = if (input$rasterUnits == "") NULL else input$rasterUnits,
@@ -482,7 +480,7 @@ server <- function(input, output, session) {
                            layer_name = input$layerName,
                            feature_name_col = vector$selected_feature_name_col,
                            description_col = vector$selected_feature_desc_col,
-                           con = con)
+                           con = pool)
       output$vectorUploadStatus <- showModal(modalDialog(
         title = "Vector Upload Status",
         "Vector has been uploaded to the database.",
@@ -506,7 +504,7 @@ server <- function(input, output, session) {
                            layer_name = input$layerName,
                            feature_name = input$featureName,
                            description = input$featureDesc,
-                           con = con)
+                           con = pool)
       output$vectorUploadStatus <- showModal(modalDialog(
         title = "Vector Upload Status",
         "Vector has been uploaded to the database.",
