@@ -60,7 +60,7 @@ Suggests:
     shinyjs,
     testthat (>= 3.0.0)
 Remotes:
-    github::ropensci/weathercan
+    github::ropensci/weathercan,
     github:stenevang/sftp
 VignetteBuilder: 
     knitr
