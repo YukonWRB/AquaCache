@@ -1,12 +1,12 @@
 #' Get images from the WSC
 #'
-#' Fetches auto images from the WSC. Default URL is for the Yukon, adjust for other cameras/locations. Intended to be called by function [getNewImages()]
+#' Fetches auto images from the WSC/ECCC website. Default is for the Yukon, adjust for other cameras/locations. To fetch directly from NuPoint instead see [downloadNupointImages()]. Intended to be called by function [getNewImages()].
 #'
 #' @param location The location for which to get images.
-#' @param start_datetime The earliest datetime to start pulling images from.
+#' @param start_datetime The earliest datetime to start pulling images from, as a POSIXct object.
 #' @param username Username to use for password-protected login.
 #' @param password Password to use for protected login.
-#' @param url The URL from which to get new images
+#' @param url The URL from which to get new images.
 #' @param save_path Optional; path in which to save the image.
 #'
 #' @return A list object of type 'response' containing the image (object$content) and metadata regarding the object and how/when it was fetched.
@@ -15,6 +15,10 @@
 
 downloadWSCImages <- function(location, start_datetime, username = Sys.getenv("ECCCUSER"), password = Sys.getenv("ECCCPASS"), url = "https://collaboration.cmc.ec.gc.ca/cmc/hydrometric_additionalData/FieldData/YT/", save_path = NULL) {
 
+  if (!inherits(start_datetime, "POSIXct")){
+    stop("Parameter start_datetime must be a POSIXct.")
+  }
+  
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
   saved_files <- list.files(paste0(tempdir(), "/downloadWSCImages"))
 
@@ -23,7 +27,7 @@ downloadWSCImages <- function(location, start_datetime, username = Sys.getenv("E
   } else {
     saved_files <- data.frame(file = saved_files,
                               datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"), tz = "UTC")
-    ok <- saved_files[saved_files$datetime > Sys.time() - 10*60 , ]
+    ok <- saved_files[saved_files$datetime > Sys.time() - 2*60 , ]
     if (nrow(ok) > 0) {
       target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
       tbl <- readRDS(paste0(tempdir(), "/downloadWSCImages/", target_file$file))

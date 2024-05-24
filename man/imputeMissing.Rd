@@ -44,7 +44,7 @@ Imputed values added to the database.
 \description{
 \subsection{Note}{
 
-See function \code{\link[=predictMissing]{predictMissing()}} for machine learning predictions, especially useful if there are no timeseries than be be used with a direct relationship such as predicting flow using level, or level using multiple other level stations.
+See function predictMissing() (not finished yet!) for machine learning predictions, especially useful if there are no timeseries than be be used with a direct relationship such as predicting flow using level, or level using multiple other level stations.
 
 Impute missing values using either a nearby timeseries or using linear or spline interpolation on the time-series itself. If using nearby timeseries, they can be of same or of other parameters, as specified with parameter 'extra_params'. User interaction is necessary to select the most appropriate timeseries and to review the result of imputation before updating the database.
 

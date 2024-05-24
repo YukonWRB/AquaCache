@@ -7,14 +7,14 @@
 calculate_period(data, timeseries_id, con = hydrometConnect())
 }
 \arguments{
-\item{data}{The data.frame for which to calculate periodicity. Must contain at minimum columns named 'datetime' and 'value', with only 'datetime' needing to have  NAs.}
+\item{data}{The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values.}
 
 \item{timeseries_id}{The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided \code{data}.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }
 \value{
-A list of two objects: a data.frame with calculated periods and a Boolean delete flag, true if rows were fetched from the database (and thus need to be deleted prior to appending) or false if no data needs to be replaced
+A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
 }
 \description{
 Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals.

@@ -16,13 +16,13 @@ downloadWSCImages(
 \arguments{
 \item{location}{The location for which to get images.}
 
-\item{start_datetime}{The earliest datetime to start pulling images from.}
+\item{start_datetime}{The earliest datetime to start pulling images from, as a POSIXct object.}
 
 \item{username}{Username to use for password-protected login.}
 
 \item{password}{Password to use for protected login.}
 
-\item{url}{The URL from which to get new images}
+\item{url}{The URL from which to get new images.}
 
 \item{save_path}{Optional; path in which to save the image.}
 }
@@ -30,5 +30,5 @@ downloadWSCImages(
 A list object of type 'response' containing the image (object$content) and metadata regarding the object and how/when it was fetched.
 }
 \description{
-Fetches auto images from the WSC. Default URL is for the Yukon, adjust for other cameras/locations. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}
+Fetches auto images from the WSC/ECCC website. Default is for the Yukon, adjust for other cameras/locations. To fetch directly from NuPoint instead see \code{\link[=downloadNupointImages]{downloadNupointImages()}}. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}.
 }

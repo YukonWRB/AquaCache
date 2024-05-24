@@ -24,7 +24,7 @@ downloadECCCwx(
 \item{interval}{The interval to pass to \code{\link[weathercan:weather_dl]{weathercan::weather_dl()}}, one of "hour", "day", "month".}
 }
 \value{
-A data.table object of hydrometric data, with datetimes in UTC-0.
+A data.frame of hydrometric data, with datetimes in UTC-0.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

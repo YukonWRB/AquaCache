@@ -6,7 +6,7 @@
 #' Use this function to add a vector file to the database. Ensures that database constraints are met and permits spatial queries. If you need to delete (not overwrite) a vector for any reason you'll have to use SQL (perhaps via R using the DBI package).
 #'
 #' ## Extracting from the database
-#' Use function [fetchVector()] to retrieve a point, line, or polygon from the database.
+#' Use function [YGwater::getVector()] to retrieve a point, line, or polygon from the database.
 #'
 #' ## Attribute tables:
 #' The attribute table of the object will be discarded except for the columns specified in parameters `feature_name_col` and `description_col` to work with the existing database column names and to enable many to many relationships within the database. If you want vector files with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using [insertHydrometDocument()]. Note however that this precludes using the object's spatial attributes within the database!

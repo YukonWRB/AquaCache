@@ -4,18 +4,25 @@
 
 server <- function(input, output, session) {
   
-  con <- hydrometConnect()
+  con <- HydroMetDB::hydrometConnect()
   
   options(shiny.maxRequestSize = 100*1024^2)
   
   # Server logic dealing with document upload #####################################
   vectors <- reactiveValues()
   selectedVectors <- reactiveValues()
+  document_types <- reactiveValues()
   # points, lines, polygons
   vectors$points <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Point', 'ST_MultiPoint');")
   vectors$lines <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_LineString', 'ST_MultiLineString');")
   vectors$polygons <- DBI::dbGetQuery(con, "SELECT layer_name, feature_name, description, geom_id FROM vectors WHERE geom_type IN ('ST_Polygon', 'ST_MultiPolygon');")
+  # document types
+  document_types$types <- DBI::dbGetQuery(con, "SELECT document_type_id, document_type_en FROM document_types;")
   
+  observeEvent(input$tabsetPanel1 == "addDocument", {
+    types <- setNames(document_types$types$document_type_id, document_types$types$document_type_en)
+    updateSelectizeInput(session, "documentType", choices = types)
+  })
   # Select points in pop-up and window
   observeEvent(input$associatePoints, {
     showModal(modalDialog(
@@ -134,10 +141,14 @@ server <- function(input, output, session) {
       return()
     }
     
-    authors <- unlist(strsplit(input$documentAuthors, "\n"))
-    geom_ids <- c(selectedVectors$points$geom_id, selectedVectors$lines$geom_id, selectedVectors$polygons$geom_id)
-    print(geom_ids)
+    if (input$documentAuthors == "") {
+      authors <- NULL
+    } else {
+      authors <- unlist(strsplit(input$documentAuthors, "\n"))
+    }
     
+    geom_ids <- c(selectedVectors$points$geom_id, selectedVectors$lines$geom_id, selectedVectors$polygons$geom_id)
+
     if (length(geom_ids) == 0) {
       output$documentUploadStatus <- showModal(modalDialog(
         title = "Document Upload Status",
@@ -150,15 +161,16 @@ server <- function(input, output, session) {
       
       observeEvent(input$okButton, {
         removeModal()
-        authors <- strsplit(input$documentAuthors, "\n")
+        
         insertHydrometDocument(path = input$documentFile$datapath,
                                name = input$documentName,
-                               type = input$documentType,
+                               type = document_types$types[document_types$types$document_type_id == input$documentType, "document_type_en"],
                                description = input$documentDesc,
-                               authors = unlist(authors),
+                               authors = authors,
                                publish_date = input$documentDate,
                                url = if (input$documentURL == "") NULL else input$documentURL,
-                               geoms = if (length(geom_ids) == 0) NULL else geom_ids
+                               geoms = if (length(geom_ids) == 0) NULL else geom_ids,
+                               con = con
         )
         output$documentUploadStatus <- showModal(modalDialog(
           title = "Document Upload Status",
@@ -173,7 +185,7 @@ server <- function(input, output, session) {
     } else {
       insertHydrometDocument(path = input$documentFile$datapath,
                              name = input$documentName,
-                             type = input$documentType,
+                             type = document_types$types[document_types$types$document_type_id == input$documentType, "document_type_en"],
                              description = input$documentDesc,
                              authors = authors,
                              publish_date = input$documentDate,

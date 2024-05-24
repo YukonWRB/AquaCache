@@ -142,7 +142,7 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
           inDB <- DBI::dbGetQuery(con, paste0("SELECT target_datetime, datetime, value, note, sample_class FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
         }
         
-        if (nrow(inDB) > 0) {
+        if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch
           if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
             inDB <- inDB[inDB$datetime >= min(inRemote$datetime) , ]
           }
@@ -222,18 +222,27 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
               #make the new entry into table timeseries
               end <- max(inRemote$datetime)
               DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+              if (min(inRemote$datetime) < min(inDB$datetime)) { #If the remote data starts before the local data, update the start_datetime in the timeseries table
+                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(inRemote$datetime), "' WHERE timeseries_id = ", tsid, ";"))
+              }
             }
-          )
+          ) # End of DB transaction block
           if (category == "continuous") {
             #Recalculate daily means and statistics
             calculate_stats(timeseries_id = tsid,
                             con = con,
                             start_recalc = as.Date(substr(datetime, 1, 10)))
           }
-        } else { # There was data in the remote but no mismatch
+        } else { # mismatch is FALSE: there was data in the remote but no mismatch
           DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+          # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
+          start_dt <- DBI::dbGetQuery(con, paste0("SELECT start_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))[[1]]
+          if (start_dt > min(inRemote$datetime)) {
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(inRemote$datetime), "' WHERE timeseries_id = ", tsid, ";"))
+            message("The start_datetime in table timeseries was found to be incorrect for timeseries ", tsid, "; it has been updated to the earliest data I could find in the remote. Depending on what you set for parameter start_datetime this may not be the whole picture but this will be checked when this function is run again with an earlier start_datetime.")
+          }
         }
-      } else { # There was no new data in remote
+      } else { # There was no data in remote for the date range specified
         DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
       }
     }, error = function(e) {

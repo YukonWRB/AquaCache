@@ -8,7 +8,7 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
-#' @return An SQLite database in the folder location specified by 'path'.
+#' @return New tables in the target postgres database. 
 #' @export
 #'
 
@@ -381,11 +381,18 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  UNIQUE (project_id, location_id));")
   
 
-  # documents table #################
+  # documents tables #################
+  DBI::dbExecute(con, "CREATE TABLE if not exists document_types (
+                 document_type_id SERIAL PRIMARY KEY,
+                 document_type_en TEXT NOT NULL UNIQUE,
+                 document_type_fr TEXT NOT NULL UNIQUE,
+                 description_en TEXT,
+                 description_fr TEXT);")
+  
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
-                 document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other')),
+                 type INTEGER NOT NULL,
                  has_points BOOLEAN NOT NULL DEFAULT FALSE,
                  has_lines BOOLEAN NOT NULL DEFAULT FALSE,
                  has_polygons BOOLEAN NOT NULL DEFAULT FALSE,
@@ -394,7 +401,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  publish_date DATE,
                  description TEXT NOT NULL,
                  format TEXT NOT NULL,
-                 document BYTEA NOT NULL);")
+                 document BYTEA NOT NULL
+                 FOREIGN KEY (type) REFERENCES document_types(document_type_id) ON UPDATE CASCADE ON DELETE CASCADE);")
   DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, protocol, grading scheme, metadata, other'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.has_points IS 'Flag to indicate that the document_spatial has a point entry for this document.'")
@@ -482,7 +490,10 @@ EXECUTE FUNCTION check_approval_exists_daily();
                sub_group TEXT,
                sub_group_fr TEXT,
                description TEXT
-               description_fr TEXT);")
+               description_fr TEXT,
+               plot_default_y_orientation TEXT NOT NULL CHECK(plot_default_y_orientation IN ('normal', 'inverted')),
+                 plot_default_floor NUMERIC,
+                 plot_default_ceiling NUMERIC);")
   
   # param_types table #################
   DBI::dbExecute(con, "CREATE TABLE param_types (
@@ -929,6 +940,69 @@ GROUP BY
 ORDER BY
     datetime;
 ")
+  
+  # Views for timeseries metadata
+  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_en AS",
+                            "SELECT ts.timeseries_id, ptypes.param_type AS parameter_type, params.group AS parameter_group, ts.category, params.param_name AS parameter_name, params.unit, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude, ts.public",
+                            "FROM timeseries AS ts ",
+                            "JOIN locations AS loc ON ts.location_id = loc.location_id ",
+                            "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
+                            "LEFT JOIN param_types AS ptypes ON ts.param_type = ptypes.param_type_code",
+                            "ORDER BY ts.timeseries_id;"))
+  
+  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_fr AS",
+                            "SELECT ts.timeseries_id, ptypes.param_type_fr AS type_de_paramètre, params.group_fr AS groupe_de_paramètres, ts.category, params.param_name_fr AS nom_paramètre, params.unit AS unités, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS début, ts.end_datetime AS fin, ts.note, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude, ts.public",
+                            "FROM timeseries AS ts ",
+                            "JOIN locations AS loc ON ts.location_id = loc.location_id ",
+                            "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
+                            "LEFT JOIN param_types AS ptypes ON ts.param_type = ptypes.param_type_code",
+                            "ORDER BY ts.timeseries_id;"))
+  
+  # View for location metadata
+  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_en AS
+SELECT
+    loc.location_id,
+    loc.location AS location_code,
+    loc.name AS name,
+    loc.latitude,
+    loc.longitude,
+    dc.conversion_m AS elevation,
+    dl.datum_name_en AS datum,
+    loc.note,
+    array_agg(DISTINCT proj.name) AS projects,
+    array_agg(DISTINCT net.name) AS networks
+FROM locations AS loc
+LEFT JOIN locations_projects AS loc_proj ON loc.location_id = loc_proj.location_id
+LEFT JOIN projects AS proj ON loc_proj.project_id = proj.project_id
+LEFT JOIN locations_networks AS loc_net ON loc.location_id = loc_net.location_id
+LEFT JOIN networks AS net ON loc_net.network_id = net.network_id
+LEFT JOIN datum_conversions AS dc ON loc.location_id = dc.location_id AND dc.current = TRUE
+LEFT JOIN datum_list AS dl ON dc.datum_id_to = dl.datum_id
+GROUP BY loc.location_id, loc.location, loc.name, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_en;
+"
+  )
+  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_fr AS
+SELECT
+    loc.location_id,
+    loc.location AS code_de_site,
+    loc.name_fr AS nom,
+    loc.latitude,
+    loc.longitude,
+    dc.conversion_m AS altitude,
+    dl.datum_name_fr AS datum,
+    loc.note,
+    array_agg(DISTINCT proj.name_fr) AS projets,
+    array_agg(DISTINCT net.name_fr) AS réseaux
+FROM locations AS loc
+LEFT JOIN locations_projects AS loc_proj ON loc.location_id = loc_proj.location_id
+LEFT JOIN projects AS proj ON loc_proj.project_id = proj.project_id
+LEFT JOIN locations_networks AS loc_net ON loc.location_id = loc_net.location_id
+LEFT JOIN networks AS net ON loc_net.network_id = net.network_id
+LEFT JOIN datum_conversions AS dc ON loc.location_id = dc.location_id AND dc.current = TRUE
+LEFT JOIN datum_list AS dl ON dc.datum_id_to = dl.datum_id
+GROUP BY loc.location_id, loc.location, loc.name_fr, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_fr;
+"
+  )
 
   # Create a read-only account ########################################
   tryCatch({

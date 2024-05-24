@@ -3,14 +3,14 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See [fetchDocument()] to get a document out again.
+#' This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See [YGwater::getDocument()] to get a document out again.
 #'
 #' ## Locations, lines, and polygons
 #' Any document can be associated with locations (points), lines, polygons, or any combination thereof. Please reference the table 'vectors' to give the correct geom_id(s) for your desired geoms.
 #'
 #' @param path Valid path including extension to the document to upload.
 #' @param name A concise but descriptive name to give the document.
-#' @param type Type of document. Must be one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other'.
+#' @param type Type of document, which must exist in the database already. Currently one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'metadata', 'audit'.
 #' @param description A text description of what the document is. Please be detailed!
 #' @param authors Document author(s) if known. Specify multiple authors as individual elements of a character vector, such as c("author 1", "author 2").
 #' @param publish_date The date of publication, as a Date object.
@@ -37,8 +37,9 @@ insertHydrometDocument <- function(path, name, type, description, authors = NULL
     stop("Minimum character length for 'description' is 5. Try harder.")
   }
   type <- tolower(type)
-  if (!(type %in% c('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other'))) {
-    stop("Your specified document type is invalid. Refer to the help file.")
+  db_types <- DBI::dbGetQuery(con, "SELECT document_type_id, document_type_en FROM document_types;")
+  if (!(type %in% db_types$document_type_en)) {
+    stop("Your specified document type is not in the DB. This is what I see in there now:\n  ", paste(db_types$document_type_en, collapse = "\n  "))
   }
   #Check that the name doesn't already exist
   name_check <- DBI::dbGetQuery(con, paste0("SELECT name FROM documents WHERE name = '", name, "';"))
@@ -65,7 +66,8 @@ insertHydrometDocument <- function(path, name, type, description, authors = NULL
   extension <- tools::file_ext(path)
   file <- hexView::readRaw(path)$fileRaw
 
-  DBI::dbExecute(con, paste0("INSERT INTO documents (name, document_type, description, format, document) VALUES ('", name, "', '", type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+  assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
+  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
   id <- DBI::dbGetQuery(con, paste0("SELECT document_id FROM documents WHERE name = '", name, "';"))
 
   if (!is.null(authors)) {

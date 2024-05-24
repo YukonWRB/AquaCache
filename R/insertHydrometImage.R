@@ -5,7 +5,7 @@
 #'
 #' Images auto-generated on a regular basis should be updated in the database using function [getNewImages()] instead of this function. For one-off images, read on.
 #'
-#' This function facilitates the addition of one image at a time to the database in the 'images' table. Each image must be linked to a specific location_id from the locations table. Adding an image directly to the database is not possible, since the file must be converted to a binary object before loading. See [fetchImage()] to get the image out again.
+#' This function facilitates the addition of one image at a time to the database in the 'images' table. Each image must be linked to a specific location_id from the locations table. Adding an image directly to the database is not possible, since the file must be converted to a binary object before loading. See [YGwater::getImage()] to get the image out again.
 #'
 #' @param object Valid path including extension to the document to upload, or an object of class 'response' such as that provided by [downloadWSCImages()].
 #' @param img_meta_id The img_meta_id, from the table images_index, corresponding to the image location and type. Set NULL if there is no img_meta_id yet.
@@ -97,14 +97,25 @@ insertHydrometImage <- function(object, img_meta_id, datetime, fetch_datetime = 
 
   #Add to the database and update tables
   exist_img <- DBI::dbGetQuery(con, paste0("SELECT datetime FROM images WHERE datetime = '", datetime, "' AND img_meta_id = ", img_meta_id, ";"))[1,1]
+  update <- FALSE
   if (!is.na(exist_img)) {
-    warning("There is already an image in the database for this img_meta_id and datetime ", datetime, ". Deleting the old image and inserting the new one.")
-    DBI::dbExecute(con, paste0("DELETE FROM images WHERE datetime = '", datetime, "' and img_meta_id = ", img_meta_id, ";"))
+    warning("There is already an image in the database for this img_meta_id and datetime ", datetime, ". Updating the image, keeping the same img_id.")
+    # DBI::dbExecute(con, paste0("DELETE FROM images WHERE datetime = '", datetime, "' and img_meta_id = ", img_meta_id, ";"))
+    update <- TRUE
   }
   if (!is.null(fetch_datetime)) {
-    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+    if (update) {
+      DBI::dbExecute(con, paste0("UPDATE images SET fetch_datetime = '", fetch_datetime, "', description = '", description, "', format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE img_meta_id = ", img_meta_id, " AND datetime = '", datetime, "';"))
+      
+    } else {
+      DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+    }
   } else {
-    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, description, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+    if (update){
+      DBI::dbExecute(con, paste0("UPDATE images SET description = '", description, "', format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE img_meta_id = ", img_meta_id, " AND datetime = '", datetime, "';"))
+    } else {
+      DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, description, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+    }
   }
   img_times <- DBI::dbGetQuery(con, paste0("SELECT first_img, last_img FROM images_index WHERE img_meta_id = ", img_meta_id, ";"))
 

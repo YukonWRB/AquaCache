@@ -12,7 +12,7 @@
 #' @return Opens the Shiny application.
 #' @export
 
-hydrometApp <- function() {
+AquaCacheApp <- function() {
   
   Sys.getenv()
   
