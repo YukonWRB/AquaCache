@@ -5,13 +5,13 @@ ui <- fluidPage(
   
   shinyjs::useShinyjs(),
   
-  titlePanel("Hydromet Data Entry App"),
+  titlePanel("AquaCache Data Entry App"),
   tabsetPanel(id = "tabsetPanel1",
               # Add Document tab ############################################################################################################
               tabPanel("Add Document", value = "addDocument",
                        fileInput("documentFile", "Choose a document to upload"),
                        textInput("documentName", "Enter a descriptive name for the document"),
-                       selectizeInput("documentType", "Select the type of document", choices = c("thesis", "report", "well log", "conference paper", "poster", "journal article", "map", "graph", "protocol", "grading scheme", "metadata", "other"), multiple = TRUE, options = list(maxItems = 1)),
+                       selectizeInput("documentType", "Select the type of document", choices = "placeholder"),
                        textInput("documentDesc", "Enter a detailled description of the document"),
                        textAreaInput("documentAuthors", "Enter the authors of the document (one per line)", cols = 1, placeholder = "Firstname Lastname"),
                        dateInput("documentDate", "Enter the publish date of the document"),

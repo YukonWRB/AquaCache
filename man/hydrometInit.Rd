@@ -12,7 +12,7 @@ hydrometInit(con = hydrometConnect(), overwrite = FALSE)
 \item{overwrite}{TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.}
 }
 \value{
-An SQLite database in the folder location specified by 'path'.
+New tables in the target postgres database.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

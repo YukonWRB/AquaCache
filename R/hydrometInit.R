@@ -8,7 +8,7 @@
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
-#' @return An SQLite database in the folder location specified by 'path'.
+#' @return New tables in the target postgres database. 
 #' @export
 #'
 
@@ -381,11 +381,18 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  UNIQUE (project_id, location_id));")
   
 
-  # documents table #################
+  # documents tables #################
+  DBI::dbExecute(con, "CREATE TABLE if not exists document_types (
+                 document_type_id SERIAL PRIMARY KEY,
+                 document_type_en TEXT NOT NULL UNIQUE,
+                 document_type_fr TEXT NOT NULL UNIQUE,
+                 description_en TEXT,
+                 description_fr TEXT);")
+  
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
-                 document_type TEXT NOT NULL CHECK(document_type IN ('thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other')),
+                 type INTEGER NOT NULL,
                  has_points BOOLEAN NOT NULL DEFAULT FALSE,
                  has_lines BOOLEAN NOT NULL DEFAULT FALSE,
                  has_polygons BOOLEAN NOT NULL DEFAULT FALSE,
@@ -394,7 +401,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  publish_date DATE,
                  description TEXT NOT NULL,
                  format TEXT NOT NULL,
-                 document BYTEA NOT NULL);")
+                 document BYTEA NOT NULL
+                 FOREIGN KEY (type) REFERENCES document_types(document_type_id) ON UPDATE CASCADE ON DELETE CASCADE);")
   DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, protocol, grading scheme, metadata, other'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.has_points IS 'Flag to indicate that the document_spatial has a point entry for this document.'")

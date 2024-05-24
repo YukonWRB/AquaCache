@@ -21,7 +21,7 @@ insertHydrometDocument(
 
 \item{name}{A concise but descriptive name to give the document.}
 
-\item{type}{Type of document. Must be one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'grading scheme', 'metadata', 'other'.}
+\item{type}{Type of document, which must exist in the database already. Currently one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'metadata', 'audit'.}
 
 \item{description}{A text description of what the document is. Please be detailed!}
 
