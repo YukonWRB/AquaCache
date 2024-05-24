@@ -4,6 +4,13 @@
 
 server <- function(input, output, session) {
   
+  library(shiny)
+  library(shinyjs)
+  library(HydroMetDB)
+  
+  
+  
+  
   options(shiny.maxRequestSize = 100*1024^2)
   
   pool <- hydrometConnect()
