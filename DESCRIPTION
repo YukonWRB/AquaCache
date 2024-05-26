@@ -1,6 +1,6 @@
 Package: HydroMetDB
 Title: Hydrological database creation and maintenance
-Version: 1.9.0
+Version: 1.9.1
 Authors@R: c(
     person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -52,12 +52,14 @@ Suggests:
     knitr,
     openxlsx,
     plotly,
+    pool,
     rmarkdown,
     rstudioapi,
     sf,
     shiny,
     shinyFiles,
     shinyjs,
+    shinyWidgets,
     testthat (>= 3.0.0)
 Remotes:
     github::ropensci/weathercan,

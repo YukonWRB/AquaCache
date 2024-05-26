@@ -4,16 +4,8 @@
 
 server <- function(input, output, session) {
   
-  library(shiny)
-  library(shinyjs)
-  library(HydroMetDB)
-  
-  
-  
   
   options(shiny.maxRequestSize = 100*1024^2)
-  
-  pool <- hydrometConnect()
   
   # Server logic dealing with document upload #####################################
   vectors <- reactiveValues()
@@ -29,6 +21,9 @@ server <- function(input, output, session) {
   observeEvent(input$tabsetPanel1 == "addDocument", {
     types <- setNames(document_types$types$document_type_id, document_types$types$document_type_en)
     updateSelectizeInput(session, "documentType", choices = types)
+    output$documentFile <- renderUI({
+      fileInput("documentFile", "Choose a document to upload")
+    })
   })
   # Select points in pop-up and window
   observeEvent(input$associatePoints, {
@@ -176,9 +171,33 @@ server <- function(input, output, session) {
                                authors = authors,
                                publish_date = input$documentDate,
                                url = if (input$documentURL == "") NULL else input$documentURL,
+                               public = input$documentPublic,
                                geoms = if (length(geom_ids) == 0) NULL else geom_ids,
                                con = pool
         )
+        output$documentFile <- renderUI({
+          fileInput("documentFile", "Choose a document to upload")
+        })
+        updateTextInput(session, "documentName", value = "")
+        updateSelectizeInput(session, "documentType", selected = "")
+        updateTextInput(session, "documentDesc", value = "")
+        updateTextAreaInput(session, "documentAuthors", placeholder = "Firstname Lastname", value = "")
+        updateDateInput(session, "documentDate", value = Sys.Date())
+        updateTextInput(session, "documentURL", value = "", placeholder = "Optional but recommended!")
+        updateCheckboxInput(session, "documentPublic", value = FALSE)
+        
+        selectedVectors$points$geom_id <- selectedVectors$lines$geom_id <- selectedVectors$polygons$geom_id <- NULL
+        
+        output$associatedLines <- renderUI({
+          return(NULL)
+        })
+        output$associatedPolygons <- renderUI({
+          return(NULL)
+        })
+        output$associatedPoints <- renderUI({
+          return(NULL)
+        })
+        
         output$documentUploadStatus <- showModal(modalDialog(
           title = "Document Upload Status",
           "Document has been uploaded to the database.",
@@ -197,8 +216,30 @@ server <- function(input, output, session) {
                              authors = authors,
                              publish_date = input$documentDate,
                              url = if (input$documentURL == "") NULL else input$documentURL,
+                             public = input$documentPublic,
                              geoms = geom_ids
       )
+      
+      updateTextInput(session, "documentName", value = "")
+      updateSelectizeInput(session, "documentType", selected = "")
+      updateTextInput(session, "documentDesc", value = "")
+      updateTextAreaInput(session, "documentAuthors", placeholder = "Firstname Lastname", value = "")
+      updateDateInput(session, "documentDate", value = Sys.Date())
+      updateTextInput(session, "documentURL", value = "", placeholder = "Optional but recommended!")
+      updateCheckboxInput(session, "documentPublic", value = FALSE)
+      
+      selectedVectors$points$geom_id <- selectedVectors$lines$geom_id <- selectedVectors$polygons$geom_id <- NULL
+      
+      output$associatedLines <- renderUI({
+        return(NULL)
+      })
+      output$associatedPolygons <- renderUI({
+        return(NULL)
+      })
+      output$associatedPoints <- renderUI({
+        return(NULL)
+      })
+      
       output$documentUploadStatus <- showModal(modalDialog(
         title = "Document Upload Status",
         "Document has been uploaded to the database.",

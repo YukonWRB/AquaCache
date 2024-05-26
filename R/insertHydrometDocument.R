@@ -15,13 +15,14 @@
 #' @param authors Document author(s) if known. Specify multiple authors as individual elements of a character vector, such as c("author 1", "author 2").
 #' @param publish_date The date of publication, as a Date object.
 #' @param url An optional url (could also be a DOI) for the document.
+#' @param public Logical, whether the document should be publicly available. Default is FALSE.
 #' @param geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-insertHydrometDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, geoms = NULL, con = hydrometConnect()) {
+insertHydrometDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, public = FALSE, geoms = NULL, con = hydrometConnect()) {
 
   #Checks
   if (length(path) > 1) {
@@ -67,7 +68,7 @@ insertHydrometDocument <- function(path, name, type, description, authors = NULL
   file <- hexView::readRaw(path)$fileRaw
 
   assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
-  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, public) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "'", public, ");"))
   id <- DBI::dbGetQuery(con, paste0("SELECT document_id FROM documents WHERE name = '", name, "';"))
 
   if (!is.null(authors)) {

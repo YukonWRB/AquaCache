@@ -401,7 +401,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  publish_date DATE,
                  description TEXT NOT NULL,
                  format TEXT NOT NULL,
-                 document BYTEA NOT NULL
+                 document BYTEA NOT NULL,
+                 public BOOLEAN NOT NULL DEFAULT FALSE,
                  FOREIGN KEY (type) REFERENCES document_types(document_type_id) ON UPDATE CASCADE ON DELETE CASCADE);")
   DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, protocol, grading scheme, metadata, other'")

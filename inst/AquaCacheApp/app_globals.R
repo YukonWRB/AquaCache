@@ -1,5 +1,6 @@
 library(shiny)
 library(shinyjs)
+library(shinyWidgets)
 library(HydroMetDB)
 
 # Establish database connection
