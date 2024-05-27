@@ -9,13 +9,15 @@ ui <- fluidPage(
   tabsetPanel(id = "tabsetPanel1",
               # Add Document tab ############################################################################################################
               tabPanel("Add Document", value = "addDocument",
-                       fileInput("documentFile", "Choose a document to upload"),
-                       textInput("documentName", "Enter a descriptive name for the document"),
+                       uiOutput("documentFile"),
+                       # fileInput("documentFile", "Choose a document to upload"),
+                       textInput("documentName", "Enter a descriptive name for the document (must be unique in the database)"),
                        selectizeInput("documentType", "Select the type of document", choices = "placeholder"),
-                       textInput("documentDesc", "Enter a detailled description of the document"),
+                       textInput("documentDesc", "Enter a detailled description of the document (think about key words future users will search)"),
                        textAreaInput("documentAuthors", "Enter the authors of the document (one per line)", cols = 1, placeholder = "Firstname Lastname"),
                        dateInput("documentDate", "Enter the publish date of the document"),
                        textInput("documentURL", "Enter the URL or DOI of the document", placeholder = "Optional but recommended!"),
+                       checkboxInput("documentPublic", "Make the document public?", value = FALSE),
                        actionButton("associatePoints", "Associate with locations/points", style = c("margin-bottom: 5px;")),
                        uiOutput("associatedPoints"),
                        actionButton("associateLines", "Associate with lines", style = c("margin-bottom: 5px;")),
@@ -31,7 +33,7 @@ ui <- fluidPage(
                        actionButton("associateLocation", "Associate with a location", style = c("margin-bottom: 5px;")),
                        uiOutput("associatedLocation", style = c("margin-bottom: 10px;")),
                        shinyWidgets::airDatepickerInput("imageDatetime", "Enter the date and time the image was taken", timepicker = TRUE, placeholder = "YYYY-MM-DD HH:MM:SS", timepickerOpts = shinyWidgets::timepickerOptions(minutesStep = 15, timeFormat = "HH:mm"), maxDate = Sys.Date() + 1),
-                       textInput("imageDesc", "Enter a detailled description of the image"),
+                       textInput("imageDesc", "Enter a detailled description of the image (think about key words future users will search)"),
                        actionButton("addImageBtn", "Add Image to Database", style = c("margin-top: 10px;", "margin-bottom: 15px;"), class = "btn btn-primary")
               ),
               

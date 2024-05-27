@@ -12,6 +12,7 @@ insertHydrometDocument(
   authors = NULL,
   publish_date = NULL,
   url = NULL,
+  public = FALSE,
   geoms = NULL,
   con = hydrometConnect()
 )
@@ -30,6 +31,8 @@ insertHydrometDocument(
 \item{publish_date}{The date of publication, as a Date object.}
 
 \item{url}{An optional url (could also be a DOI) for the document.}
+
+\item{public}{Logical, whether the document should be publicly available. Default is FALSE.}
 
 \item{geoms}{The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.}
 
