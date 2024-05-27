@@ -68,7 +68,7 @@ insertHydrometDocument <- function(path, name, type, description, authors = NULL
   file <- hexView::readRaw(path)$fileRaw
 
   assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
-  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, public) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "'", public, ");"))
+  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, public) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "', ", public, ");"))
   id <- DBI::dbGetQuery(con, paste0("SELECT document_id FROM documents WHERE name = '", name, "';"))
 
   if (!is.null(authors)) {
