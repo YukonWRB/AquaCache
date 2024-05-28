@@ -10,7 +10,6 @@ ui <- fluidPage(
               # Add Document tab ############################################################################################################
               tabPanel("Add Document", value = "addDocument",
                        uiOutput("documentFile"),
-                       # fileInput("documentFile", "Choose a document to upload"),
                        textInput("documentName", "Enter a descriptive name for the document (must be unique in the database)"),
                        selectizeInput("documentType", "Select the type of document", choices = "placeholder"),
                        textInput("documentDesc", "Enter a detailled description of the document (think about key words future users will search)"),
@@ -51,7 +50,8 @@ ui <- fluidPage(
               tabPanel("Add Vector", value = "addVector",
                        shinyFiles::shinyFilesButton("vectorFile", "Choose a vector file to upload", "Select", multiple = FALSE, style = c("margin-top: 15px;", "margin-bottom: 10px;")),
                        uiOutput("vectorPath"),
-                       textInput("layerName", "Enter a name for the vector layer"),
+                       selectInput("layerName", "Enter a name for the vector layer", choices = "placeholder"),
+                       textInput("newLayerName", "Enter a name for the new vector layer"),
                        textInput("featureName", "Enter a name for the feature"), # This will be hidden if the number of features for the layer is more than 1
                        textInput("featureDesc", "Enter a description for the feature"),
                        actionButton("featureNameCol", "Select the column for feature names", style = c("margin-bottom: 5px;")),

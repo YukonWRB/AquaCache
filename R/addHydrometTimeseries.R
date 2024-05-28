@@ -25,8 +25,8 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
   #TODO: add a way to pass new parameters using params_df
   
   #Check the names of timeseries_df and locations_df, if it's not null
-  if (!all(c("location", "parameter", "unit", "category", "period_type", "record_rate", "param_type", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
-    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'unit', 'category', 'period_type', 'record_rate', 'param_type', 'start_datetime', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
+  if (!all(c("location", "parameter", "category", "period_type", "record_rate", "param_type", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
+    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'category', 'period_type', 'record_rate', 'param_type', 'start_datetime', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
   }
   
   if (!is.null(locations_df)) {
@@ -112,8 +112,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
       }
     }
   }
-  
-  
 
   # Check that the proper entries exist in the settings table. Make entry to DB if necessary/possible ################
   for (i in 1:nrow(timeseries_df)) {
@@ -205,9 +203,6 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
             tbl <- data.frame(location_id = location_id, project_id = project_id)
             DBI::dbAppendTable(con, "locations_projects", tbl)
           }
-          
-
-          location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", unique(locations_df[locations_df$location == i, "location"]), "';"))[1,1]
 
           #datums table fifth
           datum <- data.frame(location_id = location_id,
@@ -233,12 +228,14 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
       
       loc <- add$location
       param_code <- DBI::dbGetQuery(con, paste0("SELECT param_code FROM parameters WHERE param_name = '", add$parameter, "';"))[,1]
+      param_type_code <- DBI::dbGetQuery(con, paste0("SELECT param_type_code FROM param_types WHERE param_type = '", add$param_type, "';"))[,1]
       source_fx <- add$source_fx
       period_type <- add$period_type
       record_rate <- add$record_rate
       source_fx_args <- add$source_fx_args
       param_name <- add$parameter
       add$parameter <- param_code
+      add$param_type <- param_type_code
       tryCatch({
         DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
         message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", param_name, ", category ", add$category, ", param_type ", add$param_type, ", and period_type ", add$period_type, ".")

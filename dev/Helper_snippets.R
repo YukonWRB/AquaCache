@@ -2,9 +2,8 @@ load_all()
 con <- hydrometConnect()
 
 # Adding timeseries
-timeseries_df <- data.frame(location = "09AH005",
+timeseries_df <- data.frame(location = "09DC007",
                             parameter = c("water level", "water flow"),
-                            unit = c("m", "m³/s"),
                             category = "continuous",
                             period_type = c("instantaneous"),
                             param_type = "surface water",
@@ -16,15 +15,16 @@ timeseries_df <- data.frame(location = "09AH005",
                             source_fx_args = NA,
                             note = NA)
 
-locations_df <- data.frame(location = c("09AA-M3"),
-                           name = c("Montana Mountain Meteorological"),
-                           latitude = c(60.133850),
-                           longitude = c(-134.719450),
-                           network = "Snow Survey Network",
+locations_df <- data.frame(location = c("09DC007"),
+                           name = c("Mayo River at Highway No. 11"),
+                           name_fr = c("Rivière Mayo à la route 11"),
+                           latitude = c(63.605556),
+                           longitude = c(-135.9),
+                           network = "Canada Yukon Hydrometric Network",
                            project = NA,
                            datum_id_from = c(10),
-                           datum_id_to = c(110),
-                           conversion_m = c(1026),
+                           datum_id_to = c(10),
+                           conversion_m = 0,
                            current = c(TRUE),
                            note = NA, 
                            contact = NA)

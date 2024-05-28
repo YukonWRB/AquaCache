@@ -14,7 +14,7 @@ insertHydrometVector(
   table = "vectors",
   geom_col = "geom",
   overwrite = FALSE,
-  con = hydrometConnect(silent = TRUE)
+  con = NULL
 )
 }
 \arguments{
@@ -36,7 +36,7 @@ insertHydrometVector(
 
 \item{overwrite}{If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
+\item{con}{A connection to the database. Default NULL will use the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 }
 \value{
 A boolean vector, one element per feature.Messages will also be printed to the console.
