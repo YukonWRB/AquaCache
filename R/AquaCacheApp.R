@@ -3,16 +3,16 @@
 #'@description
 #'`r lifecycle::badge("experimental")`
 #'
-#' Loads a Shiny app that facilitates the addition of information to the database.
-#' Currently supports uploading of documents, one-off images, vectors, and raster, with provisions to support adding timeseries (data, images, and rasters).
-#' 
-#' Requires write privileges to the database.
-#' 
+#' @param host Host address. Leave default to run locally, set to "0.0.0.0" to enable others to connect. Depends on the port specified in `port` to be open on the host machine.
+#' @param port Port number (numeric). Leave default to use the default port specified in your user options. The port you specify must be open on the host machine for it to broadcast to the network.
+#' @param browser Open the application in a browser window right away (TRUE), or in a R window (FALSE). Default is TRUE.
+#' @param display.mode The display mode for the application. Default is "normal". See `shiny::runApp()` for more information.
 #'
-#' @return Opens the Shiny application.
+#' @return Opens a Shiny application.
 #' @export
+#'
 
-AquaCacheApp <- function() {
+AquaCacheApp <- function(host = getOption("shiny.host", "127.0.0.1"), port = getOption("shiny.port"), browser = TRUE, display.mode = "normal") {
   
   rlang::check_installed("shiny", reason = "to run this app.")
   rlang::check_installed("DT", reason = "to create interactive tables within the app.")
@@ -30,5 +30,5 @@ AquaCacheApp <- function() {
   # Load the global variables. Contains modules as well as call to pool::pool() for connection to WRB database, library calls, and loads the translations data.table.
   source(system.file("AquaCacheApp/app_globals.R", package = "HydroMetDB"))
 
-  shiny::runApp(appDir, display.mode = "normal")
+  shiny::runApp(appDir, display.mode = display.mode, host = host, port = port, launch.browser = browser)
 }
