@@ -20,13 +20,21 @@
 #' @param table The target table in the database (as character string). If not under the public schema, use format c("schema", "table").
 #' @param geom_col The name of the database table column in which to insert the geometry object.
 #' @param overwrite If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database. Default NULL will use the utility function [hydrometConnect()].
 #'
 #' @return A boolean vector, one element per feature.Messages will also be printed to the console.
 #' @export
 
-insertHydrometVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = hydrometConnect(silent = TRUE)) {
-  on.exit(DBI::dbDisconnect(con))
+insertHydrometVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = NULL) {
+  
+  if (is.null(con)) {
+    con <- hydrometConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
+  if (inherits(con, "Pool")) {
+    con <- pool::localCheckout(con)
+  }
   
   exist_layer_names <- DBI::dbGetQuery(con, "SELECT DISTINCT layer_name FROM vectors")
   

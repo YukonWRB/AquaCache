@@ -416,10 +416,12 @@ server <- function(input, output, session) {
   vector$selected_feature_desc_col <- ""
   vector$selected_feature_name_col <- ""
   
+  shinyjs::hide("layerName")
   shinyjs::hide("featureName")
   shinyjs::hide("featureNameCol")
   shinyjs::hide("featureDesc")
   shinyjs::hide("featureDescCol")
+  shinyjs::hide("newLayerName")
   
   shinyFiles::shinyFileChoose(input, "vectorFile", roots = shinyFiles::getVolumes(), hidden = TRUE, filetypes = c("shp", "gpkg", "geojson", "kml", "kmz", "gml"))
   
@@ -431,6 +433,9 @@ server <- function(input, output, session) {
                  collapse = "<br>")
       )
     })
+    layers <- DBI::dbGetQuery(pool, "SELECT DISTINCT layer_name FROM vectors;")
+    updateSelectizeInput(session, "layerName", choices = c(layers$layer_name, "New Layer"))
+    shinyjs::show("layerName")
     try({
       vector$vect <- terra::vect(vector$path)
       vector$table <- as.data.frame(vector$vect)[1:5, ]
@@ -449,6 +454,15 @@ server <- function(input, output, session) {
       }
     })
   })
+  
+  observeEvent(input$layerName, {
+    if (input$layerName == "New Layer") {
+      shinyjs::show("newLayerName")
+    } else {
+      shinyjs::hide("newLayerName")
+    }
+  })
+  
   observeEvent(input$featureNameCol, {
     showModal(modalDialog(
       title = "Select column with feature names",
@@ -527,7 +541,7 @@ server <- function(input, output, session) {
         easyClose = TRUE
       ))
       insertHydrometVector(geom = vector$vect,
-                           layer_name = input$layerName,
+                           layer_name = if (input$layerName == "New Layer") input$newLayerName else input$layerName,
                            feature_name_col = vector$selected_feature_name_col,
                            description_col = vector$selected_feature_desc_col,
                            con = pool)
@@ -551,7 +565,7 @@ server <- function(input, output, session) {
         easyClose = TRUE
       ))
       insertHydrometVector(geom = vector$vect,
-                           layer_name = input$layerName,
+                           layer_name = if (input$layerName == "New Layer") input$newLayerName else input$layerName,
                            feature_name = input$featureName,
                            description = input$featureDesc,
                            con = pool)
