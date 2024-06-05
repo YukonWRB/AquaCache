@@ -4,16 +4,25 @@
 \alias{AquaCacheApp}
 \title{Shiny Interface to Hydromet DB}
 \usage{
-AquaCacheApp()
+AquaCacheApp(
+  host = getOption("shiny.host", "127.0.0.1"),
+  port = getOption("shiny.port"),
+  browser = TRUE,
+  display.mode = "normal"
+)
+}
+\arguments{
+\item{host}{Host address. Leave default to run locally, set to "0.0.0.0" to enable others to connect. Depends on the port specified in \code{port} to be open on the host machine.}
+
+\item{port}{Port number (numeric). Leave default to use the default port specified in your user options. The port you specify must be open on the host machine for it to broadcast to the network.}
+
+\item{browser}{Open the application in a browser window right away (TRUE), or in a R window (FALSE). Default is TRUE.}
+
+\item{display.mode}{The display mode for the application. Default is "normal". See \code{shiny::runApp()} for more information.}
 }
 \value{
-Opens the Shiny application.
+Opens a Shiny application.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
-
-Loads a Shiny app that facilitates the addition of information to the database.
-Currently supports uploading of documents, one-off images, vectors, and raster, with provisions to support adding timeseries (data, images, and rasters).
-
-Requires write privileges to the database.
 }
