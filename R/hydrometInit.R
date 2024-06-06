@@ -419,6 +419,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
                  record_rate TEXT NOT NULL,
+                 z NUMERIC,
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
@@ -430,7 +431,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  source_fx TEXT,
                  source_fx_args TEXT,
                  note TEXT,
-                 UNIQUE (location, parameter, category, period_type, param_type, record_rate),
+                 UNIQUE (location, parameter, category, period_type, param_type, record_rate, z),
                  CONSTRAINT check_record_rate_constraints
                      CHECK (
                      (category = 'discrete' AND record_rate IS NULL) OR
@@ -438,8 +439,11 @@ EXECUTE FUNCTION check_approval_exists_daily();
                      )
                  );")
   DBI::dbExecute(con, "
-  COMMENT ON TABLE timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, category (continuous or discrete), and period_type. For this purpose, continuous data is data gathered at regular and frequent intervals (usually max 1 day), while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parametes.';
+  COMMENT ON TABLE timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, param_type, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
   ")
+  DBI::dbExecute(con, "
+                 COMMENT ON COLUMN z IS 'Elevation of the measurement station, in meters. Used for things like thermistor strings, wind towers, or forecast climate parameters at different heights. Z elevations should be taken in the context of the location's assigned elevation and datum.';
+                 ")
   DBI::dbExecute(con, "
   COMMENT ON COLUMN timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addHydrometTimeseries.';
   ")
