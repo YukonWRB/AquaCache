@@ -55,7 +55,7 @@ calculate_period <- function(data, timeseries_id, con = hydrometConnect())
 
   } else { #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
     no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
-    no_period$period <- NA
+    no_period$period <- NULL
     data <- rbind(data, no_period)
     data <- data[order(data$datetime), ]
     diffs <- as.numeric(diff(data$datetime), units = "hours")
