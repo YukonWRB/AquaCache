@@ -53,15 +53,15 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
   
   if (timeseries_id[1] == "all") {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE source_fx IS NOT NULL")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
     }
   } else {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
     }
     if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
       fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]

@@ -26,9 +26,9 @@ getNewDiscrete <- function(con = hydrometConnect(silent = TRUE), timeseries_id =
   
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)) {
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'discrete', or has no function specified in column source_fx.")
     }
