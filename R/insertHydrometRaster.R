@@ -37,7 +37,7 @@ insertHydrometRaster <- function(con, raster, description, flag = NA, units = NU
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source TEXT,
-                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
+                   UNIQUE NULLS NOT DISTINCT (raster_series_id, flag, valid_from, valid_to, issued),
                    CONSTRAINT check_model_constraints
                      CHECK (
                      (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
@@ -58,7 +58,7 @@ insertHydrometRaster <- function(con, raster, description, flag = NA, units = NU
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source VARCHAR(MAX),
-                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
+                   UNIQUE NULLS NOT DISTINCT (raster_series_id, flag, valid_from, valid_to, issued),
                    CONSTRAINT check_model_constraints
                      CHECK (
                      (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR

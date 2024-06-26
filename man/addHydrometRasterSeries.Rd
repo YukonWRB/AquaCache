@@ -6,20 +6,26 @@
 \usage{
 addHydrometRasterSeries(
   model,
+  parameter,
   start_datetime,
   source_fx,
+  type,
   source_fx_args = NA,
   public = TRUE,
   public_delay = NA,
-  con = hydrometConnect(silent = TRUE)
+  con = NULL
 )
 }
 \arguments{
 \item{model}{The model producing the raster}
 
+\item{parameter}{The parameter to import, exactly as you'd find in the FTP link for the model rasters. For example, check out the \href{https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps-datamart_en/}{HRDPS parameters}. This must be something understood by the \code{source_fx} function.}
+
 \item{start_datetime}{The datetime (as POSIXct) from which to look for rasters}
 
-\item{source_fx}{The function to use for fetching new rasters Must be an existing function in this package.}
+\item{source_fx}{The function to use for fetching new rasters. Must be an existing function in this package.}
+
+\item{type}{The type of raster, 'forecast' or 'reanalysis'. Reanalysis rasters are kept forever, forecasts are replaced when a new one is issued.}
 
 \item{source_fx_args}{Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!}
 
@@ -27,7 +33,7 @@ addHydrometRasterSeries(
 
 \item{public_delay}{A period in ISO 8601 format by which to delay public visibility of images.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}}. Leave NULL if you want to use the package default connection settings and have the connection automatically closed afterwards.}
 }
 \value{
 TRUE if successful, and a new entry in the database with images fetched.

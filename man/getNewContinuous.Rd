@@ -4,12 +4,18 @@
 \alias{getNewContinuous}
 \title{Get new continuous-category data}
 \usage{
-getNewContinuous(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
+getNewContinuous(
+  con = hydrometConnect(silent = TRUE),
+  timeseries_id = "all",
+  active = "default"
+)
 }
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.}
+
+\item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
 }
 \value{
 The database is updated in-place, and a data.frame is generated with one row per updated location.

@@ -14,14 +14,19 @@
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
+#' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #'
 #' @return The database is updated in-place, and diagnostic messages are printed to the console.
 #' @export
 
 #TODO: snow_db_path should instead be a path or connection identifiers living in the .Renviron file.
-dailyUpdate <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all")
-
+dailyUpdate <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", active = 'default')
 {
+  
+  if (!active %in% c('default', 'all')) {
+    stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  
   function_start <- Sys.time()
   message(" ")
   message("dailyUpdate start at ", Sys.time())
@@ -41,6 +46,11 @@ dailyUpdate <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
               warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )
     }
+  }
+  
+  if (active == 'default') {
+    continuous_ts <- continuous_ts[continuous_ts$active == TRUE, ]
+    discrete_ts <- discrete_ts[discrete_ts$active == TRUE, ]
   }
 
   #Get new data ################
@@ -71,23 +81,12 @@ dailyUpdate <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
   message("Getting new images with getNewImages...")
   tryCatch({
     img_start <- Sys.time()
-    getNewImages(con = con)
+    getNewImages(con = con, active = active)
     img_duration <- Sys.time() - img_start
     message("getNewImages executed in ", round(img_duration[[1]], 2), " ", units(img_duration), ".")
   }, error = function(e) {
     warning("Error fetching new images.")
   })
-
-  message("Getting new rasters with getNewRasters...")
-  tryCatch({
-    rst_start <- Sys.time()
-    getNewRasters(con = con)
-    rst_duration <- Sys.time() - rst_start
-    message("getNewRasters executed in ", round(rst_duration[[1]], 2), " ", units(rst_duration), ".")
-  }, error = function(e) {
-    warning("Error fetching new rasters")
-  })
-
 
   ### Check for a new version of HYDAT, update timeseries in the database if needed. #####
   message("Checking for new HYDAT database on this computer and determining the version last used for updating timeseries with update_hydat...")
