@@ -13,6 +13,7 @@
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
+#' @param active Sets behavior for checking timeseries or not. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all timeseries
 #'
 #' @return Updated entries in the hydro database.
 #' @export
@@ -20,8 +21,12 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE)
+synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
 {
+  
+  if (!active %in% c('default', 'all')) {
+    stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
 
   if (inherits(start_datetime, "Date")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
@@ -65,6 +70,10 @@ synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "a
               warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )
     }
+  }
+  
+  if (active == 'default') {
+    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
   }
 
   updated <- 0 #Counter for number of updated timeseries

@@ -24,29 +24,46 @@
 
 insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from, valid_to, description = NA, flag = NA, issued = NA, units = NULL, model = NA, source = NA, bit.depth = NULL, blocks = NULL)
 {
+  
+  # Parameter check in case they're passed as NULL by other functions
+  if (is.null(description)) {
+    description <- NA
+  }
+  if (is.null(flag)) {
+    flag <- NA
+  }
+  if (is.null(issued)) {
+    issued <- NA
+  }
+  if (is.null(source)) {
+    source <- NA
+  }
+  if (is.null(model)) {
+    model <- NA
+  }
 
   # Checking valid_from parameter
   tryCatch({
-    if (inherits(valid_from, "character") & nchar(valid_from) > 10){ #Does not necessarily default to 0 hour.
+    if (inherits(valid_from, "character") & nchar(valid_from) > 10) { #Does not necessarily default to 0 hour.
       valid_from <- as.POSIXct(valid_from, tz = "UTC")
-    } else if (inherits(valid_from, "POSIXct")){
+    } else if (inherits(valid_from, "POSIXct")) {
       attr(valid_from, "tzone") <- "UTC"
-    } else if (inherits(valid_from, "Date") | (inherits(valid_from, "character") & nchar(valid_from) == 10)){ #defaults to 0 hour
+    } else if (inherits(valid_from, "Date") | (inherits(valid_from, "character") & nchar(valid_from) == 10)) { #defaults to 0 hour
       valid_from <- as.POSIXct(valid_from, tz = "UTC")
     } else {
       stop("Parameter valid_from could not be coerced to POSIXct.")
     }
-  }, error = function(e){
+  }, error = function(e) {
     stop("Failed to convert parameter valid_from to POSIXct.")
   })
 
   # Checking valid_to parameter
   tryCatch({
-    if (inherits(valid_to, "character") & nchar(valid_to) > 10){ #Does not necessarily default to 0 hour.
+    if (inherits(valid_to, "character") & nchar(valid_to) > 10) { #Does not necessarily default to 0 hour.
       valid_to <- as.POSIXct(valid_to, tz = "UTC")
-    } else if (inherits(valid_to, "POSIXct")){
+    } else if (inherits(valid_to, "POSIXct")) {
       attr(valid_to, "tzone") <- "UTC"
-    } else if (inherits(valid_to, "Date") | (inherits(valid_to, "character") & nchar(valid_to) == 10)){ #defaults to very end of day
+    } else if (inherits(valid_to, "Date") | (inherits(valid_to, "character") & nchar(valid_to) == 10)) { #defaults to very end of day
       valid_to <- as.POSIXct(valid_to, tz = "UTC")
       valid_to <- valid_to + 60*60*23.9999
     } else {
@@ -57,13 +74,13 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
   })
 
   # Checking issued parameter
-  if (!is.na(issued)){
+  if (!is.na(issued)) {
     tryCatch({
-      if (inherits(issued, "character") & nchar(issued) > 10){ #Does not necessarily default to 0 hour.
+      if (inherits(issued, "character") & nchar(issued) > 10) { #Does not necessarily default to 0 hour.
         issued <- as.POSIXct(issued, tz = "UTC")
-      } else if (inherits(issued, "POSIXct")){
+      } else if (inherits(issued, "POSIXct")) {
         attr(issued, "tzone") <- "UTC"
-      } else if (inherits(issued, "Date") | (inherits(issued, "character") & nchar(issued) == 10)){ #defaults to very end of day
+      } else if (inherits(issued, "Date") | (inherits(issued, "character") & nchar(issued) == 10)) { #defaults to very end of day
         issued <- as.POSIXct(issued, tz = "UTC")
         issued <- issued + 60*60*23.9999
       } else {
@@ -74,10 +91,10 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
     })
   }
 
-  if(!("rasters_reference" %in% DBI::dbListTables(con))) {
-    message("rasters_reference does not already exist. Creating it.")
+  if (!("rasters_reference" %in% DBI::dbListTables(con))) {
+    message("table rasters_reference does not already exist. Creating it.")
     version <- DBI::dbGetQuery(con, "SELECT version()")
-    if (grepl("PostgreSQL", version$version)){
+    if (grepl("PostgreSQL", version$version)) {
       DBI::dbExecute(con, "CREATE TABLE rasters_reference (
                    reference_id SERIAL PRIMARY KEY,
                    raster_series_id INTEGER,
@@ -91,7 +108,7 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source TEXT,
-                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
+                   UNIQUE NULLS NOT DISTINCT (raster_series_id, flag, valid_from, valid_to, issued),
                    CONSTRAINT check_model_constraints
                      CHECK (
                      (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
@@ -112,7 +129,7 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
                    valid_to TIMESTAMP WITH TIME ZONE,
                    issued TIMESTAMP WITH TIME ZONE,
                    source VARCHAR(MAX),
-                   UNIQUE (raster_series_id, flag, valid_from, valid_to),
+                   UNIQUE NULLS NOT DISTINCT (raster_series_id, flag, valid_from, valid_to, issued),
                    CONSTRAINT check_model_constraints
                      CHECK (
                      (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
@@ -128,12 +145,12 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
   }
 
   #Make sure that if units are provided that there's either one total or 1 per band
-  if (!is.null(units)){
-    if (!inherits(units, "character")){
+  if (!is.null(units)) {
+    if (!inherits(units, "character")) {
       stop("Parameter units must be specified as a character vector.")
     }
-    if (length(units) > 1){
-      if (length(units) != length(names(raster))){
+    if (length(units) > 1) {
+      if (length(units) != length(names(raster))) {
         stop("The parameter units was provided, but there isn't exactly one element or one element per band in the raster.")
       }
       units <- paste(units, collapse = ", ")
@@ -146,7 +163,7 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
   res <- writeRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks,
               constraints = TRUE)
 
-  if (res$status){
+  if (res$status) {
     # band names
     bnds <- DBI::dbQuoteString(con, paste0("{{",paste(names(raster),collapse = "},{"),"}}"))
     entry <- data.frame("raster_series_id" = raster_series_id,
@@ -164,7 +181,7 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
     new_id <- DBI::dbGetQuery(con, "SELECT max(reference_id) FROM rasters_reference")[1,1]
     DBI::dbExecute(con, paste0("UPDATE rasters SET reference_id = ", new_id, " WHERE rid IN (", paste(res$appended_rids, collapse = ","), ");"))
 
-    if (add_constraints){
+    if (add_constraints) {
       DBI::dbExecute(con, "ALTER TABLE rasters ADD CONSTRAINT fk_reference_id FOREIGN KEY (reference_id) REFERENCES rasters_reference(reference_id) ON DELETE CASCADE ON UPDATE CASCADE")
       DBI::dbExecute(con, "ALTER TABLE rasters_reference ADD CONSTRAINT fk_raster_series_id FOREIGN KEY (raster_series_id) REFERENCES raster_series_index(raster_series_id) ON DELETE CASCADE ON UPDATE CASCADE")
       DBI::dbExecute(con, "COMMENT ON TABLE public.rasters_reference IS 'References rasters in the rasters table, since the later might have rasters broken up in multiple tiles. This table has one reference_id per raster, which may be linked to multiple entries in table rasters.'")
@@ -174,6 +191,6 @@ insertHydrometModelRaster <- function(con, raster, raster_series_id, valid_from,
       DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.model IS 'If the raster is generated from a model such as a climate model enter the name here. This is more useful for one-off rasters, as model timeseries will also list the model in table raster_series_index.'")
     }
 
-    return (new_id)
+    return(new_id)
   }
 }

@@ -26,11 +26,12 @@ hydrometConnect <- function(name = "hydromet", host = Sys.getenv("hydrometHost")
                             port = port,
                             user = username,
                             password = password)
-    if (!silent){
+    # Explicitly set time zone, just in case
+    if (!silent) {
       message("Remember to disconnect using DBI::dbDisconnect() when finished.")
     }
     return(hydro)
-  }, error = function(e){
+  }, error = function(e) {
     stop("Connection failed.")
   })
 }

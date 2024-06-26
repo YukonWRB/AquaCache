@@ -113,8 +113,10 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                  source_fx_args TEXT,
                  description TEXT,
                  location_id INTEGER NOT NULL,
+                 active BOOLEAN,
                  UNIQUE (location_id, img_type));")
-  DBI::dbExecute(con, "COMMENT ON TABLE images_index IS 'Index for images table. Each location at which there is one or more image gets an entry here; images in table images are linked to this table using the img_meta_id.'")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.images_index IS 'Index for images table. Each location at which there is one or more image gets an entry here; images in table images are linked to this table using the img_meta_id.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.images_index.active IS 'Defines if the image series should or should not be imported.'")
 
   # forecasts table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
@@ -430,6 +432,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  public_delay INTERVAL,
                  source_fx TEXT,
                  source_fx_args TEXT,
+                 active BOOLEAN NOT NULL DEFAULT TRUE,
                  note TEXT,
                  UNIQUE (location, parameter, category, period_type, param_type, record_rate, z),
                  CONSTRAINT check_record_rate_constraints
@@ -439,50 +442,23 @@ EXECUTE FUNCTION check_approval_exists_daily();
                      )
                  );")
   DBI::dbExecute(con, "
-  COMMENT ON TABLE timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, param_type, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
+  COMMENT ON TABLE public.timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, param_type, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
   ")
-  DBI::dbExecute(con, "
-                 COMMENT ON COLUMN z IS 'Elevation of the measurement station, in meters. Used for things like thermistor strings, wind towers, or forecast climate parameters at different heights. Z elevations should be taken in the context of the location's assigned elevation and datum.';
-                 ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addHydrometTimeseries.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.location_id IS 'Matches to the locations table.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.category IS 'Discrete or continuous. Continuous data is data gathered at regular and frequent intervals (usually max 1 day), while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parametes.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.period_type IS 'One of instantaneous, sum, mean, median, min, max, or (min+max)/2. This last value is used for the ''daily mean'' temperatures at met stations which are in fact not true mean temps.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.record_rate IS 'For continuous timeseries, one of < 1 day, 1 day, 1 week, 4 weeks, 1 month, year. For discrete timeseries, NULL.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.start_datetime IS 'First data point for the timeseries.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.end_datetime IS 'Last data point for the timeseries.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.last_new_data IS 'Time at which data was last appended to the timeseries';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.last_daily_calculation IS 'Time at which daily means were calculated using function calculate_stats. Not used for discrete timeseries.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.last_synchronize IS 'Time at which the timeseries was cross-checked against values held by the remote or partner database; the local store should have been updated to reflect the remote.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.public_delay IS 'For public = TRUE stations, an option delay with which to serve the data to the public.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.source_fx IS 'Function (from the R package HydroMetDB) to use for incorporation of new data.';
-  ")
-  DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addHydrometTimeseries for usage.';
-  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.active IS 'Defines if the timeseries should or should not be added to or back-corrected by various HydroMetDB package functions.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.z IS 'Elevation of the measurement station, in meters. Used for things like thermistor strings, wind towers, or forecast climate parameters at different heights. Z elevations should be taken in the context of the location's assigned elevation and datum.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addHydrometTimeseries.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.location_id IS 'Matches to the locations table.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.category IS 'Discrete or continuous. Continuous data is data gathered at regular and frequent intervals (usually max 1 day), while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parametes.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.period_type IS 'One of instantaneous, sum, mean, median, min, max, or (min+max)/2. This last value is used for the ''daily mean'' temperatures at met stations which are in fact not true mean temps.'; ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.record_rate IS 'For continuous timeseries, one of < 1 day, 1 day, 1 week, 4 weeks, 1 month, year. For discrete timeseries, NULL.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.start_datetime IS 'First data point for the timeseries.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.end_datetime IS 'Last data point for the timeseries.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_new_data IS 'Time at which data was last appended to the timeseries';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_daily_calculation IS 'Time at which daily means were calculated using function calculate_stats. Not used for discrete timeseries.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_synchronize IS 'Time at which the timeseries was cross-checked against values held by the remote or partner database; the local store should have been updated to reflect the remote.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.public_delay IS 'For public = TRUE stations, an option delay with which to serve the data to the public.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx IS 'Function (from the R package HydroMetDB) to use for incorporation of new data.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addHydrometTimeseries for usage.';")
   
   # parameters table #################
   DBI::dbExecute(con, "CREATE TABLE parameters (
@@ -704,18 +680,25 @@ EXECUTE FUNCTION update_geom_type();
   # raster tables ################################################
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS raster_series_index (
                  raster_series_id SERIAL PRIMARY KEY,
-                 model TEXT UNIQUE NOT NULL,
+                 model TEXT NOT NULL,
+                 type TEXT NOT NULL CHECK(type IN ('reanalysis', 'forecast')),
+                 parameter TEXT NOT NULL,
+                 param_description TEXT,
                  start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  end_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  last_new_raster TIMESTAMP WITH TIME ZONE NOT NULL,
+                 last_issue TIMESTAMP WITH TIME ZONE,
                  public BOOLEAN NOT NULL,
                  public_delay INTERVAL,
                  source_fx TEXT,
-                 source_fx_args TEXT);")
+                 source_fx_args TEXT,
+                 active BOOLEAN NOT NULL DEFAULT TRUE,
+                 UNIQUE (model, parameter));")
   DBI::dbExecute(con, "COMMENT ON TABLE public.raster_series_index IS 'Holds metadata about raster series, such as reanalysis or forecast rasters. '
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.raster_series_index.end_datetime IS 'For rasters that have a valid_from and valid_to time, this is the valid_from of the latest raster in the database..'
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.raster_series_index.end_datetime IS 'For rasters that have a valid_from and valid_to time, this is the valid_from of the latest raster in the database.'
   ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.raster_series_index.active IS 'Defines if the raster series should or should not be imported.'")
 
   #NOTE: Additional raster tables are created upon first use of the raster addition function.
 

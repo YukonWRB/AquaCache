@@ -10,13 +10,20 @@
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'discrete'.
+#' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
+
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 #'
 
-getNewDiscrete <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all") {
+getNewDiscrete <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", active = 'default') {
 
+  
+  if (!active %in% c('default', 'all')) {
+    stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
@@ -25,6 +32,10 @@ getNewDiscrete <- function(con = hydrometConnect(silent = TRUE), timeseries_id =
     if (length(timeseries_id) != nrow(all_timeseries)) {
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'discrete', or has no function specified in column source_fx.")
     }
+  }
+  
+  if (active == 'default') {
+    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
   }
 
   count <- 0 #counter for number of successful new pulls

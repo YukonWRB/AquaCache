@@ -8,7 +8,8 @@ synchronize(
   con = hydrometConnect(silent = TRUE),
   timeseries_id = "all",
   start_datetime,
-  discrete = FALSE
+  discrete = FALSE,
+  active = "default"
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ synchronize(
 \item{start_datetime}{The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
 
 \item{discrete}{Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.}
+
+\item{active}{Sets behavior for checking timeseries or not. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all timeseries}
 }
 \value{
 Updated entries in the hydro database.
