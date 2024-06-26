@@ -5,7 +5,7 @@
 \title{Connect to the EQWin database}
 \usage{
 EQConnect(
-  path = "//carver/infosys/EQWin/WR/DB/Water_Resources.mdb",
+  path = "//carver/infosys/EQWin/WR/DB/Water_Resources.mdb;",
   silent = FALSE
 )
 }
