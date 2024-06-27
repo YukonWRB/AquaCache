@@ -2,7 +2,7 @@
 % Please edit documentation in R/AquaCacheApp.R
 \name{AquaCacheApp}
 \alias{AquaCacheApp}
-\title{Shiny Interface to Hydromet DB}
+\title{Shiny Interface to AquaCache DB}
 \usage{
 AquaCacheApp(
   host = getOption("shiny.host", "127.0.0.1"),

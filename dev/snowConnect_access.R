@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Connects to the old Snow Survey Access database.To connect to the new postgres database, use [HydroMetDB::snowConnect()].
+#' Connects to the old Snow Survey Access database.To connect to the new postgres database, use [AquaCache::snowConnect()].
 #'
 #' @param path The path to the database. Currently supports either a Microsoft Access database or an .sqlite database. 'default' points to //carver/infosys/Snow/DB/SnowDB.mdb.
 #' @param silent TRUE suppresses messages except for errors.

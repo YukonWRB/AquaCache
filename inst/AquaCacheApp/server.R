@@ -1,5 +1,5 @@
-# This script is the server-side of a Shiny application that creates an easy-to-use interface for database administrators to update the database with new data. The UI side script is located in the inst/ folder. It will facilitate the use of functions addHydrometTimeseries, addHydrometImageSeries, addHydrometRasterSeries, insertHydrometRaster, insertHydrometVector, insertHydrometDocument, and insertHydrometImage. The application will be called with function hydrometApp.
-# This script is the server-side of a Shiny application that creates an easy-to-use interface for database administrators to update the database with new data. The UI side script is located in the inst/ folder. It will facilitate the use of functions addHydrometTimeseries, addHydrometImageSeries, addHydrometRasterSeries, insertHydrometRaster, insertHydrometVector, insertHydrometDocument, and insertHydrometImage. The application will be called with function hydrometApp.
+# This script is the server-side of a Shiny application that creates an easy-to-use interface for database administrators to update the database with new data. The UI side script is located in the inst/ folder. It will facilitate the use of functions addACTimeseries, addACImageSeries, addACRasterSeries, insertACRaster, insertACVector, insertACDocument, and insertACImage. The application will be called with function AquaCacheApp.
+# This script is the server-side of a Shiny application that creates an easy-to-use interface for database administrators to update the database with new data. The UI side script is located in the inst/ folder. It will facilitate the use of functions addACTimeseries, addACImageSeries, addACRasterSeries, insertACRaster, insertACVector, insertACDocument, and insertACImage. The application will be called with function AquaCacheApp.
 
 
 server <- function(input, output, session) {
@@ -164,7 +164,7 @@ server <- function(input, output, session) {
       observeEvent(input$okButton, {
         removeModal()
         
-        insertHydrometDocument(path = input$documentFile$datapath,
+        insertACDocument(path = input$documentFile$datapath,
                                name = input$documentName,
                                type = document_types$types[document_types$types$document_type_id == input$documentType, "document_type_en"],
                                description = input$documentDesc,
@@ -209,7 +209,7 @@ server <- function(input, output, session) {
         return()
       })
     } else {
-      insertHydrometDocument(path = input$documentFile$datapath,
+      insertACDocument(path = input$documentFile$datapath,
                              name = input$documentName,
                              type = document_types$types[document_types$types$document_type_id == input$documentType, "document_type_en"],
                              description = input$documentDesc,
@@ -286,7 +286,7 @@ server <- function(input, output, session) {
     if (is.na(selectedLocation$img_meta_id)) { # Create a new entry to images_index since none exists
       new_img_idx <- data.frame(location_id = selectedLocation$location$location_id,
                                 public = TRUE,
-                                description = "Image location index added via hydrometApp.",
+                                description = "Image location index added via AquaCacheApp.",
                                 img_type = "manual",
                                 first_img = Sys.time(),
                                 last_img = Sys.time()
@@ -325,7 +325,7 @@ server <- function(input, output, session) {
       ))
       observeEvent(input$yesButton, {
         removeModal()
-        insertHydrometImage(object = input$imageFile$datapath,
+        insertACImage(object = input$imageFile$datapath,
                             img_meta_id = selectedLocation$img_meta_id,
                             datetime = input$imageDatetime,
                             description = input$imageDesc,
@@ -343,7 +343,7 @@ server <- function(input, output, session) {
         return()
       })
     } else {
-      insertHydrometImage(object = input$imageFile$datapath,
+      insertACImage(object = input$imageFile$datapath,
                           img_meta_id = selectedLocation$img_meta_id,
                           datetime = input$imageDatetime,
                           description = input$imageDesc,
@@ -397,7 +397,7 @@ server <- function(input, output, session) {
       "Please be patient, this could take a while!",
       easyClose = TRUE
     ))
-    insertHydrometRaster(con = pool,
+    insertACRaster(con = pool,
                          raster = raster$path,
                          description = input$rasterDesc,
                          units = if (input$rasterUnits == "") NULL else input$rasterUnits,
@@ -540,7 +540,7 @@ server <- function(input, output, session) {
         "Please be patient, this could take a while!",
         easyClose = TRUE
       ))
-      insertHydrometVector(geom = vector$vect,
+      insertACVector(geom = vector$vect,
                            layer_name = if (input$layerName == "New Layer") input$newLayerName else input$layerName,
                            feature_name_col = vector$selected_feature_name_col,
                            description_col = vector$selected_feature_desc_col,
@@ -564,7 +564,7 @@ server <- function(input, output, session) {
         "Please be patient, this could take a while!",
         easyClose = TRUE
       ))
-      insertHydrometVector(geom = vector$vect,
+      insertACVector(geom = vector$vect,
                            layer_name = if (input$layerName == "New Layer") input$newLayerName else input$layerName,
                            feature_name = input$featureName,
                            description = input$featureDesc,

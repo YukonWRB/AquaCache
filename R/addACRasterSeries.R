@@ -16,7 +16,7 @@
 #' @export
 #'
 
-addHydrometRasterSeries <- function(model, parameter, start_datetime, source_fx, type, source_fx_args = NA, public = TRUE, public_delay = NA, con = NULL) {
+addACRasterSeries <- function(model, parameter, start_datetime, source_fx, type, source_fx_args = NA, public = TRUE, public_delay = NA, con = NULL) {
   #function will add entry to raster_series_index, then trigger getNewRasters from the user-specified start_datetime
 
   if (!type %in% c("forecast", "reanalysis")) {
@@ -24,7 +24,7 @@ addHydrometRasterSeries <- function(model, parameter, start_datetime, source_fx,
   }
   
   if (is.null(con)) {
-    con <- hydrometConnect(silent = TRUE)
+    con <- AquaCacheCon(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
   

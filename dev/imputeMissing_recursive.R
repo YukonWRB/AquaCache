@@ -14,7 +14,7 @@
 #' @export
 #'
 
-imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed = TRUE, con = hydrometConnect(silent=TRUE)) {
+imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed = TRUE, con = AquaCacheCon(silent=TRUE)) {
 
   on.exit(DBI::dbDisconnect(con))
 

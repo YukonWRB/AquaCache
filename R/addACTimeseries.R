@@ -1,9 +1,9 @@
-#' Add timeseries to hydrometric database
+#' Add timeseries to AquaCache database
 #'
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addHydrometTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`. To add an image series see [addHydrometImageSeries()], for raster series see [addHydrometRasterSeries()]. For one-off images use [insertHydrometImage()] and for rasters [insertHydrometRaster()]. For documents use [insertHydrometDocument()].
+#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addACTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`. To add an image series see [addACImageSeries()], for raster series see [addACRasterSeries()]. For one-off images use [insertACImage()] and for rasters [insertACRaster()]. For documents use [insertACDocument()].
 #'
 #' @details
 #' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
@@ -13,13 +13,13 @@
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
 #' @param locations_df A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.
 #' @param settings_df A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
-#' @seealso [addHydrometTimeseriesTemplate()] to see templates for timesries_df and locations_df.
+#' @seealso [addACTimeseriesTemplate()] to see templates for timesries_df and locations_df.
 
-addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = hydrometConnect()) {
+addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = AquaCacheCon()) {
 
   
   #TODO: add a way to pass new parameters using params_df
@@ -86,7 +86,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
 
   if (!is.null(settings_df)) {
     if (!all(names(settings_df) %in% c("source_fx", "parameter", "period_type", "record_rate", "remote_param_name"))) {
-      stop("You provided a data.frame for 'settings_df' with incorrect names. Refer to function addHydrometTimeseriesTemplate or to this function's help.")
+      stop("You provided a data.frame for 'settings_df' with incorrect names. Refer to function addACTimeseriesTemplate or to this function's help.")
     }
     #modify some col names
     settings_df$parameter <- tolower(settings_df$parameter)
@@ -173,7 +173,7 @@ addHydrometTimeseries <- function(timeseries_df, locations_df = NULL, settings_d
                               "longitude" = locations_df[locations_df$location == i, "longitude"])
           point <- terra::vect(point, geom = c("longitude", "latitude"), crs = "epsg:4269")
 
-          insertHydrometVector(point, "Locations", feature_name_col = "feature_name", description_col = "description")
+          insertACVector(point, "Locations", feature_name_col = "feature_name", description_col = "description")
           geom_id <- DBI::dbGetQuery(con, paste0("SELECT geom_id FROM vectors WHERE layer_name = 'Locations' AND feature_name = '", locations_df[locations_df$location == i, "location"], "';"))
 
 

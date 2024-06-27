@@ -9,7 +9,7 @@
 #' Use function [YGwater::getVector()] to retrieve a point, line, or polygon from the database.
 #'
 #' ## Attribute tables:
-#' The attribute table of the object will be discarded except for the columns specified in parameters `feature_name_col` and `description_col` to work with the existing database column names and to enable many to many relationships within the database. If you want vector files with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using [insertHydrometDocument()]. Note however that this precludes using the object's spatial attributes within the database!
+#' The attribute table of the object will be discarded except for the columns specified in parameters `feature_name_col` and `description_col` to work with the existing database column names and to enable many to many relationships within the database. If you want vector files with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using [insertACDocument()]. Note however that this precludes using the object's spatial attributes within the database!
 #'
 #' @param geom The geometry object to add to the database, as a [terra::vect()] object or as a file path to a shapefile, geopackage or something else that terra::vect() van use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.
 #' @param layer_name The name to give to the vector layer, which defines which layer_name it gets assigned to in the database. This should always be an existing layer_name unless you have a good reason to create a new one.
@@ -20,15 +20,15 @@
 #' @param table The target table in the database (as character string). If not under the public schema, use format c("schema", "table").
 #' @param geom_col The name of the database table column in which to insert the geometry object.
 #' @param overwrite If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?
-#' @param con A connection to the database. Default NULL will use the utility function [hydrometConnect()].
+#' @param con A connection to the database. Default NULL will use the utility function [AquaCacheCon()].
 #'
 #' @return A boolean vector, one element per feature.Messages will also be printed to the console.
 #' @export
 
-insertHydrometVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = NULL) {
+insertACVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = NULL) {
   
   if (is.null(con)) {
-    con <- hydrometConnect(silent = TRUE)
+    con <- AquaCacheCon(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
   

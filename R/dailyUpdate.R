@@ -8,11 +8,11 @@
 #' @details
 #'Calls several functions in sequence: [getNewContinuous()] to pull in new data into the measurements_continuous table, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [getNewImages()] to get new images in a series, [getNewRasters()] to get new model rasters, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, [update_hydat_datums()] to update the datums table with any new datums present in HYDAT, and [calculate_stats()] to calculate new statistics where necessary.
 #'
-#' Note that new timeseries should be added using function [addHydrometTimeseries()].
+#' Note that new timeseries should be added using function [addACTimeseries()].
 #'
-#' Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function, and [addHydrometTimeseriesTemplate()] for details on how to format the parameters to pass to [addHydrometTimeseries()].
+#' Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function, and [addACTimeseriesTemplate()] for details on how to format the parameters to pass to [addACTimeseries()].
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #'
@@ -20,7 +20,7 @@
 #' @export
 
 #TODO: snow_db_path should instead be a path or connection identifiers living in the .Renviron file.
-dailyUpdate <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", active = 'default')
+dailyUpdate <- function(con = AquaCacheCon(silent = TRUE), timeseries_id = "all", active = 'default')
 {
   
   if (!active %in% c('default', 'all')) {

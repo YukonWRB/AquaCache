@@ -5,14 +5,14 @@
 #'
 #' Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. No indices are specified as the primary key fulfills this task already.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
 #' @param overwrite TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
 #' @return New tables in the target postgres database. 
 #' @export
 #'
 
-hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
+AquaCacheInit <- function(con = AquaCacheCon(), overwrite = FALSE) {
 
   # Initial setup ############################
   # Overwrite and vacuum if requested
@@ -69,7 +69,7 @@ hydrometInit <- function(con = hydrometConnect(), overwrite = FALSE) {
                  mean NUMERIC,
                  doy_count INTEGER,
                  PRIMARY KEY (timeseries_id, date));")
-  DBI::dbExecute(con, "COMMENT ON TABLE public.calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the HydroMetDB package function calculate_stats.'
+  DBI::dbExecute(con, "COMMENT ON TABLE public.calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the AquaCache package function calculate_stats.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed, or, for daily means provided solely in the HYDAT database, that a value was imputed directly to this table.'
   ")
@@ -444,9 +444,9 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "
   COMMENT ON TABLE public.timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, param_type, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.active IS 'Defines if the timeseries should or should not be added to or back-corrected by various HydroMetDB package functions.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.active IS 'Defines if the timeseries should or should not be added to or back-corrected by various AquaCache package functions.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.z IS 'Elevation of the measurement station, in meters. Used for things like thermistor strings, wind towers, or forecast climate parameters at different heights. Z elevations should be taken in the context of the location's assigned elevation and datum.';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addHydrometTimeseries.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addACTimeseries.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.location_id IS 'Matches to the locations table.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.category IS 'Discrete or continuous. Continuous data is data gathered at regular and frequent intervals (usually max 1 day), while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parametes.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.period_type IS 'One of instantaneous, sum, mean, median, min, max, or (min+max)/2. This last value is used for the ''daily mean'' temperatures at met stations which are in fact not true mean temps.'; ")
@@ -457,8 +457,8 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_daily_calculation IS 'Time at which daily means were calculated using function calculate_stats. Not used for discrete timeseries.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_synchronize IS 'Time at which the timeseries was cross-checked against values held by the remote or partner database; the local store should have been updated to reflect the remote.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.public_delay IS 'For public = TRUE stations, an option delay with which to serve the data to the public.';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx IS 'Function (from the R package HydroMetDB) to use for incorporation of new data.';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addHydrometTimeseries for usage.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx IS 'Function (from the R package AquaCache) to use for incorporation of new data.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addACTimeseries for usage.';")
   
   # parameters table #################
   DBI::dbExecute(con, "CREATE TABLE parameters (
@@ -575,7 +575,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  event TEXT NOT NULL,
                  value TIMESTAMP WITH TIME ZONE,
                  PRIMARY KEY (event))")
-  DBI::dbExecute(con, "COMMENT ON TABLE public.internal_status IS 'Holds information about when a certain operation took place on the database using the R functions in the HydroMetDB package.'
+  DBI::dbExecute(con, "COMMENT ON TABLE public.internal_status IS 'Holds information about when a certain operation took place on the database using the R functions in the AquaCache package.'
   ")
   internal_status <- data.frame("event" = c("HYDAT_version", "last_new_continuous",  "last_new_discrete", "last_update_daily", "last_sync", "last_sync_discrete", "last_new_rasters", "last_new_vectors", "last_vacuum", "last_new_images"),
                                 "value" = NA)
@@ -592,7 +592,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "COMMENT ON TABLE public.settings IS 'This table stores the name of functions used to pull in new data, the parameter with which they are associated, and the remote parameter name to pass to the source function for each function and database parameter name.'
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.settings.source_fx IS 'The R function (from the HydroMetDB package) to use for fetching data.';
+  COMMENT ON COLUMN public.settings.source_fx IS 'The R function (from the AquaCache package) to use for fetching data.';
   ")
   DBI::dbExecute(con, "
   COMMENT ON COLUMN public.settings.parameter IS 'Parameter integer codes used in the timeseries table.';
@@ -647,7 +647,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                CONSTRAINT enforce_valid_geom CHECK (st_isvalid(geom)),
                UNIQUE (layer_name, feature_name, geom_type)
                );")
-  DBI::dbExecute(con, "COMMENT ON TABLE public.vectors IS 'Holds points, lines, or polygons as geometry objects that can be references by other tables. For example, the locations table references a geom_id for each location. Retrieve objects from this table using function HydroMetDB::fetchVector, insert them using HydroMetDB::insertHydrometVector.';")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.vectors IS 'Holds points, lines, or polygons as geometry objects that can be references by other tables. For example, the locations table references a geom_id for each location. Retrieve objects from this table using function AquaCache::fetchVector, insert them using AquaCache::insertACVector.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.geom IS 'Enforces epsg:4269 (NAD83).';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.layer_name IS 'Non-optional descriptive name for the layer.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.vectors.feature_name IS 'Non-optional descriptive name for the feature.'")
@@ -994,13 +994,13 @@ GROUP BY loc.location_id, loc.location, loc.name_fr, loc.latitude, loc.longitude
 
   # Create a read-only account ########################################
   tryCatch({
-    DBI::dbExecute(con, "CREATE ROLE hydromet_read WITH LOGIN PASSWORD 'hydromet';")
-    DBI::dbExecute(con, "GRANT CONNECT ON DATABASE hydromet TO hydromet_read;")
-    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO hydromet_read;")
-    DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO hydromet_read;")
+    DBI::dbExecute(con, "CREATE ROLE AquaCache_read WITH LOGIN PASSWORD 'AquaCache';")
+    DBI::dbExecute(con, "GRANT CONNECT ON DATABASE AquaCache TO AquaCache_read;")
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO AquaCache_read;")
+    DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO AquaCache_read;")
   }, error = function(e) {
-    warning("May have failed to create new read only account with name hydromet_read. Ignore this message if it already exists (this function would not have erased the old account).")
+    warning("May have failed to create new read only account with name AquaCache_read. Ignore this message if it already exists (this function would not have erased the old account).")
   })
 
-  message("The database was successfully created. If a read-only account was created it has username hydromet_read and password hydromet")
+  message("The database was successfully created. If a read-only account was created it has username AquaCache_read and password AquaCache")
 }

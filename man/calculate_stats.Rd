@@ -5,13 +5,13 @@
 \title{Calculate daily means and statistics}
 \usage{
 calculate_stats(
-  con = hydrometConnect(silent = TRUE),
+  con = AquaCacheCon(silent = TRUE),
   timeseries_id,
   start_recalc = NULL
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'. Specifying 'all' will work on all continuous category timeseries.}
 

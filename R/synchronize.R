@@ -9,7 +9,7 @@
 #'
 #'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
@@ -21,7 +21,7 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-synchronize <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
+synchronize <- function(con = AquaCacheCon(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
 {
   
   if (!active %in% c('default', 'all')) {

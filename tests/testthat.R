@@ -7,6 +7,6 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(HydroMetDB)
+library(AquaCache)
 
-test_check("HydroMetDB")
+test_check("AquaCache")

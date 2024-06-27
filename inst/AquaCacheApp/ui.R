@@ -1,4 +1,4 @@
-# This script is the UI-side of a Shiny application that creates an easy-to-use interface for database administrators to update the database with new data. The server side script is located in the inst/ folder. It will facilitate the use of functions addHydrometTimeseries, addHydrometImageSeries, addHydrometRasterSeries, insertHydrometRaster, insertHydrometVector, insertHydrometDocument, and insertHydrometImage. The application will be called with function hydrometApp.
+# This script is the UI-side of a Shiny application that creates an easy-to-use interface for database administrators to update the database with new data. The server side script is located in the inst/ folder. It will facilitate the use of functions addACTimeseries, addACImageSeries, addACRasterSeries, insertACRaster, insertACVector, insertACDocument, and insertACImage. The application will be called with function AquaCacheApp
 
 
 ui <- fluidPage(

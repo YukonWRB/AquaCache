@@ -2,7 +2,7 @@
 % Please edit documentation in R/downloadSnowCourse.R
 \name{downloadSnowCourse}
 \alias{downloadSnowCourse}
-\title{Bring snow course data into the hydromet database}
+\title{Bring snow course data into the AquaCache database}
 \usage{
 downloadSnowCourse(
   location,
@@ -10,7 +10,7 @@ downloadSnowCourse(
   start_datetime,
   end_datetime = Sys.time(),
   old_loc = NULL,
-  hydroCon = NULL,
+  ACCon = NULL,
   snowCon = snowConnect()
 )
 }
@@ -25,7 +25,7 @@ downloadSnowCourse(
 
 \item{old_loc}{In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snowDB. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.}
 
-\item{hydroCon}{A connection to the hydromet database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using hydrometConnect().}
+\item{ACCon}{A connection to the AquaCache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaCacheCon().}
 
 \item{snowCon}{A connection to the snow database.}
 }

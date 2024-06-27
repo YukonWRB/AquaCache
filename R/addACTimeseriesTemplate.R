@@ -1,21 +1,21 @@
-#' Templates to add timeseries to hydrometric database
+#' Templates to add timeseries to AquaCacheric database
 #'
 #' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}", with each parameter:argument pair enclosed in curly brackets (which aren't being rendered in the help file). The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
 #' @param format "long" or "short", only applies to the timeseries table. If long, will return one row per unique parameter with the total data.frame length equal to the parameter with the highest count. If short will return a single row, with unique parameter values concatenated in a single cell per parameter.
-#' @param save_path Specify a save path (folder) if you want an xlsx document with column headers as required by function [addHydrometTimeseries()]. "choose" lets you choose interactively.
+#' @param save_path Specify a save path (folder) if you want an xlsx document with column headers as required by function [addACTimeseries()]. "choose" lets you choose interactively.
 #' 
 #' @return A list of three data.frames:
-#' For the timeseries table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `timeseries_df` of [addHydrometTimeseries()].
-#' For the spatial table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `locations_df` of [addHydrometTimeseries()].
+#' For the timeseries table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `timeseries_df` of [addACTimeseries()].
+#' For the spatial table, a data.frame with column names and options already in the DB for each required parameter to pass to the parameter `locations_df` of [addACTimeseries()].
 #' For the settings table, a data.frame with column names and options already in the DB so you can check what already exists.
 #' A data.frame is also produced listing the datums present in the database, facilitating your specification of the appropriate datum in the spatial table.
 #' 
 #' @export
 #'
 
-addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent = TRUE), format = "short", save_path = NULL) {
+addACTimeseriesTemplate <- function(con = AquaCacheCon(silent = TRUE), format = "short", save_path = NULL) {
 
 
   if (!is.null(save_path)) {
@@ -86,7 +86,7 @@ addHydrometTimeseriesTemplate <- function(con = hydrometConnect(silent = TRUE), 
   list <- list("timeseries_table" = ts_df, "locations_table" = locs, "datums" = datums, "settings" = settings)
 
   if (!is.null(save_path)) {
-    openxlsx::write.xlsx(list, file = paste0(save_path, "/addHydrometTemplate output ", Sys.Date(), ".xlsx"))
+    openxlsx::write.xlsx(list, file = paste0(save_path, "/addACTemplate output ", Sys.Date(), ".xlsx"))
   }
   return(list)
 }

@@ -2,12 +2,12 @@
 % Please edit documentation in R/vacuum.R
 \name{vacuum}
 \alias{vacuum}
-\title{Maintenance (vacuum) function for hydrometric database.}
+\title{Maintenance (vacuum) function for AquaCache database.}
 \usage{
-vacuum(con = hydrometConnect(silent = TRUE))
+vacuum(con = AquaCacheCon(silent = TRUE))
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
 }
 \value{
 A vacuumed database.

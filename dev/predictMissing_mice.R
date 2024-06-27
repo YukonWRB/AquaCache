@@ -20,7 +20,7 @@
 #' @export
 #'
 
-predictMissing_mice <- function(tsid, radius, predict_range, train_range = NULL, extra_params = NULL, imputed = TRUE, daily = FALSE, mice = FALSE, con = hydrometConnect(silent = TRUE)) {
+predictMissing_mice <- function(tsid, radius, predict_range, train_range = NULL, extra_params = NULL, imputed = TRUE, daily = FALSE, mice = FALSE, con = AquaCacheCon(silent = TRUE)) {
   
   on.exit(DBI::dbDisconnect(con))
   
