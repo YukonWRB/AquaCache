@@ -20,13 +20,13 @@
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 
- getNewContinuous <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", active = 'default')
+getNewContinuous <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", active = 'default')
 {
-   
-   if (!active %in% c('default', 'all')) {
-     stop("Parameter 'active' must be either 'default' or 'all'.")
-   }
-
+  
+  if (!active %in% c('default', 'all')) {
+    stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
@@ -36,14 +36,19 @@
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'continuous', or has no function specified in column source_fx.")
     }
   }
-   
-   if (active == 'default') {
-     all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
-   }
-
+  
+  if (active == 'default') {
+    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
+  }
+  
+  if (nrow(all_timeseries) == 0) {
+    stop("Could not find any timeseries matching your input parameters.")
+  }
+  
+  
   count <- 0 #counter for number of successful new pulls
   success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
-
+  
   # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)) {
     loc <- all_timeseries$location[i]
