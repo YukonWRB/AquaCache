@@ -166,11 +166,11 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
             
             # Create a unique datetime key for both data frames
             if (category == "continuous") {
-              inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 19), inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
-              inDB$key <- paste(substr(as.character(inDB$datetime), 1, 19), inDB$value, inDB$grade, inDB$approval, sep = "|")
+              inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
+              inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, inDB$grade, inDB$approval, sep = "|")
             } else if (category == "discrete") {
-              inRemote$key <- paste(substr(as.character(inRemote$target_datetime), 1, 19), substr(as.character(inRemote$datetime), 1, 19), inRemote$value, inRemote$note, inRemote$sample_class, sep = "|")
-              inDB$key <- paste(substr(as.character(inDB$target_datetime), 1, 19), substr(as.character(inDB$datetime), 1, 19), inDB$value, inDB$note, inDB$sample_class, sep = "|")
+              inRemote$key <- paste(substr(as.character(inRemote$target_datetime), 1, 22), substr(as.character(inRemote$datetime), 1, 22), inRemote$value, inRemote$note, inRemote$sample_class, sep = "|")
+              inDB$key <- paste(substr(as.character(inDB$target_datetime), 1, 22), substr(as.character(inDB$datetime), 1, 22), inDB$value, inDB$note, inDB$sample_class, sep = "|")
             }
             
             # Check for mismatches using set operations
