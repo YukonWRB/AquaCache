@@ -1,4 +1,4 @@
-#' Shiny Interface to Hydromet DB
+#' Shiny Interface to AquaCache DB
 #'
 #'@description
 #'`r lifecycle::badge("experimental")`
@@ -21,14 +21,14 @@ AquaCacheApp <- function(host = getOption("shiny.host", "127.0.0.1"), port = get
   rlang::check_installed("shinyWidgets", reason = "to allow for the use of widgets within the app.")
   rlang::check_installed("pool", reason = "to connect to the WRB database.")
   
-  appDir <- system.file("AquaCacheApp", package = "HydroMetDB")
+  appDir <- system.file("AquaCacheApp", package = "AquaCache")
   if (appDir == "") {
-    stop("Could not find hydromet Shiny app directory. Try re-installing `HydroMetDB`.", call. = FALSE)
+    stop("Could not find AquaCache Shiny app directory. Try re-installing `AquaCache`.", call. = FALSE)
   }
   
   
   # Load the global variables. Contains modules as well as call to pool::pool() for connection to WRB database, library calls, and loads the translations data.table.
-  source(system.file("AquaCacheApp/app_globals.R", package = "HydroMetDB"))
+  source(system.file("AquaCacheApp/app_globals.R", package = "AquaCache"))
 
   shiny::runApp(appDir, display.mode = display.mode, host = host, port = port, launch.browser = browser)
 }

@@ -5,13 +5,13 @@
 \title{Daily update of hydro database}
 \usage{
 dailyUpdate(
-  con = hydrometConnect(silent = TRUE),
+  con = AquaConnect(silent = TRUE),
   timeseries_id = "all",
   active = "default"
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
@@ -28,7 +28,7 @@ This function is intended to be run on a daily or near-daily basis to ensure dat
 \details{
 Calls several functions in sequence: \code{\link[=getNewContinuous]{getNewContinuous()}} to pull in new data into the measurements_continuous table, \code{\link[=getNewDiscrete]{getNewDiscrete()}} to pull in new data to the measurements_discrete table, \code{\link[=getNewImages]{getNewImages()}} to get new images in a series, \code{\link[=getNewRasters]{getNewRasters()}} to get new model rasters, \code{\link[=update_hydat]{update_hydat()}} to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, \code{\link[=update_hydat_datums]{update_hydat_datums()}} to update the datums table with any new datums present in HYDAT, and \code{\link[=calculate_stats]{calculate_stats()}} to calculate new statistics where necessary.
 
-Note that new timeseries should be added using function \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}}.
+Note that new timeseries should be added using function \code{\link[=addACTimeseries]{addACTimeseries()}}.
 
-Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function, and \code{\link[=addHydrometTimeseriesTemplate]{addHydrometTimeseriesTemplate()}} for details on how to format the parameters to pass to \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}}.
+Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function, and \code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} for details on how to format the parameters to pass to \code{\link[=addACTimeseries]{addACTimeseries()}}.
 }

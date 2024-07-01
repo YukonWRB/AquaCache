@@ -14,7 +14,7 @@ imputeMissing(
   daily = FALSE,
   min_gap = 1,
   max_gap = Inf,
-  con = hydrometConnect(silent = TRUE)
+  con = AquaConnect(silent = TRUE)
 )
 }
 \arguments{

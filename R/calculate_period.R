@@ -1,18 +1,19 @@
 #' Calculate periodicity of data and add a column
 #'
-#' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals.
+#' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the AquaCache DB to fetch missing data points or to pull additional data in case of ambiguity.
 #'
 #' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
 #' @export
 
-calculate_period <- function(data, timeseries_id, con = hydrometConnect())
+calculate_period <- function(data, timeseries_id, con = AquaConnect())
 {
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
-  names <- names(data)
+  names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input
+  names <- names[!names == "period"] # period is being calculated anyways so don't include it
   no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", timeseries_id, ") AND datetime NOT IN ('", paste(data$datetime, collapse = "', '"), "');"))
   if (nrow(no_period) > 0) {
     data <- rbind(data, no_period)
@@ -55,7 +56,6 @@ calculate_period <- function(data, timeseries_id, con = hydrometConnect())
 
   } else { #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
     no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
-    no_period$period <- NA
     data <- rbind(data, no_period)
     data <- data[order(data$datetime), ]
     diffs <- as.numeric(diff(data$datetime), units = "hours")

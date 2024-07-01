@@ -13,16 +13,21 @@
 #' @export
 #'
 
-EQConnect <- function(path = "//carver/infosys/EQWin/WR/DB/Water_Resources.mdb", silent = FALSE){
+EQConnect <- function(path = "//carver/infosys/EQWin/WR/DB/Water Resources.mdb", silent = FALSE){
 
+  # Check if the file exists
+  if (!file.exists(path)) {
+    stop("The specified database file does not exist.")
+  }
+  
   tryCatch({
     EQWin <- DBI::dbConnect(drv = odbc::odbc(), .connection_string = paste0("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=", path))
-    if (!silent){
-      print("Remember to disconnect using DBI::dbDisconnect() when finished.")
+    if (!silent) {
+      message("Remember to disconnect using DBI::dbDisconnect() when finished.")
     }
     return(EQWin)
   }, error = function(e) {
-    stop("EQWin connection failed. Do you need to install the Access database engine? Check the help file.")
+    stop("EQWin connection failed: ", e$message, ". Do you need to install the Access database engine? Check the help file.")
   })
-
+  
 }

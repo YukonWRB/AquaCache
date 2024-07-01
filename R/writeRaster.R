@@ -1,7 +1,7 @@
 #' Write raster to PostGIS database table.
 #'
 #' @description
-#' This function is not meant to be used by itself: in most cases use [insertHydrometModelRaster()] or [insertHydrometRaster()] which will populate reference tables so that your raster can be easily found later.
+#' This function is not meant to be used by itself: in most cases use [insertACModelRaster()] or [insertACRaster()] which will populate reference tables so that your raster can be easily found later.
 #'
 #' Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of [rpostgis::pgWriteRast()]. Will create the raster table if necessary.
 #'

@@ -7,7 +7,7 @@
 dbGetQueryDT(con, statement, ...)
 }
 \arguments{
-\item{con}{A connection object as returned by a \code{\link[DBI:dbConnect]{DBI::dbConnect()}} call or, in the context of this package, a \code{\link[=hydrometConnect]{hydrometConnect()}} or \code{\link[=snowConnect]{snowConnect()}} call.}
+\item{con}{A connection object as returned by a \code{\link[DBI:dbConnect]{DBI::dbConnect()}} call or, in the context of this package, a \code{\link[=AquaConnect]{AquaConnect()}} or \code{\link[=snowConnect]{snowConnect()}} call.}
 
 \item{statement}{A SQL statement to be passed to the database.}
 

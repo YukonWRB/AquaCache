@@ -1,6 +1,6 @@
-Package: HydroMetDB
-Title: Hydrological database creation and maintenance
-Version: 1.9.3
+Package: AquaCache
+Title: Hydrometeorological database creation and maintenance
+Version: 2.0.0
 Authors@R: c(
     person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -8,13 +8,19 @@ Authors@R: c(
            comment = c(ORCID = "0000-0002-0013-8953"))
   )
 Description: Set of functions for the creation and ongoing maintenance of
-    the Yukon Government's hydrometeorological database in postgreSQL
-    format. This database is a combination of the Water Survey of Canada
-    real-time and historical data, YG data held in Aquarius and in the
-    RWIS database, USGS data, discrete snow survey data, and water quality
-    data. Supports any number of timeseries unique by their location,
-    parameter, data type, and period (for sum, mean, etc measurements).
-    Disparate data sources are handled via scripts specified for each
+    the Yukon Government's hydrometeorological databases in postgreSQL
+    format. Contains functions to create two databases, the 'snow' and 'AquaCache' 
+    databases. The former is designed to hold discrete snowpack measurements and 
+    detailled snow survey data, while the later is designed to hold hydrometric, 
+    meteorological and water quality data along with images, spatial files and documents.
+    Currently includes adapters to import data from the Water Survey of Canada
+    real-time and historical data, date held in Aquarius, USGS data, discrete 
+    snow survey data from the snow database created with this package,
+    water quality data, images from NuPoint, and meteorological 
+    data in the form of point observations and rasters (forecast rasters are handled with special workflows). 
+    Supports any number of timeseries unique by their location,
+    parameter, data type, and period (for sum, mean, etc. measurements).
+    Disparate data sources are handled via import scripts specified for each
     timeseries, allowing for expansion of data sources.
 License: AGPL (>= 3) + file LICENSE
 Depends: 
@@ -39,7 +45,6 @@ Imports:
     rvest,
     sftp,
     stats,
-    stringr,
     terra,
     tidyhydat,
     tidyr,

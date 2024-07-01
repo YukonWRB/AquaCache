@@ -8,13 +8,13 @@
 #' @param source_fx_args Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
 #' @param public Should the images be publicly visible?
 #' @param public_delay A period in ISO 8601 format by which to delay public visibility of images.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return TRUE if successful, and a new entry in the database with images fetched.
 #' @export
 #'
 
-addHydrometImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, public = TRUE, public_delay = NA, con = hydrometConnect(silent = TRUE)) {
+addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, public = TRUE, public_delay = NA, con = AquaConnect(silent = TRUE)) {
   #function will add entry to images_index, then trigger getNewImages from the user-specified start_datetime
 
   on.exit(DBI::dbDisconnect(con))

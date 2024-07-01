@@ -15,13 +15,13 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup}
-library(HydroMetDB)
+library(AquaCache)
 ```
 
 ```{r vignette building comments, eval=FALSE, include=FALSE}
 # You should be modifying this vignette from the .Rmd document in the /vignettes folder, NOT the .RMD in the /doc folder.
 # To have this vignette updated on the G drive, uncomment and run the following code *after* re-building the vignette using devtools::build_vignettes()
-# file.copy(from = paste0(dirname(getwd()), "/doc/HydroMetDB_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/HydroMetDB/documentation/HydroMetDB user guide.html", overwrite = TRUE)
+# file.copy(from = paste0(dirname(getwd()), "/doc/AquaCache_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/AquaCache/documentation/AquaCache user guide.html", overwrite = TRUE)
 ```
 
 This guide describes the initial set-up of the snow and hydromet databases as well as their ongoing operation. A function workflow is provided for both databases.
@@ -61,7 +61,7 @@ The hydromet database relies on a series of R scripts (described below) to inges
 The hydromet database requires some additional folder access permissions for the "\\carver\infosys\EQWin" folder if EQWin (water quality) data is to be updated. It'll also need access to "//env-fs/env-data/corp/water/data" in order to run database backups using the pre-created scripts.
 
 ## R settings
-Many hydromet database functions access information stored in password-protected URLs or require credentials to interact with an API. To avoid storing credentials online with the HydroMetDB code on GitHub, these settings are stored in an .Renviron file on the machine which will run R scripts. These credentials are kept here as a backup: ""G:\water\Data\postgres_backups\.Renviron credentials.txt"".
+Many hydromet database functions access information stored in password-protected URLs or require credentials to interact with an API. To avoid storing credentials online with the AquaCache code on GitHub, these settings are stored in an .Renviron file on the machine which will run R scripts. These credentials are kept here as a backup: ""G:\water\Data\postgres_backups\.Renviron credentials.txt"".
 
 ## Hydromet-related R functions and their purposes
 

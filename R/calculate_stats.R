@@ -12,7 +12,7 @@
 #' @details
 #' Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'. Specifying 'all' will work on all continuous category timeseries.
 #' @param start_recalc The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.
 #'
@@ -20,7 +20,7 @@
 #' @export
 #'
 
-calculate_stats <- function(con = hydrometConnect(silent = TRUE), timeseries_id, start_recalc = NULL) {
+calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, start_recalc = NULL) {
 
   if (!is.null(start_recalc)) {
     if (length(start_recalc) != 1) {

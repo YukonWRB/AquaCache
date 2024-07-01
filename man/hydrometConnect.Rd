@@ -2,7 +2,7 @@
 % Please edit documentation in R/hydrometConnect.R
 \name{hydrometConnect}
 \alias{hydrometConnect}
-\title{Connect to the hydromet database}
+\title{Connect to the hydromet (dev) database}
 \usage{
 hydrometConnect(
   name = "hydromet",
@@ -20,7 +20,7 @@ hydrometConnect(
 
 \item{port}{Connection port. By default searches the .Renviron file for parameter:value pair of form hydrometPort:"1234".}
 
-\item{username}{Username. By default searches the .Renviron file for parameter:value pair of form hydrometAdminUser:"username". Refrain from using username with write privileges unless you absolutely know what you're doing.}
+\item{username}{Username. By default searches the .Renviron file for parameter:value pair of form hydrometAdminUser:"username".}
 
 \item{password}{Password. By default searches the .Renviron file for parameter:value pair of form hydrometAdminPass:"password".}
 
@@ -30,7 +30,7 @@ hydrometConnect(
 A connection to the database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
 
-This function exists to facilitate connecting to the hydrology database, especially if the database type and connection method changes in the future.
+Superseded by function \code{\link[=AquaConnect]{AquaConnect()}}. Still exported by this package as old database 'hydromet' is now a development environment.
 }

@@ -1,5 +1,5 @@
 load_all()
-con <- hydrometConnect()
+con <- AquaConnect()
 
 # Adding timeseries
 timeseries_df <- data.frame(location = "09DC007",
@@ -35,11 +35,11 @@ settings_df <- data.frame(source_fx = "downloadAquarius",
                           record_rate = "< 1 day",
                           remote_param_name = c("Precip Total.Corrected", "Air Temp.Corrected"))
 
-addHydrometTimeseries(timeseries_df = timeseries_df)
+addACTimeseries(timeseries_df = timeseries_df)
 
 
 
 
 # Check the DB size:
-DBI::dbGetQuery(con, "select pg_size_pretty(pg_database_size('hydromet'));")
+DBI::dbGetQuery(con, "select pg_size_pretty(pg_database_size('AquaCache'));")
 

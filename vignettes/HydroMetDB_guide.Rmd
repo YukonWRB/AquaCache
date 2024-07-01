@@ -1,10 +1,10 @@
 ---
-title: "HydroMetDB User Guide"
+title: "AquaCache User Guide"
 author: "Ghislain de Laplante"
 date: "2023-05-30"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{HydroMetDB User Guide}
+  %\VignetteIndexEntry{AquaCache User Guide}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -14,17 +14,17 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-library(HydroMetDB)
+library(AquaCache)
 ```
 
 Important note regarding this vignette: if you are reading this in an HTML, Word or PDF document from the package folder on the G drive and wish to update the document, please do so via the vignette R Markdown document and re-publish/overwrite the document. The R Markdown document should be the ultimate source of truth regarding this R package and associated Shiny application. Instructions on how to do so are provided in the vignette Markdown document.
 
-This vignette may also come to contain R code and links to other documentation. For best performance and to ensure that all links function, it is recommended to view this vignette from within R Studio. You can view all package vignettes with 'vignette(package = "HydroMetDB")' or this particular vignette with 'vignette(topic = "HydroMetDB_guide")'. Note however that vignettes may not have been installed, depending on the method you used to install the package.
+This vignette may also come to contain R code and links to other documentation. For best performance and to ensure that all links function, it is recommended to view this vignette from within R Studio. You can view all package vignettes with 'vignette(package = "AquaCache")' or this particular vignette with 'vignette(topic = "AquaCache_guide")'. Note however that vignettes may not have been installed, depending on the method you used to install the package.
 
 ```{r vignette building comments, eval=FALSE, include=FALSE}
 # You should be modifying this vignette from the .Rmd document in the /vignettes folder, NOT the .RMD in the /doc folder.
 # To have this vignette updated on the G drive, uncomment and run the following code *after* re-building the vignette using devtools::build_vignettes()
-# file.copy(from = paste0(dirname(getwd()), "/doc/HydroMetDB_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/HydroMetDB/documentation/HydroMetDB user guide.html", overwrite = TRUE)
+# file.copy(from = paste0(dirname(getwd()), "/doc/AquaCache_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/AquaCache/documentation/AquaCache user guide.html", overwrite = TRUE)
 ```
 
 # Introduction
@@ -38,13 +38,13 @@ The WRB's local hydrometeorological database is intended as a central repository
 
 This database should not be considered a static repository of information: when working as intended, it will continuously incorporate new information and calculate derived data, check itself for errors, and update tables whenever necessary to reflect changes to remote data stores.
 
-A strong attempt was made to limit additional dependencies wherever feasible, and otherwise to use long term stable, widely adopted packages. That said, there is no guarantee that dependencies will not change: always test new versions of HydroMetDB or updates to other packages on a non-production machine before updating the production machine.
+A strong attempt was made to limit additional dependencies wherever feasible, and otherwise to use long term stable, widely adopted packages. That said, there is no guarantee that dependencies will not change: always test new versions of AquaCache or updates to other packages on a non-production machine before updating the production machine.
 
-# The HydroMetDB package
+# The AquaCache package
 
-The **HydroMetDB** package was written with the goal of being as database-format-agnostic as possible: standard SQL is used for all database interactions once the initial connection is established. To facilitate future changes to database formats and connection methods, connections to the central database and to the snow survey database are handled by dedicated and easy to change functions in the YGWater package. These are discussed later on in this document.
+The **AquaCache** package was written with the goal of being as database-format-agnostic as possible: standard SQL is used for all database interactions once the initial connection is established. To facilitate future changes to database formats and connection methods, connections to the central database and to the snow survey database are handled by dedicated and easy to change functions in the YGWater package. These are discussed later on in this document.
 
-All of the functions that you will interact with to install and continuously update the database are located in the HydroMetDB package. These include functions for:
+All of the functions that you will interact with to install and continuously update the database are located in the AquaCache package. These include functions for:
 
 -   Initial creation of empty tables (initial_create())
 
@@ -140,9 +140,9 @@ Note how the rscript parameter points to an R script. This is important: we're n
 
 *print(paste0("Task start", Sys.time()))*
 
-*print(paste0("Using HydroMetDB version", packageVersion("HydroMetDB")))*
+*print(paste0("Using AquaCache version", packageVersion("AquaCache")))*
 
-*HydroMetDB::hydro_update_daily(path = "//env-fs/env-data/corp/water/Common_GW_SW/Data/database/hydro.sqlite", snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")*
+*AquaCache::hydro_update_daily(path = "//env-fs/env-data/corp/water/Common_GW_SW/Data/database/hydro.sqlite", snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb")*
 ```
 
 The first line sets the timezone to Yukon time so that the first *print()* call is in the right time zone.
@@ -155,8 +155,8 @@ Execution errors may arise from time-to-time when one of the following is true:
 
 -   Changes to folder access permissions. The database must be able to read and write to the folder in which it lives, as well as to the Snow Survey Access database if option is used.
 -   Changes to internet access. Obviously data needs to be fetched from online, and changes to things like firewalls can result in problems accessing the internet, or with reading encrypted data.
--   Updates to function on which HydroMetDB depends. This one's a user-beware scenario: always test updated packages on a non-production machine (like your personal computer) and not on the production machine.
--   Updates to HydroMetDB functions: hopefully whoever is updating the functions is doing proper testing, but things slip through the cracks sometimes.
+-   Updates to function on which AquaCache depends. This one's a user-beware scenario: always test updated packages on a non-production machine (like your personal computer) and not on the production machine.
+-   Updates to AquaCache functions: hopefully whoever is updating the functions is doing proper testing, but things slip through the cracks sometimes.
 -   New conditions within the database that the designer did not anticipate or see a need to incorporate and did not create failsafe workarounds. Hypothetical example: you entered a new location with parameter 'soil moisture', and the database only know how to handle 'level' and 'flow'.
 -   From time to time, service outages will also occur to the WRB's Aquarius web server or to the Water Survey of Canada's data stream for realtime information. WSC outages should be resolved without our involvement, though it's always possible that our own firewall is the source of problems accessing that data - check that first. Aquarius-related issues should be brought to the attention of Alex Mischler or whoever the Aquarius expert is at the time.
 

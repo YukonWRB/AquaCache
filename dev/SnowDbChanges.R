@@ -1,4 +1,4 @@
-con <- HydroMetDB::snowConnect()
+con <- AquaCache::snowConnect()
 DBI::dbDisconnect(con)
 
 #### Add column to snow database surveys table ####

@@ -39,7 +39,7 @@ downloadAquarius <- function(location,
     stop("downloadAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults.")
   }
 
-  source(system.file("scripts",  "timeseries_client.R", package = "HydroMetDB")) #This loads the code dependencies
+  source(system.file("scripts",  "timeseries_client.R", package = "AquaCache")) #This loads the code dependencies
 
   #Make the Aquarius configuration
   config = list(

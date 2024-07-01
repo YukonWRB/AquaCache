@@ -3,12 +3,12 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Retrieves new discrete data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the discrete table and that have a proper entry in the timeseries table; refer to [addHydrometTimeseries()] for how to add new stations. Does not work on any timeseries of category "continuous": for that, use [getNewContinuous()]. Timeseries with no specified souce_fx will be ignored.
+#' Retrieves new discrete data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the discrete table and that have a proper entry in the timeseries table; refer to [addACTimeseries()] for how to add new stations. Does not work on any timeseries of category "continuous": for that, use [getNewContinuous()]. Timeseries with no specified souce_fx will be ignored.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addHydrometTimeseries()] for a description of how to formulate these arguments.
+#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'discrete'.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 
@@ -17,7 +17,7 @@
 #' @export
 #'
 
-getNewDiscrete <- function(con = hydrometConnect(silent = TRUE), timeseries_id = "all", active = 'default') {
+getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", active = 'default') {
 
   
   if (!active %in% c('default', 'all')) {
@@ -26,9 +26,9 @@ getNewDiscrete <- function(con = hydrometConnect(silent = TRUE), timeseries_id =
   
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)) {
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'discrete', or has no function specified in column source_fx.")
     }

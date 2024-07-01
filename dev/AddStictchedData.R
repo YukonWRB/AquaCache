@@ -22,7 +22,7 @@ plot_ts <- function(tables){
 }
 
 ### ------------------------  Add new precip data ------------------------  ####
-con <- hydrometConnect()
+con <- AquaConnect()
 
 precip_all <- read.csv("Precip_March.csv")
 
@@ -38,7 +38,7 @@ precip_all <- precip_all[, c("timeseries_id", "datetime", "value", "grade", "app
 DBI::dbAppendTable(con, "measurements_continuous", precip_all)
 
 #### ---------------------- Add timeseries ---------------------------------####
-con <- hydrometConnect()
+con <- AquaConnect()
 
 # Adding timeseries
 timeseries_df <- data.frame(location = c("48168"),
@@ -55,7 +55,7 @@ timeseries_df <- data.frame(location = c("48168"),
                             source_fx_args = c("{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'hour'}", "{interval = 'hour'}"),
                             note = "Timeseries includes measurements from multiple  locations. Historical measurements adjusted using overlap to match current location")
 
-addHydrometTimeseries(timeseries_df = timeseries_df, locations_df = NULL)
+addACTimeseries(timeseries_df = timeseries_df, locations_df = NULL)
 
 
 ####------------------- Explore locations data -----------------------------####
@@ -334,7 +334,7 @@ whitehorse_precip_all$datetime <- as.POSIXct(paste(whitehorse_precip_all$date, "
                                              format = "%Y-%m-%d %H:%M:%S", tz="MST")
 whitehorse_precip_all <- whitehorse_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 663")
 DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 663")
 DBI::dbAppendTable(con, "measurements_continuous", whitehorse_precip_all)
@@ -403,7 +403,7 @@ dawson_precip_all$datetime <- as.POSIXct(paste(dawson_precip_all$date, "23:59:59
                                          format = "%Y-%m-%d %H:%M:%S")
 dawson_precip_all <- dawson_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 664")
 DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 664")
 DBI::dbAppendTable(con, "measurements_continuous", dawson_precip_all)
@@ -475,7 +475,7 @@ teslin_precip_all$datetime <- as.POSIXct(paste(teslin_precip_all$date, "23:59:59
                                          format = "%Y-%m-%d %H:%M:%S")
 teslin_precip_all <- teslin_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 665")
 DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 665")
 DBI::dbAppendTable(con, "measurements_continuous", teslin_precip_all)
@@ -544,7 +544,7 @@ carmacks_precip_all$datetime <- as.POSIXct(paste(carmacks_precip_all$date, "23:5
                                            format = "%Y-%m-%d %H:%M:%S")
 carmacks_precip_all <- carmacks_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 666")
 #DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 666")
 DBI::dbAppendTable(con, "measurements_continuous", carmacks_precip_all)
@@ -613,7 +613,7 @@ watsonlake_precip_all$datetime <- as.POSIXct(paste(watsonlake_precip_all$date, "
                                              format = "%Y-%m-%d %H:%M:%S")
 watsonlake_precip_all <- watsonlake_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 667")
 #DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 667")
 DBI::dbAppendTable(con, "measurements_continuous", watsonlake_precip_all)
@@ -682,7 +682,7 @@ mayo_precip_all$datetime <- as.POSIXct(paste(mayo_precip_all$date, "23:59:59"),
                                        format = "%Y-%m-%d %H:%M:%S")
 mayo_precip_all <- mayo_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 test <- DBI::dbGetQuery(con, "SELECT * FROM measurements_continuous WHERE timeseries_id = 668")
 #DBI::dbSendQuery(con, "DELETE FROM measurements_continuous WHERE timeseries_id = 668")
 DBI::dbAppendTable(con, "measurements_continuous", mayo_precip_all)
@@ -751,7 +751,7 @@ oldcrow_precip_all$datetime <- as.POSIXct(paste(oldcrow_precip_all$date, "23:59:
                                           format = "%Y-%m-%d %H:%M:%S")
 oldcrow_precip_all <- oldcrow_precip_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", oldcrow_precip_all)
 
 
@@ -801,7 +801,7 @@ whitehorse_temp_all$datetime <- as.POSIXct(paste(whitehorse_temp_all$date, "12:0
                                            format = "%Y-%m-%d %H:%M:%S")
 whitehorse_temp_all <- whitehorse_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- hydrometConnect()
+con <- AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", whitehorse_temp_all)
 
 # update timeseries start date
@@ -853,7 +853,7 @@ dawson_temp_all$datetime <- as.POSIXct(paste(dawson_temp_all$date, "12:00:00"),
                                        format = "%Y-%m-%d %H:%M:%S")
 dawson_temp_all <- dawson_temp_all[, c("value", "timeseries_id", "datetime", "imputed")]
 # Add to db
-con <- hydrometConnect()
+con <- AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", dawson_temp_all)
 
 # update timeseries start date
@@ -904,7 +904,7 @@ faro_temp_all$datetime <- as.POSIXct(paste(faro_temp_all$date, "12:00:00"),
                                      format = "%Y-%m-%d %H:%M:%S")
 faro_temp_all <- faro_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- hydrometConnect()
+con <- AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", faro_temp_all)
 
 # update timeseries start date
@@ -934,7 +934,7 @@ watsonlake_temp_all <- watsonlake_temp_all[, c("value", "timeseries_id", "dateti
 # One last chgeck
 plot_ts(watsonlake_temp_all)
 # Add to db
-con <- hydrometConnect()
+con <- AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", watsonlake_temp_all)
 
 # update timeseries start date
@@ -963,7 +963,7 @@ hainesjunction_temp_all <- hainesjunction_temp_all[, c("value", "timeseries_id",
 # One last chgeck
 plot_ts(hainesjunction_temp_all)
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", hainesjunction_temp_all)
 
 # update timeseries start date
@@ -992,7 +992,7 @@ beavercreek_temp_all <- beavercreek_temp_all[, c("value", "timeseries_id", "date
 # One last chgeck
 plot_ts(beavercreek_temp_all)
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", beavercreek_temp_all)
 
 # update timeseries start date
@@ -1020,7 +1020,7 @@ teslin_temp <- teslin_temp[, c("value", "timeseries_id", "datetime", "imputed", 
 # One last chgeck
 plot_ts(teslin_temp)
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", teslin_temp)
 
 # update timeseries start date
@@ -1072,7 +1072,7 @@ oldcrow_temp_all <- oldcrow_temp_all[, c("value", "timeseries_id", "datetime", "
 # Plot last time
 plot_ts(oldcrow_temp_all)
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", oldcrow_temp_all)
 
 # update timeseries start date
@@ -1121,7 +1121,7 @@ carmacks_temp_all$datetime <- as.POSIXct(paste(carmacks_temp_all$date, "12:00:00
                                          format = "%Y-%m-%d %H:%M:%S")
 carmacks_temp_all <- carmacks_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- hydrometConnect()
+con <- AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", carmacks_temp_all)
 
 # update timeseries start date
@@ -1170,7 +1170,7 @@ mayo_temp_all$datetime <- as.POSIXct(paste(mayo_temp_all$date, "12:00:00"),
                                      format = "%Y-%m-%d %H:%M:%S")
 mayo_temp_all <- mayo_temp_all[, c("value", "timeseries_id", "datetime", "imputed", "period")]
 # Add to db
-con <- HydroMetDB::hydrometConnect()
+con <- AquaCache::AquaConnect()
 DBI::dbAppendTable(con, "measurements_continuous", mayo_temp_all)
 
 # update timeseries start date

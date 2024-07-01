@@ -6,7 +6,7 @@
 \usage{
 getNewRasters(
   raster_series_ids = "all",
-  con = hydrometConnect(silent = TRUE),
+  con = AquaConnect(silent = TRUE),
   keep_forecasts = "selective",
   active = "default"
 )
@@ -14,7 +14,7 @@ getNewRasters(
 \arguments{
 \item{raster_series_ids}{A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{keep_forecasts}{Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'}
 
@@ -23,5 +23,5 @@ getNewRasters(
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Retrieves new data corresponding to entries in the table "raster_series_index" for which the column 'public' is TRUE. You can add a new raster series with \code{\link[=addHydrometRasterSeries]{addHydrometRasterSeries()}}. As with the timeseries and images table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to \code{\link[=addHydrometTimeseries]{addHydrometTimeseries()}} for a description of how to formulate these arguments.
+Retrieves new data corresponding to entries in the table "raster_series_index" for which the column 'public' is TRUE. You can add a new raster series with \code{\link[=addACRasterSeries]{addACRasterSeries()}}. As with the timeseries and images table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
 }

@@ -3,18 +3,18 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Retrieves new data corresponding to entries in the table "images_index". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addHydrometTimeseries()] for a description of how to formulate these arguments.
+#' Retrieves new data corresponding to entries in the table "images_index". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
 #' This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
 #'
 #' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param active Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the images_index table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 #' @export
 #'
 
-getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent = TRUE), active = 'default') {
+getNewImages <- function(image_meta_ids = "all", con = AquaConnect(silent = TRUE), active = 'default') {
 
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -75,12 +75,12 @@ getNewImages <- function(image_meta_ids = "all", con = hydrometConnect(silent = 
       if (inherits(imgs, "response")) {
         for (j in 1:length(imgs)) {
           img <- imgs[[j]]
-          insertHydrometImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertHydrometImage
+          insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertACImage
           image_count <- image_count + 1
         }
       } else if (inherits(imgs, "data.frame")) {
         for (j in 1:nrow(imgs)) {
-          insertHydrometImage(object = imgs[j, "file"], img_meta_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertHydrometImage
+          insertACImage(object = imgs[j, "file"], img_meta_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertACImage
           image_count <- image_count + 1
         }
       } else {

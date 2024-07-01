@@ -1,4 +1,4 @@
-#' Update existing document in hydrometric database
+#' Update existing document in AquaCache database
 #'
 #'@description
 #'`r lifecycle::badge("stable")`
@@ -18,13 +18,13 @@
 #' @param new_url An optional url (could also be a DOI) for the document.
 #' @param new_public Logical, whether the document should be publicly available. Default is FALSE.
 #' @param new_geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [hydrometConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param check Logical, whether to check that we're working with the right document before proceeding. Default is TRUE
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-updateHydrometDocument <- function(id, new_path = NULL, new_name = NULL, new_type = NULL, new_description = NULL, new_authors = NULL, new_publish_date = NULL, new_url = NULL, new_public = NULL, new_geoms = NULL, con = hydrometConnect(), check = TRUE) {
+updateHydrometDocument <- function(id, new_path = NULL, new_name = NULL, new_type = NULL, new_description = NULL, new_authors = NULL, new_publish_date = NULL, new_url = NULL, new_public = NULL, new_geoms = NULL, con = AquaConnect(), check = TRUE) {
   
   #Checks
   id_exists <- DBI::dbGetQuery(con, paste0("SELECT d.name, t.document_type_en AS type, d.authors, d.url, d.publish_date, d.description FROM documents AS d LEFT JOIN document_types as t ON d.type = t.document_type_id WHERE document_id = ", id))

@@ -5,13 +5,13 @@
 \title{Update HYDAT-related timeseries}
 \usage{
 update_hydat(
-  con = hydrometConnect(silent = TRUE),
+  con = AquaConnect(silent = TRUE),
   timeseries_id = "all",
   force_update = FALSE
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=hydrometConnect]{hydrometConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{timeseries_id}{Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries where the import function is downloadWSC.}
 
