@@ -5,13 +5,13 @@
 \title{Templates to add timeseries to AquaCacheric database}
 \usage{
 addACTimeseriesTemplate(
-  con = AquaCacheCon(silent = TRUE),
+  con = AquaConnect(silent = TRUE),
   format = "short",
   save_path = NULL
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{format}{"long" or "short", only applies to the timeseries table. If long, will return one row per unique parameter with the total data.frame length equal to the parameter with the highest count. If short will return a single row, with unique parameter values concatenated in a single cell per parameter.}
 

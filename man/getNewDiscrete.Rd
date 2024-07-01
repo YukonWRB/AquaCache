@@ -5,13 +5,13 @@
 \title{Get new discrete-category data}
 \usage{
 getNewDiscrete(
-  con = AquaCacheCon(silent = TRUE),
+  con = AquaConnect(silent = TRUE),
   timeseries_id = "all",
   active = "default"
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'discrete'.}
 

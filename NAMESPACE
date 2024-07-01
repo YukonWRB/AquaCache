@@ -2,8 +2,8 @@
 
 export("%>%")
 export(AquaCacheApp)
-export(AquaCacheCon)
 export(AquaCacheInit)
+export(AquaConnect)
 export(EQConnect)
 export(addACImageSeries)
 export(addACRasterSeries)

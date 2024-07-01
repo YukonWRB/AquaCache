@@ -17,12 +17,12 @@
 #' @param url An optional url (could also be a DOI) for the document.
 #' @param public Logical, whether the document should be publicly available. Default is FALSE.
 #' @param geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-insertACDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, public = FALSE, geoms = NULL, con = AquaCacheCon()) {
+insertACDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, public = FALSE, geoms = NULL, con = AquaConnect()) {
 
   #Checks
   if (length(path) > 1) {

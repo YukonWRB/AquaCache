@@ -8,7 +8,7 @@ addACTimeseries(
   timeseries_df,
   locations_df = NULL,
   settings_df = NULL,
-  con = AquaCacheCon()
+  con = AquaConnect()
 )
 }
 \arguments{
@@ -18,7 +18,7 @@ addACTimeseries(
 
 \item{settings_df}{A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
 One or more new entries are created in the table 'timeseries'

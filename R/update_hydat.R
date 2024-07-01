@@ -5,7 +5,7 @@
 #'
 #' First checks the local version of HYDAT using function [hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in parameter timeseries_id, will also update the internal_status table with the HYDAT version used for the update.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries where the import function is downloadWSC.
 #' @param force_update Set TRUE if you want to force a check of each location against the local copy of HYDAT.
 #'
@@ -13,7 +13,7 @@
 #' @export
 #'
 
-update_hydat <- function(con = AquaCacheCon(silent = TRUE), timeseries_id = "all", force_update = FALSE) {
+update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", force_update = FALSE) {
 
   #Check if the local copy of HYDAT needs an update
   hydat_check(silent = FALSE)

@@ -2,7 +2,7 @@
 #'
 #' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}", with each parameter:argument pair enclosed in curly brackets (which aren't being rendered in the help file). The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param format "long" or "short", only applies to the timeseries table. If long, will return one row per unique parameter with the total data.frame length equal to the parameter with the highest count. If short will return a single row, with unique parameter values concatenated in a single cell per parameter.
 #' @param save_path Specify a save path (folder) if you want an xlsx document with column headers as required by function [addACTimeseries()]. "choose" lets you choose interactively.
 #' 
@@ -15,7 +15,7 @@
 #' @export
 #'
 
-addACTimeseriesTemplate <- function(con = AquaCacheCon(silent = TRUE), format = "short", save_path = NULL) {
+addACTimeseriesTemplate <- function(con = AquaConnect(silent = TRUE), format = "short", save_path = NULL) {
 
 
   if (!is.null(save_path)) {

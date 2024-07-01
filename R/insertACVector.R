@@ -20,7 +20,7 @@
 #' @param table The target table in the database (as character string). If not under the public schema, use format c("schema", "table").
 #' @param geom_col The name of the database table column in which to insert the geometry object.
 #' @param overwrite If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?
-#' @param con A connection to the database. Default NULL will use the utility function [AquaCacheCon()].
+#' @param con A connection to the database. Default NULL will use the utility function [AquaConnect()].
 #'
 #' @return A boolean vector, one element per feature.Messages will also be printed to the console.
 #' @export
@@ -28,7 +28,7 @@
 insertACVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = NULL) {
   
   if (is.null(con)) {
-    con <- AquaCacheCon(silent = TRUE)
+    con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
   

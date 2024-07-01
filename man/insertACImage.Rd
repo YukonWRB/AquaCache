@@ -12,7 +12,7 @@ insertACImage(
   description = NULL,
   location = NULL,
   image_type = NULL,
-  con = AquaCacheCon()
+  con = AquaConnect()
 )
 }
 \arguments{
@@ -30,7 +30,7 @@ insertACImage(
 
 \item{image_type}{If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
 TRUE if an image was properly added to the database.

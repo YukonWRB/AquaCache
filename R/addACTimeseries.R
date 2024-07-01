@@ -13,13 +13,13 @@
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
 #' @param locations_df A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.
 #' @param settings_df A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
 #' @seealso [addACTimeseriesTemplate()] to see templates for timesries_df and locations_df.
 
-addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = AquaCacheCon()) {
+addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = AquaConnect()) {
 
   
   #TODO: add a way to pass new parameters using params_df

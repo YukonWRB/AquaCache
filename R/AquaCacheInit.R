@@ -5,14 +5,14 @@
 #'
 #' Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. No indices are specified as the primary key fulfills this task already.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.
 #'
 #' @return New tables in the target postgres database. 
 #' @export
 #'
 
-AquaCacheInit <- function(con = AquaCacheCon(), overwrite = FALSE) {
+AquaCacheInit <- function(con = AquaConnect(), overwrite = FALSE) {
 
   # Initial setup ############################
   # Overwrite and vacuum if requested

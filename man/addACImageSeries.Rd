@@ -11,7 +11,7 @@ addACImageSeries(
   source_fx_args = NA,
   public = TRUE,
   public_delay = NA,
-  con = AquaCacheCon(silent = TRUE)
+  con = AquaConnect(silent = TRUE)
 )
 }
 \arguments{
@@ -27,7 +27,7 @@ addACImageSeries(
 
 \item{public_delay}{A period in ISO 8601 format by which to delay public visibility of images.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
 TRUE if successful, and a new entry in the database with images fetched.

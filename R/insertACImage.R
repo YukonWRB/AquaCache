@@ -14,12 +14,12 @@
 #' @param description A description of the image. Pass as text.
 #' @param location If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.
 #' @param image_type If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return TRUE if an image was properly added to the database.
 #' @export
 
-insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, description = NULL, location = NULL, image_type = NULL, con = AquaCacheCon()) {
+insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, description = NULL, location = NULL, image_type = NULL, con = AquaConnect()) {
 
   #Checks
   if (length(location) > 1) {

@@ -8,7 +8,7 @@
 #' ## Default arguments passed to 'source_fx' functions:
 #' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'discrete'.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 
@@ -17,7 +17,7 @@
 #' @export
 #'
 
-getNewDiscrete <- function(con = AquaCacheCon(silent = TRUE), timeseries_id = "all", active = 'default') {
+getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", active = 'default') {
 
   
   if (!active %in% c('default', 'all')) {

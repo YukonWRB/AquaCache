@@ -5,13 +5,13 @@
 #'
 #' Performs a VACUUM (ANALYZE) operation on the database, re-organizing and compacting tables.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return A vacuumed database.
 #' @export
 #'
 
-vacuum <- function(con = AquaCacheCon(silent = TRUE))
+vacuum <- function(con = AquaConnect(silent = TRUE))
 
 {
   on.exit(DBI::dbDisconnect(con))

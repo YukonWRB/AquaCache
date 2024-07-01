@@ -6,14 +6,14 @@
 #' Retrieves new data corresponding to entries in the table "raster_series_index" for which the column 'public' is TRUE. You can add a new raster series with [addACRasterSeries()]. As with the timeseries and images table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addACTimeseries()] for a description of how to formulate these arguments. 
 #'
 #' @param raster_series_ids A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param keep_forecasts Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'
 #' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 
 #' @export
 #'
 
-getNewRasters <- function(raster_series_ids = "all", con = AquaCacheCon(silent = TRUE), keep_forecasts = 'selective', active = 'default') {
+getNewRasters <- function(raster_series_ids = "all", con = AquaConnect(silent = TRUE), keep_forecasts = 'selective', active = 'default') {
 
   if (!keep_forecasts %in% c('selective', 'all', 'none')) {
     stop("The 'keep_forecasts' parameter must be either 'selective', 'all', or 'none'.")

@@ -4,10 +4,10 @@
 \alias{AquaCacheInit}
 \title{Initial hydrometric/meteorological database creation.}
 \usage{
-AquaCacheInit(con = AquaCacheCon(), overwrite = FALSE)
+AquaCacheInit(con = AquaConnect(), overwrite = FALSE)
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{overwrite}{TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.}
 }

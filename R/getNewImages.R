@@ -9,12 +9,12 @@
 #' This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
 #'
 #' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param active Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the images_index table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 #' @export
 #'
 
-getNewImages <- function(image_meta_ids = "all", con = AquaCacheCon(silent = TRUE), active = 'default') {
+getNewImages <- function(image_meta_ids = "all", con = AquaConnect(silent = TRUE), active = 'default') {
 
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")

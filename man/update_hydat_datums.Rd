@@ -4,10 +4,10 @@
 \alias{update_hydat_datums}
 \title{Update datum information with HYDAT database entries}
 \usage{
-update_hydat_datums(con = AquaCacheCon())
+update_hydat_datums(con = AquaConnect())
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaCacheCon]{AquaCacheCon()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
 HYDAT-related information is updates in place in the DB.

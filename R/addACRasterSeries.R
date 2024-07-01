@@ -24,7 +24,7 @@ addACRasterSeries <- function(model, parameter, start_datetime, source_fx, type,
   }
   
   if (is.null(con)) {
-    con <- AquaCacheCon(silent = TRUE)
+    con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
   

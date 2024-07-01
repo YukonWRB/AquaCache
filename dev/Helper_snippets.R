@@ -1,5 +1,5 @@
 load_all()
-con <- AquaCacheCon()
+con <- AquaConnect()
 
 # Adding timeseries
 timeseries_df <- data.frame(location = "09DC007",

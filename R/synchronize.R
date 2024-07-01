@@ -9,7 +9,7 @@
 #'
 #'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaCacheCon()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
@@ -21,7 +21,7 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-synchronize <- function(con = AquaCacheCon(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
+synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
 {
   
   if (!active %in% c('default', 'all')) {
@@ -166,11 +166,11 @@ synchronize <- function(con = AquaCacheCon(silent = TRUE), timeseries_id = "all"
             
             # Create a unique datetime key for both data frames
             if (category == "continuous") {
-              inRemote$key <- paste(inRemote$datetime, inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
-              inDB$key <- paste(inDB$datetime, inDB$value, inDB$grade, inDB$approval, sep = "|")
+              inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 19), inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
+              inDB$key <- paste(substr(as.character(inDB$datetime), 1, 19), inDB$value, inDB$grade, inDB$approval, sep = "|")
             } else if (category == "discrete") {
-              inRemote$key <- paste(inRemote$target_datetime, inRemote$datetime, inRemote$value, inRemote$note, inRemote$sample_class, sep = "|")
-              inDB$key <- paste(inDB$target_datetime, inDB$datetime, inDB$value, inDB$note, inDB$sample_class, sep = "|")
+              inRemote$key <- paste(substr(as.character(inRemote$target_datetime), 1, 19), substr(as.character(inRemote$datetime), 1, 19), inRemote$value, inRemote$note, inRemote$sample_class, sep = "|")
+              inDB$key <- paste(substr(as.character(inDB$target_datetime), 1, 19), substr(as.character(inDB$datetime), 1, 19), inDB$value, inDB$note, inDB$sample_class, sep = "|")
             }
             
             # Check for mismatches using set operations
@@ -255,7 +255,7 @@ synchronize <- function(con = AquaCacheCon(silent = TRUE), timeseries_id = "all"
         DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
       }
     }, error = function(e) {
-      warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ").")
+      warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message:", e$message, ".")
     }
     )
   }
