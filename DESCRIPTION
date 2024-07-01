@@ -1,4 +1,4 @@
-Package: AquaCache.dev
+Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
 Version: 2.0.0
 Authors@R: c(
