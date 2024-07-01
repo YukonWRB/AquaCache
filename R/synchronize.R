@@ -129,7 +129,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
       }
       if (source_fx == "downloadSnowCourse") {
         args_list[["snowCon"]] <- snowCon
-        args_list[["hydroCon"]] <- con
+        args_list[["ACCon"]] <- con
       }
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
       inRemote <- inRemote[!is.na(inRemote$value) , ]
