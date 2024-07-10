@@ -64,7 +64,7 @@ EXECUTE FUNCTION prevent_delete_public_group();
                  user_id SERIAL PRIMARY KEY,
                  username TEXT UNIQUE NOT NULL,
                  email TEXT UNIQUE NOT NULL,
-                 group_id INTEGER NOT NULL,
+                 user_groups INTEGER[] NOT NULL DEFAULT '{1}',
                  password_hash TEXT NOT NULL,
                  password_salt TEXT NOT NULL,
                  algorithm TEXT NOT NULL DEFAULT 'sha256',
@@ -1080,7 +1080,7 @@ GROUP BY loc.location_id, loc.location, loc.name_fr, loc.latitude, loc.longitude
   
   
   # Enforce referential integrity for share_with columns linked to the user_groups table ########################################
-  # Can't be done using FK as share_with is a array but user_groups column is not
+  # Can't be done using FK as share_with is an array but user_groups column is not
   # Create function to remove a deleted group_id from all protected tables
   DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION remove_group_id_from_share_with()
 RETURNS TRIGGER AS $$
@@ -1104,6 +1104,45 @@ BEFORE DELETE ON user_groups
 FOR EACH ROW
 EXECUTE FUNCTION remove_group_id_from_share_with();
 ")
+  
+  # Create functions to validate and update users.user_groups
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION validate_user_groups()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM unnest(NEW.user_groups) AS group_id
+        WHERE group_id NOT IN (SELECT group_id FROM user_groups)
+    ) THEN
+        RAISE EXCEPTION 'Invalid group_id in user_groups array';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;")
+  
+  DBI::dbExecute(con, "CREATE TRIGGER validate_user_groups_trigger
+BEFORE INSERT OR UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION validate_user_groups();
+")
+  
+  
+  # Enforce referential integrity for user_groups array column
+  # Create function to remove a deleted group_id from users.user_groups
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION remove_group_id_from_users()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update the share_with array to remove the deleted group_id for each table
+    EXECUTE 'UPDATE users SET user_groups = array_remove(user_groups, $1) WHERE $1 = ANY(user_groups)' USING OLD.group_id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+")
+  # Create trigger to run function above when a group_id is deleted
+  DBI::dbExecute(con, "CREATE TRIGGER remove_group_id_trigger2
+BEFORE DELETE ON user_groups
+FOR EACH ROW
+EXECUTE FUNCTION remove_group_id_from_users();")
   
   
   # Create function to validate share_with array
@@ -1189,7 +1228,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
@@ -1198,7 +1237,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
@@ -1207,7 +1246,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
@@ -1216,7 +1255,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
@@ -1225,7 +1264,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
@@ -1234,7 +1273,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
@@ -1243,7 +1282,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
@@ -1252,7 +1291,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM unnest(share_with) AS unnested_group_id
-    JOIN users u ON unnested_group_id = u.group_id
+    JOIN users u ON unnested_group_id = ANY(u.user_groups)
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")

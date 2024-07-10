@@ -17,5 +17,5 @@ New tables in the target postgres database.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Creates a postgreSQL database or replaces an existing database. Establishes pre-set schemas and populates initial rows in the "settings" and "datum_list" tables. No indices are specified as the primary key fulfills this task already.
+Populates a postgreSQL database or replaces existing tables. Establishes pre-set schemas and populates some tables with initial values. No indices are specified as the primary keys fulfill this task already.
 }
