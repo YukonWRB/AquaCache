@@ -17,7 +17,7 @@
 
 downloadNupointImages <- function(location, start_datetime, username = Sys.getenv("nupointUser"), password = Sys.getenv("nupointPass"), url = Sys.getenv("nupointServer"), port = Sys.getenv("nupointPort"), folder = Sys.getenv("nupointFolder"), save_path = NULL) {
   
-  if (!inherits(start_datetime, "POSIXct")){
+  if (!inherits(start_datetime, "POSIXct")) {
     stop("Parameter start_datetime must be a POSIXct.")
   }
   
