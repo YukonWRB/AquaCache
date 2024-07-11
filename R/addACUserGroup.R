@@ -18,19 +18,18 @@ addACUserGroup <- function(name, description, con = AquaConnect(silent = TRUE)) 
   }
   
   # Check if the user group already exists
-  exists <- DBI::dbGetQuery(con, paste0("SELECT user_group_id FROM user_groups WHERE name = '", name, "';"))[1,1]
+  exists <- DBI::dbGetQuery(con, paste0("SELECT group_id FROM user_groups WHERE group_name = '", name, "';"))[1,1]
   if (!is.na(exists)) {
     stop("There is already a user group with that name.")
   }
   
   # Insert the new user group
-  insert <- data.frame(name = name,
-                       description = description)
+  insert <- data.frame(group_name = name,
+                       group_description = description)
   
   DBI::dbAppendTable(con, "user_groups", insert)
   
   # Retrieve the new group_id and return
-  new_id <- DBI::dbGetQuery(con, paste0("SELECT group_id FROM user_groups WHERE name = '", name, "';"))[1,1]
-  message("Added new user group with name ", name, " and group_id ", new_id, ". New group_id is: ")
-  return(new_id)
+  new_id <- DBI::dbGetQuery(con, paste0("SELECT group_id FROM user_groups WHERE group_name = '", name, "';"))[1,1]
+  message("Added new user group with name ", name, " and group_id ", new_id, ". New group_id is: ", new_id)
 }
