@@ -19,7 +19,6 @@
 #' @return The database is updated in-place, and diagnostic messages are printed to the console.
 #' @export
 
-#TODO: snow_db_path should instead be a path or connection identifiers living in the .Renviron file.
 dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", active = 'default')
 {
   
@@ -92,7 +91,7 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
   message("Checking for new HYDAT database on this computer and determining the version last used for updating timeseries with update_hydat...")
   tryCatch({
     hy_start <- Sys.time()
-    suppressMessages(new_hydat <- update_hydat(con = con)) #This function will run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
+    suppressMessages({new_hydat <- update_hydat(con = con)}) #This function will run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
     if (new_hydat) {
       hy_duration <- Sys.time() - hy_start
       message("A new version of HYDAT was detected. Timeseries were updated in ", round(hy_duration[[1]], 2), " ", units(hy_duration), ".")

@@ -12,7 +12,7 @@ insertACDocument(
   authors = NULL,
   publish_date = NULL,
   url = NULL,
-  public = FALSE,
+  share_with = 1,
   geoms = NULL,
   con = AquaConnect()
 )
@@ -32,7 +32,7 @@ insertACDocument(
 
 \item{url}{An optional url (could also be a DOI) for the document.}
 
-\item{public}{Logical, whether the document should be publicly available. Default is FALSE.}
+\item{share_with}{User groups with which to share the document. Default '1' is the public group. See the table 'user_groups' for more information.}
 
 \item{geoms}{The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.}
 

@@ -11,7 +11,6 @@
 #' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 
 #' @export
-#'
 
 getNewRasters <- function(raster_series_ids = "all", con = AquaConnect(silent = TRUE), keep_forecasts = 'selective', active = 'default') {
 

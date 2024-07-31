@@ -14,6 +14,8 @@
 
 AquaCacheApp <- function(host = getOption("shiny.host", "127.0.0.1"), port = getOption("shiny.port"), browser = TRUE, display.mode = "normal") {
   
+  stop("This function needs to be updated to work with a few new columns. Refer to issue https://github.com/YukonWRB/AquaCache/issues/118 for more details.")
+  
   rlang::check_installed("shiny", reason = "to run this app.")
   rlang::check_installed("DT", reason = "to create interactive tables within the app.")
   rlang::check_installed("shinyFiles", reason = "to allow file uploads within the app.")

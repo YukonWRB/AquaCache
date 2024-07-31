@@ -6,15 +6,15 @@
 #' @param start_datetime The datetime (as POSIXct) from which to look for images
 #' @param source_fx The function to use for fetching new images. Must be an existing function in this package.
 #' @param source_fx_args Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
-#' @param public Should the images be publicly visible?
-#' @param public_delay A period in ISO 8601 format by which to delay public visibility of images.
+#' @param share_with Which user groups should the image series be shared with? Default is '1', the public group.
+#' @param visibility_public How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'. 
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return TRUE if successful, and a new entry in the database with images fetched.
 #' @export
 #'
 
-addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, public = TRUE, public_delay = NA, con = AquaConnect(silent = TRUE)) {
+addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = 1, visibility_public = 'exact', con = AquaConnect(silent = TRUE)) {
   #function will add entry to images_index, then trigger getNewImages from the user-specified start_datetime
 
   on.exit(DBI::dbDisconnect(con))
@@ -34,18 +34,25 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
     stop("Parameter 'location' must be either a character or numeric vector of length 1.")
   }
 
+  if (!visibility_public %in% c('exact', 'region', 'jitter')) {
+    stop("The 'visibility_public' parameter must be either 'exact', 'region', or 'jitter'.")
+  }
+  if (!inherits(share_with, "numeric")) {
+    stop("The 'share_with' parameter must be a numeric vector.")
+  }
+  
   exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]
   if (!is.na(exists)) {
     stop("There is already an entry for that location or location_id and for images of type 'auto' in the images_index table.")
   }
   insert <- data.frame(location_id = location_id,
                        img_type = "auto",
-                       public = public,
                        first_img = start_datetime,
                        last_img = start_datetime,
-                       public_delay = public_delay,
                        source_fx = source_fx,
                        source_fx_args = source_fx_args,
+                       share_with = paste0("{", paste(share_with, collapse = ", "), "}"),
+                       visibility_public = visibility_public,
                        description = "Image series automatically taken from a web or server location.")
 
   DBI::dbAppendTable(con, "images_index", insert)

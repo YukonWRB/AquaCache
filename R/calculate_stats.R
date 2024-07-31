@@ -139,27 +139,30 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
         DBI::dbDisconnect(hydat_con)
 
         if (!flag) {
-          gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+          gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed, share_with, owner, contributor FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
 
           if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date
             gap_measurements <- gap_measurements %>%
               dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
               dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
                                value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
-                               grade = sort(.data$grade,decreasing = TRUE)[1],
-                               approval = sort(.data$approval, decreasing = TRUE)[1],
+                               grade = unique(.data$grade,decreasing = TRUE)[1],
+                               approval = unique(.data$approval, decreasing = TRUE)[1],
                                imputed = sort(.data$imputed, decreasing = TRUE)[1],
+                               owner = unique(.data$owner)[1],
+                               contributor = unique(.data$contributor)[1],
+                               share_with = sort(.data$share_with)[1],
                                .groups = "drop")
             gap_measurements <- gap_measurements[,c(3:7)]
-            names(gap_measurements) <- c("date", "value", "grade", "approval", "imputed")
+            names(gap_measurements) <- c("date", "value", "grade", "approval", "imputed", "owner", "contributor", "share_with")
 
             if (!((last_hydat + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
-              gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
+              gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE, owner = gap_measurements[gap_measurements$date == last_hydat, "owner"], contributor = gap_measurements[gap_measurements$date == last_hydat, "contributor"], share_with = gap_measurements[gap_measurements$date == last_hydat, "share_with"]))
             }
 
             if (last_day_historic < min(gap_measurements$date)) { #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with HYDAT values where they exist, taking from the database first for any imputed values and then directly from HYDAT.
               
-              backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
+              backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed, owner, contributor, share_with FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
               
               grade_mapping <- c("-1" = "U",
                                  "10" = "I",
@@ -190,6 +193,10 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             #Fill in any missing dates so that they get calculated values where possible
             full_dates <- data.frame("date" = seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day"))
             gap_measurements <- merge(gap_measurements, full_dates, by = "date", all = TRUE)
+            
+            # Fill in owner, contributor, share_with with the last known value
+            columns_to_fill <- c("owner", "contributor", "share_with")
+            gap_measurements[columns_to_fill] <- lapply(gap_measurements[columns_to_fill], function(x) zoo::na.locf(x, na.rm = FALSE))
 
             gap_measurements[is.na(gap_measurements$imputed) , "imputed"] <- FALSE
             gap_measurements[is.na(gap_measurements$grade) , "grade"] <- "U"
@@ -201,7 +208,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             missing_stats <- gap_measurements
           } else { #There is no new measurement data, but stats may still need to be calculated because of new HYDAT data
             
-            all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
+            all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed, owner, contributor, share_with FROM calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
             
             grade_mapping <- c("-1" = "U",
                                "10" = "I",
@@ -239,27 +246,34 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
       }
 
       if (!(source_fx == "downloadWSC") || flag) { #All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
-        gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+        gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, owner, contributor, share_with, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
 
         if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
           gap_measurements <- gap_measurements %>%
             dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
             dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
                              value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
-                             grade = sort(.data$grade, decreasing = TRUE)[1],
-                             approval = sort(.data$approval, decreasing = TRUE)[1],
-                             imputed = sort(.data$imputed, decreasing = TRUE)[1],
+                             grade = unique(.data$grade)[1],
+                             approval = unique(.data$approval)[1],
+                             imputed = sort(.data$imputed, decreasing = TRUE)[1], # Ensures that if there is even 1 imputed point in a day, the whole day is marked as imputed
+                             owner = unique(.data$owner)[1],
+                             contributor = unique(.data$contributor)[1],
+                             share_with = sort(.data$share_with)[1],
                              .groups = "drop")
           gap_measurements <- gap_measurements[,c(3:7)]
-          names(gap_measurements) <- c("date", "value", "grade", "approval", "imputed")
+          names(gap_measurements) <- c("date", "value", "grade", "approval", "imputed", "owner", "contributor", "share_with")
           
           if (!((last_day_historic + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
-            gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE))
+            gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE, owner = gap_measurements[gap_measurements$date == last_day_historic, "owner"], contributor = gap_measurements[gap_measurements$date == last_day_historic, "contributor"], share_with = gap_measurements[gap_measurements$date == last_day_historic, "share_with"]))
           }
           #Fill in any missing dates so that they get calculated values where possible
           full_dates <- data.frame("date" = seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day"))
           gap_measurements <- merge(gap_measurements, full_dates, by = "date", all = TRUE)
 
+          # Fill in owner, contributor, share_with with the last known value
+          columns_to_fill <- c("owner", "contributor", "share_with")
+          gap_measurements[columns_to_fill] <- lapply(gap_measurements[columns_to_fill], function(x) zoo::na.locf(x, na.rm = FALSE))
+          
           gap_measurements[is.na(gap_measurements$imputed) , "imputed"] <- FALSE
           gap_measurements[is.na(gap_measurements$grade) , "grade"] <- "U"
           gap_measurements[is.na(gap_measurements$approval) , "approval"] <- "U"
@@ -268,7 +282,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
           all_stats <- rbind(all_stats, gap_measurements[, c("date", "value")])
           missing_stats <- gap_measurements
         } else { #There is no new measurement data, but stats may still need to be calculated
-          missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
+          missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, owner, contributor, share_with, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
           if (nrow(missing_stats) > 0) {
             all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, ";"))
           }
@@ -313,7 +327,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
           if (!all(c((first_feb_29$date  - 1), (first_feb_29$date  + 1)) %in% missing_stats$date) & !is.na(first_feb_29$value)) { #if statement is FALSE, feb 29 will be dealt with later by getting the mean of the surrounding samples so don't add it to first_instance_no_stats so it isn't dealt with here
             feb_29 <- feb_29[!feb_29$date == first_feb_29$date , ]
             first_feb_29$dayofyear <- NA
-            first_instance_no_stats <- rbind(first_instance_no_stats, first_feb_29[, c("date", "value", "grade", "approval", "dayofyear", "imputed")])
+            first_instance_no_stats <- rbind(first_instance_no_stats, first_feb_29[, c("date", "value", "grade", "approval", "dayofyear", "imputed", "owner", "contributor", "share_with")])
           }
         }
 

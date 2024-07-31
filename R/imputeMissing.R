@@ -6,7 +6,7 @@
 #' 
 #'Impute missing values using either a nearby timeseries or using linear or spline interpolation on the time-series itself. If using nearby timeseries, they can be of same or of other parameters, as specified with parameter 'extra_params'. User interaction is necessary to select the most appropriate timeseries and to review the result of imputation before updating the database.
 #'
-#' Imputing long periods of missing data using spline or linear interpolation on the timeseries itself is not recommended. If this is the only feasible option presented by this function because no nearby timeseries can be used for imputation, we recommend using [predictMissing()] instead.
+#' Imputing long periods of missing data using spline or linear interpolation on the timeseries itself is not recommended. If this is the only feasible option presented by this function because no nearby timeseries can be used for imputation, we recommend using predictMissing() instead (in the 'dev' folder, not finished).
 #'
 #' @param tsid The target timeseries_id.
 #' @param radius The radius in kilometers within which to search for similar timeseries.

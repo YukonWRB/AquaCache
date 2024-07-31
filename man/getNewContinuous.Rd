@@ -35,4 +35,9 @@ With the exception of "instantaneous" timeseries which automatically receive a p
 
 If a period supplied by any data fetch function cannot be coerced to an period object acceptable to "duration" data type, NULL values will be entered to differentiate from instantaneous periods of "00:00:00".
 }
+
+\subsection{Sharing privileges and ownership}{
+
+The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data.
+}
 }

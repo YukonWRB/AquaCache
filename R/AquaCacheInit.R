@@ -170,8 +170,6 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                  first_img TIMESTAMP WITH TIME ZONE,
                  last_img TIMESTAMP WITH TIME ZONE,
                  last_new_img TIMESTAMP WITH TIME ZONE,
-                 public BOOLEAN NOT NULL,
-                 public_delay INTERVAL,
                  source_fx TEXT,
                  source_fx_args TEXT,
                  description TEXT,
@@ -487,7 +485,9 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  description TEXT NOT NULL,
                  format TEXT NOT NULL,
                  document BYTEA NOT NULL,
-                 public BOOLEAN NOT NULL DEFAULT FALSE,
+                 share_with INTEGER[] NOT NULL DEFAULT '{1}',
+                 owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
+                 contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                  FOREIGN KEY (type) REFERENCES document_types(document_type_id) ON UPDATE CASCADE ON DELETE CASCADE);")
   DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, protocol, grading scheme, metadata, other'")
@@ -511,8 +511,6 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  last_daily_calculation TIMESTAMP WITH TIME ZONE,
                  last_synchronize TIMESTAMP WITH TIME ZONE,
                  network TEXT,
-                 public BOOLEAN NOT NULL,
-                 public_delay INTERVAL,
                  source_fx TEXT,
                  source_fx_args TEXT,
                  active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -541,7 +539,6 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_new_data IS 'Time at which data was last appended to the timeseries';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_daily_calculation IS 'Time at which daily means were calculated using function calculate_stats. Not used for discrete timeseries.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.last_synchronize IS 'Time at which the timeseries was cross-checked against values held by the remote or partner database; the local store should have been updated to reflect the remote.';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.public_delay IS 'For public = TRUE stations, an option delay with which to serve the data to the public.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx IS 'Function (from the R package AquaCache) to use for incorporation of new data.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addACTimeseries for usage.';")
   
@@ -773,8 +770,6 @@ EXECUTE FUNCTION update_geom_type();
                  end_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  last_new_raster TIMESTAMP WITH TIME ZONE NOT NULL,
                  last_issue TIMESTAMP WITH TIME ZONE,
-                 public BOOLEAN NOT NULL,
-                 public_delay INTERVAL,
                  source_fx TEXT,
                  source_fx_args TEXT,
                  active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -1015,16 +1010,16 @@ ORDER BY
 ")
   
   # Views for timeseries metadata
-  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_en AS",
-                            "SELECT ts.timeseries_id, ptypes.param_type AS parameter_type, params.group AS parameter_group, ts.category, params.param_name AS parameter_name, params.unit, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude, ts.public",
+  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_en WITH (security_invoker = TRUE) AS",
+                            "SELECT ts.timeseries_id, ptypes.param_type AS parameter_type, params.group AS parameter_group, ts.category, params.param_name AS parameter_name, params.unit, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
                             "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
                             "LEFT JOIN param_types AS ptypes ON ts.param_type = ptypes.param_type_code",
                             "ORDER BY ts.timeseries_id;"))
-  
-  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_fr AS",
-                            "SELECT ts.timeseries_id, ptypes.param_type_fr AS type_de_paramètre, params.group_fr AS groupe_de_paramètres, ts.category, params.param_name_fr AS nom_paramètre, params.unit AS unités, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS début, ts.end_datetime AS fin, ts.note, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude, ts.public",
+
+  DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_fr WITH (security_invoker = TRUE) AS",
+                            "SELECT ts.timeseries_id, ptypes.param_type_fr AS type_de_param\u00E8tre, params.group_fr AS groupe_de_param\u00E8tres, ts.category AS cat\u00E9gorie, params.param_name_fr AS nom_param\u00E8tre, params.unit AS unit\u00E9s, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS d\u00E9but, ts.end_datetime AS fin, ts.note, loc.location_id, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
                             "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
@@ -1032,7 +1027,7 @@ ORDER BY
                             "ORDER BY ts.timeseries_id;"))
   
   # View for location metadata
-  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_en AS
+  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_en WITH (security_invoker = TRUE) AS
 SELECT
     loc.location_id,
     loc.location AS location_code,
@@ -1054,7 +1049,7 @@ LEFT JOIN datum_list AS dl ON dc.datum_id_to = dl.datum_id
 GROUP BY loc.location_id, loc.location, loc.name, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_en;
 "
   )
-  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_fr AS
+  DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_metadata_fr WITH (security_invoker = TRUE) AS
 SELECT
     loc.location_id,
     loc.location AS code_de_site,
@@ -1065,7 +1060,7 @@ SELECT
     dl.datum_name_fr AS datum,
     loc.note,
     array_agg(DISTINCT proj.name_fr) AS projets,
-    array_agg(DISTINCT net.name_fr) AS réseaux
+    array_agg(DISTINCT net.name_fr) AS r\u00E9seaux
 FROM locations AS loc
 LEFT JOIN locations_projects AS loc_proj ON loc.location_id = loc_proj.location_id
 LEFT JOIN projects AS proj ON loc_proj.project_id = proj.project_id
