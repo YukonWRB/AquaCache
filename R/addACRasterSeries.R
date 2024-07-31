@@ -8,15 +8,13 @@
 #' @param source_fx The function to use for fetching new rasters. Must be an existing function in this package.
 #' @param type The type of raster, 'forecast' or 'reanalysis'. Reanalysis rasters are kept forever, forecasts are replaced when a new one is issued.
 #' @param source_fx_args Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
-#' @param public Should the rasters be publicly visible?
-#' @param public_delay A period in ISO 8601 format by which to delay public visibility of images.
 #' @param con A connection to the database, created with [DBI::dbConnect()]. Leave NULL if you want to use the package default connection settings and have the connection automatically closed afterwards.
 #'
 #' @return TRUE if successful, and a new entry in the database with images fetched.
 #' @export
 #'
 
-addACRasterSeries <- function(model, parameter, start_datetime, source_fx, type, source_fx_args = NA, public = TRUE, public_delay = NA, con = NULL) {
+addACRasterSeries <- function(model, parameter, start_datetime, source_fx, type, source_fx_args = NA, con = NULL) {
   #function will add entry to raster_series_index, then trigger getNewRasters from the user-specified start_datetime
 
   if (!type %in% c("forecast", "reanalysis")) {
@@ -34,11 +32,9 @@ addACRasterSeries <- function(model, parameter, start_datetime, source_fx, type,
   }
   insert <- data.frame(model = model,
                        parameter = parameter,
-                       public = public,
                        start_datetime = start_datetime,
                        last_new_raster = start_datetime,
                        end_datetime = start_datetime,
-                       public_delay = public_delay,
                        source_fx = source_fx,
                        type = type,
                        source_fx_args = source_fx_args,

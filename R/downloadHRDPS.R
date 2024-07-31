@@ -7,7 +7,6 @@
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
-#'
 
 downloadHRDPS <- function(param, start_datetime, url = "https://dd.weather.gc.ca/model_hrdps/continental/2.5km/", clip = NULL) {
   

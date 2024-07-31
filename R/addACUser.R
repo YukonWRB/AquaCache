@@ -37,8 +37,9 @@ addACUser <- function(username, password, email, group_ids = c(1), con = AquaCon
     password_hash <- digest::digest(paste0(password, salt), algo = algorithm, serialize = FALSE)
     
     # Insert the new user into the database
-    DBI::dbExecute(con, "INSERT INTO users (username, user_groups, password_hash, password_salt, email, algorithm) VALUES ($1, $2, $3, $4, $5, $6)",
-                   params = list(username, group_ids, password_hash, salt, email, algorithm))
+    # DBI::dbExecute(con, "INSERT INTO users (username, user_groups, password_hash, password_salt, email, algorithm) VALUES ($1, $2, $3, $4, $5, $6)",
+                   # params = list(username, group_ids, password_hash, salt, email, algorithm))
+    DBI::dbExecute(con, paste0("INSERT INTO users (username, user_groups, password_hash, password_salt, email, algorithm) VALUES ('", username, "', array[", group_ids, "], '", password_hash, "', '", salt, "', '", email, "', '", algorithm, "');"))
     
     message("User '", username, "' created successfully.")
   }, error = function(e) {

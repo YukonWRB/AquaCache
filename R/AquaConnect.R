@@ -17,7 +17,6 @@
 #' @return A connection to the database.
 #'
 #' @export
-#'
 
 hydrometConnect <- function(name = "hydromet", host = Sys.getenv("hydrometHost"), port = Sys.getenv("hydrometPort"), username = Sys.getenv("hydrometAdminUser"), password = Sys.getenv("hydrometAdminPass"), silent = FALSE){
   
@@ -84,7 +83,6 @@ hydrometConnect <- function(name = "hydromet", host = Sys.getenv("hydrometHost")
 #' @return A connection to the database.
 #'
 #' @export
-#'
 
 AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), port = Sys.getenv("AquaCachePort"), username = Sys.getenv("AquaCacheAdminUser"), password = Sys.getenv("AquaCacheAdminPass"), silent = FALSE){
 

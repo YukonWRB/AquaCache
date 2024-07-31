@@ -13,7 +13,7 @@ updateHydrometDocument(
   new_authors = NULL,
   new_publish_date = NULL,
   new_url = NULL,
-  new_public = NULL,
+  new_user_groups = NULL,
   new_geoms = NULL,
   con = AquaConnect(),
   check = TRUE
@@ -36,13 +36,13 @@ updateHydrometDocument(
 
 \item{new_url}{An optional url (could also be a DOI) for the document.}
 
-\item{new_public}{Logical, whether the document should be publicly available. Default is FALSE.}
+\item{new_user_groups}{New user groups to associate with the document. Leave NULL for no change.}
 
-\item{new_geoms}{The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.}
+\item{new_geoms}{The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context. Will overwrite any existing associations.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 
-\item{check}{Logical, whether to check that we're working with the right document before proceeding. Default is TRUE}
+\item{check}{Logical, whether to double check that we're working with the right document before proceeding. Default is TRUE}
 }
 \value{
 TRUE if a document was properly added to the database.

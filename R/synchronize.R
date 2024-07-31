@@ -59,9 +59,9 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
     }
   } else {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
     }
     if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
       fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]
@@ -78,7 +78,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
 
   updated <- 0 #Counter for number of updated timeseries
   EQcon <- NULL #This prevents multiple connections to EQcon...
-  snowCon <- NULL
+  snowCon <- NULL # ...and snowCon
   for (i in 1:nrow(all_timeseries)) {
     category <- all_timeseries$category[i]
     loc <- all_timeseries$location[i]
@@ -87,6 +87,10 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
     record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
+    share_with <- all_timeseries$share_with[i]
+    owner <- all_timeseries$owner[i]
+    
+    # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
     if (source_fx == "downloadEQWin" & is.null(EQcon)) {
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
@@ -95,6 +99,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
       snowCon <- snowConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
+    
     source_fx_args <- all_timeseries$source_fx_args[i]
     if (is.na(record_rate)) {
       param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
@@ -124,6 +129,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
+      
       if (source_fx == "downloadEQWin") {
         args_list[["EQcon"]] <- EQcon
       }
@@ -131,6 +137,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
         args_list[["snowCon"]] <- snowCon
         args_list[["ACCon"]] <- con
       }
+      
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
       inRemote <- inRemote[!is.na(inRemote$value) , ]
 
@@ -208,7 +215,10 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
             inRemote$imputed <- FALSE
           }
           inRemote$timeseries_id <- tsid
-
+          if (!is.na(owner)) {
+            inRemote$owner <- owner
+          }
+          inRemote$share_with <- share_with
           DBI::dbWithTransaction(
             con,
             {

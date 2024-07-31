@@ -10,6 +10,9 @@ insertACImage(
   datetime,
   fetch_datetime = NULL,
   description = NULL,
+  owner = NULL,
+  contributor = NULL,
+  share_with = 1,
   location = NULL,
   image_type = NULL,
   con = AquaConnect()
@@ -26,6 +29,12 @@ insertACImage(
 
 \item{description}{A description of the image. Pass as text.}
 
+\item{owner}{The owner of the image. Pass as text.}
+
+\item{contributor}{The contributor of the image. Pass as text.}
+
+\item{share_with}{Which user groups should the image be shared with. Default is '1', the public group. Pass as a numeric vector.}
+
 \item{location}{If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.}
 
 \item{image_type}{If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.}
@@ -40,5 +49,5 @@ TRUE if an image was properly added to the database.
 
 Images auto-generated on a regular basis should be updated in the database using function \code{\link[=getNewImages]{getNewImages()}} instead of this function. For one-off images, read on.
 
-This function facilitates the addition of one image at a time to the database in the 'images' table. Each image must be linked to a specific location_id from the locations table. Adding an image directly to the database is not possible, since the file must be converted to a binary object before loading. See \code{\link[YGwater:getImage]{YGwater::getImage()}} to get the image out again.
+This function facilitates the addition of one image at a time to the database in the 'images' table. Each image must be linked to a specific location_id from the locations table. Adding an image directly to the database is not possible since the file must be converted to a binary object before loading. See \code{\link[YGwater:getImage]{YGwater::getImage()}} to get the image out again.
 }

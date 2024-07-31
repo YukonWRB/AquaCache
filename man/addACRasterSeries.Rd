@@ -11,8 +11,6 @@ addACRasterSeries(
   source_fx,
   type,
   source_fx_args = NA,
-  public = TRUE,
-  public_delay = NA,
   con = NULL
 )
 }
@@ -28,10 +26,6 @@ addACRasterSeries(
 \item{type}{The type of raster, 'forecast' or 'reanalysis'. Reanalysis rasters are kept forever, forecasts are replaced when a new one is issued.}
 
 \item{source_fx_args}{Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!}
-
-\item{public}{Should the rasters be publicly visible?}
-
-\item{public_delay}{A period in ISO 8601 format by which to delay public visibility of images.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}}. Leave NULL if you want to use the package default connection settings and have the connection automatically closed afterwards.}
 }

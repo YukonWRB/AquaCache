@@ -9,8 +9,8 @@ addACImageSeries(
   start_datetime,
   source_fx,
   source_fx_args = NA,
-  public = TRUE,
-  public_delay = NA,
+  share_with = 1,
+  visibility_public = "exact",
   con = AquaConnect(silent = TRUE)
 )
 }
@@ -23,9 +23,9 @@ addACImageSeries(
 
 \item{source_fx_args}{Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!}
 
-\item{public}{Should the images be publicly visible?}
+\item{share_with}{Which user groups should the image series be shared with? Default is '1', the public group.}
 
-\item{public_delay}{A period in ISO 8601 format by which to delay public visibility of images.}
+\item{visibility_public}{How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }

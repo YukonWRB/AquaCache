@@ -16,15 +16,15 @@
 #' @param new_authors Document author(s) if known. Specify multiple authors as individual elements of a character vector, such as c("author 1", "author 2").
 #' @param new_publish_date The date of publication, as a Date object.
 #' @param new_url An optional url (could also be a DOI) for the document.
-#' @param new_public Logical, whether the document should be publicly available. Default is FALSE.
-#' @param new_geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.
+#' @param new_user_groups New user groups to associate with the document. Leave NULL for no change.
+#' @param new_geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context. Will overwrite any existing associations.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
-#' @param check Logical, whether to check that we're working with the right document before proceeding. Default is TRUE
+#' @param check Logical, whether to double check that we're working with the right document before proceeding. Default is TRUE
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-updateHydrometDocument <- function(id, new_path = NULL, new_name = NULL, new_type = NULL, new_description = NULL, new_authors = NULL, new_publish_date = NULL, new_url = NULL, new_public = NULL, new_geoms = NULL, con = AquaConnect(), check = TRUE) {
+updateHydrometDocument <- function(id, new_path = NULL, new_name = NULL, new_type = NULL, new_description = NULL, new_authors = NULL, new_publish_date = NULL, new_url = NULL, new_user_groups = NULL, new_geoms = NULL, con = AquaConnect(), check = TRUE) {
   
   #Checks
   id_exists <- DBI::dbGetQuery(con, paste0("SELECT d.name, t.document_type_en AS type, d.authors, d.url, d.publish_date, d.description FROM documents AS d LEFT JOIN document_types as t ON d.type = t.document_type_id WHERE document_id = ", id))
@@ -127,12 +127,15 @@ updateHydrometDocument <- function(id, new_path = NULL, new_name = NULL, new_typ
     DBI::dbExecute(con, paste0("UPDATE documents SET publish_date = '", new_publish_date, "' WHERE document_id = ", id, ";"))
   }
   
+  if (!is.null(new_user_groups)) {
+    DBI::dbExecute(con, paste0("UPDATE documents SET user_groups = '{", paste(new_user_groups, collapse = ", "), "}' WHERE document_id = ", id, ";"))
+  }
+  
   if (!is.null(new_geoms)) {
     docs_spat <- data.frame("document_id" = id,
                             "geom_id" = exist_geoms$geom_id)
-    
+    DBI::dbExecute(con, "DELETE FROM documents_spatial WHERE document_id = ", id, ";")
     DBI::dbAppendTable(con, "documents_spatial", docs_spat)
-    
   }
   message("Document updated successfully.")
 }
