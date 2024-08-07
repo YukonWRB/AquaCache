@@ -69,7 +69,7 @@ Suggests:
     testthat (>= 3.0.0)
 Remotes:
     github::ropensci/weathercan,
-    github::stenevang/sftp
+    github::stenevang/sftp,
     github::YukonWRB/YGwater
 VignetteBuilder: 
     knitr
