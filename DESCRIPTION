@@ -70,6 +70,7 @@ Suggests:
 Remotes:
     github::ropensci/weathercan,
     github::stenevang/sftp
+    github::YukonWRB/YGwater
 VignetteBuilder: 
     knitr
 Config/testthat/edition: 3
