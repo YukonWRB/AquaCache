@@ -43,6 +43,10 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
 
+      - name: Run R-CMD-check
+        run: |
+          R -e 'options(pak.verbose = TRUE); pak::lockfile_create()'
+
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
