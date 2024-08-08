@@ -1,9 +1,11 @@
 #' Initial hydrometric/meteorological database creation.
 #'
 #' @description
-#' `r lifecycle::badge("stable")`
+#' `r lifecycle::badge("experimental")`
 #'
-#' Populates a postgreSQL database or replaces existing tables. Establishes pre-set schemas and populates some tables with initial values. No indices are specified as the primary keys fulfill this task already.
+#' NOTE: there is no guarantee that the code in this function will work as expected. It is intended to be a starting point for creating a database schema and populating it with initial values. The user should review the code and make any necessary changes to suit their needs. It may be necessary to run the code line by line rather than as a function if failure occurs, as it is possible that SQL errors exist in this script.
+#' 
+#' Populates a postgreSQL database with tables, pre-set information, relationships, checks, triggers, etc. designed to hold timeseries and discrete data, documents, images, rasters, vectors, and other data types relevant to hydrology, meteorology, water quality, geochemistry, and other physical sciences.. Establishes pre-set schemas and populates some tables with initial values. Note that no indices are specified as the primary keys fulfill this task already. 
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param overwrite TRUE overwrites the database, if one exists. Nothing will be kept. FALSE will create tables only where they are missing.
@@ -202,30 +204,127 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.forecasts.issue_datetime IS 'The datetime for which the forecast data point (row) is valid.'
   ")
+  
+  
+  # Tables to describe discrete samples #################
+  # sample_types
+  DBI::dbExecute(con, "CREATE TABLE sample_types (
+  sample_type_id SERIAL PRIMARY KEY,
+  sample_type TEXT UNIQUE NOT NULL,
+  sample_type_fr TEXT UNIQUE
+);")
+  sample_types <- data.frame(sample_type = c("field msr/obs", "QC-field replicate msr/obs", "QC-sample-blind duplicate", "QC-sample-field blank", "QC-sample-field replicate", "QC-sample-field spike", "QC-sample-inter-lab split", "QC-sample-lab blank", "QC-sample-lab duplicate", "QC-sample-lab matrix spike", "QC-sample-lab re-analysis", "QC-sample-lab spike", "QC-sample-lab split", "QC-sample-measurement precision sample", "QC-sample-other", "QC-sample-post-preservative blank", "QC-sample-pre-preservative blank", "QC-sample-reference sample", "QC-sample-trip blank", "QC-negative control", "sample-composite with parents", "sample-composite without parents", "sample-field split", "sample-field subsample", "sample-integrated cross-sectional profile", "sample-integrated flow proportioned", "sample-integrated horizontal profile", "sample-integrated time series", "sample-integrated horizontal and vertical composite profile", "sample-integrated vertical profile", "sample-negative control", "sample-other", "sample-positive control", "sample-routine")
+  )
+  DBI::dbAppendTable(con, "sample_types", sample_types)
+  
+  # collection_methods
+  DBI::dbExecute(con, "CREATE TABLE collection_methods (
+  collection_method_id SERIAL PRIMARY KEY,
+  collection_method TEXT UNIQUE NOT NULL
+);")
+  col_methods <- data.frame(collection_method = c("Observation", "Bucket", "DH-81", "DH-95", "Diffusion Gradient in Thin Film", "Gravity Corer (Generic)", "Kemmerer Bottle", "Nansen Bottle", "Niskin Bottle", "Osterberg Piston Sampler", "pH Paper", "Polar Orga. Chem. Integrative Sampler", "Probe/Sensor", "Pump", "Secchi Disk", "Sediment peeper", "Sediment sub-core", "Sediment Trap", "Semipermeable Membrane Device", "Syringe", "Test strip", "Turbidimeter", "Turbidity Tube", "Van Dorn Bottle", "Variable voltage pulsator unit", "Vinyl Tube", "Water Bottle", "Water Sampler (Other)", "WBH-96", "Whirl-pak bag", "Auger", "Trenching", "Diamond core drill", "RC drill", "Sonic drill")
+  )
+  DBI::dbAppendTable(con, "collection_methods", col_methods)
+  
+  # sample_fractions
+  DBI::dbExecute(con, "CREATE TABLE sample_fractions (
+  sample_fraction_id SERIAL PRIMARY KEY,
+  sample_fraction TEXT UNIQUE NOT NULL
+);")
+  fractions <- data.frame(sample_fraction = c("Weak acid dissociable", "Strong acid dissociable", "Acid Soluble", "Bioavailable", "Dissolved", "Extractable", "Filterable", "Filtered", "Filtered, field", "Filtered, lab", "Free", "Inorganic", "Non-settleable", "Non-volatile", "Organic", "Settleable", "Supernate", "Suspended", "Total", "Total Recoverable", "Total Residual", "Unfiltered", "Vapor", "Volatile")
+  )
+  DBI::dbAppendTable(con, "sample_fractions", fractions)
+  
+  # result_speciations
+  DBI::dbExecute(con, "CREATE TABLE result_speciations (
+  result_speciation_id SERIAL PRIMARY KEY,
+  result_speciation TEXT UNIQUE NOT NULL
+);")
+  speciations <- data.frame(result_speciation = c("as B", "as Ca", "as CaCO3", "as Cl", "as CN", "as CO3", "as DPA", "as F", "as H", "as H2S", "as HCO3", "as LAS", "as Mg", "as N", "as Na", "as NaCL", "as NH3", "as NH4", "as NO2", "as NO3", "as O2", "as OH", "as P", "as PO4", "as Ra", "as Ra226", "as S", "as Se", "as Si", "as SiO2", "as SO3", "as SO4", "as U3O8", "of CH4", "of CO2", "of H2O", "of Inorganic C", "of NH4", "of NO3", "of Organic C", "of Organic N", "of PO4", "of SO4", "of S")
+  )
+  DBI::dbAppendTable(con, "result_speciations", speciations)
+  
+  # result_value_types
+  DBI::dbExecute(con, "CREATE TABLE result_value_types (
+  result_value_type_id SERIAL PRIMARY KEY,
+  result_value_type TEXT UNIQUE NOT NULL
+);")
+  value_types <- data.frame(result_value_type = c("Actual", "Blank corrected", "Calculated", "Control adjusted", "Estimated")
+  )
+  DBI::dbAppendTable(con, "result_value_types", value_types)
+  
+  # laboratories
+  DBI::dbExecute(con, "CREATE TABLE laboratories (
+  lab_id SERIAL PRIMARY KEY,
+  lab_name TEXT UNIQUE NOT NULL
+);")
+  labs <- data.frame(lab_name = c("Saskatchewan Research Council", "ALS Environmental", "Bodycote Testing Group", "Chemex Lab", "Cantest", "CARO Analytical Services", "Envirotest", "Exova", "Maxxam", "Norwest Labs", "Pacific Environmental Science Centre", "United Keno Mine Lab", "Axys Analytical Services", "AGAT Laboratories", "Water Resources Lab", "Nautilus Environmental", "University of Calgary", "Environment Canada", "Element", "Bureau Veritas Labs (formally Maxxam)")
+  )
+  DBI::dbAppendTable(con, "laboratories", labs)
+  
+  # protocols
+  DBI::dbExecute(con, "CREATE TABLE analysis_protocols (
+  protocol_id SERIAL PRIMARY KEY,
+  protocol_name TEXT UNIQUE NOT NULL,
+  protocol_description TEXT,
+  url TEXT
+);")
+  ss_protocol <- data.frame(protocol_name = "BC Snow Survey Sampling Guide", url = "https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww2.gov.bc.ca%2Fassets%2Fgov%2Fenvironment%2Fair-land-water%2Fwater%2Fsnow%2Fsnow_survey_sampling_guide.pdf&psig=AOvVaw3HMaMRejyngEj0syvm3l88&ust=1723232510800000&source=images&cd=vfe&opi=89978449&ved=0CAQQn5wMahcKEwjwkOe-k-aHAxUAAAAAHQAAAAAQBA")
+  DBI::dbAppendTable(con, "analysis_protocols", ss_protocol)
+  
+  # result_conditions
+  DBI::dbExecute(con, "CREATE TABLE result_conditions (
+  result_condition_id SERIAL PRIMARY KEY,
+  result_condition TEXT UNIQUE NOT NULL
+);")
+  conditions <- data.frame(result_condition = c("Below Detection/Quantification Limit", "Above Detection/Quantification Limit", "Detected Not Quantified", "Not Detected", "Not Reported"))
+  DBI::dbAppendTable(con, "result_conditions", conditions)
+  
 
   # measurements_discrete table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists measurements_discrete (
                    timeseries_id INTEGER,
                    target_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE,
-                   value NUMERIC NOT NULL,
-                   sample_class TEXT,
+                   value NUMERIC,
+                   result_value_type INTEGER NOT NULL REFERENCES result_value_types(result_value_type_id),
+                   result_condition INTERGER REFERENCES result_conditions(result_condition_id),
+                   result_condition_value NUMERIC,
+                   sample_type INTEGER NOT NULL REFERENCES sample_types(sample_type_id),
+                   collect_method INTEGER REFERENCES collection_methods(collection_method_id),
+                   sample_fraction INTEGER REFERENCES sample_fractions(sample_fraction_id),
+                   result_speciation INTEGER REFERENCES result_speciations(result_speciation_id),
+                   lab INTEGER REFERENCES laboratories(lab_id),
+                   protocol INTEGER REFERENCES analysis_protocols(protocol_id)
                    note TEXT,
                    no_update BOOLEAN NOT NULL DEFAULT FALSE,
                    share_with INTEGER[] NOT NULL DEFAULT '{1}',
                    owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
-                   contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
-                   PRIMARY KEY (timeseries_id, datetime, sample_class);")
+                   contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE
+                   UNIQUE(timeseries_id, datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type)
+                 );")
   DBI::dbExecute(con, "COMMENT ON TABLE public.measurements_discrete IS 'Holds discrete observations, such as snow survey results, laboratory analyses, etc.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.target_datetime IS 'Optional column to be used for things like snow surveys where the measurements are around a certain target date and need to be plotted with the target date rather than the actual sample date.'
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.datetime IS 'The datetime on which the measurement was taken, or on which the sample was acquired in the field.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.sample_class IS 'Mostly for aqueous chem samples, to identify the sample as regular, field duplicate, lab duplicate, etc.'
-  ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_discrete.value IS 'Values below the detection limit are listed as the negative of the detection limit to keep everything numeric.'
-  ")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.value IS 'The value of the measurement if it is a number. For cases of < DL, > DL, etc. refer to column result_condition.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.result_value_type IS 'The type of result, such as actual, blank corrected, etc.';")
+  # If result_condition is not null, value must be null
+  DBI::dbExecute(con, "ALTER TABLE measurements_discrete ADD CONSTRAINT chk_result_condition CHECK (result_condition IS NULL OR value IS NULL);")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.result_condition IS 'The condition of the result, such as below detection limit, above detection limit, etc. If this column is populated then column value must be NULL';")
+  # Add constraint that result_condition_value must be a number if result_condition is < DL or > DL
+  DBI::dbExecute(con, "ALTER TABLE measurements_discrete ADD CONSTRAINT chk_result_condition_value CHECK (result_condition_value IS NULL OR result_condition IN (1, 2));")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.result_condition_value IS 'The value of the result condition, such as the detection limit, if the result condition is < DL or > DL.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.sample_type IS 'The type of sample taken, such as field measurement/observation, quality control, etc.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.collection_method IS 'The method used to collect the sample, such as bucket, pump, etc. Can be NULL.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.result_speciation IS 'The speciation of the result, such as as CaCO3, as P, as N, etc.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.sample_fraction IS 'The fraction of the sample, such as filtered, total, etc.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.lab IS 'The laboratory that performed the analysis. Can be NULL for field measurements or if the lab is not known.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.protocol IS 'The protocol used to analyze the sample. Can be NULL.';")
+  
+  
 
   # sample_class table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists sample_class (
@@ -398,10 +497,21 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "COMMENT ON COLUMN public.datum_conversions.current IS 'TRUE means that the conversion is the most up-to-date in the database. Only one conversion_id can be current for each location.'
   ")
 
-  # locations table #################
+  # locations tables #################
+  DBI::dbExecute(con, "CREATE TABLE location_types (
+                 type_id SERIAL PRIMARY KEY,
+                 type TEXT UNIQUE NOT NULL,
+                 type_fr TEXT);")
+  
+  # Initial location types table
+  loc_types <- data.frame(type = c("river/stream", "lake/pond", "estuary", "wetland", "ocean", "stormwater storage", "sewer sanitary", "sewer storm", "reservoir", "canal/ditch drainage", "canal/ditch irrigation", "well", "spring/seep", "atmosphere", "meteorological station", "snowpack"),
+                          type_fr = c("rivi\u00E8re/cours d'eau", "lac/\u00E9tang", "estuaire", "zone humide", "oc\u00E9an", "r\u00E9servoir d'eau pluviale", "\u00E9gout sanitaire", "\u00E9gout pluvial", "r\u00E9servoir", "canal/drainage", "canal/irrigation", "puit", "source/ruissellement", "atmosph\u00E8re", "station m\u00E9t\u00E9orologique", "accumulation de neige"))
+  DBI::dbAppendTable(con, "location_types", loc_types)
+  
   DBI::dbExecute(con, "CREATE TABLE if not exists locations (
                  location_id SERIAL PRIMARY KEY,
                  location TEXT UNIQUE NOT NULL,
+                 location_type INTEGER NOT NULL REFERENCES location_types (type_id),
                  name TEXT UNIQUE NOT NULL,
                  name_fr UNIQUE TEXT,
                  latitude NUMERIC NOT NULL,
@@ -500,7 +610,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter INTEGER NOT NULL,
-                 param_type INTEGER NOT NULL,
+                 media_type INTEGER NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
                  record_rate TEXT NOT NULL,
@@ -517,7 +627,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  note TEXT,
                  share_with INTEGER[] NOT NULL DEFAULT '{1}',
                  owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
-                 UNIQUE (location, parameter, category, period_type, param_type, record_rate, z),
+                 UNIQUE (location, parameter, category, period_type, media_type, record_rate, z),
                  CONSTRAINT check_record_rate_constraints
                      CHECK (
                      (category = 'discrete' AND record_rate IS NULL) OR
@@ -525,7 +635,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                      )
                  );")
   DBI::dbExecute(con, "
-  COMMENT ON TABLE public.timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, param_type, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
+  COMMENT ON TABLE public.timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, media_type, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.active IS 'Defines if the timeseries should or should not be added to or back-corrected by various AquaCache package functions.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.z IS 'Elevation of the measurement station, in meters. Used for things like thermistor strings, wind towers, or forecast climate parameters at different heights. Z elevations should be taken in the context of the location's assigned elevation and datum.';")
@@ -542,27 +652,119 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx IS 'Function (from the R package AquaCache) to use for incorporation of new data.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.source_fx_args IS 'Optional arguments to pass to the source function. See notes in function addACTimeseries for usage.';")
   
-  # parameters table #################
+  
+  # parameter related tables #################
+  DBI::dbExecute(con, "
+CREATE TABLE parameter_groups (
+    group_id SERIAL PRIMARY KEY,
+    group_name TEXT NOT NULL UNIQUE,
+    group_name_fr TEXT,
+    description TEXT,
+    description_fr TEXT
+);")
+  
+  # populate the parameter_groups table
+  grps <- data.frame(group_name = c("organics", "inorganics", "nutrients", "physical", "biological", "stable isotopes", "radioisotopes"),
+                     group_name_fr = c("organiques", "inorganiques", "nutriments", "physiques", "biologiques", "isotopes stables", "radioisotopes"),
+                     description = c("Organic (carbon-containing) parameters such as pesticides", "Inorganic parameters", "Nutrient parameters", "Physical parameters such as water level, temperature", "Biological parameters such as algae, bacteria", "Isotopes which do not undergoe radioactive decay", "Isotopes which undergo radioactive decay"),
+                     description_fr = c("Param\u00E8tres organiques (contenant du carbone) tels que les pesticides", "Param\u00E8tres inorganiques", "Param\u00E8tres nutritifs", "Param\u00E8tres physiques tels que le niveau d'eau, la temp\u00E9rature", "Param\u00E8tres biologiques tels que les algues, les bact\u00E9ries", "Isotopes qui ne subissent pas de d\u00E9sint\u00E8gration radioactive", "Isotopes qui subissent une d\u00E9sint\u00E8gration radioactive"))
+  
+  DBI::dbAppendTable(con, "parameter_groups", grps)
+  
+  
+  # Create parameter_sub_groups table with unique constraints on sub_group_name and combination of sub_group_name and group_id
+  # A sub-group can be in more than one group. For example, the sub-group 'pesticides' can be in the group 'organic' and 'inorganic'.
+  DBI::dbExecute(con, "
+CREATE TABLE parameter_sub_groups (
+    sub_group_id SERIAL PRIMARY KEY,
+    group_id INTEGER NOT NULL,
+    sub_group_name TEXT NOT NULL,
+    sub_group_name_fr TEXT,
+    description TEXT,
+    description_fr TEXT,
+    FOREIGN KEY (group_id) REFERENCES parameter_groups(group_id),
+    UNIQUE(sub_group_name, group_id)
+);")
+  
+  sub_grps1 <- data.frame(group_id = 1,
+                          sub_group_name = c("pesticides/insecticides/fungicides", "pharmaceuticals", "cyano/phytotoxins", "PFAS", "PCBs", "PAHs", "hydrocarbons - others", "others"),
+                          sub_group_name_fr = c("pesticides/insecticides/fongicides", "m\u00E9dicaments", "cyano/phytotoxines", "PFAS", "PCB", "HPA", "hydrocarbures - autres", "autres"),
+                          description = c("Pesticides, insecticides, and fungicides", "Pharmaceutical compounds", "Cyanotoxins and phytotoxins", "Per- and polyfluoroalkyl substances", "Polychlorinated biphenyls", "Polycyclic aromatic hydrocarbons", "hydrocarbons, others", NA),
+                          description_fr = c("Pesticides, insecticides et fongicides", "Compos\u00E9s pharmaceutiques", "Cyano-toxines et phytotoxines", "Substances per- et polyfluoroalkyles", "Biph\u00E9nyles polychlor\u00E9s", "Hydrocarbures aromatiques polycycliques", "hydrocarbures, autres", NA))
+  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps1)
+  
+  sub_grps2 <- data.frame(group_id = 2,
+                          sub_group_name = c("metals", "non-metals", "anions", "cations", "others"),
+                          sub_group_name_fr = c("m\u00E9taux", "non-m\u00E9taliques", "anions", "cations", "autres"),
+                          description = c("Metallic elements", "Non-metallic elements", "Anions", "Cations", NA),
+                          description_fr = c("El\u00E9ments m\u00E9talliques", "El\u00E9ments non-m\u00E9taliques", "Anions", "Cations", NA))
+  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps2)
+  
+  sub_grps3 <- data.frame(group_id = 3,
+                          sub_group_name = c("nitrogen", "phosphorus", "others"),
+                          sub_group_name_fr = c("azote", "phosphore", "autres"),
+                          description = c("Nitrogen compounds", "Phosphorus compounds", NA),
+                          description_fr = c("Compos\u00E9s azot\u00E9s", "Compos\u00E9s phosphor\u00E9s", NA))
+  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps3)
+  
+  #group 4 doesn't need sub-groups
+  
+  sub_grps5 <- data.frame(group_id = 5,
+                          sub_group_name = c("toxicity", "microbiological", "other"),
+                          sub_group_name_fr = c("toxicit\u00E9", "microbiologique", "autre"),
+                          description = c("Toxicity parameters such as LC50", "Microbiological parameters such as bacterial counts, algae concentration", NA),
+                          description_fr = c("Param\u00E8tres de toxicit\u00E9 tels que LC50", "Param\u00E8tres microbiologiques tels que les comptes bact\u00E9riens, la concentration en algues", NA))
+  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps5)
+  
+  # groups 6 and 7 don't need sub-groups
+  
+  
+  # Create parameter_relationships table with unique constraint on the combination of param_code, group_id, and sub_group_id
+  # The unique key ensures that a parameter can be in more than one group and sub-group. For example, the sub-group 'pesticides' can be in the group 'organic' and 'inorganic'.
+  DBI::dbExecute(con, "
+CREATE TABLE parameter_relationships (
+    relationship_id SERIAL PRIMARY KEY,
+    param_code INTEGER NOT NULL,
+    group_id INTEGER NOT NULL,
+    sub_group_id INTEGER,
+    FOREIGN KEY (param_code) REFERENCES parameters(param_code),
+    FOREIGN KEY (group_id) REFERENCES parameter_groups(group_id),
+    FOREIGN KEY (sub_group_id) REFERENCES parameter_sub_groups(sub_group_id),
+    UNIQUE NULLS NOT DISTINCT(param_code, group_id, sub_group_id)
+);")
+
   DBI::dbExecute(con, "CREATE TABLE parameters (
                param_code SERIAL PRIMARY KEY,
                param_name TEXT UNIQUE NOT NULL,
-               unit TEXT UNIQUE NOT NULL,
                param_name_fr TEXT UNIQUE NOT NULL,
-               group TEXT NOT NULL,
-               group_fr TEXT NOT NULL,
-               sub_group TEXT,
-               sub_group_fr TEXT,
                description TEXT
                description_fr TEXT,
+               unit TEXT UNIQUE NOT NULL,
                plot_default_y_orientation TEXT NOT NULL CHECK(plot_default_y_orientation IN ('normal', 'inverted')),
-                 plot_default_floor NUMERIC,
-                 plot_default_ceiling NUMERIC);")
+               plot_default_floor NUMERIC,
+               plot_default_ceiling NUMERIC);")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.parameters IS 'Holds information about each parameter, including the parameter name, description, unit, and default plotting orientation, ceiling, and floor to facilitate plotting. Parameters are associated with groups and sub-groups via the table parameter_relationships.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN parameters.unit IS 'SI units only. For example, m3/s, mg/L, etc. Import functions should convert to SI units listed here before appending to the DB.';")
   
-  # param_types table #################
-  DBI::dbExecute(con, "CREATE TABLE param_types (
-               param_type_code SERIAL PRIMARY KEY,
-               param_type TEXT UNIQUE NOT NULL,
-               param_type_fr TEXT UNIQUE NOT NULL,
+  params <- data.frame(param_name = c("snow water equivalent", "water level below ground surface", "total rain", "total snow", "equipment temperature", "water temperature", "total precipitation", "snow depth", "air temperature", "water level", "water flow", "distance"),
+                       param_name_fr = c("\u00E9quivalent en eau de neige", "niveau d'eau sous la surface du sol", "pluie totale", "neige totale", "temp\u00E9rature de l'\u00E9quipement", "temp\u00E9rature de l'eau", "pr\u00E9cipitation totale", "profondeur de la neige", "temp\u00E9rature de l'air", "niveau d'eau", "d\u00E9bit d'eau", "distance"),
+                       description = c("The column of water which would result from the melt of a column of snow of equal diameter.", "The depth of water below the ground surface.", "The total amount of rain that has fallen.", "The total amount of snow that has fallen.", "The temperature of the equipment used to measure other parameters.", "The temperature of the water.", "The total amount of precipitation (liquid and solid) that has fallen.", "The depth of the snowpack.", "The temperature of the air.", "The level of the water.", "The flow rate of the water.", "The distance between two points."),
+                       description_fr = c("La colonne d'eau qui r\u00E9sulterait de la fonte d'une colonne de neige de diam\u00E8tre \u00E9gal.", "La profondeur de l'eau sous la surface du sol.", "La quantit\u00E9 totale de pluie tomb\u00E9e.", "La quantit\u00E9 totale de neige tomb\u00E9e.", "La temp\u00E9rature de l'\u00E9quipement utilis\u00E9 pour mesurer d'autres param\u00E8tres.", "La temp\u00E9rature de l'eau.", "La quantit\u00E9 totale de pr\u00E9cipitations (liquides et solides) tomb\u00E9e.", "La profondeur du manteau neigeux.", "La temp\u00E9rature de l'air.", "Le niveau de l'eau.", "Le d\u00E9bit de l'eau.", "La distance entre deux points."),
+                       unit = c("mm", "m", "mm", "cm", "\u00B0C", "\u00B0C", "mm", "cm", "\u00B0C", "m", "m3/s", "m"),
+                       plot_default_y_orientation = c("normal", "inverted", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "inverted"),
+                       plot_default_floor = c(0,0,0,0,-100,-20,0,0,-100,-10, 0, NA))
+  DBI::dbAppendTable(con, "parameters", params)
+  
+  # make relationships in parameter_relationships table
+  rels <- data.frame(param_code = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+                     group_id = 4)
+  DBI::dbAppendTable(con, "parameter_relationships", rels)
+  
+  # media_types table #################
+  DBI::dbExecute(con, "CREATE TABLE media_types (
+               media_code SERIAL PRIMARY KEY,
+               media_type TEXT UNIQUE NOT NULL,
+               media_type_fr TEXT UNIQUE NOT NULL,
                description TEXT,
                description_fr TEXT);")
 
@@ -797,6 +999,13 @@ EXECUTE FUNCTION update_geom_type();
   REFERENCES vectors(geom_id)
                  ON UPDATE CASCADE ON DELETE CASCADE;")
   DBI::dbExecute(con,
+                 "ALTER TABLE locations
+  ADD CONSTRAINT fk_location_type
+  FOREIGN KEY (location_type)
+  REFERENCES location_types(type_id)
+                 ON UPDATE CASCADE;")
+  
+  DBI::dbExecute(con,
                  "ALTER TABLE timeseries
   ADD CONSTRAINT fk_location_id
   FOREIGN KEY (location_id)
@@ -805,7 +1014,7 @@ EXECUTE FUNCTION update_geom_type();
   
   DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_parameter FOREIGN KEY (parameter) REFERENCES parameters(param_code) ON UPDATE CASCADE ON DELETE CASCADE;")
   
-  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_param_type FOREIGN KEY (param_type) REFERENCES param_types(param_type_code) ON UPDATE CASCADE ON DELETE CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_media_type FOREIGN KEY (media_type) REFERENCES media_types(media_code) ON UPDATE CASCADE ON DELETE CASCADE;")
   
   DBI::dbExecute(con,
                  "ALTER TABLE timeseries
@@ -1011,19 +1220,19 @@ ORDER BY
   
   # Views for timeseries metadata
   DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_en WITH (security_invoker = TRUE) AS",
-                            "SELECT ts.timeseries_id, ptypes.param_type AS parameter_type, params.group AS parameter_group, ts.category, params.param_name AS parameter_name, params.unit, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude",
+                            "SELECT ts.timeseries_id, mtypes.media_type AS media_type, ts.category, params.param_name AS parameter_name, params.unit, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
                             "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
-                            "LEFT JOIN param_types AS ptypes ON ts.param_type = ptypes.param_type_code",
+                            "LEFT JOIN media_types AS mtypes ON ts.media_type = mtypes.media_code",
                             "ORDER BY ts.timeseries_id;"))
 
   DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_fr WITH (security_invoker = TRUE) AS",
-                            "SELECT ts.timeseries_id, ptypes.param_type_fr AS type_de_param\u00E8tre, params.group_fr AS groupe_de_param\u00E8tres, ts.category AS cat\u00E9gorie, params.param_name_fr AS nom_param\u00E8tre, params.unit AS unit\u00E9s, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS d\u00E9but, ts.end_datetime AS fin, ts.note, loc.location_id, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude",
+                            "SELECT ts.timeseries_id, mtypes.media_type_fr AS type_de_m\u00E9dia, ts.category AS cat\u00E9gorie, params.param_name_fr AS nom_param\u00E8tre, params.unit AS unit\u00E9s, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS d\u00E9but, ts.end_datetime AS fin, ts.note, loc.location_id, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
                             "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
-                            "LEFT JOIN param_types AS ptypes ON ts.param_type = ptypes.param_type_code",
+                            "LEFT JOIN media_types AS mtypes ON ts.media_type = mtypes.media_code",
                             "ORDER BY ts.timeseries_id;"))
   
   # View for location metadata

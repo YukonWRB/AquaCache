@@ -89,8 +89,8 @@ downloadSnowCourse <- function(location, param_code, start_datetime, end_datetim
         on.exit(DBI::dbDisconnect(ACCon), add = TRUE)
       }
       hydro_param <- DBI::dbGetQuery(ACCon, paste0("SELECT param_code FROM parameters WHERE param_name = '", if (param_code == "swe") "snow water equivalent" else if (param_code == "depth") "snow depth", "';"))[1,1]
-      param_type_code <- DBI::dbGetQuery(ACCon, "SELECT param_type_code FROM param_types WHERE param_type = 'meteorological'")[1,1]
-      DBI::dbExecute(ACCon, paste0("UPDATE timeseries SET note = 'Compound timeseries incorporating measurements from ", old_loc, ". Measurements at the old location adjusted using a multiplier of ", round(offset, 4), ", calculated from ", length(common_datetimes), " data points. New location measurements take precedence over old for overlap period.' WHERE location = '", location, "' AND category = 'discrete' AND param_type = ", param_type_code, " AND parameter = ", hydro_param, ";"))
+      media_code <- DBI::dbGetQuery(ACCon, "SELECT media_code FROM param_types WHERE media_type = 'atmospheric'")[1,1]
+      DBI::dbExecute(ACCon, paste0("UPDATE timeseries SET note = 'Compound timeseries incorporating measurements from ", old_loc, ". Measurements at the old location adjusted using a multiplier of ", round(offset, 4), ", calculated from ", length(common_datetimes), " data points. New location measurements take precedence over old for overlap period.' WHERE location = '", location, "' AND category = 'discrete' AND media_type = ", media_code, " AND parameter = ", hydro_param, ";"))
     })
   } else {
     #Get measurements for that location beginning after the start_datetime

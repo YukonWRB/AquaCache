@@ -25,8 +25,8 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
   #TODO: add a way to pass new parameters using params_df
   
   #Check the names of timeseries_df and locations_df, if it's not null
-  if (!all(c("location", "parameter", "category", "period_type", "record_rate", "param_type", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
-    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'category', 'period_type', 'record_rate', 'param_type', 'start_datetime', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
+  if (!all(c("location", "parameter", "category", "period_type", "record_rate", "media_type", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
+    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'category', 'period_type', 'record_rate', 'media_type', 'start_datetime', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
   }
   
   if (!is.null(locations_df)) {
@@ -56,15 +56,15 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
   timeseries_df$parameter <- tolower(timeseries_df$parameter)
   timeseries_df$category <- tolower(timeseries_df$category)
   timeseries_df$period_type <- tolower(timeseries_df$period_type)
-  timeseries_df$param_type <- tolower(timeseries_df$param_type)
+  timeseries_df$media_type <- tolower(timeseries_df$media_type)
   timeseries_df$record_rate <- as.character(timeseries_df$record_rate)
 
   # Check that cols in the timeseries_df meets constraints
   if (!all(timeseries_df$category %in% c("discrete", "continuous"))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'category' can only be one of 'discrete' or 'continuous'.")
   }
-  if (!all(timeseries_df$param_type %in% c('surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'))) {
-    stop("One of the rows in your timeseries_df has a disallowed value: column 'param_type' can only be one of 'surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'.")
+  if (!all(timeseries_df$media_type %in% c('surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'))) {
+    stop("One of the rows in your timeseries_df has a disallowed value: column 'media_type' can only be one of 'surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'.")
   }
   if (!all(timeseries_df$period_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
     stop("One of the rows in your timeseries_df has a disallowed value: column 'period_type' can only be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.")
@@ -228,17 +228,17 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
       
       loc <- add$location
       param_code <- DBI::dbGetQuery(con, paste0("SELECT param_code FROM parameters WHERE param_name = '", add$parameter, "';"))[,1]
-      param_type_code <- DBI::dbGetQuery(con, paste0("SELECT param_type_code FROM param_types WHERE param_type = '", add$param_type, "';"))[,1]
+      media_code <- DBI::dbGetQuery(con, paste0("SELECT media_code FROM media_types WHERE media_type = '", add$media_type, "';"))[,1]
       source_fx <- add$source_fx
       period_type <- add$period_type
       record_rate <- add$record_rate
       source_fx_args <- add$source_fx_args
       param_name <- add$parameter
       add$parameter <- param_code
-      add$param_type <- param_type_code
+      add$media_type <- media_code
       tryCatch({
         DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
-        message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", param_name, ", category ", add$category, ", param_type ", add$param_type, ", and period_type ", add$period_type, ".")
+        message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", param_name, ", category ", add$category, ", media_type ", add$media_type, ", and period_type ", add$period_type, ".")
       }, error = function(e) {
         message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and this function automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries.")
       })

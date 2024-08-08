@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' First checks the local version of HYDAT using function [hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaced old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in parameter timeseries_id, will also update the internal_status table with the HYDAT version used for the update.
+#' First checks the local version of HYDAT using function [hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaces old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in parameter timeseries_id, will also update the internal_status table with the HYDAT version used for the update.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries where the import function is downloadWSC.
@@ -83,23 +83,24 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
         new_level <<- data.frame()
       })
 
-
       if (nrow(new_flow) > 0) {
         tryCatch({
           param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE param_name = 'water flow'")[1,1]
-          param_type_code <- DBI::dbGetQuery(con, "SELECT param_type_code FROM param_types WHERE param_type = 'surface water'")[1,1]
+          media_code <- DBI::dbGetQuery(con, "SELECT media_code FROM media_types WHERE media_type = 'surface water'")[1,1]
+          location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", i, "';"))[1,1]
           tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = ", param_code, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_flow) == 0 | is.na(tsid_flow)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
+                                    "location_id" = location_id,
                                     "parameter" = param_code,
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
-                                    "record_rate" = "1 day",
-                                    "param_type" = param_type_code,
+                                    "record_rate" = "< 1 day", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'calculated_daily' table here.
+                                    "media_type" = media_code,
                                     "start_datetime" = min(new_flow$date),
                                     "end_datetime" = max(new_flow$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                                    "public" = TRUE,
+                                    "share_with" = "{1}",
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = ", param_code, " AND source_fx = 'downloadWSC';"))[1,1]
@@ -194,19 +195,21 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
       if (nrow(new_level) > 0) {
         tryCatch({
           param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE param_name = 'water level'")[1,1]
-          param_type_code <- DBI::dbGetQuery(con, "SELECT param_type_code FROM param_types WHERE param_type = 'surface water'")[1,1]
+          media_code <- DBI::dbGetQuery(con, "SELECT media_code FROM media_types WHERE media_type = 'surface water'")[1,1]
+          location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", i, "';"))[1,1]
           tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = ", param_code, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
           if (length(tsid_level) == 0 | is.na(tsid_level)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
+                                    "location_id" = location_id,
                                     "parameter" = param_code,
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
-                                    "record_rate" = "1 day",
-                                    "param_type" = param_type_code,
+                                    "record_rate" = "< 1 day",  #HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'calculated_daily' table here.
+                                    "media_type" = media_code,
                                     "start_datetime" = min(new_level$date),
                                     "end_datetime" = max(new_level$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                                    "public" = TRUE,
+                                    "share_with" = "{1}",
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter = ", param_code, " AND source_fx = 'downloadWSC';"))[1,1]
@@ -300,7 +303,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
     DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", local_hydat, "' WHERE event = 'HYDAT_version'"))
     message("Completed update of HYDAT related data.")
   } else {
-    message("No updates were made because the last HYDAT version referenced in the database is the same as the current HYDAT, and you didn't specify force_update = TRUE")
+    message("No updates were made because the last HYDAT version referenced in the database is the same as the current HYDAT, and you didn't specify force_update = TRUE.")
   }#End of function portion that seeks to update HYDAT related data
   return(new_hydat)
 } #End of function
