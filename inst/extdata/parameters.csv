@@ -1,0 +1,1262 @@
+﻿param_name,MethodSpeciation,SampleFraction,DataStream_group,CASNumber,group,subgroup,unit_default,unit_solid
+Resistivity,No,No,Physical, ,physical,,Ω·m,
+"Light, underwater incident",No,No,Physical, ,physical,,W/m²,
+Delta oxygen-17/oxygen-16,Yes,No,Stable Isotopes, ,stable isotopes,,VSMOW,VSMOW
+Delta oxygen-18/oxygen-16,Yes,No,Stable Isotopes, ,stable isotopes,,VSMOW,VSMOW
+"Deuterium, delta",Yes,No,Stable Isotopes, ,stable isotopes,,VSMOW,VSMOW
+Delta carbon-13/carbon-12,Yes,No,Stable Isotopes, ,stable isotopes,,VPDB,VPDB
+Delta sulfur-34/sulfur-32,Yes,No,Stable Isotopes, ,stable isotopes,,V-CDT,V-CDT
+Carbon-13/Carbon-12 ratio,Yes,No,Stable Isotopes, ,stable isotopes,,ratio,ratio
+Deuterium/Hydrogen ratio,Yes,No,Stable Isotopes, ,stable isotopes,,ratio,ratio
+Nitrogen-15/Nitrogen-14 ratio,Yes,No,Stable Isotopes, ,stable isotopes,,ratio,ratio
+Oxygen-18/Oxygen-16 ratio,Yes,No,Stable Isotopes, ,stable isotopes,,ratio,ratio
+"Strontium-87/Strontium-86, ratio",No,No,Stable Isotopes, ,stable isotopes,,ratio,ratio
+Sulfur-34/Sulfur-32 ratio,Yes,No,Stable Isotopes, ,stable isotopes,,ratio,ratio
+Uranium-234/Uranium-238 ratio,Yes,No,Radiochemical, ,radiochemical,,ratio,ratio
+Anion/cation ratio,No,No,Physical, ,physical,,ratio,
+Sodium adsorption ratio [(Na)/(sq root of 1/2 Ca + Mg)],No,No,Physical, ,physical,,ratio,
+Spectral slope ratio,No,No,Physical, ,physical,,ratio,
+Salinity,No,No,Physical, ,physical,,PSU,
+Turbidity,No,No,Physical, ,physical,,NTU,
+Oxidation reduction potential (ORP),No,No,Physical, ,physical,,mV,
+"Water equivalent, snow",No,No,Physical,,physical,,mm,
+"Grain size, coarse sand (>=630 to 2000 um)",No,No,Physical, ,physical,,mm,
+Particle size,No,No,Physical, ,physical,,mm,
+"Particle size, 30 mesh, (0.59 mm)",No,No,Physical, ,physical,,mm,
+"Particle size, 50 mesh, (0.297 mm)",No,No,Physical, ,physical,,mm,
+"Particle size, coarse sediment (>75 um)",No,No,Physical, ,physical,,mm,
+"Particle size, fine sediment (<75 um)",No,No,Physical, ,physical,,mm,
+"Particle size, Sieve No. 10, 9 mesh, (2.00mm)",No,No,Physical, ,physical,,mm,
+"Particle size, Sieve No. 100, 100 mesh, (0.150mm)",No,No,Physical, ,physical,,mm,
+"Particle size, Sieve No. 12, 10 mesh, (1.70mm)",No,No,Physical, ,physical,,mm,
+"Particle size, Sieve No. 200, 200 mesh, (0.075mm)",No,No,Physical, ,physical,,mm,
+"Particle size, Sieve No. 270, 270 mesh, (0.053mm)",No,No,Physical, ,physical,,mm,
+"Particle size, Sieve No. 400, 400 mesh, (0.038mm)",No,No,Physical, ,physical,,mm,
+"Precipitation, total",No,No,Physical, ,physical,,mm,
+"Precipitation, rain",No,No,Physical, ,physical,,mm,
+Aluminum-27,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Antimony-121,No,No,Stable Isotopes,14265-72-6,stable isotopes,,mg/l,mg/kg
+Antimony-125,No,No,Stable Isotopes,14234-35-6,stable isotopes,,mg/l,mg/kg
+Arsenic-75,No,No,Stable Isotopes,7440-38-2,stable isotopes,,mg/l,mg/kg
+Barium-137,No,No,Stable Isotopes,13981-97-0,stable isotopes,,mg/l,mg/kg
+Beryllium-9,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Bismuth-209,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Boron-11,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Cadmium-114,No,No,Stable Isotopes,14041-58-8,stable isotopes,,mg/l,mg/kg
+Calcium-43,No,No,Stable Isotopes,14333-06-3,stable isotopes,,mg/l,mg/kg
+Carbon-13,Yes,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Chlorine-35,No,No,Stable Isotopes,13981-72-1,stable isotopes,,mg/l,mg/kg
+Chromium-52,No,No,Stable Isotopes,14092-98-9,stable isotopes,,mg/l,mg/kg
+Chromium-53,No,No,Stable Isotopes,13981-78-7,stable isotopes,,mg/l,mg/kg
+Cobalt-59,No,No,Stable Isotopes,7440-48-4,stable isotopes,,mg/l,mg/kg
+Copper-63,No,No,Stable Isotopes,14191-84-5,stable isotopes,,mg/l,mg/kg
+Copper-65,No,No,Stable Isotopes,14119-06-3,stable isotopes,,mg/l,mg/kg
+Iron-57,No,No,Stable Isotopes,14762-69-7,stable isotopes,,mg/l,mg/kg
+Lithium-7,No,Yes,Stable Isotopes,13982-05-3,stable isotopes,,mg/l,mg/kg
+Magnesium-25,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Manganese-55,No,No,Stable Isotopes,7439-96-5,stable isotopes,,mg/l,mg/kg
+Mercury-202,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Molybdenum-98,No,No,Stable Isotopes,14392-20-2,stable isotopes,,mg/l,mg/kg
+Nickel-60,No,No,Stable Isotopes,13981-80-1,stable isotopes,,mg/l,mg/kg
+Nitrogen-15,Yes,No,Stable Isotopes,14390-96-6,stable isotopes,,mg/l,mg/kg
+Oxygen-18,Yes,No,Stable Isotopes,14797-71-8,stable isotopes,,mg/l,mg/kg
+Phosphorus-31,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Potassium-39,No,No,Stable Isotopes,14092-91-2,stable isotopes,,mg/l,mg/kg
+Selenium-77,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Selenium-82,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Silicon-29,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Silver-107,No,No,Stable Isotopes,14378-37-1,stable isotopes,,mg/l,mg/kg
+Sodium-23,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Strontium-86,No,No,Stable Isotopes,13982-14-4,stable isotopes,,mg/l,mg/kg
+Strontium-88,No,No,Stable Isotopes,14119-10-9,stable isotopes,,mg/l,mg/kg
+Sulfur-34,Yes,No,Stable Isotopes,13965-97-4,stable isotopes,,mg/l,mg/kg
+Thallium-205,No,No,Stable Isotopes,14280-49-0,stable isotopes,,mg/l,mg/kg
+Tin-118,No,No,Stable Isotopes, ,stable isotopes,,mg/l,mg/kg
+Titanium-47,No,No,Stable Isotopes,14304-90-6,stable isotopes,,mg/l,mg/kg
+Vanadium-51,No,No,Stable Isotopes,7440-62-2,stable isotopes,,mg/l,mg/kg
+Zinc-66,No,No,Stable Isotopes,14378-33-7,stable isotopes,,mg/l,mg/kg
+Cesium-134,No,No,Radiochemical,13967-70-9,radiochemical,,mg/l,mg/kg
+Cesium-137,No,No,Radiochemical,10045-97-3,radiochemical,,mg/l,mg/kg
+Cobalt-60,No,No,Radiochemical,10198-40-0,radiochemical,,mg/l,mg/kg
+Iodine-129,No,Yes,Radiochemical,15046-84-1,radiochemical,,mg/l,mg/kg
+Iodine-131,No,No,Radiochemical,10043-66-0,radiochemical,,mg/l,mg/kg
+Lead-210,No,No,Radiochemical,14255-04-0,radiochemical,,mg/l,mg/kg
+Polonium-210,No,No,Radiochemical,13981-52-7,radiochemical,,mg/l,mg/kg
+Radium-226,No,No,Radiochemical,13982-63-3,radiochemical,,mg/l,mg/kg
+Radium-228,No,No,Radiochemical,15262-20-1,radiochemical,,mg/l,mg/kg
+Radon-222,No,No,Radiochemical,14859-67-7,radiochemical,,mg/l,mg/kg
+Strontium-90,No,No,Radiochemical,10098-97-2,radiochemical,,mg/l,mg/kg
+Thorium-232,No,No,Radiochemical,7440-29-1,radiochemical,,mg/l,mg/kg
+Tritium,Yes,No,Radiochemical,10028-17-8,radiochemical,,mg/l,mg/kg
+Uranium,No,No,Radiochemical,7440-61-1,radiochemical,,mg/l,mg/kg
+Uranium-238,Yes,No,Radiochemical,7440-61-1 ,radiochemical,,mg/l,mg/kg
+Alkalinity,Yes,Yes,Physical, ,physical,,mg/l,
+"Biochemical oxygen demand, standard conditions",No,No,Physical, ,physical,,mg/l,
+"Carbonaceous biochemical oxygen demand, non-standard conditions",No,No,Physical, ,physical,,mg/l,
+"Carbonaceous biochemical oxygen demand, standard conditions",No,No,Physical, ,physical,,mg/l,
+Chemical oxygen demand,No,No,Physical, ,physical,,mg/l,
+Dissolved oxygen (DO),No,No,Physical, ,physical,,mg/l,
+Fixed dissolved solids,No,No,Physical, ,physical,,mg/l,
+Fixed suspended solids,No,No,Physical, ,physical,,mg/l,
+Hardness,Yes,Yes,Physical, ,physical,,mg/l,mg/kg
+Indomethacin,No,No,Organic, ,organics,pharmaceuticals,mg/l,mg/kg
+Settleable solids,No,No,Physical, ,physical,,mg/l,
+Suspended Sediment Concentration (SSC),No,No,Physical, ,physical,,mg/l,
+Total dissolved solids,No,No,Physical, ,physical,,mg/l,
+Total fixed solids,No,No,Physical, ,physical,,mg/l,
+Total solids,No,No,Physical, ,physical,,mg/l,
+Total suspended solids,No,No,Physical, ,physical,,mg/l,
+Total volatile solids,No,No,Physical, ,physical,,mg/l,
+Volatile Dissolved Solids,No,No,Physical, ,physical,,mg/l,
+Volatile suspended solids,No,No,Physical, ,physical,,mg/l,
+"2,2',3,4,4',5'-Hexabromodiphenyl ether",No,No,"Organics, BDEs",182677-30-1,organics,brominated diphenyl ethers,mg/l,mg/kg
+"2,2',4,4'-Tetrabromodiphenyl ether",No,No,"Organics, BDEs",5436-43-1,organics,brominated diphenyl ethers,mg/l,mg/kg
+"2,4,4'-Tribromodiphenyl ether",No,No,"Organics, BDEs",41318-75-6,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE 100L,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE 153L,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE 183L,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE 209L,No,No,"Organics, BDEs",562099-68-7,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE 28L,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE 47L,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-003,No,No,"Organics, BDEs",101-55-3,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-017,No,No,"Organics, BDEs",147217-75-2,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-049,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-066,No,No,"Organics, BDEs",189084-61-5,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-071,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-077,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-085,No,No,"Organics, BDEs",182346-21-0,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-099,No,No,"Organics, BDEs",60348-60-9,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-100,No,No,"Organics, BDEs",189084-64-8,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-119,No,No,"Organics, BDEs",189084-66-0,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-126,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-153,No,No,"Organics, BDEs",68631-49-2,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-154,No,No,"Organics, BDEs",207122-15-4,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-156,No,No,"Organics, BDEs",405237-85-6,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-183,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-184,No,No,"Organics, BDEs",117948-63-7,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-190,No,No,"Organics, BDEs",189084-68-2,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-194,No,No,"Organics, BDEs",85446-17-9,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-197,No,No,"Organics, BDEs",117964-21-3,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-206,No,No,"Organics, BDEs", ,organics,brominated diphenyl ethers,mg/l,mg/kg
+BDE-207,No,No,"Organics, BDEs",437701-79-6,organics,brominated diphenyl ethers,mg/l,mg/kg
+Decabromodiphenyl ether,No,No,"Organics, BDEs",1163-19-5,organics,brominated diphenyl ethers,mg/l,mg/kg
+Octabromodiphenyl ether,No,No,"Organics, BDEs",32536-52-0,organics,brominated diphenyl ethers,mg/l,mg/kg
+".alpha.,2,6-Trichlorotoluene",No,No,"Organics, Other",2014-83-7,organics,others,mg/l,mg/kg
+".alpha.-Amino-2,3-dihydro-5-methyl-3-oxo-4-isoxazolepropanoic acid",No,No,"Organics, Other",77521-29-0,organics,others,mg/l,mg/kg
+"1,1,1,2-Tetrachloroethane",No,No,"Organics, Other",630-20-6,organics,others,mg/l,mg/kg
+"1,1,1-Trichloroethane",No,No,"Organics, Other",71-55-6,organics,others,mg/l,mg/kg
+"1,1,2,2-Tetrachloroethane",No,No,"Organics, Other",79-34-5,organics,others,mg/l,mg/kg
+"1,1,2-Trichloroethane",No,No,"Organics, Other",79-00-5,organics,others,mg/l,mg/kg
+"1,1-Dichloroethane",No,No,"Organics, Other",75-34-3,organics,others,mg/l,mg/kg
+"1,1-Dichloroethylene",No,No,"Organics, Other",75-35-4,organics,others,mg/l,mg/kg
+"1,1-Dichloropropene",No,No,"Organics, Other",563-58-6,organics,others,mg/l,mg/kg
+"1,2,3,4-Tetrachloro-5,6-dimethoxybenzene",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"1,2,3,4-Tetrachlorobenzene",No,No,"Organics, Other",634-66-2,organics,others,mg/l,mg/kg
+"1,2,3,4-Tetrahydronaphthalene",No,No,"Organics, Other",119-64-2,organics,others,mg/l,mg/kg
+"1,2,3,5-Tetrachlorobenzene",No,No,"Organics, Other",634-90-2,organics,others,mg/l,mg/kg
+"1,2,3-Trichlorobenzene",No,No,"Organics, Other",87-61-6,organics,others,mg/l,mg/kg
+"1,2,4,5-Tetrachlorobenzene",No,No,"Organics, Other",95-94-3,organics,others,mg/l,mg/kg
+"1,2,4-Trichlorobenzene",No,No,"Organics, Other",120-82-1,organics,others,mg/l,mg/kg
+"1,2,4-Trimethylbenzene",No,No,"Organics, Other",95-63-6,organics,others,mg/l,mg/kg
+"1,2,6-Trimethylphenanthrene",No,No,"Organics, Other",30436-55-6,organics,others,mg/l,mg/kg
+"1,2-Dichlorobenzene-d4",No,No,"Organics, Other",2199-69-1,organics,others,mg/l,mg/kg
+"1,2-Dichloroethane",No,No,"Organics, Other",107-06-2,organics,others,mg/l,mg/kg
+"1-Heptanesulfonic acid, 1,1,2,2,3,3,4,4,5,5,6,6,7,7,7-pentadecafluoro-",No,No,"PFAS,Perfluorinated Alkyl Substance",375-92-8,organics,PFAS,mg/l,mg/kg
+"1,2-Dichloroethane-d4",No,No,"Organics, Other",17060-07-0,organics,others,mg/l,mg/kg
+"1,2-Dichloropropane",No,No,"Organics, Other",78-87-5,organics,others,mg/l,mg/kg
+"1,2-Dimethylnaphthalene",No,No,"Organics, Other",573-98-8,organics,others,mg/l,mg/kg
+"1,2-Diphenylhydrazine",No,No,"Organics, Other",122-66-7,organics,others,mg/l,mg/kg
+"1,3,4,6,7,8-Hexahydro-4,6,6,7,8,8-hexamethylcyclopenta[g]-2-benzopyran",No,No,"Organics, Other",1222-05-5,organics,others,mg/l,mg/kg
+"1,3,5-Trichlorobenzene",No,No,"Organics, Other",108-70-3,organics,others,mg/l,mg/kg
+"1,3,5-Trimethylbenzene",No,No,"Organics, Other",108-67-8,organics,others,mg/l,mg/kg
+"1,3-Dichlorobenzene",No,No,"Organics, Other",541-73-1,organics,others,mg/l,mg/kg
+"1,4,6,7-Tetramethylnaphthalene",No,No,"Organics, Other",13765-09-8,organics,others,mg/l,mg/kg
+"1,4-Dichlorobenzene-d4",No,No,"Organics, Other",3855-82-1,organics,others,mg/l,mg/kg
+"1,4-Difluorobenzene",No,No,"Organics, Other",540-36-3,organics,others,mg/l,mg/kg
+"1,6,7-Trimethylnaphthalene",No,No,"Organics, Other",2245-38-7,organics,others,mg/l,mg/kg
+"1,7-Dimethylfluorene",No,No,"Organics, Other",442-66-0,organics,others,mg/l,mg/kg
+"1,7-Dimethylphenanthrene",No,No,"Organics, Other",483-87-4,organics,others,mg/l,mg/kg
+"1,8-Dimethylphenanthrene",No,No,"Organics, Other",7372-87-4,organics,others,mg/l,mg/kg
+12-Chlorodehydroabietic acid,No,No,"Organics, Other",65310-45-4,organics,others,mg/l,mg/kg
+14-Chlorodehydroabietic acid,No,No,"Organics, Other",65281-76-7,organics,others,mg/l,mg/kg
+1-Butanol,No,No,"Organics, Other",71-36-3,organics,others,mg/l,mg/kg
+1-Methylchrysene,No,No,"Organics, Other",3351-28-8,organics,others,mg/l,mg/kg
+1-Methylnaphthalene,No,No,"Organics, Other",90-12-0,organics,others,mg/l,mg/kg
+1-Methylphenanthrene,No,No,"Organics, Other",832-69-9,organics,others,mg/l,mg/kg
+1-Naphthol-d8,No,No,"Organics, Other",207569-03-7,organics,others,mg/l,mg/kg
+1-Pentanol,No,No,"Organics, Other",71-41-0,organics,others,mg/l,mg/kg
+"1-Phenanthrenecarboxylic acid, 1,2,3,4,4a,4b,5,9,10,10a-decahydro-1,4a-dimethyl-7-(1-methylethyl)-, (1R-(1.alpha.,4a.beta., 4b.alpha.,10a.alpha.))-",No,No,"Organics, Other",79-54-9,organics,others,mg/l,mg/kg
+1-Propanol,No,No,"Organics, Other",71-23-8,organics,others,mg/l,mg/kg
+2-(Thiocyanomethylthio)Benzothiazole,No,No,"Organics, Other",64441-45-8,organics,others,mg/l,mg/kg
+"2,2,4,5,6,7,8,8-Octachloro-2,3,3a,4,7,7a-hexahydro-4,7-methano-1H-indene",No,No,"Organics, Other",5566-34-7,organics,others,mg/l,mg/kg
+"2,2'-[1,2 ethanediylbis(oxy)]bis-ethanol diacetate",No,No,"Organics, Other",112-27-6,organics,others,mg/l,mg/kg
+"2,2-Dichloropropane",No,No,"Organics, Other",594-20-7,organics,others,mg/l,mg/kg
+"2,3,4,5- & 2,3,5,6- Tetrachlorophenol",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"2,3,4,5-Tetrachlorophenol",No,No,"Organics, Other",4901-51-3,organics,others,mg/l,mg/kg
+"2,3,4,6-Tetrachlorophenol",No,No,"Organics, Other",58-90-2,organics,others,mg/l,mg/kg
+"2,3,4,6-Tetrachlorophenol mixt. with 2,3,5,6-Tetrachlorophenol",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"2,3,4-Trichlorophenol",No,No,"Organics, Other",15950-66-0,organics,others,mg/l,mg/kg
+"2,3,5,6-Tetrachlorophenol",No,No,"Organics, Other",935-95-5,organics,others,mg/l,mg/kg
+"2,3,5-Trichlorophenol",No,No,"Organics, Other",933-78-8,organics,others,mg/l,mg/kg
+"2,3,6-Trichlorophenol",No,No,"Organics, Other",933-75-5,organics,others,mg/l,mg/kg
+"2,3,6-Trichlorotoluene",No,No,"Organics, Other",2077-46-5,organics,others,mg/l,mg/kg
+"2,3,6-Trimethylnaphthalene",No,No,"Organics, Other",829-26-5,organics,others,mg/l,mg/kg
+"2,3-Dichlorophenol",No,No,"Organics, Other",576-24-9,organics,others,mg/l,mg/kg
+"2,4- & 2,5-Dichlorophenol",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"2,4,5-Trichlorotoluene",No,No,"Organics, Other",6639-30-1,organics,others,mg/l,mg/kg
+"2,4,6-Tribromophenol",No,No,"Organics, Other",118-79-6,organics,others,mg/l,mg/kg
+"2,4,6-Trinitro-5-tert-butyl-m-xylene",No,No,"Organics, Other",81-15-2 ,organics,others,mg/l,mg/kg
+"2,4-Dichlorophenol mixt. with 2,5-Dichlorophenol",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"2,4-Dichlorophenylacetic acid",No,No,"Organics, Other",19719-28-9,organics,others,mg/l,mg/kg
+"2,4-Dimethyldibenzothiophene",No,No,"Organics, Other",31317-18-7,organics,others,mg/l,mg/kg
+"2,4-Dimethylphenol",No,No,"Organics, Other",105-67-9,organics,others,mg/l,mg/kg
+"2,4-Dinitrophenol",No,No,"Organics, Other",51-28-5,organics,others,mg/l,mg/kg
+"2,4-Dinitrotoluene",No,No,"Organics, Other",121-14-2,organics,others,mg/l,mg/kg
+"2,5-Dibromobenzoic Acid",No,No,"Organics, Other",610-71-9,organics,others,mg/l,mg/kg
+"2,6-Dichlorophenol",No,No,"Organics, Other",87-65-0,organics,others,mg/l,mg/kg
+"2,6-Dimethylnaphthalene",No,No,"Organics, Other",581-42-0,organics,others,mg/l,mg/kg
+"2,6-Dimethylnaphthalene-D12",No,No,"Organics, Other",350820-12-1,organics,others,mg/l,mg/kg
+"2,6-Dimethylphenanthrene",No,No,"Organics, Other",17980-16-4,organics,others,mg/l,mg/kg
+"2,6-Dinitrotoluene",No,No,"Organics, Other",606-20-2,organics,others,mg/l,mg/kg
+2-Butanol,No,No,"Organics, Other",78-92-2,organics,others,mg/l,mg/kg
+"2-Chloro-4,6-diamino-s-triazine",No,No,"Organics, Other",3397-62-4,organics,others,mg/l,mg/kg
+2-Chloroethylvinylether,No,No,"Organics, Other",256471-05-3,organics,others,mg/l,mg/kg
+2-Chloronaphthalene,No,No,"Organics, Other",91-58-7,organics,others,mg/l,mg/kg
+2-Chlorophenol-d4,No,No,"Organics, Other",93951-73-6,organics,others,mg/l,mg/kg
+2-Choro-6-ethylamino-4-amino-s-triazine,No,No,"Organics, Other",1007-28-9,organics,others,mg/l,mg/kg
+2-Fluorobiphenyl,No,No,"Organics, Other",321-60-8,organics,others,mg/l,mg/kg
+2-Methylanthracene,No,No,"Organics, Other",613-12-7,organics,others,mg/l,mg/kg
+2-Methyldibenzothiophenes/3-Methyldibenzothiophenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+2-Methylfluorene,No,No,"Organics, Other",1430-97-3,organics,others,mg/l,mg/kg
+2-Methylnaphthalene,No,No,"Organics, Other",91-57-6,organics,others,mg/l,mg/kg
+2-Methylnaphthalene-D10,No,No,"Organics, Other",7297-45-2,organics,others,mg/l,mg/kg
+2-Methylphenanthrene,No,No,"Organics, Other",2531-84-2,organics,others,mg/l,mg/kg
+"3,3'-Dichlorobenzidine",No,No,"Organics, Other",91-94-1,organics,others,mg/l,mg/kg
+"3,4,5-Trichlorophenol",No,No,"Organics, Other",609-19-8,organics,others,mg/l,mg/kg
+"3,4-Dichlorophenol",No,No,"Organics, Other",95-77-2,organics,others,mg/l,mg/kg
+"3,5-Dichlorobenzoic acid",No,No,"Organics, Other",51-36-5,organics,others,mg/l,mg/kg
+"3,5-Dichlorophenol",No,No,"Organics, Other",591-35-5,organics,others,mg/l,mg/kg
+"3,6-Dimethylphenanthrene",No,No,"Organics, Other",1576-67-6,organics,others,mg/l,mg/kg
+3-Iodo-2-propynyl butyl carbamate,No,No,"Organics, Other",55406-53-6,organics,others,mg/l,mg/kg
+3-Methylcholanthrene,No,No,"Organics, Other",56-49-5,organics,others,mg/l,mg/kg
+3-Methylfluoranthene/Benzo[a]fluorene,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+3-Methylphenanthrene,No,No,"Organics, Other",832-71-3,organics,others,mg/l,mg/kg
+"3-Pyridinecarboxamide, N-(2,4-difluorophenyl)-2-[3-(trifluoromethyl)phenoxy]-",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"4,4'-Dibromobiphenyl",No,No,"Organics, Other",92-86-4,organics,others,mg/l,mg/kg
+"4,4'-Isopropylidenediphenol",No,No,"Organics, Other",1980-05-07,organics,others,mg/l,mg/kg
+"4,6-Dimethyldibenzothiophene",No,No,"Organics, Other",1207-12-1,organics,others,mg/l,mg/kg
+4-Methyl-2-pentanol,No,No,"Organics, Other",108-11-2,organics,others,mg/l,mg/kg
+"4-methyl-6-(2-methyl-5-propan-2-ylphenyl)-2-(5-propan-2-yl-1H-indazol-4-yl)-7,8-dihydro-5H-1,6-naphthyridine",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+4-Nonylphenol monoethoxylates,No,No,"Organics, Other",104-35-8,organics,others,mg/l,mg/kg
+4-Nonylphenol pentaethoxylates,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+4-Nonylphenol tetraethoxylates,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+4-Nonylphenol triethoxylate,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"5,9-Dimethylchrysene",No,No,"Organics, Other",139493-40-6,organics,others,mg/l,mg/kg
+5-Methylchrysene/6-Methylchrysene,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"6-Acetyl-1,1,2,4,4,7-hexamethyltetralin",No,No,"Organics, Other",1506-02-1,organics,others,mg/l,mg/kg
+"7,12-Dimethylbenz[a]anthracene",No,No,"Organics, Other",57-97-6,organics,others,mg/l,mg/kg
+7-Methylbenzo[a]pyrene,No,No,"Organics, Other",63041-77-0,organics,others,mg/l,mg/kg
+8(14)-Abietenic acid,No,No,"Organics, Other",19407-37-5,organics,others,mg/l,mg/kg
+"9,10-Dichlorostearic Acid",No,No,"Organics, Other",5829-48-1,organics,others,mg/l,mg/kg
+9-Methylphenanthrene/4-Methylphenanthrene,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Abietic acid,No,No,"Organics, Other",514-10-3,organics,others,mg/l,mg/kg
+Acebutolol,No,No,"Organics, Other",37517-30-9,organics,others,mg/l,mg/kg
+Acenaphthene,No,No,"Organics, Other",83-32-9,organics,others,mg/l,mg/kg
+Acenaphthene-d10,No,No,"Organics, Other",15067-26-2,organics,others,mg/l,mg/kg
+Acenaphthylene,No,No,"Organics, Other",208-96-8,organics,others,mg/l,mg/kg
+Acenaphthylene-d8,No,No,"Organics, Other",93951-97-4,organics,others,mg/l,mg/kg
+Acesulfame,No,No,"Organics, Other",33665-90-6,organics,others,mg/l,mg/kg
+Acetaldehyde,No,No,"Organics, Other",75-07-0,organics,others,mg/l,mg/kg
+Acetaminophen,No,No,"Organics, Other",103-90-2,organics,others,mg/l,mg/kg
+Acridine,No,No,"Organics, Other",260-94-6,organics,others,mg/l,mg/kg
+Acridine-d9,No,No,"Organics, Other",34749-75-2,organics,others,mg/l,mg/kg
+Adenosine triphosphate,No,No,"Organics, Other",56-65-5,organics,others,mg/l,mg/kg
+Adsorbable organic halides,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Amoxicillin,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Anthracene,No,No,"Organics, Other",120-12-7,organics,others,mg/l,mg/kg
+Aspartame,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Aspirin,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Benz[a]anthracene,No,No,"Organics, Other",56-55-3,organics,others,mg/l,mg/kg
+Benzaldehyde,No,No,"Organics, Other",100-52-7,organics,others,mg/l,mg/kg
+Benzene,No,No,"Organics, Other",71-43-2,organics,others,mg/l,mg/kg
+"Benzene, 1,2-dichloro-4-methyl-",No,No,"Organics, Other",95-75-0,organics,others,mg/l,mg/kg
+"Benzene, 1-bromo-2-(trifluoromethyl)-",No,No,"Organics, Other",392-83-6,organics,others,mg/l,mg/kg
+"Benzeneacetic acid, .alpha.-methyl-4-(2-methylpropyl)-",No,No,"Organics, Other",15687-27-1,organics,others,mg/l,mg/kg
+Benzidine,No,No,"Organics, Other",92-87-5,organics,others,mg/l,mg/kg
+Benzo(a)anthracene-D12,No,No,"Organics, Other",1718-53-2,organics,others,mg/l,mg/kg
+Benzo(b)fluoranthene,No,No,"Organics, Other",205-99-2,organics,others,mg/l,mg/kg
+Benzo(b)fluoranthene-D12,No,No,"Organics, Other",93951-98-5,organics,others,mg/l,mg/kg
+"Benzo(g,h,i)perylene-D12",No,No,"Organics, Other",93951-66-7,organics,others,mg/l,mg/kg
+Benzo(j+k)fluoranthene,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Benzo(k)fluoranthene-d12,No,No,"Organics, Other",93952-01-3,organics,others,mg/l,mg/kg
+Benzo[a]pyrene,No,No,"Organics, Other",50-32-8,organics,others,mg/l,mg/kg
+Benzo[a]pyrene-d12,No,No,"Organics, Other",63466-71-7,organics,others,mg/l,mg/kg
+"Benzo[b,j,k]fluoranthene",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Benzo[b,j]fluoranthene",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Benzo[b,k]fluoranthene",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Benzo[b]fluoranthene, mixt with benzo[j]fluoranthene and benzo[k]fluoranthene",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Benzo[c]phenanthrene,No,No,"Organics, Other",195-19-7,organics,others,mg/l,mg/kg
+Benzo[e]pyrene,No,No,"Organics, Other",192-97-2,organics,others,mg/l,mg/kg
+Benzo[ghi]perylene,No,No,"Organics, Other",191-24-2,organics,others,mg/l,mg/kg
+Benzo[j]fluoranthene,No,No,"Organics, Other",205-82-3,organics,others,mg/l,mg/kg
+Benzo[k]fluoranthene,No,No,"Organics, Other",207-08-9,organics,others,mg/l,mg/kg
+Benzofluoranthene,No,No,"Organics, Other",56832-73-6,organics,others,mg/l,mg/kg
+Benzoic acid,No,No,"Organics, Other",65-85-0,organics,others,mg/l,mg/kg
+Bezafibrate,No,No,"Organics, Other",41859-67-0,organics,others,mg/l,mg/kg
+Biphenyl,No,No,"Organics, Other",92-52-4,organics,others,mg/l,mg/kg
+Biphenyl-d10,No,No,"Organics, Other",1486-01-7,organics,others,mg/l,mg/kg
+Bis(2-chloroethoxy)methane,No,No,"Organics, Other",111-91-1,organics,others,mg/l,mg/kg
+Bis(2-chloroethyl) ether,No,No,"Organics, Other",111-44-4,organics,others,mg/l,mg/kg
+Bis(2-chloroisopropyl) ether,No,No,"Organics, Other",39638-32-9,organics,others,mg/l,mg/kg
+Bis(2-ethoxyethyl) phthalate,No,No,"Organics, Other",605-54-9,organics,others,mg/l,mg/kg
+Bisphenol F,No,No,"Organics, Other",620-92-8,organics,others,mg/l,mg/kg
+Bisphenol S,No,No,"Organics, Other",1980-09-01,organics,others,mg/l,mg/kg
+Brodifacoum,No,No,"Organics, Other",56073-10-0,organics,others,mg/l,mg/kg
+Bromoacetic acid,No,No,"Organics, Other",1979-08-03,organics,others,mg/l,mg/kg
+Bromobenzene,No,No,"Organics, Other",108-86-1,organics,others,mg/l,mg/kg
+Bromochloroacetic acid,No,No,"Organics, Other",5589-96-8,organics,others,mg/l,mg/kg
+Bromochloromethane,No,No,"Organics, Other",74-97-5,organics,others,mg/l,mg/kg
+"BTEX, Total",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Butyl benzyl phthalate,No,No,"Organics, Other",85-68-7,organics,others,mg/l,mg/kg
+Butyltin,No,No,"Organics, Other",2406-65-7,organics,others,mg/l,mg/kg
+Butyraldehyde,No,No,"Organics, Other",123-72-8,organics,others,mg/l,mg/kg
+C10-C16 Hydrocarbons,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C16-C34 Hydrocarbons,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C1-Acenaphthenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C1-Benzo[a]anthracenes/chrysenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C1-Benzofluoranthenes/benzopyrenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C1-Biphenyls,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C1-Dibenzothiophenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C1-Fluoranthenes/pyrenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C1-Phenanthrenes/anthracenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C23-C32 Hydrocarbons,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Benzo[a]anthracenes/chrysenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Benzofluoranthenes/benzopyrenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Biphenyls,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Chrysenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Dibenzothiophenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Fluoranthenes/pyrenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Fluorenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Naphthalenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C2-Phenanthrenes/anthracenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C34-C50 Hydrocarbons,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C3-Benzo[a]anthracenes/chrysenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C3-Chrysenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C3-Dibenzothiophenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C3-Fluoranthenes/pyrenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C3-Fluorenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C3-Naphthalenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C3-Phenanthrenes/anthracenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C4-Benzo[a]anthracenes/chrysenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C4-Chrysenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C4-Dibenzothiophenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C4-Fluoranthenes/pyrenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C4-Fluorenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C4-Naphthalenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+C4-Phenanthrenes/anthracenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Caffeine,No,No,"Organics, Other",1958-08-02,organics,others,mg/l,mg/kg
+Carbamazepine,No,No,"Organics, Other",298-46-4,organics,others,mg/l,mg/kg
+Carbon tetrachloride,No,No,"Organics, Other",56-23-5,organics,others,mg/l,mg/kg
+"Carbonodithioic acid, O-ethyl ester",No,No,"Organics, Other",151-01-9,organics,others,mg/l,mg/kg
+Cashmeran,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Celestolide,No,No,"Organics, Other",13171-00-1,organics,others,mg/l,mg/kg
+CFC-11,No,No,"Organics, Other",75-69-4,organics,others,mg/l,mg/kg
+CFC-113,No,No,"Organics, Other",76-13-1,organics,others,mg/l,mg/kg
+CFC-12,No,No,"Organics, Other",75-71-8,organics,others,mg/l,mg/kg
+Chloramphenicol,No,No,"Organics, Other",56-75-7,organics,others,mg/l,mg/kg
+Chloroacetic acid,No,No,"Organics, Other",1979-11-08,organics,others,mg/l,mg/kg
+Chlorobenzene,No,No,"Organics, Other",108-90-7,organics,others,mg/l,mg/kg
+Chlorodibromomethane,No,No,"Organics, Other",124-48-1,organics,others,mg/l,mg/kg
+Chloroethane,No,No,"Organics, Other",75-00-3,organics,others,mg/l,mg/kg
+Chloroform,No,No,"Organics, Other",67-66-3,organics,others,mg/l,mg/kg
+Chloromethane,No,No,"Organics, Other",74-87-3,organics,others,mg/l,mg/kg
+Chloronaphthalene,No,No,"Organics, Other",25586-43-0,organics,others,mg/l,mg/kg
+Chrysene,No,No,"Organics, Other",218-01-9,organics,others,mg/l,mg/kg
+Chrysene + Triphenylene,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Chrysene-d12,No,No,"Organics, Other",1719-03-5,organics,others,mg/l,mg/kg
+Ciprofloxacin,No,No,"Organics, Other",85721-33-1,organics,others,mg/l,mg/kg
+"cis-1,2-Dichloroethylene",No,No,"Organics, Other",156-59-2,organics,others,mg/l,mg/kg
+Clarithromycin,No,No,"Organics, Other",81103-11-9,organics,others,mg/l,mg/kg
+Clindamycin,No,No,"Organics, Other",18323-44-9,organics,others,mg/l,mg/kg
+Clofibric acid,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Cocaine,No,No,"Organics, Other",50-36-2,organics,others,mg/l,mg/kg
+Codeine,No,No,"Organics, Other",76-57-3,organics,others,mg/l,mg/kg
+Copper 8-quinolinolate,No,No,"Organics, Other",10380-28-6,organics,others,mg/l,mg/kg
+Cotinine,No,No,"Organics, Other",486-56-6,organics,others,mg/l,mg/kg
+Cumene,No,No,"Organics, Other",98-82-8,organics,others,mg/l,mg/kg
+Cyanate,No,No,"Organics, Other",661-20-1,organics,others,mg/l,mg/kg
+Dehydroabietic acid,No,No,"Organics, Other",1740-19-8,organics,others,mg/l,mg/kg
+Desmethylvenlafaxine,No,No,"Organics, Other",93413-62-8,organics,others,mg/l,mg/kg
+Di(2-ethylhexyl) phthalate,No,No,"Organics, Other",117-81-7,organics,others,mg/l,mg/kg
+"Dibenz[a,h]anthracene",No,No,"Organics, Other",53-70-3,organics,others,mg/l,mg/kg
+"Dibenzo(a,h)anthracene-D14",No,No,"Organics, Other",13250-98-1,organics,others,mg/l,mg/kg
+"Dibenzo[a,h]pyrene",No,No,"Organics, Other",189-64-0,organics,others,mg/l,mg/kg
+"Dibenzo[a,i]pyrene",No,No,"Organics, Other",189-55-9,organics,others,mg/l,mg/kg
+"Dibenzo[a,l]pyrene",No,No,"Organics, Other",191-30-0,organics,others,mg/l,mg/kg
+Dibenzofuran,No,No,"Organics, Other",132-64-9,organics,others,mg/l,mg/kg
+Dibenzothiophene,No,No,"Organics, Other",132-65-0,organics,others,mg/l,mg/kg
+Dibenzothiophene-D8,No,No,"Organics, Other",33262-29-2,organics,others,mg/l,mg/kg
+Dibromoacetic acid,No,No,"Organics, Other",631-64-1,organics,others,mg/l,mg/kg
+Dibromomethane,No,No,"Organics, Other",74-95-3,organics,others,mg/l,mg/kg
+Dibutyl phthalate,No,No,"Organics, Other",84-74-2,organics,others,mg/l,mg/kg
+Dibutyltin,No,No,"Organics, Other",1002-53-5,organics,others,mg/l,mg/kg
+Dichloroacetic acid,No,No,"Organics, Other",79-43-6,organics,others,mg/l,mg/kg
+Dichlorobromomethane,No,No,"Organics, Other",75-27-4,organics,others,mg/l,mg/kg
+Dichlorodehydroabietic acid,No,No,"Organics, Other",57055-39-7,organics,others,mg/l,mg/kg
+Dichlorophenols,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Dichlorovanillins,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Dichloroveretrols,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Diclofenac,No,No,"Organics, Other",15307-86-5,organics,others,mg/l,mg/kg
+"Diclofenac, 4-hydroxy",No,No,"Organics, Other",64118-84-9,organics,others,mg/l,mg/kg
+Didecyl dimethyl ammonium chloride,No,No,"Organics, Other",7173-51-5,organics,others,mg/l,mg/kg
+Diethyl phthalate,No,No,"Organics, Other",84-66-2,organics,others,mg/l,mg/kg
+Diethylene glycol,No,No,"Organics, Other",111-46-6,organics,others,mg/l,mg/kg
+Dihydroisopimaric acid,No,No,"Organics, Other",5673-36-9,organics,others,mg/l,mg/kg
+Diisopropanolamine,No,No,"Organics, Other",110-97-4,organics,others,mg/l,mg/kg
+Dimethyl diselenide,No,No,"Organics, Other",7101-31-7,organics,others,mg/l,mg/kg
+Dimethyl phthalate,No,No,"Organics, Other",131-11-3,organics,others,mg/l,mg/kg
+Dimethyl sulfone,No,No,"Organics, Other",67-71-0,organics,others,mg/l,mg/kg
+Dinitramine,No,No,"Organics, Other",29091-05-2,organics,others,mg/l,mg/kg
+Di-n-octyl phthalate,No,No,"Organics, Other",117-84-0,organics,others,mg/l,mg/kg
+Docosanoic acid,No,No,"Organics, Other",112-85-6,organics,others,mg/l,mg/kg
+Eicosanoic acid,No,No,"Organics, Other",506-30-9,organics,others,mg/l,mg/kg
+Enrofloxacin,No,No,"Organics, Other",93106-60-6,organics,others,mg/l,mg/kg
+EPTC-d14,No,No,"Organics, Other",1219794-88-3,organics,others,mg/l,mg/kg
+Erythromycin,No,No,"Organics, Other",114-07-8,organics,others,mg/l,mg/kg
+Estradiol,No,No,"Organics, Other",50-28-2,organics,others,mg/l,mg/kg
+Estriol,No,No,"Organics, Other",50-27-1,organics,others,mg/l,mg/kg
+Estrone,No,No,"Organics, Other",53-16-7,organics,others,mg/l,mg/kg
+Ethanol,No,No,"Organics, Other",64-17-5,organics,others,mg/l,mg/kg
+Ethinyl estradiol,No,No,"Organics, Other",57-63-6,organics,others,mg/l,mg/kg
+Ethyl acetate,No,No,"Organics, Other",141-78-6,organics,others,mg/l,mg/kg
+Ethylbenzene,No,No,"Organics, Other",100-41-4,organics,others,mg/l,mg/kg
+Ethylene glycol,No,No,"Organics, Other",107-21-1,organics,others,mg/l,mg/kg
+Extractable hydrocarbons,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Fluoranthene,No,No,"Organics, Other",206-44-0,organics,others,mg/l,mg/kg
+Fluoranthene-d10,No,No,"Organics, Other",93951-69-0,organics,others,mg/l,mg/kg
+Fluorene,No,No,"Organics, Other",86-73-7,organics,others,mg/l,mg/kg
+Fluoxetine,No,No,"Organics, Other",54910-89-3,organics,others,mg/l,mg/kg
+Formaldehyde,No,No,"Organics, Other",50-00-0,organics,others,mg/l,mg/kg
+Gas Range Organics (C6-C10),No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Gemfibrozil,No,No,"Organics, Other",25812-30-0,organics,others,mg/l,mg/kg
+Glyoxal,No,No,"Organics, Other",107-22-2,organics,others,mg/l,mg/kg
+Haloacetic acids,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Heptanal,No,No,"Organics, Other",111-71-7,organics,others,mg/l,mg/kg
+Hexachlorobutadiene,No,No,"Organics, Other",87-68-3,organics,others,mg/l,mg/kg
+Hexachlorocyclopentadiene,No,No,"Organics, Other",77-47-4,organics,others,mg/l,mg/kg
+Hexachloroethane,No,No,"Organics, Other",67-72-1,organics,others,mg/l,mg/kg
+Hexaconazole,No,No,"Organics, Other",79983-71-4,organics,others,mg/l,mg/kg
+Hexaldehyde,No,No,"Organics, Other",66-25-1,organics,others,mg/l,mg/kg
+Hexane Extractable Material (HEM),No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Hydrocarbons,No,No,"Organics, Other",308067-53-0,organics,others,mg/l,mg/kg
+"Hydrocarbons, C10-19, Light petroleum",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Hydrocarbons, C19-32, Heavy petroleum",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Hydrocarbons, petroleum",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Hydrocarbons, volatile",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Hydromorphone,No,No,"Organics, Other",466-99-9,organics,others,mg/l,mg/kg
+Hydroquinone,No,No,"Organics, Other",123-31-9,organics,others,mg/l,mg/kg
+"Hydroxy-ibuprofen, 2-",No,No,"Organics, Other",51146-55-5,organics,others,mg/l,mg/kg
+Hydroxyphenols,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Indene,No,No,"Organics, Other",95-13-6,organics,others,mg/l,mg/kg
+"Indeno[1,2,3-cd]pyrene",No,No,"Organics, Other",193-39-5,organics,others,mg/l,mg/kg
+"Indeno[1,2,3-cd]pyrene-d12",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Isobutanol,No,No,"Organics, Other",78-83-1,organics,others,mg/l,mg/kg
+Isobutyraldehyde,No,No,"Organics, Other",78-84-2,organics,others,mg/l,mg/kg
+Isophorone,No,No,"Organics, Other",78-59-1,organics,others,mg/l,mg/kg
+Isopimaric acid,No,No,"Organics, Other",5835-26-7,organics,others,mg/l,mg/kg
+Isopimaric Acid mixt. with Palustric Acids,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Isopropanol,No,No,"Organics, Other",67-63-0,organics,others,mg/l,mg/kg
+Isovaleraldehyde,No,No,"Organics, Other",590-86-3,organics,others,mg/l,mg/kg
+Jodfenphos,No,No,"Organics, Other",18181-70-9 ,organics,others,mg/l,mg/kg
+Ketoprofen,No,No,"Organics, Other",22071-15-4,organics,others,mg/l,mg/kg
+Lauric acid,No,No,"Organics, Other",143-07-7,organics,others,mg/l,mg/kg
+Lignoceric Acid,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Lincomycin,No,No,"Organics, Other",154-21-2,organics,others,mg/l,mg/kg
+Linoleic acid,No,No,"Organics, Other",60-33-3,organics,others,mg/l,mg/kg
+m- & p-Chlorophenol,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+m and p-Cresol,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"m,p-Xylene",No,No,"Organics, Other",179601-23-1,organics,others,mg/l,mg/kg
+m-Chlorophenol,No,No,"Organics, Other",108-43-0,organics,others,mg/l,mg/kg
+m-Cresol,No,No,"Organics, Other",108-39-4,organics,others,mg/l,mg/kg
+Meclofenamic acid,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Methamphetamine,No,No,"Organics, Other",537-46-2,organics,others,mg/l,mg/kg
+Methane,No,No,"Organics, Other",74-82-8,organics,others,mg/l,mg/kg
+Methanol,No,No,"Organics, Other",67-56-1,organics,others,mg/l,mg/kg
+Methotrexate,No,No,"Organics, Other",1959-05-02,organics,others,mg/l,mg/kg
+Methyl isobutyl ketone,No,No,"Organics, Other",108-10-1,organics,others,mg/l,mg/kg
+Methyl Selenium,No,No,"Organics, Other",593-79-3,organics,others,mg/l,mg/kg
+Methyl tert-butyl ether,No,No,"Organics, Other",1634-04-4,organics,others,mg/l,mg/kg
+Methylacenaphthene,No,No,"Organics, Other",36541-21-6,organics,others,mg/l,mg/kg
+Methylarsonic acid,No,No,"Organics, Other",124-58-3,organics,others,mg/l,mg/kg
+Methylchrysene,No,No,"Organics, Other",41637-90-5,organics,others,mg/l,mg/kg
+Methyldibenzothiophene,No,No,"Organics, Other",30995-64-3,organics,others,mg/l,mg/kg
+Methylene chloride,No,No,"Organics, Other",1975-09-02,organics,others,mg/l,mg/kg
+Methylfluorene,No,No,"Organics, Other",26914-17-0,organics,others,mg/l,mg/kg
+Methylglyoxal,No,No,"Organics, Other",78-98-8,organics,others,mg/l,mg/kg
+Methylnaphthalene,No,No,"Organics, Other",1321-94-4,organics,others,mg/l,mg/kg
+Methylseleninic Acid,No,No,"Organics, Other",28274-57-9,organics,others,mg/l,mg/kg
+Monochlorodehydroabietic acid,No,No,"Organics, Other",57055-38-6,organics,others,mg/l,mg/kg
+Monochloroguaicols,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Monochlorophenols,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Monochlorovanillins,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Musk ambrette,No,No,"Organics, Other",83-66-9,organics,others,mg/l,mg/kg
+Musk ketone,No,No,"Organics, Other",81-14-1,organics,others,mg/l,mg/kg
+Musk moskine,No,No,"Organics, Other",116-66-5,organics,others,mg/l,mg/kg
+Musk Tibetene,No,No,"Organics, Other",145-39-1,organics,others,mg/l,mg/kg
+m-Xylene,No,No,"Organics, Other",108-38-3,organics,others,mg/l,mg/kg
+Myristic acid,No,No,"Organics, Other",544-63-8,organics,others,mg/l,mg/kg
+Naphthalene,No,No,"Organics, Other",91-20-3,organics,others,mg/l,mg/kg
+Naphthalene-d8,No,No,"Organics, Other",1146-65-2,organics,others,mg/l,mg/kg
+Naphthenic Acids,No,No,"Organics, Other",1338-24-5,organics,others,mg/l,mg/kg
+Naproxen,No,No,"Organics, Other",22204-53-1,organics,others,mg/l,mg/kg
+n-Butylbenzene,No,No,"Organics, Other",104-51-8,organics,others,mg/l,mg/kg
+Neotame,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Nicarbazin,No,No,"Organics, Other",330-95-0,organics,others,mg/l,mg/kg
+Nitrilotriacetic acid,No,No,"Organics, Other",139-13-9,organics,others,mg/l,mg/kg
+Nitrobenzene,No,No,"Organics, Other",98-95-3,organics,others,mg/l,mg/kg
+Nitrophenol,No,No,"Organics, Other",25154-55-6,organics,others,mg/l,mg/kg
+N-Nitrosodimethylamine,No,No,"Organics, Other",62-75-9,organics,others,mg/l,mg/kg
+N-Nitrosodi-n-propylamine,No,No,"Organics, Other",621-64-7,organics,others,mg/l,mg/kg
+N-Nitrosodiphenylamine,No,No,"Organics, Other",86-30-6,organics,others,mg/l,mg/kg
+Nonadecanoic acid,No,No,"Organics, Other",646-30-0,organics,others,mg/l,mg/kg
+Nonanal,No,No,"Organics, Other",124-19-6,organics,others,mg/l,mg/kg
+Nonylphenol,No,No,"Organics, Other",25154-52-3,organics,others,mg/l,mg/kg
+Nonylphenol diethoxylate,No,No,"Organics, Other",20427-84-3,organics,others,mg/l,mg/kg
+Norfloxacin,No,No,"Organics, Other",70458-96-7,organics,others,mg/l,mg/kg
+Norfluoxetine,No,No,"Organics, Other",83891-03-6,organics,others,mg/l,mg/kg
+n-Propylbenzene,No,No,"Organics, Other",103-65-1,organics,others,mg/l,mg/kg
+o-Chlorophenol,No,No,"Organics, Other",95-57-8,organics,others,mg/l,mg/kg
+o-Chlorotoluene,No,No,"Organics, Other",95-49-8,organics,others,mg/l,mg/kg
+o-Cresol,No,No,"Organics, Other",95-48-7,organics,others,mg/l,mg/kg
+Octachlorostyrene,No,No,"Organics, Other",29082-74-4,organics,others,mg/l,mg/kg
+Octanal,No,No,"Organics, Other",124-13-0,organics,others,mg/l,mg/kg
+o-Dichlorobenzene,No,No,"Organics, Other",95-50-1,organics,others,mg/l,mg/kg
+Ofloxacin,No,No,"Organics, Other",82419-36-1,organics,others,mg/l,mg/kg
+Oil and Grease,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Oil and Grease, Nonpolar",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Oleic acid,No,No,"Organics, Other",112-80-1,organics,others,mg/l,mg/kg
+o-Nitrophenol,No,No,"Organics, Other",88-75-5,organics,others,mg/l,mg/kg
+Organic carbon,No,Yes,"Organics, Other", ,organics,others,mg/l,mg/kg
+Organic matter,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Oxolinic acid,No,No,"Organics, Other",14698-29-4,organics,others,mg/l,mg/kg
+Oxycarboxin,No,No,"Organics, Other",5259-88-1,organics,others,mg/l,mg/kg
+o-Xylene,No,No,"Organics, Other",95-47-6,organics,others,mg/l,mg/kg
+"o-Xylene, mixt. with m-xylene and p-xylene",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Palmitic acid,No,No,"Organics, Other",1957-10-03,organics,others,mg/l,mg/kg
+Palustric acid,No,No,"Organics, Other",1945-53-5,organics,others,mg/l,mg/kg
+p-Bromofluorobenzene,No,No,"Organics, Other",460-00-4,organics,others,mg/l,mg/kg
+p-Chloro-m-cresol,No,No,"Organics, Other",59-50-7,organics,others,mg/l,mg/kg
+p-Chlorophenol,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+p-Chlorophenyl phenyl ether,No,No,"Organics, Other",7005-72-3,organics,others,mg/l,mg/kg
+p-Chlorotoluene,No,No,"Organics, Other",106-43-4,organics,others,mg/l,mg/kg
+p-Cymene,No,No,"Organics, Other",99-87-6,organics,others,mg/l,mg/kg
+p-Dichlorobenzene,No,No,"Organics, Other",106-46-7,organics,others,mg/l,mg/kg
+Pentachloroanisole,No,No,"Organics, Other",1825-21-4,organics,others,mg/l,mg/kg
+Pentoxifylline,No,No,"Organics, Other",6493-05-06,organics,others,mg/l,mg/kg
+Perylene,No,No,"Organics, Other",198-55-0,organics,others,mg/l,mg/kg
+Perylene-d12,No,No,"Organics, Other",1520-96-3,organics,others,mg/l,mg/kg
+"Petroleum hydrocarbons, total volatile",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Phantolide,No,No,"Organics, Other",15323-35-0,organics,others,mg/l,mg/kg
+Phenanthrene,No,No,"Organics, Other",1985-01-08,organics,others,mg/l,mg/kg
+Phenanthrene-d10,No,No,"Organics, Other",1517-22-2,organics,others,mg/l,mg/kg
+Phenol,No,No,"Organics, Other",108-95-2,organics,others,mg/l,mg/kg
+"Phenol, 2,3-dichloro-6-methoxy-",No,No,"Organics, Other",77102-95-5,organics,others,mg/l,mg/kg
+"Phenol, dibromo-",No,No,"Organics, Other",28514-45-6,organics,others,mg/l,mg/kg
+Phenolics,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Phenols,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Pimaric acid,No,No,"Organics, Other",127-27-5,organics,others,mg/l,mg/kg
+Pipemidic acid,No,No,"Organics, Other",51940-44-4,organics,others,mg/l,mg/kg
+p-Nitrophenol,No,No,"Organics, Other",100-02-7,organics,others,mg/l,mg/kg
+Polybrominated biphenyls,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Polycyclic aromatic hydrocarbons,No,No,"Organics, Other",130498-29-2,organics,others,mg/l,mg/kg
+Progesterone,No,No,"Organics, Other",57-83-0,organics,others,mg/l,mg/kg
+Propionaldehyde,No,No,"Organics, Other",123-38-6,organics,others,mg/l,mg/kg
+Propylene glycol,No,No,"Organics, Other",57-55-6,organics,others,mg/l,mg/kg
+p-Terphenyl-d14,No,No,"Organics, Other",1718-51-0,organics,others,mg/l,mg/kg
+Purgeable hydrocarbons,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+p-Xylene,No,No,"Organics, Other",106-42-3,organics,others,mg/l,mg/kg
+Pyrene,No,No,"Organics, Other",129-00-0,organics,others,mg/l,mg/kg
+Quinoline,No,No,"Organics, Other",91-22-5,organics,others,mg/l,mg/kg
+"rac-10,11-Dihydro-10,11-dihydroxy carbamazepine",No,No,"Organics, Other",58955-93-4,organics,others,mg/l,mg/kg
+Resorcinol,No,No,"Organics, Other",108-46-3,organics,others,mg/l,mg/kg
+Retene,No,No,"Organics, Other",483-65-8,organics,others,mg/l,mg/kg
+Saccharin,No,No,"Organics, Other",1981-07-02,organics,others,mg/l,mg/kg
+Salicylic acid,No,No,"Organics, Other",69-72-7,organics,others,mg/l,mg/kg
+Sandaracopimaric acid,No,No,"Organics, Other",471-74-9,organics,others,mg/l,mg/kg
+sec-Butylbenzene,No,No,"Organics, Other",135-98-8,organics,others,mg/l,mg/kg
+Selenocyanate,No,No,"Organics, Other",5749-48-4,organics,others,mg/l,mg/kg
+Selenomethionine,No,No,"Organics, Other",1464-42-2,organics,others,mg/l,mg/kg
+Selenosulfate,No,No,"Organics, Other",16450-48-9,organics,others,mg/l,mg/kg
+Silica gel treated n-hexane extractable material,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Stearic acid,No,No,"Organics, Other",1957-11-04,organics,others,mg/l,mg/kg
+Styrene,No,No,"Organics, Other",100-42-5,organics,others,mg/l,mg/kg
+Sucralose,No,No,"Organics, Other",56038-13-2,organics,others,mg/l,mg/kg
+Sulfabenzamide,No,No,"Organics, Other",127-71-9,organics,others,mg/l,mg/kg
+Sulfadoxine,No,No,"Organics, Other",2447-57-6,organics,others,mg/l,mg/kg
+Sulfamerazine,No,No,"Organics, Other",127-79-7,organics,others,mg/l,mg/kg
+Sulfamethazine,No,No,"Organics, Other",57-68-1,organics,others,mg/l,mg/kg
+Sulfamethoxazole,No,No,"Organics, Other",723-46-6,organics,others,mg/l,mg/kg
+Sulfapyridine,No,No,"Organics, Other",144-83-2,organics,others,mg/l,mg/kg
+Sulfathiazole,No,No,"Organics, Other",72-14-0,organics,others,mg/l,mg/kg
+Sulfolane,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Sulfonates, alkyl-, linear",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Surfactants,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Tannin and Lignin,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Terphenyl-d14,No,No,"Organics, Other",98904-43-9,organics,others,mg/l,mg/kg
+tert-Butylbenzene,No,No,"Organics, Other",####,organics,others,mg/l,mg/kg
+Testosterone,No,No,"Organics, Other",58-22-0,organics,others,mg/l,mg/kg
+Tetrachloroethylene,No,No,"Organics, Other",127-18-4,organics,others,mg/l,mg/kg
+Tetrachloroguaiacol,No,No,"Organics, Other",2539-17-5,organics,others,mg/l,mg/kg
+Tetrachloro-m-xylene,No,No,"Organics, Other",877-09-8,organics,others,mg/l,mg/kg
+Tetraethylene glycol,No,No,"Organics, Other",112-60-7,organics,others,mg/l,mg/kg
+Tolfenamic acid,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Toluene,No,No,"Organics, Other",108-88-3,organics,others,mg/l,mg/kg
+Toluene-d8,No,No,"Organics, Other",2037-26-5,organics,others,mg/l,mg/kg
+Tolylfluanid,No,No,"Organics, Other",731-27-1,organics,others,mg/l,mg/kg
+"Total PAHs, high wt",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"Total PAHs, low wt",No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Total PCBs,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Total xylenes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+"trans-1,2-Dichloroethylene",No,No,"Organics, Other",156-60-5,organics,others,mg/l,mg/kg
+Traseolide,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Tribromomethane,No,No,"Organics, Other",75-25-2,organics,others,mg/l,mg/kg
+Tributyltin,No,No,"Organics, Other",688-73-3,organics,others,mg/l,mg/kg
+Trichloroacetic acid,No,No,"Organics, Other",1976-03-09,organics,others,mg/l,mg/kg
+Trichloroethylene,No,No,"Organics, Other",1979-01-06,organics,others,mg/l,mg/kg
+Trichloroguaiacols,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Trichlorophenol,No,No,"Organics, Other",25167-82-2,organics,others,mg/l,mg/kg
+Trichlorosyringol,No,No,"Organics, Other",2539-26-6,organics,others,mg/l,mg/kg
+Triclocarban,No,No,"Organics, Other",101-20-2,organics,others,mg/l,mg/kg
+Triclosan,No,No,"Organics, Other",3380-34-5,organics,others,mg/l,mg/kg
+Triclosan methyl ether,No,No,"Organics, Other",,organics,others,mg/l,mg/kg
+Trihalomethanes,No,No,"Organics, Other", ,organics,others,mg/l,mg/kg
+Trimethoprim,No,No,"Organics, Other",738-70-5,organics,others,mg/l,mg/kg
+Triphenyl phosphate,No,No,"Organics, Other",115-86-6,organics,others,mg/l,mg/kg
+Venlafaxine,No,No,"Organics, Other",93413-69-5,organics,others,mg/l,mg/kg
+Vinyl chloride,No,No,"Organics, Other",1975-01-04,organics,others,mg/l,mg/kg
+Xylene,No,No,"Organics, Other",1330-20-7,organics,others,mg/l,mg/kg
+"2,2',3,3',4,4'-Hexachlorobiphenyl",No,No,"Organics, PCBs",38380-07-3,organics,PCBs,mg/l,mg/kg
+"2,2',3,3',4-Pentachlorobiphenyl",No,No,"Organics, PCBs",52663-62-4,organics,PCBs,mg/l,mg/kg
+"2,2',4,4'-Tetrachlorobiphenyl",No,No,"Organics, PCBs",2437-79-8,organics,PCBs,mg/l,mg/kg
+"3,3',5,5'-Tetrachlorobiphenyl",No,No,"Organics, PCBs",33284-52-5,organics,PCBs,mg/l,mg/kg
+FtS 6:2 ion,No,No,"PFAS,Perfluorinated Alkyl Substance",425670-75-3,organics,PFAS,mg/l,mg/kg
+Aroclor 1016,No,No,"Organics, PCBs",12674-11-2,organics,PCBs,mg/l,mg/kg
+Aroclor 1221,No,No,"Organics, PCBs",11104-28-2,organics,PCBs,mg/l,mg/kg
+Aroclor 1232,No,No,"Organics, PCBs",11141-16-5,organics,PCBs,mg/l,mg/kg
+Aroclor 1242,No,No,"Organics, PCBs",53469-21-9,organics,PCBs,mg/l,mg/kg
+Aroclor 1248,No,No,"Organics, PCBs",12672-29-6,organics,PCBs,mg/l,mg/kg
+Aroclor 1254,No,No,"Organics, PCBs",11097-69-1,organics,PCBs,mg/l,mg/kg
+Aroclor 1260,No,No,"Organics, PCBs",11096-82-5,organics,PCBs,mg/l,mg/kg
+Aroclor 1262,No,No,"Organics, PCBs",37324-23-5,organics,PCBs,mg/l,mg/kg
+Aroclor 1268,No,No,"Organics, PCBs",11100-14-4,organics,PCBs,mg/l,mg/kg
+Heptafluorobutyric acid,No,No,"PFAS,Perfluorinated Alkyl Substance",375-22-4,organics,PFAS,mg/l,mg/kg
+Decachlorobiphenyl,No,No,"Organics, PCBs",2051-24-3,organics,PCBs,mg/l,mg/kg
+Polychlorinated biphenyls,No,No,"Organics, PCBs",1336-36-3,organics,PCBs,mg/l,mg/kg
+(R)-Dichlorprop,No,No,"Organics, Pesticide",15165-67-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+.alpha.-Endosulfan,No,No,"Organics, Pesticide",959-98-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+.alpha.-Hexachlorocyclohexane,No,No,"Organics, Pesticide",319-84-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+.beta.-Endosulfan,No,No,"Organics, Pesticide",33213-65-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+.beta.-Heptachlor epoxide,No,No,"Organics, Pesticide",76543-83-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Hexafluoropropylene oxide dimer acid ammonium salt,No,No,"PFAS,Perfluorinated Alkyl Substance",62037-80-3,organics,PFAS,mg/l,mg/kg
+.beta.-Hexachlorocyclohexane,No,No,"Organics, Pesticide",319-85-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+.delta.-Hexachlorocyclohexane,No,No,"Organics, Pesticide",319-86-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+.gamma.-Hexachlorocyclohexane,No,No,"Organics, Pesticide",58-89-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+.lambda.-Cyhalothrin,No,No,"Organics, Pesticide",91465-08-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"1-(3,4-dichlorophenyl)-3-methyl urea",No,No,"Organics, Pesticide",3567-62-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"1,2,3-Trichloropropane",No,No,"Organics, Pesticide",96-18-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"1,2-Dibromo-3-chloropropane",No,No,"Organics, Pesticide",####,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"1,3-Dichloropropane",No,No,"Organics, Pesticide",142-28-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"1,3-Dichloropropene",No,No,"Organics, Pesticide",542-75-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+1-Naphthol,No,No,"Organics, Pesticide",90-15-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+1rs Cis-Permethrin,No,No,"Organics, Pesticide",61949-76-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,3,3-tris(4-methoxyphenyl)-N,N-dimethylprop-2-en-1-amine",No,No,"Organics, Pesticide",5585-64-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,4,5-T",No,No,"Organics, Pesticide",93-76-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,4,5-Trichlorophenol",No,No,"Organics, Pesticide",95-95-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,4,6-Trichlorophenol",No,No,"Organics, Pesticide",1988-06-02,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,4-D",No,No,"Organics, Pesticide",94-75-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,4-DB",No,No,"Organics, Pesticide",94-82-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,4-Dichlorophenol",No,No,"Organics, Pesticide",120-83-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,4-Dichlorophenol-d3",No,No,"Organics, Pesticide",93951-74-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"2,6-Dichlorobenzamide",No,No,"Organics, Pesticide",2008-58-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+2-Chloro-4-isopropylamino-6-amino-s-triazine,No,No,"Organics, Pesticide",6190-65-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+2-Hydroxyatrazine,No,No,"Organics, Pesticide",2163-68-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+3-Hydroxycarbofuran,No,No,"Organics, Pesticide",16655-82-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"4,6-Dinitro-o-cresol",No,No,"Organics, Pesticide",534-52-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+4-Chloro-2-methylphenol,No,No,"Organics, Pesticide",1570-64-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+4-Hydroxy-chlorothalonil,No,No,"Organics, Pesticide",28343-61-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Acephate,No,No,"Organics, Pesticide",30560-19-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Acetamiprid,No,No,"Organics, Pesticide",135410-20-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"Acifluorfen, sodium salt",No,No,"Organics, Pesticide",62476-59-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Alachlor,No,No,"Organics, Pesticide",15972-60-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Aldicarb,No,No,"Organics, Pesticide",116-06-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Aldicarb sulfone,No,No,"Organics, Pesticide",1646-88-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Aldicarb sulfoxide,No,No,"Organics, Pesticide",1646-87-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Aldrin,No,No,"Organics, Pesticide",309-00-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"Aldrin + dieldrin mix, unspecified",No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ametryn,No,No,"Organics, Pesticide",834-12-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Aminocarb,No,No,"Organics, Pesticide",2032-59-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Aminomethylphosphonic acid,No,No,"Organics, Pesticide",1066-51-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Aminopyralid,No,No,"Organics, Pesticide",150114-71-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Anilazine,No,No,"Organics, Pesticide",101-05-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Asulam,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Atrazine,No,No,"Organics, Pesticide",1912-24-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Atrazine + N-Dealkylated Metabolites,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Atrazine-d5 (ethyl-d5),No,No,"Organics, Pesticide",163165-75-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Azinphos-ethyl,No,No,"Organics, Pesticide",2642-71-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Azinphos-methyl,No,No,"Organics, Pesticide",86-50-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Azoxystrobin,No,No,"Organics, Pesticide",131860-33-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bendiocarb,No,No,"Organics, Pesticide",22781-23-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Benfluralin,No,No,"Organics, Pesticide",1861-40-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Benomyl,No,No,"Organics, Pesticide",17804-35-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bentazon,No,No,"Organics, Pesticide",25057-89-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Benzoylecgonine,No,No,"Organics, Pesticide",519-09-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Beta Cypermethrin,No,No,"Organics, Pesticide",52315-07-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bifenazate,No,No,"Organics, Pesticide",149877-41-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bifenthrin,No,No,"Organics, Pesticide",82657-04-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Boscalid,No,No,"Organics, Pesticide",188425-85-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bromacil,No,No,"Organics, Pesticide",314-40-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bromophos,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bromophos-ethyl,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Bromoxynil,No,No,"Organics, Pesticide",1689-84-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Butachlor,No,No,"Organics, Pesticide",23184-66-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"Butanoic acid, 4-(4-chloro-2-methylphenoxy)-, ethyl ester",No,No,"Organics, Pesticide",10443-70-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Butralin,No,No,"Organics, Pesticide",33629-47-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Butylate,No,No,"Organics, Pesticide",2008-41-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cacodylic acid,No,No,"Organics, Pesticide",75-60-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Captafol,No,No,"Organics, Pesticide",24650-06-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Captan,No,No,"Organics, Pesticide",133-06-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Carbaryl,No,No,"Organics, Pesticide",63-25-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Carbaryl-d7,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Carbofuran,No,No,"Organics, Pesticide",1563-66-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Carbophenothion,No,No,"Organics, Pesticide",786-19-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Carboxin,No,No,"Organics, Pesticide",5234-68-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Carfentrazone-ethyl,No,No,"Organics, Pesticide",128639-02-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Catechol,No,No,"Organics, Pesticide",120-80-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chloramben,No,No,"Organics, Pesticide",133-90-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorantraniliprole,No,No,"Organics, Pesticide",500008-45-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorbenside,No,No,"Organics, Pesticide",103-17-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlordane,No,No,"Organics, Pesticide",57-74-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorfenson,No,No,"Organics, Pesticide",80-33-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorfenvinphos,No,No,"Organics, Pesticide",470-90-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorimuron-ethyl,No,No,"Organics, Pesticide",90982-32-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlormephos,No,No,"Organics, Pesticide",24934-91-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chloroneb,No,No,"Organics, Pesticide",2675-77-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorothalonil,No,No,"Organics, Pesticide",1897-45-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chloroxuron,No,No,"Organics, Pesticide",1982-47-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorpropham,No,No,"Organics, Pesticide",101-21-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorpyrifos,No,No,"Organics, Pesticide",2921-88-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorpyrifos-methyl,No,No,"Organics, Pesticide",5598-13-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorsulfuron,No,No,"Organics, Pesticide",64902-72-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorthal-dimethyl,No,No,"Organics, Pesticide",1861-32-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Chlorthiophos,No,No,"Organics, Pesticide",60238-56-4 ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"cis-1,3-Dichloropropene",No,No,"Organics, Pesticide",10061-01-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+cis-Chlordane,No,No,"Organics, Pesticide",5103-71-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+cis-Mevinphos,No,No,"Organics, Pesticide",298-01-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+cis-Nonachlor,No,No,"Organics, Pesticide",5103-73-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Clodinafop,No,No,"Organics, Pesticide",114420-56-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Clodinafop-propargyl,No,No,"Organics, Pesticide",105512-06-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Clomazone,No,No,"Organics, Pesticide",81777-89-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Clopyralid,No,No,"Organics, Pesticide",1702-17-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Clothianidin,No,No,"Organics, Pesticide",210880-92-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Clothianidin-d3,No,No,"Organics, Pesticide",1262776-24-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Crufomate,No,No,"Organics, Pesticide",299-86-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyanazine,No,No,"Organics, Pesticide",21725-46-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyanazine-d5,No,No,"Organics, Pesticide",1190003-29-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyanophos,No,No,"Organics, Pesticide",2636-26-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyantraniliprole,No,No,"Organics, Pesticide",736994-63-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyclamate,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cycloate,No,No,"Organics, Pesticide",1134-23-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyfluthrin,No,No,"Organics, Pesticide",68359-37-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyhalothrin,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Cyprodinil,No,No,"Organics, Pesticide",121552-61-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"DDD, o,o'-, o,p'-, and p,p'- isomers",No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"DDE, o,o'-, o,p'-, and p,p'- isomers",No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"DDT, o,p'- and p,p'- isomers",No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"DDT/DDD/DDE, sum of p,p' isomers",No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Deltamethrin,No,No,"Organics, Pesticide",52918-63-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Demeton,No,No,"Organics, Pesticide",8065-48-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Demeton-S,No,No,"Organics, Pesticide",126-75-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Desmetryn,No,No,"Organics, Pesticide",1014-69-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Desthio-prothioconazole,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Diallate,No,No,"Organics, Pesticide",2303-16-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Diazinon,No,No,"Organics, Pesticide",333-41-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dicamba,No,No,"Organics, Pesticide",1918-00-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dichlobenil,No,No,"Organics, Pesticide",1194-65-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dichlofenthion,No,No,"Organics, Pesticide",97-17-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dichlofluanid,No,No,"Organics, Pesticide",1085-98-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dichloran,No,No,"Organics, Pesticide",99-30-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dichlorocatechols,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dichlorprop,No,No,"Organics, Pesticide",120-36-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dichlorvos,No,No,"Organics, Pesticide",62-73-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Diclofop methyl,No,No,"Organics, Pesticide",51338-27-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dicofol,No,No,"Organics, Pesticide",115-32-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dicrotophos,No,No,"Organics, Pesticide",141-66-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dieldrin,No,No,"Organics, Pesticide",60-57-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Difenoconazole,No,No,"Organics, Pesticide",119446-68-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dimethachlor,No,No,"Organics, Pesticide",50563-36-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dimethenamid,No,No,"Organics, Pesticide",87674-68-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dimethoate,No,No,"Organics, Pesticide",60-51-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dimethoate-d6,No,No,"Organics, Pesticide",1219794-81-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dimethomorph,No,No,"Organics, Pesticide",110488-70-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dinoseb,No,No,"Organics, Pesticide",88-85-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dinotefuran,No,No,"Organics, Pesticide",165252-70-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Dioxathion,No,No,"Organics, Pesticide",78-34-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Diphenamid,No,No,"Organics, Pesticide",957-51-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Diphenylamine,No,No,"Organics, Pesticide",122-39-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Diquat,No,No,"Organics, Pesticide",2764-72-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Disulfoton,No,No,"Organics, Pesticide",298-04-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Diuron,No,No,"Organics, Pesticide",330-54-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Endosulfan,No,No,"Organics, Pesticide",115-29-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Endosulfan sulfate,No,No,"Organics, Pesticide",1031-07-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Endrin,No,No,"Organics, Pesticide",72-20-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Endrin aldehyde,No,No,"Organics, Pesticide",7421-93-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Endrin ketone,No,No,"Organics, Pesticide",53494-70-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ethalfluralin,No,No,"Organics, Pesticide",55283-68-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ethion,No,No,"Organics, Pesticide",563-12-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ethofumesate,No,No,"Organics, Pesticide",26225-79-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ethoprop,No,No,"Organics, Pesticide",13194-48-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ethylene dibromide,No,No,"Organics, Pesticide",106-93-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Etridiazole,No,No,"Organics, Pesticide",2593-15-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Etrimfos,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Famoxadone,No,No,"Organics, Pesticide",131807-57-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fenamidone,No,No,"Organics, Pesticide",161326-34-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fenitrothion,No,No,"Organics, Pesticide",122-14-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fenitrothion-d6,No,No,"Organics, Pesticide",203645-59-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fenoprofen,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fenoxaprop-ethyl,No,No,"Organics, Pesticide",66441-23-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fenoxaprop-P-ethyl,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fensulfothion,No,No,"Organics, Pesticide",115-90-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fenthion,No,No,"Organics, Pesticide",55-38-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Flonicamid,No,No,"Organics, Pesticide",158062-67-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Flonicamid-d3,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fluazifop,No,No,"Organics, Pesticide",69335-91-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fluazifop-P-butyl,No,No,"Organics, Pesticide",79241-46-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fluazinam,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fludioxonil,No,No,"Organics, Pesticide",131341-86-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Flumetralin,No,No,"Organics, Pesticide",62924-70-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Flumetsulam,No,No,"Organics, Pesticide",98967-40-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Flumioxazin,No,No,"Organics, Pesticide",103361-09-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fluopyram,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Flupyradifurone,No,No,"Organics, Pesticide",951659-40-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fluroxypyr,No,No,"Organics, Pesticide",69377-81-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Folpet,No,No,"Organics, Pesticide",133-07-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Fonofos,No,No,"Organics, Pesticide",944-22-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Foramsulfuron,No,No,"Organics, Pesticide",173159-57-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Glufosinate,No,No,"Organics, Pesticide",51276-47-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Perfluorobutanesulfonic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",375-73-5,organics,PFAS,mg/l,mg/kg
+Perfluorodecanoic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",335-76-2,organics,PFAS,mg/l,mg/kg
+Perfluoroheptanoic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",375-85-9,organics,PFAS,mg/l,mg/kg
+Perfluorohexanesulfonic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",355-46-4,organics,PFAS,mg/l,mg/kg
+Perfluorohexanoic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",307-24-4,organics,PFAS,mg/l,mg/kg
+Perfluorononanoic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",375-95-1,organics,PFAS,mg/l,mg/kg
+Perfluorooctane sulfonic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",1763-23-1,organics,PFAS,mg/l,mg/kg
+Perfluorooctanoic acid,No,No,"PFAS,Perfluorinated Alkyl Substance",335-67-1,organics,PFAS,mg/l,mg/kg
+Perfluorovaleric acid,No,No,"PFAS,Perfluorinated Alkyl Substance",2706-90-3,organics,PFAS,mg/l,mg/kg
+Glyphosate,No,No,"Organics, Pesticide",1071-83-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Heptachlor,No,No,"Organics, Pesticide",76-44-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Heptachlor and Heptachlor epoxide,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Heptachlor epoxide,No,No,"Organics, Pesticide",1024-57-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Hexachlorobenzene,No,No,"Organics, Pesticide",118-74-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Hexachlorocyclohexane,No,No,"Organics, Pesticide",27154-44-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Hexazinone,No,No,"Organics, Pesticide",51235-04-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Imazamethabenz-methyl,No,No,"Organics, Pesticide",81405-85-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Imazamox,No,No,"Organics, Pesticide",114311-32-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Imazapyr,No,No,"Organics, Pesticide",81334-34-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Imazethapyr,No,No,"Organics, Pesticide",81335-77-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Imidacloprid,No,No,"Organics, Pesticide",138261-41-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ipconazole,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Iprodione,No,No,"Organics, Pesticide",36734-19-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Isofenphos,No,No,"Organics, Pesticide",25311-71-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Linuron,No,No,"Organics, Pesticide",330-55-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Linuron-d6,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Malaoxon,No,No,"Organics, Pesticide",1634-78-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Malathion,No,No,"Organics, Pesticide",121-75-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Malathion-d6,No,No,"Organics, Pesticide",1189877-72-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Mancozeb,No,No,"Organics, Pesticide",8018-01-07,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Mandipropamid,No,No,"Organics, Pesticide",374726-62-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+MCPA,No,No,"Organics, Pesticide",94-74-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+MCPB,No,No,"Organics, Pesticide",94-81-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Mecoprop,No,No,"Organics, Pesticide",93-65-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metalaxyl,No,No,"Organics, Pesticide",57837-19-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metalaxyl-M,No,No,"Organics, Pesticide",70630-17-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metconazole,No,No,"Organics, Pesticide",125116-23-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methamidophos,No,No,"Organics, Pesticide",10265-92-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methidathion,No,No,"Organics, Pesticide",950-37-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methomyl,No,No,"Organics, Pesticide",16752-77-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methoprene,No,No,"Organics, Pesticide",40596-69-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methoprene acid,No,No,"Organics, Pesticide",53092-52-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methoxychlor,No,No,"Organics, Pesticide",72-43-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methoxycitronellal,No,No,"Organics, Pesticide",3613-30-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methyl bromide,No,No,"Organics, Pesticide",74-83-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Methyl parathion,No,No,"Organics, Pesticide",298-00-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metiram,No,No,"Organics, Pesticide",9006-42-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metobromuron,No,No,"Organics, Pesticide",3060-98-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metolachlor,No,No,"Organics, Pesticide",51218-45-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metolachlor-d6,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metribuzin,No,No,"Organics, Pesticide",21087-64-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Metsulfuron-methyl,No,No,"Organics, Pesticide",74223-64-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Mevinphos,No,No,"Organics, Pesticide",7786-34-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Mirex,No,No,"Organics, Pesticide",2385-85-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Monochlorocatechols,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Monolinuron,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Monuron,No,No,"Organics, Pesticide",150-68-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Myclobutanil,No,No,"Organics, Pesticide",88671-89-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"N,N-Diethyl-m-toluamide",No,No,"Organics, Pesticide",134-62-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Naled,No,No,"Organics, Pesticide",300-76-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Napropamide,No,No,"Organics, Pesticide",15299-99-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Neoabietic acid,No,No,"Organics, Pesticide",471-77-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Nicosulfuron,No,No,"Organics, Pesticide",111991-09-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Nitenpyram,No,No,"Organics, Pesticide",150824-47-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Nitrapyrin,No,No,"Organics, Pesticide",1929-82-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Nitrofen,No,No,"Organics, Pesticide",1836-75-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"o,p'-DDD",No,No,"Organics, Pesticide",53-19-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"o,p'-DDE",No,No,"Organics, Pesticide",3424-82-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"o,p'-DDT",No,No,"Organics, Pesticide",789-02-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+O-Ethyl O-(p-nitrophenyl) phenylphosphonothioate,No,No,"Organics, Pesticide",2104-64-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Omethoate,No,No,"Organics, Pesticide",1113-02-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Organochlorine pesticides,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Organophosphorus pesticides,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Oryzalin,No,No,"Organics, Pesticide",19044-88-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Oxamyl,No,No,"Organics, Pesticide",23135-22-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Oxathiapiprolin,No,No,"Organics, Pesticide",1003318-67-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Oxychlordane,No,No,"Organics, Pesticide",27304-13-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Oxyfluorfen,No,No,"Organics, Pesticide",42874-03-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"p,p'-DDD",No,No,"Organics, Pesticide",72-54-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"p,p'-DDE",No,No,"Organics, Pesticide",72-55-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"p,p'-DDT",No,No,"Organics, Pesticide",50-29-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"p,p'-Methoxychlor",No,No,"Organics, Pesticide",56578-33-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Paraoxon,No,No,"Organics, Pesticide",311-45-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Paraquat,No,No,"Organics, Pesticide",4685-14-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Parathion,No,No,"Organics, Pesticide",56-38-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Parathion-d10,No,No,"Organics, Pesticide",350820-04-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+p-Cresol,No,No,"Organics, Pesticide",106-44-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pendimethalin,No,No,"Organics, Pesticide",40487-42-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Penflufen,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pentachlorobenzene,No,No,"Organics, Pesticide",608-93-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pentachloronitrobenzene,No,No,"Organics, Pesticide",82-68-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pentachlorophenol,No,No,"Organics, Pesticide",87-86-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Permethrin,No,No,"Organics, Pesticide",52645-53-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Perthane,No,No,"Organics, Pesticide",72-56-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Phorate,No,No,"Organics, Pesticide",298-02-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Phorate-d10,No,No,"Organics, Pesticide",1219805-45-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Phosalone,No,No,"Organics, Pesticide",2310-17-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Phosmet,No,No,"Organics, Pesticide",732-11-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Phosphamidon,No,No,"Organics, Pesticide",13171-21-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Picloram,No,No,"Organics, Pesticide",####,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Picoxystrobin,No,No,"Organics, Pesticide",117428-22-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Piperonyl butoxide,No,No,"Organics, Pesticide",1951-03-06,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pirimicarb,No,No,"Organics, Pesticide",23103-98-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pirimiphos-ethyl,No,No,"Organics, Pesticide",23505-41-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pirimiphos-methyl,No,No,"Organics, Pesticide",29232-93-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Procymidone,No,No,"Organics, Pesticide",32809-16-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Profluralin,No,No,"Organics, Pesticide",26399-36-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Prometon,No,No,"Organics, Pesticide",1610-18-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Prometryn,No,No,"Organics, Pesticide",7287-19-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pronamide,No,No,"Organics, Pesticide",23950-58-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Propachlor,No,No,"Organics, Pesticide",1918-16-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Propanil,No,No,"Organics, Pesticide",709-98-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Propazine,No,No,"Organics, Pesticide",139-40-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Propetamphos,No,No,"Organics, Pesticide",31218-83-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Propham,No,No,"Organics, Pesticide",122-42-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Propiconazole,No,No,"Organics, Pesticide",60207-90-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Propoxur,No,No,"Organics, Pesticide",114-26-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Prosulfuron,No,No,"Organics, Pesticide",94125-34-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Prothioconazole,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pyraclostrobin,No,No,"Organics, Pesticide",175013-18-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pyrethrin I,No,No,"Organics, Pesticide",121-21-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pyrethrin II,No,No,"Organics, Pesticide",121-29-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pyridaben,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Pyrimethanil,No,No,"Organics, Pesticide",53112-28-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Quinalphos,No,No,"Organics, Pesticide",13593-03-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Quinclorac,No,No,"Organics, Pesticide",84087-01-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Quizalofop,No,No,"Organics, Pesticide",76578-12-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Rimsulfuron,No,No,"Organics, Pesticide",122931-48-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ronnel,No,No,"Organics, Pesticide",299-84-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sethoxydim,No,No,"Organics, Pesticide",74051-80-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+S-Ethyl dipropylthiocarbamate,No,No,"Organics, Pesticide",759-94-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Silvex,No,No,"Organics, Pesticide",93-72-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Simazine,No,No,"Organics, Pesticide",122-34-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Spirodiclofen,No,No,"Organics, Pesticide",148477-71-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Spiromesifen,No,No,"Organics, Pesticide",283594-90-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Spirotetramat,No,No,"Organics, Pesticide",203313-25-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sulfadimethoxine,No,No,"Organics, Pesticide",122-11-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sulfaquinoxaline,No,No,"Organics, Pesticide",59-40-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sulfentrazone,No,No,"Organics, Pesticide",122836-35-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sulfotep,No,No,"Organics, Pesticide",3689-24-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sulfoxaflor,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sulfoxaflor-13C15N2,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Sulprofos,No,No,"Organics, Pesticide",35400-43-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tebuconazole,No,No,"Organics, Pesticide",107534-96-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tebuthiuron,No,No,"Organics, Pesticide",34014-18-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tecnazene,No,No,"Organics, Pesticide",117-18-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Temephos,No,No,"Organics, Pesticide",3383-96-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Terbacil,No,No,"Organics, Pesticide",5902-51-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Terbufos,No,No,"Organics, Pesticide",13071-79-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Terbufos-d10,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Terbuthylazine,No,No,"Organics, Pesticide",5915-41-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Terbutryn,No,No,"Organics, Pesticide",886-50-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tetrachlorocatechol,No,No,"Organics, Pesticide",1198-55-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tetrachlorophenol,No,No,"Organics, Pesticide",25167-83-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tetrachlorvinphos,No,No,"Organics, Pesticide",22248-79-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tetradifon,No,No,"Organics, Pesticide",116-29-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tetrapropyl dithiopyrophosphate,No,No,"Organics, Pesticide",3244-90-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thiabendazole,No,No,"Organics, Pesticide",148-79-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thiacloprid,No,No,"Organics, Pesticide",111988-49-9,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thiacloprid-13C6,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thiamethoxam,No,No,"Organics, Pesticide",153719-23-4,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thifensulfuron,No,No,"Organics, Pesticide",79277-67-1,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thifensulfuron-methyl,No,No,"Organics, Pesticide",79277-27-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thiocyanate,No,No,"Organics, Pesticide",302-04-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thiophanate Methyl,No,No,"Organics, Pesticide",23564-05-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Thiram,No,No,"Organics, Pesticide",137-26-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Toxaphene,No,No,"Organics, Pesticide",8001-35-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tralkoxydim,No,No,"Organics, Pesticide",87820-88-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+"trans-1,3-Dichloropropene",No,No,"Organics, Pesticide",10061-02-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+trans-Chlordane,No,No,"Organics, Pesticide",5103-74-2,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+trans-Nonachlor,No,No,"Organics, Pesticide",39765-80-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Transpermethrin,No,No,"Organics, Pesticide",61949-77-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Triadimefon,No,No,"Organics, Pesticide",43121-43-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Triallate,No,No,"Organics, Pesticide",2303-17-5,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tribenuron-methyl,No,No,"Organics, Pesticide",101200-48-0,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Tribufos,No,No,"Organics, Pesticide",78-48-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Trichlorocatechols,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Triclopyr,No,No,"Organics, Pesticide",55335-06-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Trifloxystrobin,No,No,"Organics, Pesticide",141517-21-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Trifluralin,No,No,"Organics, Pesticide",1582-09-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Trinexapac-Ethyl,No,No,"Organics, Pesticide",95266-40-3,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Triphenyltin,No,No,"Organics, Pesticide",892-20-6,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Triticonazole,No,No,"Organics, Pesticide",131983-72-7,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Vinclozolin,No,No,"Organics, Pesticide",50471-44-8,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Zoxamide,No,No,"Organics, Pesticide", ,organics,pesticides/insecticides/fungicides,mg/l,mg/kg
+Ammonia,Yes,Yes,Nutrient,7664-41-7,nutrients,nitrogen,mg/l,mg/kg
+Ammonia and ammonium,Yes,Yes,Nutrient, ,nutrients,nitrogen,mg/l,mg/kg
+Ammonium,Yes,Yes,Nutrient,14798-03-9,nutrients,nitrogen,mg/l,mg/kg
+"Inorganic nitrogen (ammonia, nitrate and nitrite)",Yes,Yes,Nutrient, ,nutrients,nitrogen,mg/l,mg/kg
+Inorganic nitrogen (nitrate and nitrite),Yes,Yes,Nutrient, ,nutrients,nitrogen,mg/l,mg/kg
+Kjeldahl nitrogen,Yes,Yes,Nutrient, ,nutrients,nitrogen,mg/l,mg/kg
+Nitrate,Yes,Yes,Nutrient,14797-55-8,nutrients,nitrogen,mg/l,mg/kg
+Nitrite,Yes,Yes,Nutrient,14797-65-0,nutrients,nitrogen,mg/l,mg/kg
+Nitrogen dioxide,No,No,Nutrient,10102-44-0,nutrients,nitrogen,mg/l,mg/kg
+Organic Nitrogen,Yes,Yes,Nutrient, ,nutrients,nitrogen,mg/l,mg/kg
+Organic phosphorus,Yes,Yes,Nutrient, ,nutrients,phosphorus,mg/l,mg/kg
+Orthophosphate,Yes,Yes,Nutrient,14265-44-2,nutrients,phosphorus,mg/l,mg/kg
+"Phosphorus, hydrolyzable",Yes,Yes,Nutrient, ,nutrients,phosphorus,mg/l,mg/kg
+Soluble Reactive Phosphorus (SRP),Yes,Yes,Nutrient, ,nutrients,phosphorus,mg/l,mg/kg
+"Total Nitrogen, mixed forms",Yes,Yes,Nutrient, ,nutrients,nitrogen,mg/l,mg/kg
+"Total Phosphorus, mixed forms",Yes,Yes,Nutrient, ,nutrients,phosphorus,mg/l,mg/kg
+Aluminum,No,Yes,"Inorganics, Minor, Metals",7429-90-5,inorganics,metals,mg/l,mg/kg
+Antimony,No,Yes,"Inorganics, Minor, Non-metals",7440-36-0,inorganics,non-metals,mg/l,mg/kg
+Arsenate,No,No,"Inorganics, Minor, Non-metals", ,inorganics,non-metals,mg/l,mg/kg
+Arsenic,No,Yes,"Inorganics, Minor, Non-metals",7440-38-2,inorganics,non-metals,mg/l,mg/kg
+Arsenite,No,No,"Inorganics, Minor, Non-metals", ,inorganics,non-metals,mg/l,mg/kg
+"Arsonium, (carboxymethyl)trimethyl-, inner salt",No,No,"Inorganics, Minor, Non-metals",64436-13-1,inorganics,non-metals,mg/l,mg/kg
+Barium,No,Yes,"Inorganics, Minor, Metals",7440-39-3,inorganics,metals,mg/l,mg/kg
+Beryllium,No,Yes,"Inorganics, Minor, Metals",7440-41-7,inorganics,metals,mg/l,mg/kg
+Bicarbonate,No,No,"Inorganics, Major, Non-metals",71-52-3,inorganics,non-metals,mg/l,mg/kg
+Bismuth,No,Yes,"Inorganics, Minor, Metals",7440-69-9,inorganics,metals,mg/l,mg/kg
+Boron,No,Yes,"Inorganics, Minor, Non-metals",7440-42-8,inorganics,non-metals,mg/l,mg/kg
+Bromate,No,No,"Inorganics, Minor, Non-metals",15541-45-4,inorganics,non-metals,mg/l,mg/kg
+Bromide,No,No,"Inorganics, Major, Non-metals",24959-67-9,inorganics,non-metals,mg/l,mg/kg
+Bromine,No,Yes,"Inorganics, Minor, Non-metals",7726-95-6,inorganics,non-metals,mg/l,mg/kg
+Cadmium,No,Yes,"Inorganics, Minor, Metals",7440-43-9,inorganics,metals,mg/l,mg/kg
+Calcium,No,Yes,"Inorganics, Major, Metals",7440-70-2,inorganics,metals,mg/l,mg/kg
+Calcium carbonate,No,No,"Inorganics, Major, Non-metals",471-34-1,inorganics,non-metals,mg/l,mg/kg
+Carbon dioxide,No,Yes,"Inorganics, Major, Non-metals",124-38-9,inorganics,non-metals,mg/l,mg/kg
+"Carbon Dioxide, free CO2",No,No,"Inorganics, Major, Non-metals", ,inorganics,non-metals,mg/l,mg/kg
+Carbonate,No,No,"Inorganics, Major, Non-metals",3812-32-6,inorganics,non-metals,mg/l,mg/kg
+Cerium,No,Yes,"Inorganics, Minor, Metals",7440-45-1,inorganics,metals,mg/l,mg/kg
+Cesium,No,Yes,"Inorganics, Minor, Metals",7440-46-2,inorganics,metals,mg/l,mg/kg
+Chlorate,No,Yes,"Inorganics, Minor, Non-metals",14866-68-3,inorganics,non-metals,mg/l,mg/kg
+Chloride,No,Yes,"Inorganics, Major, Non-metals",16887-00-6,inorganics,non-metals,mg/l,mg/kg
+Chlorine,No,Yes,"Inorganics, Major, Non-metals",7782-50-5,inorganics,non-metals,mg/l,mg/kg
+Chlorite,No,Yes,"Inorganics, Major, Non-metals",14998-27-7,inorganics,non-metals,mg/l,mg/kg
+Chromium,No,Yes,"Inorganics, Minor, Metals",7440-47-3,inorganics,metals,mg/l,mg/kg
+Chromium(III),No,Yes,"Inorganics, Minor, Metals",16065-83-1,inorganics,metals,mg/l,mg/kg
+Chromium(VI),No,Yes,"Inorganics, Minor, Metals",18540-29-9,inorganics,metals,mg/l,mg/kg
+Cobalt,No,Yes,"Inorganics, Minor, Metals",7440-48-4,inorganics,metals,mg/l,mg/kg
+Copper,No,Yes,"Inorganics, Minor, Metals",7440-50-8,inorganics,metals,mg/l,mg/kg
+Cyanide,No,Yes,"Inorganics, Minor, Non-metals",1957-12-05,inorganics,non-metals,mg/l,mg/kg
+Cyanide + Thiocyanate,No,Yes,"Inorganics, Minor, Non-metals", ,inorganics,non-metals,mg/l,mg/kg
+Europium,No,Yes,"Inorganics, Minor, Metals",7440-53-1,inorganics,metals,mg/l,mg/kg
+Ferric ion,No,No,"Inorganics, Minor, Metals",20074-52-6,inorganics,metals,mg/l,mg/kg
+Ferrous ion,No,No,"Inorganics, Minor, Metals",15438-31-0,inorganics,metals,mg/l,mg/kg
+Fluoride,No,Yes,"Inorganics, Major, Non-metals",16984-48-8,inorganics,non-metals,mg/l,mg/kg
+Fluorine,No,Yes,"Inorganics, Major, Non-metals",7782-41-4,inorganics,non-metals,mg/l,mg/kg
+Gadolinium,No,Yes,"Inorganics, Minor, Metals",7440-54-2,inorganics,metals,mg/l,mg/kg
+Gallium,No,Yes,"Inorganics, Minor, Metals",7440-55-3,inorganics,metals,mg/l,mg/kg
+Germanium,No,Yes,"Inorganics, Minor, Non-metals",7440-56-4,inorganics,non-metals,mg/l,mg/kg
+Gold,No,Yes,"Inorganics, Minor, Metals",7440-57-5,inorganics,metals,mg/l,mg/kg
+Hafnium,No,Yes,"Inorganics, Minor, Metals",7440-58-6,inorganics,metals,mg/l,mg/kg
+Hexavalent chromium compounds,No,Yes,"Inorganics, Minor, Metals", ,inorganics,metals,mg/l,mg/kg
+Holmium,No,Yes,"Inorganics, Minor, Metals",7440-60-0,inorganics,metals,mg/l,mg/kg
+Hydrogen,No,No,"Inorganics, Major, Non-metals",1333-74-0,inorganics,non-metals,mg/l,mg/kg
+Hydrogen peroxide,No,No,"Inorganics, Minor, Non-metals",7722-84-1,inorganics,non-metals,mg/l,mg/kg
+Hydrogen sulfide,No,No,"Inorganics, Major, Non-metals",7783-06-04,inorganics,non-metals,mg/l,mg/kg
+Hydroxide,No,Yes,"Inorganics, Major, Non-metals",14280-30-9,inorganics,non-metals,mg/l,mg/kg
+Indium,No,Yes,"Inorganics, Minor, Metals",7440-74-6,inorganics,metals,mg/l,mg/kg
+Carbon,No,Yes,"Inorganics, Major, Non-metals", ,inorganics,non-metals,mg/l,mg/kg
+Iridium,No,Yes,"Inorganics, Minor, Metals",7439-88-5,inorganics,metals,mg/l,mg/kg
+Iron,No,Yes,"Inorganics, Minor, Metals",7439-89-6,inorganics,metals,mg/l,mg/kg
+Lanthanum,No,Yes,"Inorganics, Minor, Metals",7439-91-0,inorganics,metals,mg/l,mg/kg
+Lead,No,Yes,"Inorganics, Minor, Metals",7439-92-1,inorganics,metals,mg/l,mg/kg
+Lithium,No,Yes,"Inorganics, Minor, Metals",7439-93-2,inorganics,metals,mg/l,mg/kg
+Lutetium,No,Yes,"Inorganics, Minor, Metals",7439-94-3,inorganics,metals,mg/l,mg/kg
+Magnesium,No,Yes,"Inorganics, Major, Metals",7439-95-4,inorganics,metals,mg/l,mg/kg
+Manganese,No,Yes,"Inorganics, Minor, Metals",7439-96-5,inorganics,metals,mg/l,mg/kg
+Mercury,No,Yes,"Inorganics, Minor, Metals",7439-97-6,inorganics,metals,mg/l,mg/kg
+Methylmercury(1+),No,Yes,"Inorganics, Minor, Metals",22967-92-6,inorganics,metals,mg/l,mg/kg
+Molybdenum,No,Yes,"Inorganics, Minor, Metals",7439-98-7,inorganics,metals,mg/l,mg/kg
+Neodymium,No,Yes,"Inorganics, Minor, Metals",7440-00-8,inorganics,metals,mg/l,mg/kg
+Nickel,No,Yes,"Inorganics, Minor, Metals",7440-02-0,inorganics,metals,mg/l,mg/kg
+Niobium,No,Yes,"Inorganics, Minor, Metals",7440-03-01,inorganics,metals,mg/l,mg/kg
+"Phosphorus, elemental",No,Yes,"Inorganics, Minor, Non-metals",7723-14-0,inorganics,non-metals,mg/l,mg/kg
+Platinum,No,Yes,"Inorganics, Minor, Metals",7440-05-04,inorganics,metals,mg/l,mg/kg
+Potassium,No,Yes,"Inorganics, Major, Metals",7440-09-07,inorganics,metals,mg/l,mg/kg
+Praseodymium,No,Yes,"Inorganics, Minor, Metals",7440-10-0,inorganics,metals,mg/l,mg/kg
+Radium,No,Yes,"Inorganics, Minor, Metals",7440-14-4,inorganics,metals,mg/l,mg/kg
+Rhenium,No,Yes,"Inorganics, Minor, Metals",7440-15-5,inorganics,metals,mg/l,mg/kg
+Rubidium,No,Yes,"Inorganics, Minor, Metals",7440-17-7,inorganics,metals,mg/l,mg/kg
+Ruthenium,No,Yes,"Inorganics, Minor, Metals",7440-18-8,inorganics,metals,mg/l,mg/kg
+Samarium,No,Yes,"Inorganics, Minor, Metals",7440-19-9,inorganics,metals,mg/l,mg/kg
+Scandium,No,Yes,"Inorganics, Minor, Metals",7440-20-2,inorganics,metals,mg/l,mg/kg
+Selenate,No,Yes,"Inorganics, Minor, Non-metals",14124-68-6,inorganics,non-metals,mg/l,mg/kg
+Selenite,No,Yes,"Inorganics, Minor, Non-metals",14124-67-5,inorganics,non-metals,mg/l,mg/kg
+Selenium,No,Yes,"Inorganics, Minor, Non-metals",7782-49-2,inorganics,non-metals,mg/l,mg/kg
+Silica,No,No,"Inorganics, Major, Non-metals",7631-86-9,inorganics,non-metals,mg/l,mg/kg
+"Silica, reactive",No,No,"Inorganics, Major, Non-metals",7631-86-9,inorganics,non-metals,mg/l,mg/kg
+Silicate,No,No,"Inorganics, Major, Non-metals",12627-13-3,inorganics,non-metals,mg/l,mg/kg
+Silicon,No,Yes,"Inorganics, Major, Non-metals",7440-21-3,inorganics,non-metals,mg/l,mg/kg
+Silver,No,Yes,"Inorganics, Minor, Metals",7440-22-4,inorganics,metals,mg/l,mg/kg
+Sodium,No,Yes,"Inorganics, Major, Metals",7440-23-5,inorganics,metals,mg/l,mg/kg
+Strontium,No,Yes,"Inorganics, Minor, Metals",7440-24-6,inorganics,metals,mg/l,mg/kg
+Sulfate,No,Yes,"Inorganics, Major, Non-metals",14808-79-8,inorganics,non-metals,mg/l,mg/kg
+Sulfide,No,No,"Inorganics, Major, Non-metals",18496-25-8,inorganics,non-metals,mg/l,mg/kg
+Sulfur,No,Yes,"Inorganics, Major, Non-metals",7704-34-9,inorganics,non-metals,mg/l,mg/kg
+Sulfur Total,No,No,"Inorganics, Major, Non-metals", ,inorganics,non-metals,mg/l,mg/kg
+Tantalum,No,Yes,"Inorganics, Minor, Metals",7440-25-7,inorganics,metals,mg/l,mg/kg
+Tellurium,No,Yes,"Inorganics, Minor, Non-metals",13494-80-9,inorganics,non-metals,mg/l,mg/kg
+Terbium,No,Yes,"Inorganics, Minor, Metals",7440-27-9,inorganics,metals,mg/l,mg/kg
+Thallium,No,Yes,"Inorganics, Minor, Metals",7440-28-0,inorganics,metals,mg/l,mg/kg
+Thorium,No,Yes,"Inorganics, Minor, Metals", ,inorganics,metals,mg/l,mg/kg
+Tin,No,Yes,"Inorganics, Minor, Metals",7440-31-5,inorganics,metals,mg/l,mg/kg
+Titanium,No,Yes,"Inorganics, Minor, Metals",7440-32-6,inorganics,metals,mg/l,mg/kg
+Tungsten,No,Yes,"Inorganics, Minor, Metals",7440-33-7,inorganics,metals,mg/l,mg/kg
+Vanadium,No,Yes,"Inorganics, Minor, Metals",7440-62-2,inorganics,metals,mg/l,mg/kg
+Ytterbium,No,Yes,"Inorganics, Minor, Metals",7440-64-4,inorganics,metals,mg/l,mg/kg
+Yttrium,No,Yes,"Inorganics, Minor, Metals",7440-65-5,inorganics,metals,mg/l,mg/kg
+Zinc,No,Yes,"Inorganics, Minor, Metals",7440-66-6,inorganics,metals,mg/l,mg/kg
+Zirconium,No,Yes,"Inorganics, Minor, Metals",7440-67-7,inorganics,metals,mg/l,mg/kg
+Sum of anions,No,No,Physical, ,physical,,meq/L,
+Sum of cations,No,No,Physical, ,physical,,meq/L,
+"Discharge, River/Stream",No,No,Physical, ,physical,,m3/s,
+Surface area,No,No,Physical, ,physical,,m2,
+"Light, underwater extinction coefficient (K)",No,No,Physical, ,physical,,m⁻¹,
+Velocity - water,No,No,Physical, ,physical,,m/s,
+Velocity - wind,No,No,Physical, ,physical,,m/s,
+Bankfull Height,No,No,Physical, ,physical,,m,
+Bankfull width,No,No,Physical, ,physical,,m,
+Depth of water column,No,No,Physical, ,physical,,m,
+"Depth, Secchi disk depth",No,No,Physical, ,physical,,m,
+Distance From Left Bank,No,No,Physical, ,physical,,m,
+Distance,No,No,Physical,,physical,,m,
+Ice thickness,No,No,Physical, ,physical,,m,
+Ionic strength,No,No,Physical, ,physical,,M,
+"Light attenuation, depth at 99%",No,No,Physical, ,physical,,m,
+Stream width measure,No,No,Physical, ,physical,,m,
+Water level,No,No,Physical, ,physical,,m,
+Water level below ground surface,No,No,Physical, ,physical,,m,
+Wetted Width,No,No,Physical, ,physical,,m,
+White ice thickness,No,No,Physical, ,physical,,m,
+Delta lithium-7/lithium-6,No,No,Stable Isotopes,,stable isotopes,,LSVEC,LSVEC
+Barometric pressure,No,No,Physical, ,physical,,kPa,
+Partial Pressure CO2,No,No,Physical, ,physical,,kPa,
+Pressure,No,No,Physical, ,physical,,kPa,
+"Day, ice on",No,No,Physical,,physical,,doy,
+"Day, ice off",No,No,Physical,,physical,,doy,
+Absorbance at 250 nm,No,No,Physical, ,physical,,dimensionless,
+Absorbance at 254 nm,No,No,Physical, ,physical,,dimensionless,
+Absorbance at 280 nm,No,No,Physical, ,physical,,dimensionless,
+Absorbance at 330 nm,No,No,Physical, ,physical,,dimensionless,
+Absorbance at 350 nm,No,No,Physical, ,physical,,dimensionless,
+Absorbance at 365 nm,No,No,Physical, ,physical,,dimensionless,
+Absorbance at 370 nm,No,No,Physical, ,physical,,dimensionless,
+Apparent color,No,No,Physical, ,physical,,dimensionless,
+Color,No,No,Physical, ,physical,,dimensionless,
+Fluorescence index,No,No,Physical, ,physical,,dimensionless,
+Fluorescent dissolved organic matter (FDOM),No,No,Physical, ,physical,,dimensionless,
+Hilsenhoff Biotic Index,No,No,Physical, ,physical,,dimensionless,
+Langelier Saturation Index,No,No,Physical, ,physical,,dimensionless,
+Odor threshold number,No,No,Physical, ,physical,,dimensionless,
+"pH, field",No,No,Physical, ,physical,,dimensionless,
+"pH, lab",No,No,Physical, ,physical,,dimensionless,
+Saturation Index Aragonite,No,No,Physical, ,physical,,dimensionless,
+Specific UV Absorbance at 250 nm,No,No,Physical, ,physical,,dimensionless,
+Specific UV Absorbance at 254 nm,No,No,Physical, ,physical,,dimensionless,
+"Specific UV Absorbance at 254 nm, corrected for Fe",No,No,Physical, ,physical,,dimensionless,
+Specific UV Absorbance at 310 nm,No,No,Physical, ,physical,,dimensionless,
+Specific UV Absorbance at 340 nm,No,No,Physical, ,physical,,dimensionless,
+Specific UV Absorbance at 360 nm,No,No,Physical, ,physical,,dimensionless,
+Specific UV Absorbance at 365 nm,No,No,Physical, ,physical,,dimensionless,
+Specific UV Absorbance at 510 nm,No,No,Physical, ,physical,,dimensionless,
+UV 254,No,No,Physical, ,physical,,dimensionless,
+River/stream channel slope,No,No,Physical, ,physical,,degrees,
+"Wind direction (direction from, expressed 0-360 deg)",No,No,Physical, ,physical,,degrees,
+Ice cover duration,No,No,Physical,,physical,,days,
+True color,No,No,Physical, ,physical,,CU,
+"Taxonomic Richness, Ephemeroptera, Plecoptera, Trichoptera",No,No,Biological, ,biological,other,count,
+"Coliform/Streptococcus ratio, fecal",No,No,Microbiological, ,biological,microbiological,count,
+Coliphage,No,No,Microbiological, ,biological,microbiological,count,
+Cryptosporidium,No,No,Microbiological, ,biological,microbiological,count,
+Enterococcus,No,No,Microbiological, ,biological,microbiological,count,
+Escherichia coli,No,No,Microbiological,68583-22-2,biological,microbiological,count,
+Fecal Coliform,No,No,Microbiological, ,biological,microbiological,count,
+Fecal Streptococcus Group Bacteria,No,No,Microbiological, ,biological,microbiological,count,
+Giardia,No,No,Microbiological, ,biological,microbiological,count,
+Heterotrophic bacteria,No,No,Microbiological, ,biological,microbiological,count,
+Human Enteric viruses,No,No,Microbiological, ,biological,microbiological,count,
+Pseudomonas aeruginosa,No,No,Microbiological,68583-29-9,biological,microbiological,count,
+Salmonella,No,No,Microbiological, ,biological,microbiological,count,
+Streptococcus,No,No,Microbiological, ,biological,microbiological,count,
+Total Coliform,No,No,Microbiological, ,biological,microbiological,count,
+"Depth, snow",No,No,Physical, ,physical,,cm,
+"Precipitation, snow",No,No,Physical, ,physical,,cm,
+"Transparency, tube with disk",No,No,Physical, ,physical,,cm,
+"Gross alpha radioactivity, (Americium-241 ref std) ",No,No,Radiochemical, ,radiochemical,,Bq/L,Bq/kg
+"Gross beta radioactivity, (Cesium-137 ref std)",No,No,Radiochemical, ,radiochemical,,Bq/L,Bq/kg
+Delta nitrogen-15/nitrogen-14,Yes,No,Stable Isotopes, ,stable isotopes,,AIR,AIR
+Conductivity,No,No,Physical, ,physical,,µS/cm,
+Specific conductance,No,No,Physical, ,physical,,µS/cm,
+"Light, photosynthetic active radiation (PAR)",No,No,Physical, ,physical,,µmol/m²/s,
+Chlorophyll a - Periphyton (attached),No,No,"Biological, Photosynthetic Pigments",479-61-8,biological,photosynthetic pigments,µg/L,µg/g
+"Chlorophyll a, corrected for pheophytin",No,No,"Biological, Photosynthetic Pigments",479-61-8,biological,photosynthetic pigments,µg/L,µg/g
+"Chlorophyll a, pheophytin correction unspecified",No,No,"Biological, Photosynthetic Pigments",479-61-8,biological,photosynthetic pigments,µg/L,µg/g
+"Chlorophyll a, uncorrected for pheophytin",No,No,"Biological, Photosynthetic Pigments",479-61-8,biological,photosynthetic pigments,µg/L,µg/g
+Chlorophyll b,No,No,"Biological, Photosynthetic Pigments",519-62-0,biological,photosynthetic pigments,µg/L,µg/g
+Pheophytin,No,No,"Biological, Photosynthetic Pigments",603-17-8,biological,photosynthetic pigments,µg/L,µg/g
+Pheophytin a,No,No,"Biological, Photosynthetic Pigments",603-17-8,biological,photosynthetic pigments,µg/L,µg/g
+Phycocyanin,No,No,"Biological, Photosynthetic Pigments",11016-15-2,biological,photosynthetic pigments,µg/L,µg/g
+Microcystin,No,No,"Cyanotoxins, Phytotoxins",77238-39-2,biological,cyano/phytotoxins,µg/L,
+Microcystin dRR,No,No,"Cyanotoxins, Phytotoxins",131022-02-1,biological,cyano/phytotoxins,µg/L,
+Microcystin HilR,No,No,"Cyanotoxins, Phytotoxins", ,biological,cyano/phytotoxins,µg/L,
+Microcystin HtyR,No,No,"Cyanotoxins, Phytotoxins", ,biological,cyano/phytotoxins,µg/L,
+Microcystin LA,No,No,"Cyanotoxins, Phytotoxins",96180-79-9,biological,cyano/phytotoxins,µg/L,
+Microcystin LF,No,No,"Cyanotoxins, Phytotoxins",154037-70-4,biological,cyano/phytotoxins,µg/L,
+Microcystin LR,No,No,"Cyanotoxins, Phytotoxins",101043-37-2,biological,cyano/phytotoxins,µg/L,
+"Microcystin LR, Desmethyl",No,No,"Cyanotoxins, Phytotoxins",120011-66-7,biological,cyano/phytotoxins,µg/L,
+Microcystin LW,No,No,"Cyanotoxins, Phytotoxins",157622-02-1,biological,cyano/phytotoxins,µg/L,
+Microcystin LY,No,No,"Cyanotoxins, Phytotoxins",123304-10-9,biological,cyano/phytotoxins,µg/L,
+Microcystin RR,No,No,"Cyanotoxins, Phytotoxins",111755-37-4,biological,cyano/phytotoxins,µg/L,
+Microcystin WR,No,No,"Cyanotoxins, Phytotoxins",138234-58-9,biological,cyano/phytotoxins,µg/L,
+Microcystin YR,No,No,"Cyanotoxins, Phytotoxins",101064-48-6,biological,cyano/phytotoxins,µg/L,
+"Temperature, air",No,No,Physical, ,physical,,°C,
+"Temperature, water",No,No,Physical, ,physical,,°C,
+"Temperature, equipment",No,No,Physical,,physical,,°C,
+Dissolved oxygen saturation,No,No,Physical, ,physical,,%,
+"Ice cover, floating or solid, as % area estimate",No,No,Physical, ,physical,,%,
+Ion Balance,No,No,Physical, ,physical,,%,
+Moisture content,No,No,Physical, ,physical,,%,
+Snow cover as % area estimate,No,No,Physical, ,physical,,%,
+Snow cover on ice as % area estimate,No,No,Physical, ,physical,,%,
+"Sodium, Percent Total Cations",No,No,"Inorganics, Major, Metals", ,inorganics,metals,%,%
+Filamentous Algae Cover,No,No,"Biological, Habitat, Filamentous Algae", ,biological,other,%,
+Macrophyte cover,No,No,Biological, ,biological,other,%,

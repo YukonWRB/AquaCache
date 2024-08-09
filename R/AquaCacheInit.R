@@ -664,60 +664,53 @@ CREATE TABLE parameter_groups (
 );")
   
   # populate the parameter_groups table
-  grps <- data.frame(group_name = c("organics", "inorganics", "nutrients", "physical", "biological", "stable isotopes", "radioisotopes"),
-                     group_name_fr = c("organiques", "inorganiques", "nutriments", "physiques", "biologiques", "isotopes stables", "radioisotopes"),
-                     description = c("Organic (carbon-containing) parameters such as pesticides", "Inorganic parameters", "Nutrient parameters", "Physical parameters such as water level, temperature", "Biological parameters such as algae, bacteria", "Isotopes which do not undergoe radioactive decay", "Isotopes which undergo radioactive decay"),
-                     description_fr = c("Param\u00E8tres organiques (contenant du carbone) tels que les pesticides", "Param\u00E8tres inorganiques", "Param\u00E8tres nutritifs", "Param\u00E8tres physiques tels que le niveau d'eau, la temp\u00E9rature", "Param\u00E8tres biologiques tels que les algues, les bact\u00E9ries", "Isotopes qui ne subissent pas de d\u00E9sint\u00E8gration radioactive", "Isotopes qui subissent une d\u00E9sint\u00E8gration radioactive"))
+  grps <- data.frame(group_name = c("organics", "inorganics", "nutrients", "physical", "biological", "stable isotopes", "radiochemical"),
+                     group_name_fr = c("organiques", "inorganiques", "nutriments", "physiques", "biologiques", "isotopes stables", "radiochimique"),
+                     description = c("Organic (carbon-containing) parameters such as pesticides", "Inorganic parameters", "Nutrient parameters", "Physical parameters such as water level, temperature", "Biological parameters such as algae, bacteria", "Isotopes which do not undergoe radioactive decay", "Isotopes which undergo radioactive decay, radiation parameters"),
+                     description_fr = c("Param\u00E8tres organiques (contenant du carbone) tels que les pesticides", "Param\u00E8tres inorganiques", "Param\u00E8tres nutritifs", "Param\u00E8tres physiques tels que le niveau d'eau, la temp\u00E9rature", "Param\u00E8tres biologiques tels que les algues, les bact\u00E9ries", "Isotopes qui ne subissent pas de d\u00E9sint\u00E8gration radioactive", "Isotopes qui subissent une d\u00E9sint\u00E8gration radioactive, param\u00E8tres de radiation"))
   
   DBI::dbAppendTable(con, "parameter_groups", grps)
   
   
-  # Create parameter_sub_groups table with unique constraints on sub_group_name and combination of sub_group_name and group_id
-  # A sub-group can be in more than one group. For example, the sub-group 'pesticides' can be in the group 'organic' and 'inorganic'.
+  # Create parameter_sub_groups table
   DBI::dbExecute(con, "
 CREATE TABLE parameter_sub_groups (
     sub_group_id SERIAL PRIMARY KEY,
-    group_id INTEGER NOT NULL,
     sub_group_name TEXT NOT NULL,
     sub_group_name_fr TEXT,
     description TEXT,
     description_fr TEXT,
-    FOREIGN KEY (group_id) REFERENCES parameter_groups(group_id),
-    UNIQUE(sub_group_name, group_id)
+    UNIQUE(sub_group_name),
+    unique(sub_group_name_fr)
 );")
   
-  sub_grps1 <- data.frame(group_id = 1,
-                          sub_group_name = c("pesticides/insecticides/fungicides", "pharmaceuticals", "cyano/phytotoxins", "PFAS", "PCBs", "PAHs", "hydrocarbons - others", "others"),
-                          sub_group_name_fr = c("pesticides/insecticides/fongicides", "m\u00E9dicaments", "cyano/phytotoxines", "PFAS", "PCB", "HPA", "hydrocarbures - autres", "autres"),
-                          description = c("Pesticides, insecticides, and fungicides", "Pharmaceutical compounds", "Cyanotoxins and phytotoxins", "Per- and polyfluoroalkyl substances", "Polychlorinated biphenyls", "Polycyclic aromatic hydrocarbons", "hydrocarbons, others", NA),
-                          description_fr = c("Pesticides, insecticides et fongicides", "Compos\u00E9s pharmaceutiques", "Cyano-toxines et phytotoxines", "Substances per- et polyfluoroalkyles", "Biph\u00E9nyles polychlor\u00E9s", "Hydrocarbures aromatiques polycycliques", "hydrocarbures, autres", NA))
-  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps1)
+  sub_grps <- data.frame( sub_group_name = c("pesticides/insecticides/fungicides", "pharmaceuticals", "cyano/phytotoxins", "PFAS", "PCBs", "PAHs", "BDEs", "hydrocarbons - others", "metals", "non-metals", "anions", "cations", "nitrogen", "phosphorus", "toxicity", "microbiological", "photosynthetic pigments", "other"),
+                          sub_group_name_fr = c("pesticides/insecticides/fongicides", "m\u00E9dicaments", "cyano/phytotoxines", "PFAS", "PCB", "HPA", NA, "hydrocarbures - autres", "m\u00E9taux", "non-m\u00E9taliques", "anions", "cations", "azote", "phosphore", "toxicit\u00E9", "microbiologique", "pigments photosynthétiques", "autre"),
+                          description = c("Pesticides, insecticides, and fungicides", "Pharmaceutical compounds", "Cyanotoxins and phytotoxins", "Per- and polyfluoroalkyl substances", "Brominated diphenyl ethers", "Polychlorinated biphenyls", "Polycyclic aromatic hydrocarbons", "hydrocarbons, others", "Metallic elements", "Non-metallic elements", "Anions", "Cations", "Nitrogen compounds", "Phosphorus compounds", "Toxicity parameters such as LC50", "Microbiological parameters such as bacterial counts, algae concentration", NA, NA),
+                          description_fr = c("Pesticides, insecticides et fongicides", "Compos\u00E9s pharmaceutiques", "Cyano-toxines et phytotoxines", "Substances per- et polyfluoroalkyles", NA, "Biph\u00E9nyles polychlor\u00E9s", "Hydrocarbures aromatiques polycycliques", "hydrocarbures, autres", "El\u00E9ments m\u00E9talliques", "El\u00E9ments non-m\u00E9taliques", "Anions", "Cations","Compos\u00E9s azot\u00E9s", "Compos\u00E9s phosphor\u00E9s", "Param\u00E8tres de toxicit\u00E9 tels que LC50", "Param\u00E8tres microbiologiques tels que les comptes bact\u00E9riens, la concentration en algues", NA, NA))
   
-  sub_grps2 <- data.frame(group_id = 2,
-                          sub_group_name = c("metals", "non-metals", "anions", "cations", "others"),
-                          sub_group_name_fr = c("m\u00E9taux", "non-m\u00E9taliques", "anions", "cations", "autres"),
-                          description = c("Metallic elements", "Non-metallic elements", "Anions", "Cations", NA),
-                          description_fr = c("El\u00E9ments m\u00E9talliques", "El\u00E9ments non-m\u00E9taliques", "Anions", "Cations", NA))
-  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps2)
-  
-  sub_grps3 <- data.frame(group_id = 3,
-                          sub_group_name = c("nitrogen", "phosphorus", "others"),
-                          sub_group_name_fr = c("azote", "phosphore", "autres"),
-                          description = c("Nitrogen compounds", "Phosphorus compounds", NA),
-                          description_fr = c("Compos\u00E9s azot\u00E9s", "Compos\u00E9s phosphor\u00E9s", NA))
-  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps3)
-  
-  #group 4 doesn't need sub-groups
-  
-  sub_grps5 <- data.frame(group_id = 5,
-                          sub_group_name = c("toxicity", "microbiological", "other"),
-                          sub_group_name_fr = c("toxicit\u00E9", "microbiologique", "autre"),
-                          description = c("Toxicity parameters such as LC50", "Microbiological parameters such as bacterial counts, algae concentration", NA),
-                          description_fr = c("Param\u00E8tres de toxicit\u00E9 tels que LC50", "Param\u00E8tres microbiologiques tels que les comptes bact\u00E9riens, la concentration en algues", NA))
-  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps5)
-  
-  # groups 6 and 7 don't need sub-groups
-  
+  DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps)
+
+
+  # Ce-create parameters and parameter_relationships tables
+  DBI::dbExecute(con, "CREATE TABLE parameters (
+               param_code SERIAL PRIMARY KEY,
+               param_name TEXT UNIQUE NOT NULL,
+               param_name_fr TEXT UNIQUE,
+               description TEXT,
+               description_fr TEXT,
+               unit_default TEXT NOT NULL,
+               unit_solid TEXT,
+               cas_number TEXT,
+               result_speciation BOOLEAN NOT NULL,
+               sample_fraction BOOLEAN NOT NULL,
+               plot_default_y_orientation TEXT NOT NULL CHECK(plot_default_y_orientation IN ('normal', 'inverted')),
+               plot_default_floor NUMERIC,
+               plot_default_ceiling NUMERIC);")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.parameters IS 'Holds information about each parameter, including the parameter name, description, unit, and default plotting orientation, ceiling, and floor to facilitate plotting. Parameters are associated with groups and sub-groups via the table parameter_relationships.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN parameters.unit_default IS 'SI units only. For example, m3/s, mg/L, etc. Import functions should convert to SI units listed here before appending to the DB.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN parameters.result_speciation IS 'Controls if results using this parameter require an entry to column result_speciation of table measurements_discrete';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN parameters.sample_fraction IS 'Controls if results using this parameter require an entry to column sample_fraction of table measurements_discrete';")
   
   # Create parameter_relationships table with unique constraint on the combination of param_code, group_id, and sub_group_id
   # The unique key ensures that a parameter can be in more than one group and sub-group. For example, the sub-group 'pesticides' can be in the group 'organic' and 'inorganic'.
@@ -732,33 +725,34 @@ CREATE TABLE parameter_relationships (
     FOREIGN KEY (sub_group_id) REFERENCES parameter_sub_groups(sub_group_id),
     UNIQUE NULLS NOT DISTINCT(param_code, group_id, sub_group_id)
 );")
+  
 
-  DBI::dbExecute(con, "CREATE TABLE parameters (
-               param_code SERIAL PRIMARY KEY,
-               param_name TEXT UNIQUE NOT NULL,
-               param_name_fr TEXT UNIQUE NOT NULL,
-               description TEXT
-               description_fr TEXT,
-               unit TEXT UNIQUE NOT NULL,
-               plot_default_y_orientation TEXT NOT NULL CHECK(plot_default_y_orientation IN ('normal', 'inverted')),
-               plot_default_floor NUMERIC,
-               plot_default_ceiling NUMERIC);")
-  DBI::dbExecute(con, "COMMENT ON TABLE public.parameters IS 'Holds information about each parameter, including the parameter name, description, unit, and default plotting orientation, ceiling, and floor to facilitate plotting. Parameters are associated with groups and sub-groups via the table parameter_relationships.';")
-  DBI::dbExecute(con, "COMMENT ON COLUMN parameters.unit IS 'SI units only. For example, m3/s, mg/L, etc. Import functions should convert to SI units listed here before appending to the DB.';")
+  # Load the parameters, groups, sub-groups table from the inst folder or the package root if installed
+  params <- read.csv(system.file("extdata/parameters.csv", package = "AquaCache"))
+  params <- params[, -which(names(params) == "DataStream_group")]
+  names(params) <- c("param_name", "result_speciation", "sample_fraction", "cas_number", "group", "subgroup", "unit_default", "unit_solid")
+  params$plot_default_y_orientation <- "normal"
+  # Change Yes/No values to TRUE/FALSE
+  params[params$result_speciation == "Yes", "result_speciation"] <- TRUE
+  params[params$result_speciation == "No", "result_speciation"] <- FALSE
+  params[params$sample_fraction == "Yes", "sample_fraction"] <- TRUE
+  params[params$sample_fraction == "No", "sample_fraction"] <- FALSE
+  params$sample_fraction <- as.logical(params$sample_fraction)
+  params$result_speciation <- as.logical(params$result_speciation)
   
-  params <- data.frame(param_name = c("snow water equivalent", "water level below ground surface", "total rain", "total snow", "equipment temperature", "water temperature", "total precipitation", "snow depth", "air temperature", "water level", "water flow", "distance"),
-                       param_name_fr = c("\u00E9quivalent en eau de neige", "niveau d'eau sous la surface du sol", "pluie totale", "neige totale", "temp\u00E9rature de l'\u00E9quipement", "temp\u00E9rature de l'eau", "pr\u00E9cipitation totale", "profondeur de la neige", "temp\u00E9rature de l'air", "niveau d'eau", "d\u00E9bit d'eau", "distance"),
-                       description = c("The column of water which would result from the melt of a column of snow of equal diameter.", "The depth of water below the ground surface.", "The total amount of rain that has fallen.", "The total amount of snow that has fallen.", "The temperature of the equipment used to measure other parameters.", "The temperature of the water.", "The total amount of precipitation (liquid and solid) that has fallen.", "The depth of the snowpack.", "The temperature of the air.", "The level of the water.", "The flow rate of the water.", "The distance between two points."),
-                       description_fr = c("La colonne d'eau qui r\u00E9sulterait de la fonte d'une colonne de neige de diam\u00E8tre \u00E9gal.", "La profondeur de l'eau sous la surface du sol.", "La quantit\u00E9 totale de pluie tomb\u00E9e.", "La quantit\u00E9 totale de neige tomb\u00E9e.", "La temp\u00E9rature de l'\u00E9quipement utilis\u00E9 pour mesurer d'autres param\u00E8tres.", "La temp\u00E9rature de l'eau.", "La quantit\u00E9 totale de pr\u00E9cipitations (liquides et solides) tomb\u00E9e.", "La profondeur du manteau neigeux.", "La temp\u00E9rature de l'air.", "Le niveau de l'eau.", "Le d\u00E9bit de l'eau.", "La distance entre deux points."),
-                       unit = c("mm", "m", "mm", "cm", "\u00B0C", "\u00B0C", "mm", "cm", "\u00B0C", "m", "m3/s", "m"),
-                       plot_default_y_orientation = c("normal", "inverted", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "inverted"),
-                       plot_default_floor = c(0,0,0,0,-100,-20,0,0,-100,-10, 0, NA))
-  DBI::dbAppendTable(con, "parameters", params)
+  DBI::dbWriteTable(con, "parameters", params[, c("param_name", "result_speciation", "sample_fraction", "cas_number", "unit_default", "plot_default_y_orientation")], append = TRUE)
   
-  # make relationships in parameter_relationships table
-  rels <- data.frame(param_code = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
-                     group_id = 4)
-  DBI::dbAppendTable(con, "parameter_relationships", rels)
+  # Establish relationships between parameters and groups/sub-groups using columns group and subgroup of params, put these into the parameter_relationships table
+  # First get the parameter, group and sub-group ids
+  subgroups <- DBI::dbGetQuery(con, "SELECT sub_group_id, sub_group_name FROM parameter_sub_groups")
+  groups <- DBI::dbGetQuery(con, "SELECT group_id, group_name FROM parameter_groups")
+  parameters <- DBI::dbGetQuery(con, "SELECT param_code, param_name FROM parameters")
+  parameters <- merge(params[, c("param_name", "group", "subgroup")], parameters, by = "param_name", all.x = TRUE)
+  parameters <- merge(parameters, groups, by.x = "group", by.y = "group_name", all.x = TRUE)
+  parameters <- merge(parameters, subgroups[, c("sub_group_id", "sub_group_name")], by.x = "subgroup", by.y = "sub_group_name", all.x = TRUE)
+  
+  DBI::dbAppendTable(con, "parameter_relationships", parameters[, c("param_code", "group_id", "sub_group_id")], append = TRUE)
+  
   
   # media_types table #################
   DBI::dbExecute(con, "CREATE TABLE media_types (
@@ -1220,7 +1214,7 @@ ORDER BY
   
   # Views for timeseries metadata
   DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_en WITH (security_invoker = TRUE) AS",
-                            "SELECT ts.timeseries_id, mtypes.media_type AS media_type, ts.category, params.param_name AS parameter_name, params.unit, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude",
+                            "SELECT ts.timeseries_id, mtypes.media_type AS media_type, ts.category, params.param_name AS parameter_name, params.unit_default AS default_units, params.unit_solid AS units_solid_medium, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
                             "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
@@ -1228,7 +1222,7 @@ ORDER BY
                             "ORDER BY ts.timeseries_id;"))
 
   DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_fr WITH (security_invoker = TRUE) AS",
-                            "SELECT ts.timeseries_id, mtypes.media_type_fr AS type_de_m\u00E9dia, ts.category AS cat\u00E9gorie, params.param_name_fr AS nom_param\u00E8tre, params.unit AS unit\u00E9s, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS d\u00E9but, ts.end_datetime AS fin, ts.note, loc.location_id, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude",
+                            "SELECT ts.timeseries_id, mtypes.media_type_fr AS type_de_m\u00E9dia, ts.category AS cat\u00E9gorie, params.param_name_fr AS nom_param\u00E8tre, params.unit_default AS unit\u00E9s_par_d\u00E9faut, params.unit_solid AS unit\u00E9s_media_solide, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS d\u00E9but, ts.end_datetime AS fin, ts.note, loc.location_id, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
                             "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",

@@ -5,11 +5,36 @@
 #'
 #' Retrieves new discrete data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the discrete table and that have a proper entry in the timeseries table; refer to [addACTimeseries()] for how to add new stations. Does not work on any timeseries of category "continuous": for that, use [getNewContinuous()]. Timeseries with no specified souce_fx will be ignored.
 #'
+#' ## Making functions called by getNewDiscrete:
+#' Each timeseries in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return a data.frame with the following mandatory columns:
+#' - 'datetime': a POSIXct datetime object in UTC 0 time zone
+#' - 'value': the value of the parameter at that datetime, as a numeric. Negative and positive values are allowed, and NA values are allowed if column result_condition is not NULL/NA. Values such as < DL or > DL should appear as NA with corresponding entries in the result_condition column.
+#' 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 ('field msr/obs'), or 34 ('sample-routine').
+#' 'result_value_type':  a numeric specifying the result_value_type_id of the data point from table 'result_value_types', such as 1 ('actual'), 2 ('blank corrected'), or 3 ('calculated').
+#' 
+#' Conditional columns are:
+#' - 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'value' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
+#' - 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
+#' 
+#' Optional but recommended columns are:
+#' - 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
+#' 'collection_method': a numeric specifying the collection_method_id of the data point from table 'collection_methods', such as 1 (observation), 27 (water bottle), or 14 (pump).
+#' - 'sample_fraction': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended').
+#' - 'result_speciation': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S).
+#' -'lab': 
+#' - 'protocol': 
+#' - 'note': a character string with a note about the data point(s).
+#' - 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'owners_contributors' table and an error will be thrown if it does not.
+#' - 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'owners_contributors' table and an error will be thrown if it does not.
+#' - 'share_with': the user groups with which the data should be shared, as a character string. If not specified, the data will be shared with the same groups as the timeseries.
+#' 
+#' Additionally, functions must be able to handle the case where no new data is available and return an empty data.frame.
+#' 
 #' ## Default arguments passed to 'source_fx' functions:
 #' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #' 
 #' ## Sharing privileges and ownership
-#' The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data.
+#' The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data, unless the source function returns populated columns for owner and share_with.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'discrete'.
@@ -106,12 +131,30 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
       ts <- do.call(source_fx, args_list) #Get the data using the args_list
       ts <- ts[!is.na(ts$value) , ]
 
-      if (!is.na(owner)) {
-        ts$owner <- owner
+      # Check if the source function returned the owner and share_with columns. If not, use the ones from the timeseries table if they are not NA. If yes, use the ones from the source function, replacing NAs in these columns with the timeseries table values if they are not NA.
+      if ("owner" %in% names(ts)) {
+        if (!is.na(owner)) {
+          ts$owner[is.na(ts$owner)] <- owner
+        }
+      } else {
+        if (!is.na(owner)) {
+          ts$owner <- owner
+        }
       }
-      ts$share_with <- share_with
+      if ("share_with" %in% names(ts)) {
+        if (!is.na(share_with)) {
+          ts$share_with[is.na(ts$share_with)] <- share_with
+        }
+      } else {
+        if (!is.na(share_with)) {
+          ts$share_with <- share_with
+        }
+      }
+      
       
       if (nrow(ts) > 0) {
+        # colnames(ts) <- c("datetime", "value", "owner", "share_with")
+        
         ts$timeseries_id <- tsid
         DBI::dbWithTransaction(
           con, {
