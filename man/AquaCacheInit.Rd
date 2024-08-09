@@ -15,7 +15,9 @@ AquaCacheInit(con = AquaConnect(), overwrite = FALSE)
 New tables in the target postgres database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
 
-Populates a postgreSQL database or replaces existing tables. Establishes pre-set schemas and populates some tables with initial values. No indices are specified as the primary keys fulfill this task already.
+NOTE: there is no guarantee that the code in this function will work as expected. It is intended to be a starting point for creating a database schema and populating it with initial values. The user should review the code and make any necessary changes to suit their needs. It may be necessary to run the code line by line rather than as a function if failure occurs, as it is possible that SQL errors exist in this script.
+
+Populates a postgreSQL database with tables, pre-set information, relationships, checks, triggers, etc. designed to hold timeseries and discrete data, documents, images, rasters, vectors, and other data types relevant to hydrology, meteorology, water quality, geochemistry, and other physical sciences.. Establishes pre-set schemas and populates some tables with initial values. Note that no indices are specified as the primary keys fulfill this task already.
 }
