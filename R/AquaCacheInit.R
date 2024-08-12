@@ -652,7 +652,7 @@ CREATE TABLE parameter_sub_groups (
 );")
   
   sub_grps <- data.frame( sub_group_name = c("pesticides/insecticides/fungicides", "pharmaceuticals", "cyano/phytotoxins", "PFAS", "PCBs", "PAHs", "BDEs", "hydrocarbons - others", "metals", "non-metals", "anions", "cations", "nitrogen", "phosphorus", "toxicity", "microbiological", "photosynthetic pigments", "other"),
-                          sub_group_name_fr = c("pesticides/insecticides/fongicides", "m\u00E9dicaments", "cyano/phytotoxines", "PFAS", "PCB", "HPA", NA, "hydrocarbures - autres", "m\u00E9taux", "non-m\u00E9taliques", "anions", "cations", "azote", "phosphore", "toxicit\u00E9", "microbiologique", "pigments photosynthétiques", "autre"),
+                          sub_group_name_fr = c("pesticides/insecticides/fongicides", "m\u00E9dicaments", "cyano/phytotoxines", "PFAS", "PCB", "HPA", NA, "hydrocarbures - autres", "m\u00E9taux", "non-m\u00E9taliques", "anions", "cations", "azote", "phosphore", "toxicit\u00E9", "microbiologique", "pigments photosynth\u00E9tiques", "autre"),
                           description = c("Pesticides, insecticides, and fungicides", "Pharmaceutical compounds", "Cyanotoxins and phytotoxins", "Per- and polyfluoroalkyl substances", "Brominated diphenyl ethers", "Polychlorinated biphenyls", "Polycyclic aromatic hydrocarbons", "hydrocarbons, others", "Metallic elements", "Non-metallic elements", "Anions", "Cations", "Nitrogen compounds", "Phosphorus compounds", "Toxicity parameters such as LC50", "Microbiological parameters such as bacterial counts, algae concentration", NA, NA),
                           description_fr = c("Pesticides, insecticides et fongicides", "Compos\u00E9s pharmaceutiques", "Cyano-toxines et phytotoxines", "Substances per- et polyfluoroalkyles", NA, "Biph\u00E9nyles polychlor\u00E9s", "Hydrocarbures aromatiques polycycliques", "hydrocarbures, autres", "El\u00E9ments m\u00E9talliques", "El\u00E9ments non-m\u00E9taliques", "Anions", "Cations","Compos\u00E9s azot\u00E9s", "Compos\u00E9s phosphor\u00E9s", "Param\u00E8tres de toxicit\u00E9 tels que LC50", "Param\u00E8tres microbiologiques tels que les comptes bact\u00E9riens, la concentration en algues", NA, NA))
   
@@ -694,7 +694,7 @@ CREATE TABLE parameter_relationships (
   
 
   # Load the parameters, groups, sub-groups table from the inst folder or the package root if installed
-  params <- read.csv(system.file("extdata/parameters.csv", package = "AquaCache"))
+  params <- utils::read.csv(system.file("extdata/parameters.csv", package = "AquaCache"))
   params$param_name <- tolower(params$param_name)  # Make sure all parameter names are lowercase, YGwater package has function to ensure proper capitalization based on selected language
   params <- params[, -which(names(params) == "DataStream_group")]
   names(params) <- c("param_name", "result_speciation", "sample_fraction", "cas_number", "group", "subgroup", "unit_default", "unit_solid")
@@ -730,9 +730,9 @@ CREATE TABLE parameter_relationships (
                description_fr TEXT);")
   
   medias <- data.frame(media_type = c("surface water", "ground water", "waste water", "waste water effluent", "seep", "drinking water", "sediment, sub-surface", "sediment, surface water", "rain water", "ocean water", "atmospheric"),
-                       media_type_fr = c("eau de surface", "eau souterraine", "eau usée", "effluent d'eau usée", "exsurgence", "eau potable", "sédiment, sol", "sédiment, eau de surface", "eau de pluie", "eau de mer", "atmosphérique"),
+                       media_type_fr = c("eau de surface", "eau souterraine", "eau us\u00E9e", "effluent d'eau us\u00E9e", "exsurgence", "eau potable", "s\u00E9diment, sol", "s\u00E9diment, eau de surface", "eau de pluie", "eau de mer", "atmosph\u00E9rique"),
                        description = c("Surface water", "Water extracted from the ground.", "Water samples prior to or during waste water treatment.", "Water downstream of waste water treatment facilities", "Water that comes out of the ground by without pumping.", "Water used for drinking purposes, pre or post treatment.", "Sediment from a soil sample outside of an aquatic environment.", "Sediment from a surface water environment", NA, NA, "Temperature, humidity, wind speed, precipitation rate and accumulation, etc."),
-                       description_fr = c("Eau de surface", "Eau extraite du sol.", "Échantillons d'eau avant ou pendant le traitement des eaux usées.", "Eau en aval des installations de traitement des eaux usées", "Eau qui sort du sol sans pompage.", "Eau utilisée à des fins de consommation, avant ou après traitement.", "Sédiment provenant d'un échantillon de sol hors d'un environment aquatique.", "Sédiment provenant d'un environment aquatique en surface.", NA, NA, "Température, humidité, vitesse du vent, taux et accumulation de précipitations, etc.")
+                       description_fr = c("Eau de surface", "Eau extraite du sol.", "\u00C9chantillons d'eau avant ou pendant le traitement des eaux us\u00E9es.", "Eau en aval des installations de traitement des eaux us\u00E9es", "Eau qui sort du sol sans pompage.", "Eau utilis\u00E9e \u00E0 des fins de consommation, avant ou apr\u00E8s traitement.", "S\u00E9diment provenant d'un \u00E9chantillon de sol hors d'un environment aquatique.", "S\u00E9diment provenant d'un environment aquatique en surface.", NA, NA, "Temp\u00E9rature, humidit\u00E9, vitesse du vent, taux et accumulation de pr\u00E9cipitations, etc.")
   )
   DBI::dbAppendTable(con, "media_types", medias)
 

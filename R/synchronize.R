@@ -5,7 +5,7 @@
 #'
 #' The synchronize function pulls and replaces data of category 'continuous' and 'discrete' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. For continuous data daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 #'
-#' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote.
+#' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote, and any data point labelled as no_update = TRUE is not replaced by the remote data.
 #'
 #'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
 #'
@@ -149,7 +149,13 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
 
       if (nrow(inRemote) > 0) {
         if (category == "continuous") {
-          inDB <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          # Set aside any rows where no_update == TRUE
+          no_update <- inDB[inDB$no_update == TRUE, ]
+          inDB <- inDB[inDB$no_update == FALSE, ]
+          # Drop no_update columns
+          inDB$no_update <- NULL
+          no_update$no_update <- NULL
           #Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
           imputed <- inDB[inDB$imputed == TRUE , ]
           imputed.remains <- data.frame()
@@ -161,7 +167,13 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
             }
           }
         } else if (category == "discrete") {
-          inDB <- DBI::dbGetQuery(con, paste0("SELECT target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          # Set aside any rows where no_update == TRUE
+          no_update <- inDB[inDB$no_update == TRUE, ]
+          inDB <- inDB[inDB$no_update == FALSE, ]
+          # Drop no_update columns
+          inDB$no_update <- NULL
+          no_update$no_update <- NULL
           # Drop completely empty columns
           inDB <- inDB[, colSums(is.na(inDB)) < nrow(inDB)]
         }
@@ -181,14 +193,26 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
             
             # Create a unique datetime key for both data frames
             if (category == "continuous") {
+              # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote.
+              if (nrow(no_update) > 0) {
+                inRemote <- inRemote[!(inRemote$datetime %in% no_update$datetime), ]
+                inDB <- inDB[!(inDB$datetime %in% no_update$datetime), ]
+              }
+              # Make keys
               inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
               inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, inDB$grade, inDB$approval, sep = "|")
             } else if (category == "discrete") {
+              # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote. In this case though, entries are unique on datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type so things are slower
+              if (nrow(no_update) > 0) {
+                for (j in 1:nrow(no_update)) {
+                  inRemote <- inRemote[!(inRemote$datetime == no_update[j, "datetime"] & inRemote$sample_type == no_update[j, "sample_type"] & inRemote$collection_method == no_update[j, "collection_method"] & inRemote$sample_fraction == no_update[j, "sample_fraction"] & inRemote$result_speciation == no_update[j, "result_speciation"] & inRemote$result_value_type == no_update[j, "result_value_type"]), ]
+                }
+              }
               
+              # Make keys
               # These column names can all be present in either data.frame: target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab. 
               # Some will not be present in one and/or the other. Build a key with all columns present in one or the other data.frame. 
               # target_datetime and datetime need to be rounded to be truncated to 22 characters to prevent rounding errors.
-
               inRemote$datetime <- substr(as.character(inRemote$datetime), 1, 22)
               inDB$datetime <- substr(as.character(inDB$datetime), 1, 22)
               if (!("target_datetime" %in% names(inRemote))) {

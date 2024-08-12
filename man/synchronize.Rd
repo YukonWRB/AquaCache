@@ -31,7 +31,7 @@ Updated entries in the hydro database.
 
 The synchronize function pulls and replaces data of category 'continuous' and 'discrete' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. For continuous data daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables.
 
-NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote.
+NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote, and any data point labelled as no_update = TRUE is not replaced by the remote data.
 
 Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[=downloadAquarius]{downloadAquarius()}} for more information.
 }

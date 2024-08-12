@@ -24,7 +24,7 @@ plot_ts <- function(tables){
 ### ------------------------  Add new precip data ------------------------  ####
 con <- AquaConnect()
 
-precip_all <- read.csv("Precip_March.csv")
+precip_all <- utils::read.csv("Precip_March.csv")
 
 # Fix datetime
 precip_all$datetime <- lubridate::ceiling_date(as.Date(paste0(precip_all$year, "-", precip_all$month, "-01")), "month") - lubridate::days(1)
@@ -297,7 +297,7 @@ whitehorse_precip <- whitehorse_precip[format(whitehorse_precip$date, "%m") %in%
                                          format(whitehorse_precip$date, "%m") %in% c("04","06","09","11") & whitehorse_precip$count >= 29, ]
 
 ## Pull in snow bulletin csv
-whitehorse_precip_sb <- read.csv(paste0(folder, "whitehorse_precip_sb.csv"))
+whitehorse_precip_sb <- utils::read.csv(paste0(folder, "whitehorse_precip_sb.csv"))
 # Put into long format
 whitehorse_precip_sb <- whitehorse_precip_sb %>%
   tidyr::pivot_longer(cols=names(whitehorse_precip_sb[, 2:length(whitehorse_precip_sb)]),
@@ -365,7 +365,7 @@ dawson_precip <- dawson_precip[format(dawson_precip$date, "%m") %in% c("02") & d
 
 
 ## Pull in snow bulletin csv
-dawson_precip_sb <- read.csv(paste0(folder, "dawson_precip_sb.csv"))
+dawson_precip_sb <- utils::read.csv(paste0(folder, "dawson_precip_sb.csv"))
 # Put into long format
 dawson_precip_sb <- dawson_precip_sb %>%
   tidyr::pivot_longer(cols=names(dawson_precip_sb[, 2:length(dawson_precip_sb)]),
@@ -437,7 +437,7 @@ teslin_precip <- teslin_precip[format(teslin_precip$date, "%m") %in% c("02") & t
 
 
 ## Pull in snow bulletin csv
-teslin_precip_sb <- read.csv(paste0(folder, "teslin_precip_sb.csv"))
+teslin_precip_sb <- utils::read.csv(paste0(folder, "teslin_precip_sb.csv"))
 # Put into long format
 teslin_precip_sb <- teslin_precip_sb %>%
   tidyr::pivot_longer(cols=names(teslin_precip_sb[, 2:length(teslin_precip_sb)]),
@@ -506,7 +506,7 @@ carmacks_precip <- carmacks_precip[format(carmacks_precip$date, "%m") %in% c("02
 
 
 ## Pull in snow bulletin csv
-carmacks_precip_sb <- read.csv(paste0(folder, "carmacks_precip_sb.csv"))
+carmacks_precip_sb <- utils::read.csv(paste0(folder, "carmacks_precip_sb.csv"))
 # Put into long format
 carmacks_precip_sb <- carmacks_precip_sb %>%
   tidyr::pivot_longer(cols=names(carmacks_precip_sb[, 2:length(carmacks_precip_sb)]),
@@ -575,7 +575,7 @@ watsonlake_precip <- watsonlake_precip[format(watsonlake_precip$date, "%m") %in%
 
 
 ## Pull in snow bulletin csv
-watsonlake_precip_sb <- read.csv(paste0(folder, "watsonlake_precip_sb.csv"))
+watsonlake_precip_sb <- utils::read.csv(paste0(folder, "watsonlake_precip_sb.csv"))
 # Put into long format
 watsonlake_precip_sb <- watsonlake_precip_sb %>%
   tidyr::pivot_longer(cols=names(watsonlake_precip_sb[, 2:length(watsonlake_precip_sb)]),
@@ -644,7 +644,7 @@ mayo_precip <- mayo_precip[format(mayo_precip$date, "%m") %in% c("02") & mayo_pr
 
 
 ## Pull in snow bulletin csv
-mayo_precip_sb <- read.csv(paste0(folder, "mayo_precip_sb.csv"))
+mayo_precip_sb <- utils::read.csv(paste0(folder, "mayo_precip_sb.csv"))
 # Put into long format
 mayo_precip_sb <- mayo_precip_sb %>%
   tidyr::pivot_longer(cols=names(mayo_precip_sb[, 2:length(mayo_precip_sb)]),
@@ -713,7 +713,7 @@ oldcrow_precip <- oldcrow_precip[format(oldcrow_precip$date, "%m") %in% c("02") 
 
 
 ## Pull in snow bulletin csv
-oldcrow_precip_sb <- read.csv(paste0(folder, "oldcrow_precip_sb.csv"))
+oldcrow_precip_sb <- utils::read.csv(paste0(folder, "oldcrow_precip_sb.csv"))
 # Put into long format
 oldcrow_precip_sb <- oldcrow_precip_sb %>%
   tidyr::pivot_longer(cols=names(oldcrow_precip_sb[, 2:length(oldcrow_precip_sb)]),
@@ -771,7 +771,7 @@ whitehorse_temp <- whitehorse[whitehorse$variable=="mean_temp",]
 whitehorse_temp <- whitehorse_temp[whitehorse_temp$date >= "1942-04-01",]
 
 ## Pull in snow bulletin csv
-whitehorse_temp_sb <- read.csv(paste0(folder, "whitehorse_temp_sb.csv"))
+whitehorse_temp_sb <- utils::read.csv(paste0(folder, "whitehorse_temp_sb.csv"))
 # Put into long format
 whitehorse_temp_sb <- whitehorse_temp_sb %>%
   tidyr::pivot_longer(cols=names(whitehorse_temp_sb[, 2:length(whitehorse_temp_sb)]),
@@ -823,7 +823,7 @@ dawson_temp <- dawson[dawson$variable=="mean_temp",]
 dawson_temp <- dawson_temp[dawson_temp$date >= "1897-07-22",]
 
 ## Pull in snow bulletin csv
-dawson_temp_sb <- read.csv(paste0(folder, "Dawson_temp_sb.csv"))
+dawson_temp_sb <- utils::read.csv(paste0(folder, "Dawson_temp_sb.csv"))
 # Put into wide format
 dawson_temp_sb <- dawson_temp_sb %>%
   tidyr::pivot_longer(cols=names(dawson_temp_sb[, 2:length(dawson_temp_sb)]),
@@ -872,7 +872,7 @@ faro_temp <- faro[faro$variable=="mean_temp",]
 faro_temp <- faro_temp[faro_temp$date >= "1966-04-01",]
 
 ## Pull in snow bulletin csv
-faro_temp_sb <- read.csv(paste0(folder, "Faro_temp_sb.csv"))
+faro_temp_sb <- utils::read.csv(paste0(folder, "Faro_temp_sb.csv"))
 # Put into long format
 faro_temp_sb <- faro_temp_sb %>%
   tidyr::pivot_longer(cols=names(faro_temp_sb[, 2:length(faro_temp_sb)]),
@@ -1040,7 +1040,7 @@ oldcrow_temp <- oldcrow[oldcrow$variable=="mean_temp",]
 oldcrow_temp <- oldcrow_temp[oldcrow_temp$date >= "1951-09-18",]
 
 ## Pull in snow bulletin csv
-oldcrow_temp_sb <- read.csv(paste0(folder, "oldcrow_temp_sb.csv"))
+oldcrow_temp_sb <- utils::read.csv(paste0(folder, "oldcrow_temp_sb.csv"))
 # Put into long format
 oldcrow_temp_sb <- oldcrow_temp_sb %>%
   tidyr::pivot_longer(cols=names(oldcrow_temp_sb[, 2:length(oldcrow_temp_sb)]),
@@ -1091,7 +1091,7 @@ carmacks_temp <- carmacks[carmacks$variable=="mean_temp",]
 carmacks_temp <- carmacks_temp[carmacks_temp$date >= "1963-08-28",]
 
 ## Pull in snow bulletin csv
-carmacks_temp_sb <- read.csv(paste0(folder, "carmacks_temp_sb.csv"))
+carmacks_temp_sb <- utils::read.csv(paste0(folder, "carmacks_temp_sb.csv"))
 # Put into long format
 carmacks_temp_sb <- carmacks_temp_sb %>%
   tidyr::pivot_longer(cols=names(carmacks_temp_sb[, 2:length(carmacks_temp_sb)]),
@@ -1140,7 +1140,7 @@ mayo_temp <- mayo[mayo$variable=="mean_temp",]
 mayo_temp <- mayo_temp[mayo_temp$date >= "1925-01-12",]
 
 ## Pull in snow bulletin csv
-mayo_temp_sb <- read.csv(paste0(folder, "mayo_temp_sb.csv"))
+mayo_temp_sb <- utils::read.csv(paste0(folder, "mayo_temp_sb.csv"))
 # Put into long format
 mayo_temp_sb <- mayo_temp_sb %>%
   tidyr::pivot_longer(cols=names(mayo_temp_sb[, 2:length(mayo_temp_sb)]),
@@ -1232,7 +1232,7 @@ dawson_temp <- dawson_temp[order(dawson_temp$monthday),]
 write.csv(dawson_temp, paste0(folder,"Dawson_temp_auto.csv"))
 
 ## Pull in csv
-dawson_temp_all <- read.csv(paste0(folder, "Dawson_temp_all.csv"))
+dawson_temp_all <- utils::read.csv(paste0(folder, "Dawson_temp_all.csv"))
 # Put into wide format
 dawson_temp_all <- dawson_temp_all %>%
   tidyr::pivot_longer(cols=names(dawson_temp_all[, 2:length(dawson_temp_all)]),
