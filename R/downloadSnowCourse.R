@@ -95,16 +95,17 @@ downloadSnowCourse <- function(location, param_code, start_datetime, end_datetim
   } else {
     #Get measurements for that location beginning after the start_datetime
     meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, ", param_code, ", estimate_flag FROM means WHERE location = '", location, "' AND survey_date >= '", start_datetime, "' AND survey_date <= '", end_datetime, "';"))
-    names(meas) <- c("target_datetime", "datetime", "value", "note")
+    names(meas) <- c("target_datetime", "datetime", "value", "result_value_type")
     # Adjust the plain date to middle of the day MST
     meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
     meas$datetime <- as.POSIXct(meas$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
   }
   if (nrow(meas) > 0) {
-    meas$note <- as.character(meas$note)
-    meas$note[meas$note == "TRUE"] <- "estimated"
-    meas$note[meas$note == "FALSE"] <- NA
-    meas$sample_class <- "M"
+    meas$result_value_type[meas$result_value_type] <- 5 # estimated
+    meas$result_value_type[!meas$result_value_type] <- 1 # actual
+    meas$sample_type <- 1  # 1 = field msr/obs
+    meas$collection_method <- 1 # observation
+    meas$protocol <- 1 # BC Snow Survey Sampling Guide
   } else {
     meas <- data.frame()
   }

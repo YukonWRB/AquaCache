@@ -16,6 +16,8 @@
 
 downloadEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
 
+  stop("This function has not yet been updated to work with the new (as of early August 2024) measurements_discrete table schema.")
+  
   # Checking start_datetime parameter
   tryCatch({
     if (inherits(start_datetime, "character") & nchar(start_datetime) > 10) { #Does not necessarily default to 0 hour.

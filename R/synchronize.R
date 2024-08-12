@@ -139,7 +139,13 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
       }
       
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
-      inRemote <- inRemote[!is.na(inRemote$value) , ]
+      # discrete data can have NA values (subject to several checks), but continuous data cannot
+      if (category == "continuous") {
+        inRemote <- inRemote[!is.na(inRemote$value) , ]
+      }  else {
+        # Drop completely empty columns
+        inRemote <- inRemote[, colSums(is.na(inRemote)) < nrow(inRemote)]
+      }
 
       if (nrow(inRemote) > 0) {
         if (category == "continuous") {
@@ -155,7 +161,9 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
             }
           }
         } else if (category == "discrete") {
-          inDB <- DBI::dbGetQuery(con, paste0("SELECT target_datetime, datetime, value, note, sample_class FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          inDB <- DBI::dbGetQuery(con, paste0("SELECT target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          # Drop completely empty columns
+          inDB <- inDB[, colSums(is.na(inDB)) < nrow(inDB)]
         }
         
         if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch
@@ -176,8 +184,23 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
               inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
               inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, inDB$grade, inDB$approval, sep = "|")
             } else if (category == "discrete") {
-              inRemote$key <- paste(substr(as.character(inRemote$target_datetime), 1, 22), substr(as.character(inRemote$datetime), 1, 22), inRemote$value, inRemote$note, inRemote$sample_class, sep = "|")
-              inDB$key <- paste(substr(as.character(inDB$target_datetime), 1, 22), substr(as.character(inDB$datetime), 1, 22), inDB$value, inDB$note, inDB$sample_class, sep = "|")
+              
+              # These column names can all be present in either data.frame: target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab. 
+              # Some will not be present in one and/or the other. Build a key with all columns present in one or the other data.frame. 
+              # target_datetime and datetime need to be rounded to be truncated to 22 characters to prevent rounding errors.
+
+              inRemote$datetime <- substr(as.character(inRemote$datetime), 1, 22)
+              inDB$datetime <- substr(as.character(inDB$datetime), 1, 22)
+              if (!("target_datetime" %in% names(inRemote))) {
+                inRemote$target_datetime <- substr(as.character(inRemote$target_datetime), 1, 22)
+              }
+              if (!("target_datetime" %in% names(inDB))) {
+                inDB$target_datetime <- substr(as.character(inDB$target_datetime), 1, 22)
+              }
+              
+              # Create the key on inRemote and inDB using all columns present in each data.frame
+              inRemote$key <- do.call(paste, c(inRemote, sep = "|"))
+              inDB$key <- do.call(paste, c(inDB, sep = "|"))
             }
             
             # Check for mismatches using set operations
