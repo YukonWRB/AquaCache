@@ -231,7 +231,7 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
   sample_fraction_id SERIAL PRIMARY KEY,
   sample_fraction TEXT UNIQUE NOT NULL
 );")
-  fractions <- data.frame(sample_fraction = c("Weak acid dissociable", "Strong acid dissociable", "Acid Soluble", "Bioavailable", "Dissolved", "Extractable", "Filterable", "Filtered", "Filtered, field", "Filtered, lab", "Free", "Inorganic", "Non-settleable", "Non-volatile", "Organic", "Settleable", "Supernate", "Suspended", "Total", "Total Recoverable", "Total Residual", "Unfiltered", "Vapor", "Volatile")
+  fractions <- data.frame(sample_fraction = c("weak acid dissociable", "strong acid dissociable", "acid Soluble", "bioavailable", "dissolved", "extractable", "filterable", "filtered", "filtered, field", "filtered, lab", "free", "inorganic", "non-settleable", "non-volatile", "organic", "settleable", "supernate", "suspended", "total", "total recoverable", "total Residual", "unfiltered", "vapor", "volatile")
   )
   DBI::dbAppendTable(con, "sample_fractions", fractions)
   
@@ -287,15 +287,15 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                    target_datetime TIMESTAMP WITH TIME ZONE,
                    datetime TIMESTAMP WITH TIME ZONE,
                    value NUMERIC,
-                   result_value_type INTEGER NOT NULL REFERENCES result_value_types(result_value_type_id),
-                   result_condition INTERGER REFERENCES result_conditions(result_condition_id),
+                   result_value_type INTEGER NOT NULL REFERENCES result_value_types(result_value_type_id) ON DELETE CASCADE ON UPDATE CASCADE,
+                   result_condition INTEGER REFERENCES result_conditions(result_condition_id) ON DELETE SET NULL ON UPDATE CASCADE,
                    result_condition_value NUMERIC,
-                   sample_type INTEGER NOT NULL REFERENCES sample_types(sample_type_id),
-                   collect_method INTEGER REFERENCES collection_methods(collection_method_id),
-                   sample_fraction INTEGER REFERENCES sample_fractions(sample_fraction_id),
-                   result_speciation INTEGER REFERENCES result_speciations(result_speciation_id),
-                   lab INTEGER REFERENCES laboratories(lab_id),
-                   protocol INTEGER REFERENCES analysis_protocols(protocol_id)
+                   sample_type INTEGER NOT NULL REFERENCES sample_types(sample_type_id) ON DELETE CASCADE ON UPDATE CASCADE,
+                   collect_method INTEGER REFERENCES collection_methods(collection_method_id) ON DELETE SET NULL ON UPDATE CASCADE,
+                   sample_fraction INTEGER REFERENCES sample_fractions(sample_fraction_id) ON DELETE SET NULL ON UPDATE CASCADE,
+                   result_speciation INTEGER REFERENCES result_speciations(result_speciation_id) ON DELETE SET NULL ON UPDATE CASCADE,
+                   lab INTEGER REFERENCES laboratories(lab_id) ON DELETE SET NULL ON UPDATE CASCADE,
+                   protocol INTEGER REFERENCES analysis_protocols(protocol_id) ON DELETE SET NULL ON UPDATE CASCADE,
                    note TEXT,
                    no_update BOOLEAN NOT NULL DEFAULT FALSE,
                    share_with INTEGER[] NOT NULL DEFAULT '{1}',
@@ -323,39 +323,6 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
   DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.sample_fraction IS 'The fraction of the sample, such as filtered, total, etc.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.lab IS 'The laboratory that performed the analysis. Can be NULL for field measurements or if the lab is not known.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN measurements_discrete.protocol IS 'The protocol used to analyze the sample. Can be NULL.';")
-  
-  
-
-  # sample_class table #################
-  DBI::dbExecute(con, "CREATE TABLE if not exists sample_class (
-                 code TEXT PRIMARY KEY,
-                 description TEXT NOT NULL,
-                 description_fr TEXT);")
-  class <- data.frame("code" = c("M", "D", "I", "U"),
-                      "description" = c("Monitoring (routine)", "Duplicate/Replicate or split sample", "Incident response", "Undefined"))
-  DBI::dbAppendTable(con, "sample_class", class)
-  DBI::dbExecute(con,
-                 "ALTER TABLE measurements_discrete
-                 ADD CONSTRAINT fk_class
-                 FOREIGN KEY (sample_class)
-                 REFERENCES sample_class(code)
-                 ON DELETE CASCADE
-                 ON UPDATE CASCADE;")
-  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_sample_class_exists()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM sample_class WHERE code = NEW.sample_class) THEN
-        RAISE EXCEPTION 'Invalid sample class code: %', NEW.sample_class;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-")
-  DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_sample_class
-BEFORE INSERT OR UPDATE OF sample_class ON measurements_discrete
-FOR EACH ROW
-EXECUTE FUNCTION check_sample_class_exists();
-")
 
   # grades table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists grades (
@@ -691,8 +658,7 @@ CREATE TABLE parameter_sub_groups (
   
   DBI::dbAppendTable(con, "parameter_sub_groups", sub_grps)
 
-
-  # Ce-create parameters and parameter_relationships tables
+  # Create parameters and parameter_relationships tables
   DBI::dbExecute(con, "CREATE TABLE parameters (
                param_code SERIAL PRIMARY KEY,
                param_name TEXT UNIQUE NOT NULL,
@@ -729,6 +695,7 @@ CREATE TABLE parameter_relationships (
 
   # Load the parameters, groups, sub-groups table from the inst folder or the package root if installed
   params <- read.csv(system.file("extdata/parameters.csv", package = "AquaCache"))
+  params$param_name <- tolower(params$param_name)  # Make sure all parameter names are lowercase, YGwater package has function to ensure proper capitalization based on selected language
   params <- params[, -which(names(params) == "DataStream_group")]
   names(params) <- c("param_name", "result_speciation", "sample_fraction", "cas_number", "group", "subgroup", "unit_default", "unit_solid")
   params$plot_default_y_orientation <- "normal"
@@ -761,6 +728,14 @@ CREATE TABLE parameter_relationships (
                media_type_fr TEXT UNIQUE NOT NULL,
                description TEXT,
                description_fr TEXT);")
+  
+  medias <- data.frame(media_type = c("surface water", "ground water", "waste water", "waste water effluent", "seep", "drinking water", "sediment, sub-surface", "sediment, surface water", "rain water", "ocean water", "atmospheric"),
+                       media_type_fr = c("eau de surface", "eau souterraine", "eau usée", "effluent d'eau usée", "exsurgence", "eau potable", "sédiment, sol", "sédiment, eau de surface", "eau de pluie", "eau de mer", "atmosphérique"),
+                       description = c("Surface water", "Water extracted from the ground.", "Water samples prior to or during waste water treatment.", "Water downstream of waste water treatment facilities", "Water that comes out of the ground by without pumping.", "Water used for drinking purposes, pre or post treatment.", "Sediment from a soil sample outside of an aquatic environment.", "Sediment from a surface water environment", NA, NA, "Temperature, humidity, wind speed, precipitation rate and accumulation, etc."),
+                       description_fr = c("Eau de surface", "Eau extraite du sol.", "Échantillons d'eau avant ou pendant le traitement des eaux usées.", "Eau en aval des installations de traitement des eaux usées", "Eau qui sort du sol sans pompage.", "Eau utilisée à des fins de consommation, avant ou après traitement.", "Sédiment provenant d'un échantillon de sol hors d'un environment aquatique.", "Sédiment provenant d'un environment aquatique en surface.", NA, NA, "Température, humidité, vitesse du vent, taux et accumulation de précipitations, etc.")
+  )
+  DBI::dbAppendTable(con, "media_types", medias)
+
 
   # extrema table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists extrema (
