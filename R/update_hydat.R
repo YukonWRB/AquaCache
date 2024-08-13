@@ -85,7 +85,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
 
       if (nrow(new_flow) > 0) {
         tryCatch({
-          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE param_name = 'water flow'")[1,1]
+          param_code <- DBI::dbGetQuery(con, "SELECT param_code FROM parameters WHERE param_name = 'discharge, river/stream'")[1,1]
           media_code <- DBI::dbGetQuery(con, "SELECT media_code FROM media_types WHERE media_type = 'surface water'")[1,1]
           location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", i, "';"))[1,1]
           tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter = ", param_code, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]

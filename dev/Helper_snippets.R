@@ -3,7 +3,7 @@ con <- AquaConnect()
 
 # Adding timeseries
 timeseries_df <- data.frame(location = "09DC007",
-                            parameter = c("water level", "water flow"),
+                            parameter = c("water level", "discharge, river/stream"),
                             category = "continuous",
                             period_type = c("instantaneous"),
                             media_type = "surface water",
