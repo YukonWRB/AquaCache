@@ -334,7 +334,7 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
             }, error = function(e) {
               warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
             })
-            if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "water flow")) {
+            if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "discharge, river/stream")) {
               message("Adding historical data from HYDAT database")
               suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
             }
