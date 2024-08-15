@@ -55,25 +55,22 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
       earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
       
-      # Below lines deal with timeseries that don't have daily values but should, or don't have them far enough in the past
-      if (is.na(earliest_day_historic)) {
+      # Below lines deal with timeseries that don't have daily values but should, or don't have them far enough in the past. We check if it's necessary to calculate further back in time than start_recalc_i.
+      if (is.na(earliest_day_historic)) { # This means that no daily values have been calculated yet, or that they've been completely deleted from the database. In that case we start recalculation straight from the earliest measurement date.
         earliest_day_historic <- earliest_day_measurements
         last_day_historic <- earliest_day_measurements
         start_recalc_i <- earliest_day_measurements
-      } else if (is.na(earliest_day_measurements)) {
-        if (last_day_historic < Sys.Date() - 30) { # If this is the case there should be no data to recalculate anymore. setting start_recalc_i to last_day_historic should yield a data.frame of 0 rows and trigger next
+      } else if (is.na(earliest_day_measurements)) { # In this case there are no realtime measurements but there are calculated daily values
+        if (last_day_historic < Sys.Date() - 30) { # If this is the case there should be no data to recalculate anymore unless it's been a long time since the last calc or they've been deleted for some reason.
           start_recalc_i <- last_day_historic
         } else { 
           start_recalc_i <- Sys.Date() - 2
         }
         start_recalc_i <- last_day_historic
-      } else if (earliest_day_historic < earliest_day_measurements) {
-        start_recalc_i <- earliest_day_historic
+      } else if (earliest_day_measurements < earliest_day_historic) { # If we got to here there are measurements and daily values. Check if measurements start earlier than daily values.
+        start_recalc_i <- earliest_day_measurements
       }
       
-      if (length(earliest_day_historic) == 0) { # This is the case where there is no data in the calculated_daily table yet
-        earliest_day_historic <- earliest_day_measurements
-      }
       tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, source_fx FROM timeseries WHERE timeseries_id = ", i, ";"))
       period_type <- tmp[1,1] # Daily values are calculated differently depending on the period type
       source_fx <- tmp[1,2]  #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
@@ -92,7 +89,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             last_day_historic <- NA
           }
         }
-      } else { #start_recalc_i is NULL
+      } else { #start_recalc_i is NULL so let's find out when to start recalculating
         if (!is.na(last_day_historic) & !is.na(earliest_day_measurements)) {
           last_day_historic <- last_day_historic - 2 # recalculate the last two days of historic data in case new data has come in
         } else if (is.na(last_day_historic) & !is.na(earliest_day_measurements)) { #say, a new timeseries that isn't in hydat yet or one that's just being added and has no calculations yet
@@ -105,6 +102,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
       if (is.na(last_day_historic)) {
         skip <- TRUE
       }
+      
       if (!skip) {
         missing_stats <- data.frame()
         flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
@@ -409,6 +407,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
     }, error = function(e) {
       warning("calculate_stats: failed to calculate stats for timeseries_id ", i, ".")
     }) #End of tryCatch for stats calculation
+    
     if (skip) {
       message("Skipping calculations for timeseries ", i, " as it looks like nothing needs to be calculated.")
       next
