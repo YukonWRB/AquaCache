@@ -549,6 +549,11 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE
                  );")
   
+  doc_types <- data.frame(document_type_en = c("thesis", "data sharing agreement", "report", "well log", "conference paper","poster",
+                          "journal article", "map", "graph", "protocol", "metadata", "audit"),
+                          document_type_fr = c("th\u00E8se", "accord de partage de donn\u00E9es", "rapport", "journal de puits", "article de conf\u00E9rence", "affiche", "article de journal", "carte", "graphique", "protocole", "m\u00E9tadonn\u00E9es", "audit"))
+  DBI::dbAppendTable(con, "document_types", doc_types)
+  
   DBI::dbExecute(con, "CREATE TABLE if not exists documents (
                  document_id SERIAL PRIMARY KEY,
                  name TEXT UNIQUE NOT NULL,
@@ -567,9 +572,39 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                  FOREIGN KEY (type) REFERENCES document_types(document_type_id) ON UPDATE CASCADE ON DELETE CASCADE);")
   DBI::dbExecute(con, "COMMENT ON TABLE public.documents IS 'Holds documents and metadata associated with each document. Each document can be associated with one or more location, line, or polygon, or all three.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.document_type IS 'One of thesis, report, well log, conference paper, poster, journal article, map, graph, protocol, grading scheme, metadata, other'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.has_points IS 'Flag to indicate that the document_spatial has a point entry for this document.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.documents.authors IS 'An *array* of one or more authors.'")
+  
+  
+  # Add data_sharing_agreement_id to locations and enforce checks
+  DBI::dbExecute(con, "ALTER TABLE locations ADD COLUMN data_sharing_agreement_id INTEGER REFERENCES documents(document_id)")
+  
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.locations.data_sharing_agreement_id IS 'An optional link to a data sharing agreement from the documents table. A check is enforced to ensure that this column only references documents of type ''data sharing agreement''.'")
+  
+  # Add constraint to documents.data_sharing_agreement_id
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_data_sharing_agreement() 
+RETURNS TRIGGER AS $$
+  BEGIN
+IF NEW.data_sharing_agreement IS NOT NULL THEN
+-- Check if the referenced document is of the correct type
+IF NOT EXISTS (
+  SELECT 1
+  FROM documents d
+  JOIN document_types dt ON d.type = dt.document_type_id
+  WHERE d.document_id = NEW.data_sharing_agreement
+  AND dt.document_type_en = 'data sharing agreement'
+) THEN
+RAISE EXCEPTION 'Invalid document type: data_sharing_agreement must reference a document of type ''data sharing agreement''';
+END IF;
+END IF;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;")
+  
+  DBI::dbExecute(con, "CREATE TRIGGER trg_check_data_sharing_agreement
+BEFORE INSERT OR UPDATE ON locations
+FOR EACH ROW
+EXECUTE FUNCTION check_data_sharing_agreement();")
 
 
   # timeseries table #################
