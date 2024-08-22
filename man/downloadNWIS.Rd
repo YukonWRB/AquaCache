@@ -24,7 +24,7 @@ downloadNWIS(
 \item{modifiedSince}{Optional. A number of hours to narrow the request down to only data points modified within the last x hours. Default NULL fetches all data with the \code{start_datetime} and \code{end_datetime} range.}
 }
 \value{
-A data.table object of hydrometric data, with datetimes in UTC-0.
+A data.frame object of hydrometric data, with datetimes in UTC-0.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

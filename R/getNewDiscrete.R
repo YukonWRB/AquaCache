@@ -46,7 +46,6 @@
 #'
 
 getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", active = 'default') {
-
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -211,8 +210,8 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
         }
         
         # Get the result_speciation and sample_fraction boolean values for the parameter. If TRUE then ts must contain columns result_speciation and sample_fraction.
-        result_speciation <- DBI::dbGetQuery(con, paste0("SELECT result_speciation FROM parameters WHERE parameter = '", parameter, "';"))[1,1]
-        sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT sample_fraction FROM parameters WHERE parameter = '", parameter, "';"))[1,1]
+        result_speciation <- DBI::dbGetQuery(con, paste0("SELECT result_speciation FROM parameters WHERE param_code = '", parameter, "';"))[1,1]
+        sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT sample_fraction FROM parameters WHERE param_code = '", parameter, "';"))[1,1]
         if (result_speciation == TRUE) {
           if (!("result_speciation" %in% names(ts))) {
             stop("The source function did not return a column 'result_speciation' but the parameter in the database has result_speciation set to TRUE.")

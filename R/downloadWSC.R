@@ -81,7 +81,7 @@ downloadWSC <- function(location, param_code, start_datetime, end_datetime = Sys
 
     return(data)
   } else {
-    data <- data.frame()
+    data <- data.table::data.table()
     return(data)
   }
 

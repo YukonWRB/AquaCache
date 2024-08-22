@@ -53,7 +53,7 @@ downloadSnowCourse <- function(location, param_code, start_datetime, end_datetim
 
   if (!is.null(old_loc)) {
     #Check if there are new measurements at the old station
-    old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, ", param_code, ", estimate_flag FROM means WHERE location = '", old_loc, "' AND survey_date > '", start_datetime, "';"))
+    old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, ", param_code, ", estimate_flag FROM means WHERE location = '", old_loc, "' AND survey_date >= '", start_datetime, "';"))
   } else {
     old_meas <- data.frame()
   }
