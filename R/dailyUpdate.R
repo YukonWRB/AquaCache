@@ -61,7 +61,7 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
       rt_duration <- Sys.time() - rt_start
       message("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), ".")
     }, error = function(e) {
-      warning("Error fetching new continuous data.")
+      warning("dailyUpdate: error fetching new continuous data. Returned message: ", e$message)
     })
   }
 
@@ -73,7 +73,7 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
       disc_duration <- Sys.time() - disc_start
       message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
     }, error = function(e) {
-      warning("Error fetching new discrete data.")
+      warning("dailyUpdate: error fetching new discrete data. Returned message: ", e$message)
     })
   }
 
@@ -84,7 +84,7 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
     img_duration <- Sys.time() - img_start
     message("getNewImages executed in ", round(img_duration[[1]], 2), " ", units(img_duration), ".")
   }, error = function(e) {
-    warning("Error fetching new images.")
+    warning("dailyUpdate: error fetching new images. Returned message: ", e$message)
   })
 
   ### Check for a new version of HYDAT, update timeseries in the database if needed. #####
@@ -104,7 +104,7 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
       update_hydat_datums(con = con)
     }
   }, error = function(e) {
-    warning("Error when checking for new HYDAT database or when updating datums.")
+    warning("dailyUpdate: error when checking for new HYDAT database or when updating datums. Returned message: ", e$message)
   })
 
 
@@ -128,7 +128,7 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
         message("No daily means and stats to calculate, skipping.")
       }
     }, error = function(e) {
-      warning("Error when trying to calculate new daily means and statistics.")
+      warning("dailyUpdate: error when trying to calculate new daily means and statistics. Returned message: ", e$message)
     })
   }
 

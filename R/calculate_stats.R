@@ -405,7 +405,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
         # Nothing here as it's taken care of outside the tryCatch loop
       }
     }, error = function(e) {
-      warning("calculate_stats: failed to calculate stats for timeseries_id ", i, ".")
+      warning("calculate_stats: failed to calculate stats for timeseries_id ", i, ". Returned error: ", e$message)
     }) #End of tryCatch for stats calculation
     
     if (skip) {
@@ -417,6 +417,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
     if (nrow(missing_stats) > 0) { #This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.
       tryCatch({
         missing_stats <- missing_stats[order(missing_stats$date), ]
+        missing_stats <- hablar::rationalize(missing_stats)  # Occasionally % historic range is dividing by zero (snowpack), so this replaces Inf, -Inf with NAs
         # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no calculated stats even if they are between the start and end date of missing_stats.
         delete_query <- paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", i, " AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "'")
         remaining_dates <- as.Date(setdiff(seq.Date(min(as.Date(missing_stats$date)), max(as.Date(missing_stats$date)), by = "day"), as.Date(missing_stats$date)), origin = "1970-01-01")
@@ -433,7 +434,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
           }
         )
       }, error = function(e) {
-        warning("calculate_stats: failed to append new statistics for timeseries_id ", i, ".")
+        warning("calculate_stats: failed to append new statistics for timeseries_id ", i, ". Returned error: ", e$message)
       }) #End of tryCatch for removing/adding to DB
     }
   } # End of for loop calculating means and stats for each station in timeseries table
