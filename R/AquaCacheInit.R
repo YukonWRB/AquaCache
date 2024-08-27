@@ -301,7 +301,7 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                    share_with INTEGER[] NOT NULL DEFAULT '{1}',
                    owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                    contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE
-                   UNIQUE(timeseries_id, datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type)
+                   UNIQUE NULLS NOT DISTINCT(timeseries_id, datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type)
                  );")
   DBI::dbExecute(con, "COMMENT ON TABLE public.measurements_discrete IS 'Holds discrete observations, such as snow survey results, laboratory analyses, etc.'
   ")
