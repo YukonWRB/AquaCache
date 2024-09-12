@@ -585,13 +585,13 @@ EXECUTE FUNCTION check_approval_exists_daily();
   DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION check_data_sharing_agreement() 
 RETURNS TRIGGER AS $$
   BEGIN
-IF NEW.data_sharing_agreement IS NOT NULL THEN
+IF NEW.data_sharing_agreement_id IS NOT NULL THEN
 -- Check if the referenced document is of the correct type
 IF NOT EXISTS (
   SELECT 1
   FROM documents d
   JOIN document_types dt ON d.type = dt.document_type_id
-  WHERE d.document_id = NEW.data_sharing_agreement
+  WHERE d.document_id = NEW.data_sharing_agreement_id
   AND dt.document_type_en = 'data sharing agreement'
 ) THEN
 RAISE EXCEPTION 'Invalid document type: data_sharing_agreement must reference a document of type ''data sharing agreement''';
