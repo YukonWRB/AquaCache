@@ -28,11 +28,11 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
   
   # Create connection setup to nupoint
   nupoint <- sftp::sftp_connect(
-    server = Sys.getenv("nupointServer"),
-    folder = Sys.getenv("nupointFolder"),
-    username = Sys.getenv("nupointUser"),
-    password = Sys.getenv("nupointPass"),
-    port = Sys.getenv("nupointPort"),
+    server = url,
+    folder = folder,
+    username = username,
+    password = password,
+    port = port,
     timeout = 120)
   
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
