@@ -118,13 +118,13 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
     source_fx <- timeseries_df[i, "source_fx"]
     record_rate <- timeseries_df[i, "record_rate"]
     parameter <- timeseries_df[i, "parameter"]
-    param_code <- DBI::dbGetQuery(con, paste0("SELECT param_code FROM parameters WHERE param_name = '", parameter, "';"))[,1]
+    parameter_id <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", parameter, "';"))[,1]
     period_type <- timeseries_df[i, "period_type"]
 
     if (is.na(record_rate)) {
-      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate IS NULL AND parameter = ", param_code, " AND period_type = '", period_type, "';"))
+      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate IS NULL AND parameter = ", parameter_id, " AND period_type = '", period_type, "';"))
     } else {
-      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate = '", record_rate, "' AND parameter = ", param_code, " AND period_type = '", period_type, "';"))
+      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate = '", record_rate, "' AND parameter = ", parameter_id, " AND period_type = '", period_type, "';"))
     }
     if (!is.null(settings_df)) { # A df was provided with settings info
       if (nrow(setting) == 1) { # There already is a setting in the DB for that combination, so do nothing
@@ -142,9 +142,9 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
           if (nrow(DBI::dbGetQuery(con, paste0("SELECT * FROM parameters WHERE param_name = '", parameter, "';"))) == 0) {
             stop("The parameter '", parameter, "' does not exist in the parameters table. Please add it first using the function parameter param_df.")
           } else {
-            # Get the param_code for the parameter and sub it in to sub.settings_df
-            param_code <- DBI::dbGetQuery(con, paste0("SELECT param_code FROM parameters WHERE param_name = '", parameter, "';"))[,1]
-            sub.settings_df$parameter <- param_code
+            # Get the parameter_id for the parameter and sub it in to sub.settings_df
+            parameter_id <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", parameter, "';"))[,1]
+            sub.settings_df$parameter <- parameter_id
           }
           DBI::dbAppendTable(con, "settings", sub.settings_df)
         } else if (nrow(sub.settings_df) > 1) {
@@ -227,14 +227,14 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
       add <- timeseries_df[i, -which(names(timeseries_df) == "start_datetime")]
       
       loc <- add$location
-      param_code <- DBI::dbGetQuery(con, paste0("SELECT param_code FROM parameters WHERE param_name = '", add$parameter, "';"))[,1]
+      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", add$parameter, "';"))[,1]
       media_code <- DBI::dbGetQuery(con, paste0("SELECT media_code FROM media_types WHERE media_type = '", add$media_type, "';"))[,1]
       source_fx <- add$source_fx
       period_type <- add$period_type
       record_rate <- add$record_rate
       source_fx_args <- add$source_fx_args
       param_name <- add$parameter
-      add$parameter <- param_code
+      add$parameter <- parameter_id
       add$media_type <- media_code
       tryCatch({
         DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
@@ -243,16 +243,16 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
         message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and this function automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries.")
       })
       
-      new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter = ", param_code, " AND category = '", add$category, "' AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
+      new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter = ", parameter_id, " AND category = '", add$category, "' AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
 
       if (is.na(record_rate)) {
-        param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", param_code, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
+        parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", parameter_id, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
       } else {
-        param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", param_code, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+        parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", parameter_id, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
       }
 
       if (!is.na(add$source_fx)) {
-        args_list <- list(location = loc, param_code = param_code, start_datetime = timeseries_df[i, "start_datetime"])
+        args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = timeseries_df[i, "start_datetime"])
         if (!is.na(source_fx_args)) {#add some arguments if they are specified
           args <- strsplit(source_fx_args, "\\},\\s*\\{")
           pairs <- lapply(args, function(pair) {

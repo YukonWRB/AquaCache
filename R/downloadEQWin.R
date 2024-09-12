@@ -6,7 +6,7 @@
 #' Brings in water quality data from the EQWin database. <DL values are transformed to the negative of the detection limit, > instrument range is left as the value. A note is added in either case to the 'note' column.
 #'
 #' @param location The location code associated with the snow course.
-#' @param param_code The parameter code as specified in the EQWin table eqparams.
+#' @param parameter_id The parameter code as specified in the EQWin table eqparams.
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param EQcon connection to the EQWin database. See EQConnect for details.
@@ -14,7 +14,7 @@
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
 
-downloadEQWin <- function(location, param_code, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
+downloadEQWin <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
 
   stop("This function has not yet been updated to work with the new (as of early August 2024) measurements_discrete table schema.")
   
@@ -55,7 +55,7 @@ downloadEQWin <- function(location, param_code, start_datetime, end_datetime = S
   SampleIds <- DBI::dbGetQuery(EQcon, paste0("SELECT SampleId, CollectDateTime, SampleClass FROM eqsampls WHERE StnId = ", StnId, " AND CollectDateTime >= #",  substr(as.character(start_datetime), 1,19), "# AND CollectDateTime <= #", substr(as.character(end_datetime), 1,19), "#;"))
   if (nrow(SampleIds) > 0) {
     SampleIds$CollectDateTime <- lubridate::force_tz(SampleIds$CollectDateTime, "MST")
-    ParamId <- DBI::dbGetQuery(EQcon, paste0("SELECT ParamId FROM eqparams WHERE ParamCode = '", param_code, "'"))[1,1]
+    ParamId <- DBI::dbGetQuery(EQcon, paste0("SELECT ParamId FROM eqparams WHERE ParamCode = '", parameter_id, "'"))[1,1]
     # Find the measurements for the parameter of interest. There won't necessarily be a measurement for each sample (nrow(meas) may be < nrow(sampleIds))
     meas <- DBI::dbGetQuery(EQcon, paste0("SELECT SampleId, Result FROM eqdetail WHERE SampleId IN (", paste(SampleIds$SampleId, collapse = ", "), ") AND ParamId = ", ParamId, ";"))
     if (nrow(meas) > 0) {

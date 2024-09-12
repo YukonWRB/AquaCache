@@ -112,7 +112,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             hydat_check(silent = TRUE)
             hydat_checked <- TRUE
           }
-          tmp <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter = p.param_code WHERE t.timeseries_id = ", i, ";"))
+          tmp <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter_id, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter_id = p.parameter_id WHERE t.timeseries_id = ", i, ";"))
           hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
           if (tmp[, "param_name"] == "discharge, river/stream") {
             last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_FLOWS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]

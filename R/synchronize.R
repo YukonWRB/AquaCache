@@ -53,15 +53,15 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
   
   if (timeseries_id[1] == "all") {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE source_fx IS NOT NULL")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE source_fx IS NOT NULL")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, active FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
     }
   } else {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
     }
     if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
       fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]
@@ -82,7 +82,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
   for (i in 1:nrow(all_timeseries)) {
     category <- all_timeseries$category[i]
     loc <- all_timeseries$location[i]
-    parameter <- all_timeseries$parameter[i]
+    parameter <- all_timeseries$parameter_id[i]
     period_type <- all_timeseries$period_type[i]
     record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
@@ -102,14 +102,14 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
     
     source_fx_args <- all_timeseries$source_fx_args[i]
     if (is.na(record_rate)) {
-      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
+      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
     } else {
-      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
     }
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
 
     tryCatch({
-      args_list <- list(location = loc, param_code = param_code, start_datetime = start_dt)
+      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair) {

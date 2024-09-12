@@ -47,7 +47,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   }
   
   
-  entry <- DBI::dbGetQuery(con, paste0("SELECT t.location, p.param_name AS parameter, t.category, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on T.parameter = p.param_code WHERE t.timeseries_id = ", tsid, ";"))
+  entry <- DBI::dbGetQuery(con, paste0("SELECT t.location, p.param_name AS parameter, t.category, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.timeseries_id = ", tsid, ";"))
   if (entry$category != "continuous") {
     stop("This function is not designed to work with discrete category timeseries.")
   }
@@ -243,10 +243,10 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
 
   # look for timeseries within the radius (in table nrby) that might have data that can be used to impute the missing values
   if (!is.null(extra_params)) { # if there are extra parameters, look for those as well
-    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter = p.param_code WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
     
   } else { # if there are no extra parameters, look for the same parameter at nearby locations
-    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter = p.param_code WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
   }
   
 

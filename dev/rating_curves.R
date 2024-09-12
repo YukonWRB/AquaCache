@@ -3,8 +3,8 @@
 DBI::dbExecute(con, "CREATE TABLE rating_curves_reference (
   curve_reference_id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
-  input_parameter_id INTEGER NOT NULL REFERENCES parameters(param_code),
-  output_parameter_id INTEGER NOT NULL REFERENCES parameters(param_code),
+  input_parameter_id INTEGER NOT NULL REFERENCES parameters(parameter_id),
+  output_parameter_id INTEGER NOT NULL REFERENCES parameters(parameter_id),
   last_modified TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   description TEXT,
   notes TEXT,

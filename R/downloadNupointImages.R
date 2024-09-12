@@ -21,6 +21,11 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
     stop("Parameter start_datetime must be a POSIXct.")
   }
   
+  # for variables left as "Sys.getenv(xxxx)", check that these exist
+  if (is.null(Sys.getenv("nupointUser")) | is.null(Sys.getenv("nupointPass")) | is.null(Sys.getenv("nupointServer")) | is.null(Sys.getenv("nupointPort")) | is.null(Sys.getenv("nupointFolder")) ) {
+    stop("One or more of the necessary environment variables are missing. Please ensure that nupointUser, nupointPass, nupointServer, nupointPort, and nupointFolder are set in your .Renviron file OR specify them yourself in the funciton call.")
+  }
+  
   # Create connection setup to nupoint
   nupoint <- sftp::sftp_connect(
     server = Sys.getenv("nupointServer"),

@@ -6,7 +6,7 @@
 \usage{
 downloadNWIS(
   location,
-  param_code,
+  parameter_id,
   start_datetime,
   end_datetime = Sys.time(),
   modifiedSince = NULL
@@ -15,7 +15,7 @@ downloadNWIS(
 \arguments{
 \item{location}{One ore more USGS station codes.}
 
-\item{param_code}{One or more USGS parameter codes. 65 for instantaneous gauge level, 60 for mean daily flow, 61 for instantaneous flow (though beware, these two might be flipped), 10 for water temperature, for example; see more \href{https://help.waterdata.usgs.gov/codes-and-parameters/parameters}{here}.}
+\item{parameter_id}{One or more USGS parameter codes. 65 for instantaneous gauge level, 60 for mean daily flow, 61 for instantaneous flow (though beware, these two might be flipped), 10 for water temperature, for example; see more \href{https://help.waterdata.usgs.gov/codes-and-parameters/parameters}{here}.}
 
 \item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 

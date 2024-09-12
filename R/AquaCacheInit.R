@@ -611,8 +611,8 @@ EXECUTE FUNCTION check_data_sharing_agreement();")
   DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
-                 parameter INTEGER NOT NULL,
-                 media_type INTEGER NOT NULL,
+                 parameter_id INTEGER NOT NULL,
+                 media_id INTEGER NOT NULL,
                  category TEXT NOT NULL CHECK(category IN ('discrete', 'continuous')),
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
                  record_rate TEXT NOT NULL,
@@ -629,7 +629,7 @@ EXECUTE FUNCTION check_data_sharing_agreement();")
                  note TEXT,
                  share_with INTEGER[] NOT NULL DEFAULT '{1}',
                  owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
-                 UNIQUE (location, parameter, category, period_type, media_type, record_rate, z),
+                 UNIQUE (location, parameter_id, category, period_type, media_id, record_rate, z),
                  CONSTRAINT check_record_rate_constraints
                      CHECK (
                      (category = 'discrete' AND record_rate IS NULL) OR
@@ -637,7 +637,7 @@ EXECUTE FUNCTION check_data_sharing_agreement();")
                      )
                  );")
   DBI::dbExecute(con, "
-  COMMENT ON TABLE public.timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, media_type, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
+  COMMENT ON TABLE public.timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, media_id, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
   ")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.active IS 'Defines if the timeseries should or should not be added to or back-corrected by various AquaCache package functions.';")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.timeseries.z IS 'Elevation of the measurement station, in meters. Used for things like thermistor strings, wind towers, or forecast climate parameters at different heights. Z elevations should be taken in the context of the location's assigned elevation and datum.';")
@@ -695,7 +695,7 @@ CREATE TABLE parameter_sub_groups (
 
   # Create parameters and parameter_relationships tables
   DBI::dbExecute(con, "CREATE TABLE parameters (
-               param_code SERIAL PRIMARY KEY,
+               parameter_id SERIAL PRIMARY KEY,
                param_name TEXT UNIQUE NOT NULL,
                param_name_fr TEXT UNIQUE,
                description TEXT,
@@ -713,18 +713,18 @@ CREATE TABLE parameter_sub_groups (
   DBI::dbExecute(con, "COMMENT ON COLUMN parameters.result_speciation IS 'Controls if results using this parameter require an entry to column result_speciation of table measurements_discrete';")
   DBI::dbExecute(con, "COMMENT ON COLUMN parameters.sample_fraction IS 'Controls if results using this parameter require an entry to column sample_fraction of table measurements_discrete';")
   
-  # Create parameter_relationships table with unique constraint on the combination of param_code, group_id, and sub_group_id
+  # Create parameter_relationships table with unique constraint on the combination of parameter_id, group_id, and sub_group_id
   # The unique key ensures that a parameter can be in more than one group and sub-group. For example, the sub-group 'pesticides' can be in the group 'organic' and 'inorganic'.
   DBI::dbExecute(con, "
 CREATE TABLE parameter_relationships (
     relationship_id SERIAL PRIMARY KEY,
-    param_code INTEGER NOT NULL,
+    parameter_id INTEGER NOT NULL,
     group_id INTEGER NOT NULL,
     sub_group_id INTEGER,
-    FOREIGN KEY (param_code) REFERENCES parameters(param_code),
+    FOREIGN KEY (parameter_id) REFERENCES parameters(parameter_id),
     FOREIGN KEY (group_id) REFERENCES parameter_groups(group_id),
     FOREIGN KEY (sub_group_id) REFERENCES parameter_sub_groups(sub_group_id),
-    UNIQUE NULLS NOT DISTINCT(param_code, group_id, sub_group_id)
+    UNIQUE NULLS NOT DISTINCT(parameter_id, group_id, sub_group_id)
 );")
   
 
@@ -748,17 +748,17 @@ CREATE TABLE parameter_relationships (
   # First get the parameter, group and sub-group ids
   subgroups <- DBI::dbGetQuery(con, "SELECT sub_group_id, sub_group_name FROM parameter_sub_groups")
   groups <- DBI::dbGetQuery(con, "SELECT group_id, group_name FROM parameter_groups")
-  parameters <- DBI::dbGetQuery(con, "SELECT param_code, param_name FROM parameters")
+  parameters <- DBI::dbGetQuery(con, "SELECT parameter_id, param_name FROM parameters")
   parameters <- merge(params[, c("param_name", "group", "subgroup")], parameters, by = "param_name", all.x = TRUE)
   parameters <- merge(parameters, groups, by.x = "group", by.y = "group_name", all.x = TRUE)
   parameters <- merge(parameters, subgroups[, c("sub_group_id", "sub_group_name")], by.x = "subgroup", by.y = "sub_group_name", all.x = TRUE)
   
-  DBI::dbAppendTable(con, "parameter_relationships", parameters[, c("param_code", "group_id", "sub_group_id")], append = TRUE)
+  DBI::dbAppendTable(con, "parameter_relationships", parameters[, c("parameter_id", "group_id", "sub_group_id")], append = TRUE)
   
   
   # media_types table #################
   DBI::dbExecute(con, "CREATE TABLE media_types (
-               media_code SERIAL PRIMARY KEY,
+               media_id SERIAL PRIMARY KEY,
                media_type TEXT UNIQUE NOT NULL,
                media_type_fr TEXT UNIQUE NOT NULL,
                description TEXT,
@@ -872,21 +872,21 @@ CREATE TABLE parameter_relationships (
   # settings table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists settings (
                  source_fx TEXT NOT NULL,
-                 parameter INTEGER NOT NULL,
+                 parameter_id INTEGER NOT NULL,
                  period_type TEXT NOT NULL,
                  record_rate TEXT,
                  remote_param_name TEXT NOT NULL,
-                 UNIQUE (source_fx, parameter, period_type, record_rate))")
+                 UNIQUE (source_fx, parameter_id, period_type, record_rate))")
   DBI::dbExecute(con, "COMMENT ON TABLE public.settings IS 'This table stores the name of functions used to pull in new data, the parameter with which they are associated, and the remote parameter name to pass to the source function for each function and database parameter name.'
   ")
   DBI::dbExecute(con, "
   COMMENT ON COLUMN public.settings.source_fx IS 'The R function (from the AquaCache package) to use for fetching data.';
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.settings.parameter IS 'Parameter integer codes used in the timeseries table.';
+  COMMENT ON COLUMN public.settings.parameter_id IS 'Parameter integer codes used in the timeseries table.';
   ")
   DBI::dbExecute(con, "
-  COMMENT ON COLUMN public.settings.remote_param_name IS 'The parameter name or code to pass to the parameter param_code of the R function specified in source_fx.';
+  COMMENT ON COLUMN public.settings.remote_param_name IS 'The parameter name or code to pass to the parameter parameter_id of the R function specified in source_fx.';
   ")
 
   #Populate datum_list table from hydat database #############
@@ -991,9 +991,9 @@ EXECUTE FUNCTION update_geom_type();
 
   #Add in foreign keys ###########
   DBI::dbExecute(con, "ALTER TABLE settings 
-                 ADD CONSTRAINT fk_parameter
-                 FOREIGN KEY (parameter)
-                 REFERENCES parameters(param_code)
+                 ADD CONSTRAINT fk_parameter_id
+                 FOREIGN KEY (parameter_id)
+                 REFERENCES parameters(parameter_id)
                  ON UPDATE CASCADE ON DELETE CASCADE;")
   
   DBI::dbExecute(con,
@@ -1016,9 +1016,9 @@ EXECUTE FUNCTION update_geom_type();
   REFERENCES locations(location_id)
                  ON UPDATE CASCADE ON DELETE CASCADE;")
   
-  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_parameter FOREIGN KEY (parameter) REFERENCES parameters(param_code) ON UPDATE CASCADE ON DELETE CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_parameter_id FOREIGN KEY (parameter_id) REFERENCES parameters(parameter_id) ON UPDATE CASCADE ON DELETE CASCADE;")
   
-  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_media_type FOREIGN KEY (media_type) REFERENCES media_types(media_code) ON UPDATE CASCADE ON DELETE CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_media_type FOREIGN KEY (media_id) REFERENCES media_types(media_id) ON UPDATE CASCADE ON DELETE CASCADE;")
   
   DBI::dbExecute(con,
                  "ALTER TABLE timeseries
@@ -1227,16 +1227,16 @@ ORDER BY
                             "SELECT ts.timeseries_id, mtypes.media_type AS media_type, ts.category, params.param_name AS parameter_name, params.unit_default AS default_units, params.unit_solid AS units_solid_medium, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime, ts.end_datetime, ts.note, loc.location_id, loc.location AS location_code, loc.name AS location_name, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
-                            "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
-                            "LEFT JOIN media_types AS mtypes ON ts.media_type = mtypes.media_code",
+                            "LEFT JOIN parameters AS params ON ts.parameter_id = params.parameter_id",
+                            "LEFT JOIN media_types AS mtypes ON ts.media_id = mtypes.media_id",
                             "ORDER BY ts.timeseries_id;"))
 
   DBI::dbExecute(con, paste("CREATE OR REPLACE VIEW public.timeseries_metadata_fr WITH (security_invoker = TRUE) AS",
                             "SELECT ts.timeseries_id, mtypes.media_type_fr AS type_de_m\u00E9dia, ts.category AS cat\u00E9gorie, params.param_name_fr AS nom_param\u00E8tre, params.unit_default AS unit\u00E9s_par_d\u00E9faut, params.unit_solid AS unit\u00E9s_media_solide, ts.period_type, ts.record_rate AS recording_rate, ts.start_datetime AS d\u00E9but, ts.end_datetime AS fin, ts.note, loc.location_id, loc.location AS location_code, loc.name_fr AS nom_endroit, loc.latitude, loc.longitude",
                             "FROM timeseries AS ts ",
                             "JOIN locations AS loc ON ts.location_id = loc.location_id ",
-                            "LEFT JOIN parameters AS params ON ts.parameter = params.param_code",
-                            "LEFT JOIN media_types AS mtypes ON ts.media_type = mtypes.media_code",
+                            "LEFT JOIN parameters AS params ON ts.parameter_id = params.parameter_id",
+                            "LEFT JOIN media_types AS mtypes ON ts.media_id = mtypes.media_id",
                             "ORDER BY ts.timeseries_id;"))
   
   # View for location metadata
