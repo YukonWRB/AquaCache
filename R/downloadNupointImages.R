@@ -57,7 +57,7 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
     links <- sftp::sftp_listfiles(nupoint, verbose = FALSE)$name
     tbl <-  data.frame(link = links,
                          datetime = as.POSIXct(sub(".*_(\\d{14}).*", "\\1", links), format = "%Y%m%d%H%M%S", tz = "UTC"),
-                         location = sub("^([0-9]{2}[A-Za-z]{2}[0-9]{3}).*", "\\1", links))
+                         location = sub("^(.*)_\\d{14}.*$", "\\1", links))
     
     suppressWarnings(dir.create(paste0(tempdir(), "/downloadNupointImages")))
     name <- gsub(" ", "", Sys.time())

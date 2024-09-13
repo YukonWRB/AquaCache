@@ -22,7 +22,7 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
   if (inherits(location, "character")) {
       location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", location,  "';"))[1,1]
       if (is.na(location_id)) {
-        stop("The location you specified does not exist. Reminder that you should specify the location code or location_id, not the name.")
+        stop("The location you specified does not exist. Reminder that you should specify the location code (text) or location_id (numeric), not the name.")
       }
   } else if (inherits(location, "numeric")) {
     location_id <- location
@@ -53,6 +53,7 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
                        source_fx_args = source_fx_args,
                        share_with = paste0("{", paste(share_with, collapse = ", "), "}"),
                        visibility_public = visibility_public,
+                       active = TRUE,
                        description = "Image series automatically taken from a web or server location.")
 
   DBI::dbAppendTable(con, "images_index", insert)
