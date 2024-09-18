@@ -3,7 +3,7 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function [addACTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df` and `locations_df`. To add an image series see [addACImageSeries()], for raster series see [addACRasterSeries()]. For one-off images use [insertACImage()] and for rasters [insertACRaster()]. For documents use [insertACDocument()].
+#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function [addACTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df`. To add an image series see [addACImageSeries()], for raster series see [addACRasterSeries()]. For one-off images use [insertACImage()] and for rasters [insertACRaster()]. For documents use [insertACDocument()].
 #'
 #' @details
 #' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
@@ -11,44 +11,29 @@
 #' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
-#' @param locations_df A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.
-#' @param settings_df A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.
+#' @param settings_df A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist. Calls function [addACImportFlow()] if necessary.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
-#' @seealso [addACTimeseriesTemplate()] to see templates for timesries_df and locations_df.
+#' @seealso [addACTimeseriesTemplate()] to see templates for timeseries_df and settings_df
 
-addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NULL, con = AquaConnect()) {
+addACTimeseries <- function(timeseries_df, settings_df = NULL, con = AquaConnect()) {
 
   
   #TODO: add a way to pass new parameters using params_df
   
-  #Check the names of timeseries_df and locations_df, if it's not null
+  #Check the names of timeseries_df
   if (!all(c("location", "parameter", "category", "period_type", "record_rate", "media_type", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
     stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'category', 'period_type', 'record_rate', 'media_type', 'start_datetime', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
   }
   
-  if (!is.null(locations_df)) {
-    if (!all(c("location", "name", "name_fr", "latitude", "longitude", "datum_id_from", "datum_id_to", "conversion_m", "current", "note", "contact", "network", "project") %in% names(locations_df))) {
-      stop("It looks like you're either missing columns in locations_df or that you have a typo. Please review that you have columns named c('location', 'name', 'name_fr', 'latitude', 'longitude', 'datum_id_from', 'datum_id_to', 'conversion_m', 'current', 'note', 'contact', 'network', 'project'). Use NA to indicate a column with no applicable value.")
-    }
-  }
-  
-  #Check that every location in the timeseries_df already exists; if they don't, check they've been specified in locations_df
+  #Check that every location in the timeseries_df already exists
   new_locs <- NULL
   exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
-  if (!all(unique(timeseries_df$location) %in% exist_locs)) {
-    if (is.null(locations_df)) {
-      missing <- timeseries_df$location[!(timeseries_df$location %in% exist_locs)]
-      stop("You didn't specify a locations_df, but not all of the locations in your timeseries_df are already in the database. Either double-check your timeseries_df or give me a locations_df from which to add the missing location(s) ", paste(missing, collapse = ", "), ".")
-    } else {
-      # Check that locations in locations_df match those in timeseries_df
-      if (!all(unique(locations_df$location) %in% unique(timeseries_df$location))) {
-        stop("The locations in your locations_df don't match those in your timeseries_df. Please double-check that they match.")
-      }
-      new_locs <- unique(timeseries_df$location)[!(unique(timeseries_df$location) %in% exist_locs)]
-    }
+  if (!all(timeseries_df$location %in% exist_locs)) {
+    new_locs <- timeseries_df$location[!(timeseries_df$location %in% exist_locs)]
+    stop("Not all of the locations in your timeseries_df are already in the database. Please add the following location(s) first using addACLocation(): ", paste(new_locs, collapse = ", "), ", or use one of the existing locations.")
   }
 
 
@@ -92,25 +77,6 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
     settings_df$parameter <- tolower(settings_df$parameter)
     settings_df$period_type <- tolower(settings_df$period_type)
     settings_df$record_rate <- as.character(settings_df$record_rate) #to align with what comes out of the DB
-  }
-  
-  if (!is.null(locations_df)) {
-    # Check that the networks already exists. If not, stop and alert user to add it first. #########################
-    new_networks <- unique(locations_df$network)
-    exist_networks <- DBI::dbGetQuery(con, "SELECT name FROM networks")[,1]
-    if (!all(new_networks %in% exist_networks)) {
-      missing <- new_networks[!(new_networks %in% exist_networks)]
-      stop("Not all of the networks in your locations_df are already in the database. Please add the following network(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing networks: ", paste(exist_networks$name, collapse = ", "), ".")
-    }
-    # Check that the projects already exists. If not, stop and alert user to add it first. #########################
-    new_projects <- unique(locations_df$project)
-    if (!is.na(new_projects)) {
-      exist_projects <- DBI::dbGetQuery(con, "SELECT name FROM projects")[,1]
-      if (!all(new_projects %in% exist_projects)) {
-        missing <- new_projects[!(new_projects %in% exist_projects)]
-        stop("Not all of the projects in your locations_df are already in the database. Please add the following project(s) first: ", paste(missing, collapse = ", "), ", or use one of the existing projects: ", paste(exist_projects$name, collapse = ", "), ".")
-      }
-    }
   }
 
   # Check that the proper entries exist in the settings table. Make entry to DB if necessary/possible ################
@@ -159,64 +125,6 @@ addACTimeseries <- function(timeseries_df, locations_df = NULL, settings_df = NU
       }
     }
   }
-
-  #Add the location, networks, projects, and datums info ###################################################################
-  if (!is.null(new_locs)) {
-    for (i in new_locs) {
-      DBI::dbWithTransaction(
-        con,
-        {
-          #vectors table first
-          point <- data.frame("feature_name" = locations_df[locations_df$location == i, "location"],
-                              "description" = locations_df[locations_df$location == i, "name"],
-                              "latitude" = locations_df[locations_df$location == i, "latitude"],
-                              "longitude" = locations_df[locations_df$location == i, "longitude"])
-          point <- terra::vect(point, geom = c("longitude", "latitude"), crs = "epsg:4269")
-
-          insertACVector(point, "Locations", feature_name_col = "feature_name", description_col = "description")
-          geom_id <- DBI::dbGetQuery(con, paste0("SELECT geom_id FROM vectors WHERE layer_name = 'Locations' AND feature_name = '", locations_df[locations_df$location == i, "location"], "';"))
-
-
-          #locations table second
-          location <- data.frame(location = unique(locations_df[locations_df$location == i, "location"]),
-                                 name = unique(locations_df[locations_df$location == i, "name"]),
-                                 name_fr = unique(locations_df[locations_df$location == i, "name_fr"]),
-                                 latitude = unique(locations_df[locations_df$location == i, "latitude"]),
-                                 longitude = unique(locations_df[locations_df$location == i, "longitude"]),
-                                 note = locations_df[locations_df$location == i, "note"],
-                                 contact = locations_df[locations_df$location == i, "contact"],
-                                 geom_id = geom_id)
-          DBI::dbAppendTable(con, "locations", location)
-          
-          location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", unique(locations_df[locations_df$location == i, "location"]), "';"))[1,1]
-          
-          # networks table third
-          if (!is.na(locations_df[locations_df$location == i, "network"])) {
-            network_id <- DBI::dbGetQuery(con, paste0("SELECT network_id FROM networks WHERE name = '", unique(locations_df[locations_df$location == i, "network"]), "';"))[1,1]
-            tbl <- data.frame(location_id = location_id, network_id = network_id)
-            DBI::dbAppendTable(con, "locations_networks", tbl)
-          }
-          
-          # projects table fourth
-          if (!is.na(locations_df[locations_df$location == i, "project"])) {
-            project_id <- DBI::dbGetQuery(con, paste0("SELECT project_id FROM projects WHERE name = '", unique(locations_df[locations_df$location == i, "project"]), "';"))[1,1]
-            tbl <- data.frame(location_id = location_id, project_id = project_id)
-            DBI::dbAppendTable(con, "locations_projects", tbl)
-          }
-
-          #datums table fifth
-          datum <- data.frame(location_id = location_id,
-                              datum_id_from = locations_df[locations_df$location == i, "datum_id_from"],
-                              datum_id_to = locations_df[locations_df$location == i, "datum_id_to"],
-                              conversion_m = locations_df[locations_df$location == i, "conversion_m"],
-                              current = locations_df[locations_df$location == i, "current"])
-          DBI::dbAppendTable(con, "datum_conversions", datum)
-          message("Added a new entry to the locations table for location ", i, ".")
-        }
-      ) #End of dbWithTransaction
-    }
-  }
-
 
   #Add the timeseries #######################################################################################################
   timeseries_df$location_id <- NA

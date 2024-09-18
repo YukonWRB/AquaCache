@@ -4,19 +4,12 @@
 \alias{addACTimeseries}
 \title{Add timeseries to AquaCache database}
 \usage{
-addACTimeseries(
-  timeseries_df,
-  locations_df = NULL,
-  settings_df = NULL,
-  con = AquaConnect()
-)
+addACTimeseries(timeseries_df, settings_df = NULL, con = AquaConnect())
 }
 \arguments{
 \item{timeseries_df}{A data.frame containing the information necessary to add the timeseries (see details for template).}
 
-\item{locations_df}{A data.frame containing spatial information related to the individual locations specified in timeseries_df. Only necessary if you are specifying a location code that is NOT already in the database. Function returns an error if you didn't specify a spatial_df when it is necessary. See details for template.}
-
-\item{settings_df}{A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.}
+\item{settings_df}{A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist. Calls function \code{\link[=addACImportFlow]{addACImportFlow()}} if necessary.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
@@ -26,7 +19,7 @@ One or more new entries are created in the table 'timeseries'
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries, locations, and datum_conversions tables. See related function \code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} for help in formatting the data.frames to pass to \code{timeseries_df} and \code{locations_df}. To add an image series see \code{\link[=addACImageSeries]{addACImageSeries()}}, for raster series see \code{\link[=addACRasterSeries]{addACRasterSeries()}}. For one-off images use \code{\link[=insertACImage]{insertACImage()}} and for rasters \code{\link[=insertACRaster]{insertACRaster()}}. For documents use \code{\link[=insertACDocument]{insertACDocument()}}.
+This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function \code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} for help in formatting the data.frames to pass to \code{timeseries_df}. To add an image series see \code{\link[=addACImageSeries]{addACImageSeries()}}, for raster series see \code{\link[=addACRasterSeries]{addACRasterSeries()}}. For one-off images use \code{\link[=insertACImage]{insertACImage()}} and for rasters \code{\link[=insertACRaster]{insertACRaster()}}. For documents use \code{\link[=insertACDocument]{insertACDocument()}}.
 }
 \details{
 You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
@@ -34,5 +27,5 @@ You can also add the new timeseries by directly editing the database, but this f
 Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 }
 \seealso{
-\code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} to see templates for timesries_df and locations_df.
+\code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} to see templates for timeseries_df and settings_df
 }
