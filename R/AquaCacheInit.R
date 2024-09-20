@@ -485,7 +485,7 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  longitude NUMERIC NOT NULL
                  contact TEXT,
                  geom_id INTEGER NOT NULL,
-                 note TEXT
+                 note TEXT,
                  visibility_public TEXT NOT NULL CHECK(visibility_public IN ('exact', 'region', 'jitter')) DEFAULT 'exact',
                  share_with INTEGER[] NOT NULL DEFAULT '{1}',
                  owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE
@@ -608,7 +608,8 @@ EXECUTE FUNCTION check_data_sharing_agreement();")
 
 
   # timeseries table #################
-  DBI::dbExecute(con, "CREATE TABLE if not exists timeseries (
+  DBI::dbExecute(con, "
+  CREATE TABLE if not exists timeseries (
                  timeseries_id SERIAL PRIMARY KEY,
                  location TEXT NOT NULL,
                  parameter_id INTEGER NOT NULL,
@@ -617,6 +618,7 @@ EXECUTE FUNCTION check_data_sharing_agreement();")
                  period_type TEXT NOT NULL CHECK(period_type IN ('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2')),
                  record_rate TEXT NOT NULL,
                  z NUMERIC,
+                 sensor_priority INTEGER,  -- this permits primary, secondary, tertiary, etc. sensors to be defined for a location/parameter/media combination
                  start_datetime TIMESTAMP WITH TIME ZONE,
                  end_datetime TIMESTAMP WITH TIME ZONE,
                  last_new_data TIMESTAMP WITH TIME ZONE,
@@ -629,13 +631,16 @@ EXECUTE FUNCTION check_data_sharing_agreement();")
                  note TEXT,
                  share_with INTEGER[] NOT NULL DEFAULT '{1}',
                  owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
-                 UNIQUE (location, parameter_id, category, period_type, media_id, record_rate, z),
+                 UNIQUE NULLS NOT DISTINCT (location, parameter_id, category, period_type, media_id, record_rate, z, sensor_priority),
                  CONSTRAINT check_record_rate_constraints
                      CHECK (
                      (category = 'discrete' AND record_rate IS NULL) OR
                      (category = 'continuous' AND record_rate IN ('< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'))
                      )
-                 );")
+                 );
+                 ")
+  
+  ## Add table and column comments #################
   DBI::dbExecute(con, "
   COMMENT ON TABLE public.timeseries IS 'Provides a record of every timeseries in the database. Each timeseries is unique by its combination of location, parameter, media_id, category (continuous or discrete), period_type, record_rate, and z (elevation).Continuous data is data gathered at regular and usually frequent intervals, while discrete data includes infrequent, often manual measurements of values such as snow depth or dissolved element parameters.';
   ")
@@ -1505,7 +1510,7 @@ $$ LANGUAGE plpgsql;
   
   
   DBI::dbExecute(con, "
-CREATE OR REPLACE VIEW corrected_measurements_continuous AS
+CREATE OR REPLACE VIEW measurements_continuous_corrected AS
 SELECT
 mc.timeseries_id,
 mc.datetime,
@@ -1787,6 +1792,724 @@ USING (
   DBI::dbExecute(con, "ALTER TABLE images FORCE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE images_index FORCE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE documents FORCE ROW LEVEL SECURITY;")
+  
+  
+  
+  
+  
+  # Create calibration and instrument maintenance tables and relationships in a new schema ########################################
+  
+  DBI::dbExecute(con, "CREATE SCHEMA instruments;")
+  
+  ## Create "instruments" and related tables ########################################
+  
+  DBI::dbExecute(con, "CREATE TABLE instruments.instrument_type (
+                 type_id SERIAL PRIMARY KEY,
+                 type TEXT NOT NULL,
+                 description TEXT NOT NULL,
+                 create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                 modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                 )
+                 ;")
+  
+  DBI::dbExecute(con, "CREATE TABLE instruments.instrument_make (
+                 make_id SERIAL PRIMARY KEY,
+                 make TEXT NOT NULL,
+                 description TEXT,
+                 create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                 modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                 )
+                 ;")
+  
+  DBI::dbExecute(con, "CREATE TABLE instruments.instrument_model (
+                 model_id SERIAL PRIMARY KEY,
+                 model TEXT NOT NULL,
+                 description TEXT
+                 create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                 modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                 )
+                 ;")
+  
+  DBI::dbExecute(con, "CREATE TABLE instruments.observers (
+                 observer_id SERIAL PRIMARY KEY,
+                 observer_first TEXT NOT NULL,
+                 observer_last TEXT NOT NULL
+                 organization TEXT NOT NULL,
+                 create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                 modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                 UNIQUE (observer_first, observer_last, organization)
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.instruments (
+                  instrument_id SERIAL PRIMARY KEY,
+                  obs_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                  observer NUMERIC NOT NULL,
+                  make TEXT NOT NULL,
+                  model INTEGER NOT NULL,
+                  type TEXT NOT NULL,
+                  holds_replaceable_sensors BOOLEAN NOT NULL DEFAULT FALSE,
+                  serial_no TEXT NOT NULL,
+                  asset_tag TEXT,
+                  date_in_service DATE,
+                  date_purchased DATE,
+                  retired_by TEXT,
+                  date_retired DATE,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  UNIQUE (serial_no),
+                  FOREIGN KEY (make) REFERENCES instruments.instrument_make(make_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                  FOREIGN KEY (model) REFERENCES instruments.instrument_model(model_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                  FOREIGN KEY (type) REFERENCES instruments.instrument_type(type_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                  FOREIGN KEY (observer) REFERENCES instruments.observers(observer_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.instrument_deployment (
+                  instrument_id INTEGER NOT NULL,
+                  deployment_start_date DATE NOT NULL,
+                  deployment_end_date DATE,
+                  deployment_location TEXT,
+                  deployment_purpose TEXT,
+                  deployment_notes TEXT,
+                  location_id INTEGER NOT NULL REFERENCES instruments.locations(location_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                  FOREIGN KEY (instrument_id) REFERENCES instruments.instruments(instrument_id) ON UPDATE CASCADE ON DELETE CASCADE
+                  )
+                 ;")
+  
+  ## Create "sensors" tables ########################################
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.sensor_types (
+                  sensor_type_id SERIAL PRIMARY KEY,
+                  sensor_type TEXT NOT NULL,
+                  sensor_type_description TEXT,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                 )")
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.sensors (
+                  sensor_id SERIAL PRIMARY KEY,
+                  sensor_type TEXT NOT NULL,
+                  sensor_serial TEXT NOT NULL,
+                  sensor_make TEXT NOT NULL,
+                  sensor_model TEXT NOT NULL,
+                  sensor_date_in_service DATE,
+                  sensor_date_purchased DATE,
+                  sensor_retired_by TEXT,
+                  sensor_date_retired DATE,
+                  sensor_asset_tag TEXT,
+                  sensor_notes TEXT,
+                  UNIQUE (sensor_serial),
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (sensor_type) REFERENCES instruments.sensor_types(sensor_type_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  
+  ## Create "maintenance" tables ########################################
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.instrument_maintenance (
+                  event_id SERIAL PRIMARY KEY,
+                  instrument_id INTEGER NOT NULL,
+                  observer INTEGER NOT NULL,
+                  obs_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                  note TEXT NOT NULL,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (instrument_id) REFERENCES instruments.instruments(instrument_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                  FOREIGN KEY (observer) REFERENCES instruments.observers(observer_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.array_maintenance_changes (
+                event_id SERIAL PRIMARY KEY,
+                instrument_id INTEGER NOT NULL,
+                observer INTEGER NOT NULL,
+                obs_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                sensor1_id INTEGER NOT NULL,
+                sensor1_notes TEXT,
+                sensor2_id INTEGER,
+                sensor2_notes TEXT,
+                sensor3_id INTEGER,
+                sensor3_notes TEXT,
+                sensor4_id INTEGER,
+                sensor4_notes TEXT,
+                sensor5_id INTEGER,
+                sensor5_notes TEXT,
+                sensor6_id INTEGER,
+                sensor6_notes TEXT,
+                sensor7_id INTEGER,
+                sensor7_notes TEXT,
+                sensor8_id INTEGER,
+                sensor8_notes TEXT,
+                create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (instrument_id) REFERENCES instruments(instrument_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (observer) REFERENCES instruments.observers(observer_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor1_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor2_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor3_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor4_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor5_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor6_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor7_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (sensor8_id) REFERENCES instruments.sensors(sensor_id) ON UPDATE CASCADE ON DELETE CASCADE
+                )
+               ;")
+  DBI::dbExecute(con, "COMMENT ON TABLE instruments.array_maintenance_changes IS 'This table is used to record changes to the sensors in an instrument array. Each row represents a single maintenance event, and the notes field should contain a description of the changes or maintenance made to each sensor. A simple maintenance event with no change of sensor should have the same sensor_id as the previous entry for that instrument and sensorX_id, while sensor changes must be recorded with a new sensor_id.'")
+  
+  
+  
+  ## Create "calibrations" table and associated tables #########################################
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrations (
+                  calibration_id SERIAL PRIMARY KEY,
+                  observer INTEGER NOT NULL,
+                  obs_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                  id_sensor_holder INTEGER NOT NULL,
+                  id_handheld_meter INTEGER,
+                  complete BOOLEAN NOT NULL DEFAULT FALSE,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (id_sensor_holder) REFERENCES instruments.instruments(instrument_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                  FOREIGN KEY (id_handheld_meter) REFERENCES instruments.instruments(instrument_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                  FOREIGN KEY (observer) REFERENCES instruments.observers(observer_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrate_temperature (
+                  calibration_id INTEGER NOT NULL,
+                  temp_reference_desc TEXT NOT NULL,
+                  temp_reference NUMERIC NOT NULL,
+                  temp_observed NUMERIC NOT NULL,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (calibration_id),
+                  FOREIGN KEY (calibration_id) REFERENCES instruments.calibrations(calibration_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrate_specific_conductance (
+                  calibration_id INTEGER NOT NULL,
+                  SpC1_std NUMERIC NOT NULL,
+                  SpC2_std NUMERIC NOT NULL,
+                  SpC1_pre NUMERIC NOT NULL,
+                  SpC2_pre NUMERIC NOT NULL,
+                  SpC1_post NUMERIC NOT NULL,
+                  SpC2_post NUMERIC NOT NULL,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (calibration_id),
+                  FOREIGN KEY (calibration_id) REFERENCES instruments.calibrations(calibration_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrate_pH (
+                  calibration_id INTEGER NOT NULL,
+                  pH1_std NUMERIC NOT NULL,
+                  pH2_std NUMERIC NOT NULL,
+                  pH3_std NUMERIC,
+                  pH1_pre_val NUMERIC NOT NULL,
+                  pH2_pre_val NUMERIC NOT NULL,
+                  pH3_pre_val NUMERIC,
+                  pH1_mV NUMERIC NOT NULL,
+                  pH2_mV NUMERIC NOT NULL,
+                  pH3_mV NUMERIC,
+                  pH1_post_val NUMERIC NOT NULL,
+                  pH2_post_val NUMERIC NOT NULL,
+                  pH3_post_val NUMERIC,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (calibration_id),
+                  FOREIGN KEY (calibration_id) REFERENCES instruments.calibrations(calibration_id) ON UPDATE CASCADE ON DELETE CASCADE
+                )
+                ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrate_ORP (
+                  calibration_id INTEGER NOT NULL,
+                  orp_std NUMERIC NOT NULL,
+                  orp_pre_mV NUMERIC NOT NULL,
+                  orp_post_mV NUMERIC NOT NULL,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (calibration_id),
+                  FOREIGN KEY (calibration_id) REFERENCES instruments.calibrations(calibration_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrate_turbidity (
+                  calibration_id INTEGER NOT NULL,
+                  turb1_std NUMERIC NOT NULL,
+                  turb2_std NUMERIC NOT NULL,
+                  turb1_pre NUMERIC NOT NULL,
+                  turb2_pre NUMERIC NOT NULL,
+                  turb1_post NUMERIC NOT NULL,
+                  turb2_post NUMERIC NOT NULL,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (calibration_id),
+                  FOREIGN KEY (calibration_id) REFERENCES instruments.calibrations(calibration_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrate_dissolved_oxygen (
+                  calibration_id INTEGER NOT NULL,
+                  baro_press_pre NUMERIC NOT NULL,
+                  baro_press_post NUMERIC NOT NULL,
+                  DO_pre_mgl NUMERIC NOT NULL,
+                  DO_post_mgl NUMERIC NOT NULL,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (calibration_id),
+                  FOREIGN KEY (calibration_id) REFERENCES instruments.calibrations(calibration_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  DBI::dbExecute(con,
+                 "CREATE TABLE instruments.calibrate_depth (
+                  calibration_id INTEGER NOT NULL,
+                  depth_check_ok BOOLEAN NOT NULL,
+                  depth_changes_ok BOOLEAN,
+                  create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (calibration_id),
+                  FOREIGN KEY (calibration_id) REFERENCES instruments.calibrations(calibration_id) ON UPDATE CASCADE ON DELETE CASCADE
+                 )
+                 ;")
+  
+  
+  ## Function and Trigger to update the modify_datetime column on update ########################################
+  DBI::dbExecute(con, "
+    CREATE OR REPLACE FUNCTION instruments.update_modify_datetime()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.modify_datetime = CURRENT_TIMESTAMP;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  ")
+  
+  # Creating triggers for tables
+  tables_to_update <- c('instrument_type', 'instrument_make', 'instrument_model', 'observers', 'instruments', 'instrument_deployment', 'sensor_types', 'sensors', 'instrument_maintenance', 'array_maintenance_changes', 'calibrations', 'calibrate_temperature', 'calibrate_specific_conductance', 'calibrate_pH', 'calibrate_ORP', 'calibrate_turbidity', 'calibrate_dissolved_oxygen', 'calibrate_depth')
+  
+  for (table in tables_to_update) {
+    DBI::dbExecute(con, paste0("
+      CREATE TRIGGER update_", table, "_modify_datetime
+      BEFORE UPDATE ON instruments.", table, "
+      FOR EACH ROW
+      EXECUTE FUNCTION instruments.update_modify_datetime();
+    "))
+  }
+  
+  ## Modify the serach path to include the 'instruments' schema
+  DBI::dbExecute(con, "ALTER ROLE AquaCache SET search_path TO public, instruments;")
+  
+  
+  
+  # Create metadata tables for the main database that link to the 'instruments' schema as well ########################################
+  # Location metadata fixed in time is part of table 'locations'
+  # Remove column 'owner' from table 'locations' as it can change with time
+  DBI::dbExecute(con, "ALTER TABLE locations DROP COLUMN owner")
+  # Add a few columns
+  DBI::dbExecute(con, "
+               ALTER TABLE locations 
+               ADD COLUMN install_purpose TEXT")
+  DBI::dbExecute(con, "ALTER TABLE locations
+               ADD COLUMN current_purpose TEXT")
+  
+  
+  # Locations metadata that can change over time and for which records should be kept is part of table 'location_metadata_xxx'
+  # Location ownership metadata
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_owners_operators (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               owner INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               operator INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+               end_datetime TIMESTAMP WITH TIME ZONE,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_owners_operators IS 'Ownership and operator metadata for locations.'")
+  # populate missing entries with the most recent entry and ensure end_datetime gets filled in when new data is added
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION fill_locations_metadata_owners_operators_missing()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- Check that both owner and operator are not NULL
+                  IF NEW.owner IS NULL AND NEW.operator IS NULL THEN
+                      RAISE EXCEPTION 'Both owner and operator cannot be NULL';
+                  END IF;
+                  
+                  -- Step 1: If owner is NULL, fill it with the previous value
+                  IF NEW.owner IS NULL THEN
+                      SELECT owner
+                      INTO NEW.owner
+                      FROM locations_metadata_owners_operators
+                      WHERE location_id = NEW.location_id
+                      ORDER BY start_datetime DESC
+                      LIMIT 1;
+                  END IF;
+                  
+                  -- Step 2: If operator is NULL, fill it with the previous value
+                  IF NEW.operator IS NULL THEN
+                      SELECT operator
+                      INTO NEW.operator
+                      FROM locations_metadata_owners_operators
+                      WHERE location_id = NEW.location_id
+                      ORDER BY start_datetime DESC
+                      LIMIT 1;
+                  END IF;
+                  
+                  -- Step 3: If a previous entry exists without an end_datetime, update its end_datetime
+                  UPDATE locations_metadata_owners_operators
+                  SET end_datetime = NEW.start_datetime
+                  WHERE location_id = NEW.location_id
+                    AND end_datetime IS NULL;
+                    
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER fill_locations_metadata_owners_operators_missing_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_owners_operators
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_owners_operators_missing();
+")
+  
+  # Site access metadata
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_access (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               method TEXT, -- helicopter, boat, foot, etc.
+               health_safety TEXT,
+               notes TEXT,
+               start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+               end_datetime TIMESTAMP WITH TIME ZONE,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_access IS 'Site access metadata for locations.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_access.method IS 'Method of access, such as helicopter, boat, foot, etc.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_access.health_safety IS 'Health and safety considerations for accessing the site.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_access.notes IS 'Additional notes about site access.'")
+  # populate missing entries with the most recent entry and ensure end_datetime gets filled in when new data is added
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION fill_locations_metadata_access_missing()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- Check that method, and notes, and health_safety are not NULL
+                  IF NEW.method IS NULL AND NEW.notes IS NULL AND NEW.health_safety IS NULL THEN
+                      RAISE EXCEPTION 'Method, notes, and health_safety cannot be NULL';
+                  END IF;
+                  
+                  -- Step 1: If method is NULL, fill it with the previous value
+                  IF NEW.method IS NULL THEN
+                      SELECT method
+                      INTO NEW.method
+                      FROM locations_metadata_access
+                      WHERE location_id = NEW.location_id
+                      ORDER BY start_datetime DESC
+                      LIMIT 1;
+                  END IF;
+                  
+                  -- Step 2: If notes is NULL, fill it with the previous value
+                  IF NEW.notes IS NULL THEN
+                      SELECT notes
+                      INTO NEW.notes
+                      FROM locations_metadata_access
+                      WHERE location_id = NEW.location_id
+                      ORDER BY start_datetime DESC
+                      LIMIT 1;
+                  END IF;
+                  
+                  -- Step 3: If health_safety is NULL, fill it with the previous value
+                  IF NEW.health_safety IS NULL THEN
+                      SELECT health_safety
+                      INTO NEW.health_safety
+                      FROM locations_metadata_access
+                      WHERE location_id = NEW.location_id
+                      ORDER BY start_datetime DESC
+                      LIMIT 1;
+                  END IF;
+                  
+                  -- Step 4: If a previous entry exists without an end_datetime, update its end_datetime
+                  UPDATE locations_metadata_access
+                  SET end_datetime = NEW.start_datetime
+                  WHERE location_id = NEW.location_id
+                    AND end_datetime IS NULL;
+                    
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER fill_locations_metadata_access_missing_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_access
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_access_missing();
+")
+  
+  # Data transmission metadata
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_transmission (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               method TEXT NOT NULL, -- manual download, GOES, Iridium, etc.
+               transmitter INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               transmission_code TEXT,
+               battery INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               solar_panel INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               instruments INTEGER[],
+               start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+               end_datetime TIMESTAMP WITH TIME ZONE,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_transmission IS 'Data transmission metadata for locations.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.method IS 'Method of data transmission, such as manual download, GOES, etc.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.transmitter IS 'Transmitter instrument ID.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.battery IS 'Battery instrument ID.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.solar_panel IS 'Solar panel instrument ID.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.transmission_code IS 'Transmission code, if applicable.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.instruments IS 'Array of instrument IDs used for data transmission. Each array element must exist in table instruments.instruments, enforced with a trigger and function.'")
+  # Add check that all elements of 'instruments' exist in table 'instruments.instruments' as this can't be done with a foreign key on the array
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION check_locations_metadata_transmission_instruments()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  IF NEW.instruments IS NOT NULL THEN
+                      FOR i IN 1..array_length(NEW.instruments, 1) LOOP
+                          IF NOT EXISTS (SELECT 1 FROM instruments.instruments WHERE instrument_id = NEW.instruments[i]) THEN
+                              RAISE EXCEPTION 'Instrument ID % does not exist in table instruments.instruments.', NEW.instruments[i];
+                          END IF;
+                      END LOOP;
+                  END IF;
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER check_locations_metadata_transmission_instruments_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_transmission
+              FOR EACH ROW
+              EXECUTE FUNCTION check_locations_metadata_transmission_instruments();
+")
+  
+  # General infrastructure metadata
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_infrastructure (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               site_description TEXT, -- i.e. 'open field', 'forest', 'lake', etc.
+               infrastructure_description TEXT, -- i.e. 'tower', 'shelter', 'cabin', 'well', etc.
+               start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+               end_datetime TIMESTAMP WITH TIME ZONE,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_infrastructure IS 'General infrastructure metadata for locations as freehand text.'")
+  # populate missing entries with the most recent entry and ensure end_datetime gets filled in when new data is added
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION fill_locations_metadata_infrastructure_missing()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- Check that both site_description and infrastructure_description are not NULL
+                  IF NEW.site_description IS NULL AND NEW.infrastructure_description IS NULL THEN
+                      RAISE EXCEPTION 'Both site_description and infrastructure_description cannot be NULL';
+                  END IF;
+                  
+                  -- Step 1: If site_description is NULL, fill it with the previous value
+                  IF NEW.site_description IS NULL THEN
+                      SELECT site_description 
+                      INTO NEW.site_description
+                      FROM locations_metadata_infrastructure
+                      WHERE location_id = NEW.location_id
+                      ORDER BY start_datetime DESC
+                      LIMIT 1;
+                  END IF;
+                  
+                  -- Step 2: If infrastructure_description is NULL, fill it with the previous value
+                  IF NEW.infrastructure_description IS NULL THEN
+                      SELECT infrastructure_description 
+                      INTO NEW.infrastructure_description
+                      FROM locations_metadata_infrastructure
+                      WHERE location_id = NEW.location_id
+                      ORDER BY start_datetime DESC
+                      LIMIT 1;
+                  END IF;
+                  
+                  -- Step 3: If a previous entry exists without an end_datetime, update its end_datetime
+                  UPDATE locations_metadata_infrastructure
+                  SET end_datetime = NEW.start_datetime
+                  WHERE location_id = NEW.location_id
+                    AND end_datetime IS NULL;
+                    
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER fill_locations_metadata_infrastructure_missing_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_infrastructure
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_infrastructure_missing();
+")
+  
+  # Hydrometric-specific infrastructure metadata
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_infrastructure_hydromet (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               stilling_well TEXT,
+               staff_gauge TEXT,
+               tower TEXT,
+               shelter TEXT,
+               cableway TEXT,
+               reach_substrate TEXT,
+               reach_grade NUMERIC,
+               reach_note TEXT,
+               health_safety TEXT,
+               start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+               end_datetime TIMESTAMP WITH TIME ZONE,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_infrastructure_hydromet IS 'Hydrometric-specific infrastructure metadata.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.stilling_well IS 'Type of stilling well and details.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.staff_gauge IS 'Type of staff gauge and details.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.tower IS 'Type of tower and details.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.shelter IS 'Type of shelter and details.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.reach_substrate IS 'Substrate type at reach.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.reach_grade IS 'Grade of reach (approximate, degrees).'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.reach_note IS 'Additional notes about reach.'")
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION fill_locations_metadata_infrastructure_hydromet()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- Check that end_datetime gets populated
+                  UPDATE locations_metadata_infrastructure_hydromet
+                  SET end_datetime = NEW.start_datetime
+                  WHERE location_id = NEW.location_id
+                    AND end_datetime IS NULL;
+                    
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER fill_locations_metadata_infrastructure_hydromet_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_infrastructure_hydromet
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_infrastructure_hydromet();
+")
+  
+  # GW-specific infrastructure metadata
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_infrastructure_groundwater (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               well_depth_btoc_m NUMERIC,
+               well_diameter_cm NUMERIC,
+               stick_up_m NUMERIC,
+               start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+               end_datetime TIMESTAMP WITH TIME ZONE,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_infrastructure_groundwater IS 'Groundwater-specific infrastructure metadata.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_groundwater.well_depth_btoc_m IS 'Depth of well in meters below top of casing.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_groundwater.well_diameter_cm IS 'Diameter of well in centimeters.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_groundwater.stick_up_m IS 'Distance from top of casing to ground surface in meters.'")
+  # populate missing entries with the most recent entry and ensure end_datetime gets filled in when new data is added
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION fill_locations_metadata_infrastructure_groundwater()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- Check that end_datetime gets populated
+                  UPDATE locations_metadata_infrastructure_groundwater
+                  SET end_datetime = NEW.start_datetime
+                  WHERE location_id = NEW.location_id
+                    AND end_datetime IS NULL;
+                    
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER fill_locations_metadata_infrastructure_groundwater_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_infrastructure_groundwater
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_infrastructure_groundwater();
+")
+  
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_xsections (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               x_m NUMERIC[],
+               y_top_m NUMERIC[] DEFAULT '{0}',
+               y_bot_m NUMERIC[],
+               mean_velocity_m_s NUMERIC[],
+               angle_deg NUMERIC DEFAULT 90,
+               water_level_m NUMERIC,
+               xsection_substrate TEXT,
+               xsection_note TEXT,
+               instrument INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               measurement_grade TEXT REFERENCES grades(code) ON DELETE SET NULL ON UPDATE CASCADE,
+               valid TIMESTAMP WITH TIME ZONE NOT NULL,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_xsections IS 'Cross-section and reach metadata for hydrometric sites.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.x_m IS 'Distance along cross-section from left bank in meters.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.y_top_m IS 'Top elevation of cross-section (default 0).'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.y_bot_m IS 'Bottom elevation of cross-section.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.mean_velocity_m_s IS 'Mean velocity of water at cross-section x-value.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.angle_deg IS 'Angle of cross-section relative to perpendicular to channel orientation. 90 is perpendicular.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.water_level_m IS 'Water level at time of cross-section measurements.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.xsection_substrate IS 'Substrate type at cross-section.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.xSection_note IS 'Additional notes about cross-section.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.valid IS 'Timestamp of validity of data.'")
+  
+  
+  # Function and Trigger to update the `modified` column on update
+  DBI::dbExecute(con, "
+    CREATE OR REPLACE FUNCTION update_modify_datetime()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.modified = CURRENT_TIMESTAMP;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  ")
+  
+  # Creating triggers for tables
+  tables_to_update <- c('locations_metadata_owners_operators', 'locations_metadata_access', 'locations_metadata_transmission', 'locations_metadata_infrastructure', 'locations_metadata_infrastructure_hydromet', 'locations_metadata_infrastructure_groundwater', 'locations_metadata_xsections')
+  
+  for (table in tables_to_update) {
+    DBI::dbExecute(con, paste0("
+      CREATE TRIGGER update_", table, "_modify_datetime
+      BEFORE UPDATE ON ", table, "
+      FOR EACH ROW
+      EXECUTE FUNCTION update_modify_datetime();
+    "))
+  }
   
   
   

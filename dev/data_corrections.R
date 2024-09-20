@@ -271,5 +271,7 @@
 #   OR md.value IS NULL;
 # ")
 
+
+
  
 # !!!! function calculate_stats takes values from measurements_continuous. Consider changing this to use the views table instead
