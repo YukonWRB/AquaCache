@@ -1390,7 +1390,7 @@ GROUP BY loc.location_id, loc.location, loc.name_fr, loc.latitude, loc.longitude
   )
 
   
-  ## Add tables and functions to hold corrections. These can apply to anything with a timeseries_id. A view table will be created to apply these corrections to the data and to let users extract corrected data ################
+  # Add tables, functions, and view tables to apply corrections. ################
   
   DBI::dbExecute(con, "CREATE TABLE correction_types (
   correction_type_id SERIAL PRIMARY KEY,
@@ -1439,11 +1439,14 @@ GROUP BY loc.location_id, loc.location, loc.name_fr, loc.latitude, loc.longitude
     timestep_window = c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE),
     equation = c(FALSE, FALSE, FALSE, TRUE, FALSE, FALSE)
   )
-  
-  DBI::dbExecute(con, "COMMENT ON TABLE correction_types IS 'Table to hold correction types for use in the corrections table'")
-  
   DBI::dbAppendTable(con, "correction_types", correction_types)
-  
+  DBI::dbExecute(con, "COMMENT ON TABLE correction_types IS 'Table to hold correction types and information for their use in the corrections table'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.correction_types.priority IS 'Defines the order in which corrections are applied. Lower numbers are applied first.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.correction_types.value1 IS 'Whether or not value1 is required for this correction type. NULL if optional'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.correction_types.value2 IS 'Whether or not value2 is required for this correction type. NULL if optional'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.correction_types.timestep_window IS 'Whether or not timestep_window is required for this correction type. NULL if optional'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.correction_types.equation IS 'Whether or not equation is required for this correction type. NULL if optional'")
+
   DBI::dbExecute(con, "CREATE TABLE corrections (
   correction_id SERIAL PRIMARY KEY,
   timeseries_id INTEGER NOT NULL REFERENCES timeseries (timeseries_id) ON UPDATE CASCADE ON DELETE CASCADE,
@@ -1461,7 +1464,7 @@ GROUP BY loc.location_id, loc.location, loc.name_fr, loc.latitude, loc.longitude
   UNIQUE (timeseries_id, start_dt, end_dt, correction_type)
 )")
   
-  DBI::dbExecute(con, "COMMENT ON TABLE corrections IS 'Table to hold corrections for timeseries data.'")
+  DBI::dbExecute(con, "COMMENT ON TABLE corrections IS 'Table to hold corrections for timeseries data. Each correction applies to a timeseries for a specified datetime range; overlapping corrections are applied in order of priority as defined in table correction_types.'")
   
   
   # Make function and trigger to ensure value1, value2, timestep_window are appropriately populated based on correction_type
@@ -1513,13 +1516,11 @@ END;
 $$ LANGUAGE plpgsql;
 ")
   
-  
   DBI::dbExecute(con, "CREATE TRIGGER validate_corrections_trigger
 BEFORE INSERT OR UPDATE ON corrections
 FOR EACH ROW
 EXECUTE FUNCTION validate_corrections();
 ")
-  
   
   DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION apply_corrections(
   p_timeseries_id INTEGER,
@@ -1606,7 +1607,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 ")
-  
   
   DBI::dbExecute(con, "
 CREATE OR REPLACE VIEW measurements_continuous_corrected AS
@@ -2686,7 +2686,66 @@ EXECUTE FUNCTION enforce_maintenance_constraints();
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.valid IS 'Timestamp of validity of data.'")
   
   
-  # Function and Trigger to update the `modified` column on update
+  ## Tables to hold rating curves and relevant data ########################################
+  DBI::dbExecute(con, "CREATE TABLE rating_curves (
+  curve_id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(location_id),
+  input_parameter_id INTEGER NOT NULL REFERENCES parameters(parameter_id),
+  output_parameter_id INTEGER NOT NULL REFERENCES parameters(parameter_id),
+  valid_from TIMESTAMP WITH TIME ZONE,
+  valid_to TIMESTAMP WITH TIME ZONE,
+  offset_value NUMERIC NOT NULL DEFAULT 0,
+  approval TEXT REFERENCES approvals(code),
+  created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  modified TIMESTAMP WITH TIME ZONE,
+  description TEXT,
+  notes TEXT,
+  UNIQUE(location_id, input_parameter_id, output_parameter_id, valid_from)
+)")
+  
+  DBI::dbExecute(con, "CREATE TABLE rating_curve_points (
+  curve_point_id SERIAL PRIMARY KEY,
+  curve_id INTEGER NOT NULL REFERENCES rating_curves(curve_id),
+  input_value numeric NOT NULL,
+  output_value numeric NOT NULL,
+  UNIQUE(curve_id, input_value)
+  )
+")
+  
+  DBI::dbExecute(con, "CREATE TABLE rating_curve_shifts (
+  curve_shift_id SERIAL PRIMARY KEY,
+  curve_id INTEGER NOT NULL REFERENCES rating_curves(curve_id),
+  shift_start TIMESTAMP WITH TIME ZONE NOT NULL,
+  shift_end TIMESTAMP WITH TIME ZONE NOT NULL,
+  shift_value numeric NOT NULL,
+  created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  modified TIMESTAMP WITH TIME ZONE,
+  UNIQUE(curve_id, shift_start, shift_end)
+)")
+  
+  # Enable btree_gist extension, which is required for the exclusion constraints
+  DBI::dbExecute(con, "CREATE EXTENSION IF NOT EXISTS btree_gist;
+")
+  
+  DBI::dbExecute(con, "ALTER TABLE rating_curves
+ADD CONSTRAINT rating_curves_no_overlap
+EXCLUDE USING gist (
+  location_id WITH =,
+  input_parameter_id WITH =,
+  output_parameter_id WITH =,
+  tstzrange(valid_from, valid_to, '[]') WITH &&
+);
+")
+  
+  DBI::dbExecute(con, "ALTER TABLE rating_curve_shifts
+ADD CONSTRAINT rating_curve_shifts_no_overlap
+EXCLUDE USING gist (
+  curve_id WITH =,
+  tstzrange(shift_start, shift_end, '[]') WITH &&
+);
+")
+  
+  ## Function and Trigger to update the `modified` column on update for multiple tables ########################################
   DBI::dbExecute(con, "
     CREATE OR REPLACE FUNCTION update_modified()
     RETURNS TRIGGER AS $$
@@ -2698,7 +2757,7 @@ EXECUTE FUNCTION enforce_maintenance_constraints();
   ")
   
   # Creating triggers for tables
-  tables_to_update <- c('locations_metadata_owners_operators', 'locations_metadata_access', 'locations_metadata_transmission', 'locations_metadata_acquisition', 'locations_metadata_infrastructure', 'locations_metadata_infrastructure_hydromet', 'locations_metadata_infrastructure_groundwater', 'locations_metadata_xsections')
+  tables_to_update <- c('locations_metadata_owners_operators', 'locations_metadata_access', 'locations_metadata_transmission', 'locations_metadata_acquisition', 'locations_metadata_infrastructure', 'locations_metadata_infrastructure_hydromet', 'locations_metadata_infrastructure_groundwater', 'locations_metadata_xsections', 'rating_curves', 'rating_curve_shifts')
   
   for (table in tables_to_update) {
     DBI::dbExecute(con, paste0("
