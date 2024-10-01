@@ -153,8 +153,13 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
   # images table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
                    image_id SERIAL PRIMARY KEY,
-                   img_meta_id INTEGER NOT NULL,
+                   img_meta_id INTEGER,
                    datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+                   latitude NUMERIC,
+                   longitude NUMERIC,
+                   azimuth_true NUMERIC,
+                   altitude_m_agl NUMERIC,
+                   altitude_m_asl NUMERIC,
                    fetch_datetime TIMESTAMP WITH TIME ZONE,
                    format TEXT NOT NULL,
                    file BYTEA NOT NULL,
@@ -162,7 +167,7 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                    share_with INTEGER[] NOT NULL DEFAULT '{1}',
                    owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                    contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
-                   UNIQUE (img_meta_id, datetime));")
+                   UNIQUE (img_meta_id, latitude, longitude, datetime));")
   DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images of local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images. NOT intended to capture what the instrumentation looks like, only what the conditions at the location are.'")
 
   # images_index table #################
@@ -181,8 +186,72 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                  owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                  active BOOLEAN,
                  UNIQUE (location_id, img_type));")
-  DBI::dbExecute(con, "COMMENT ON TABLE public.images_index IS 'Index for images table. Each location at which there is one or more image gets an entry here; images in table images are linked to this table using the img_meta_id.'")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.images_index IS 'Index for image series in images table. Each location at which there is an image series gets an entry here; images in table images are linked to this table using the img_meta_id.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN public.images_index.active IS 'Defines if the image series should or should not be imported.'")
+  
+  
+  ## Constraint functions/triggers on image tables ################
+  # Ensure that lat/long is populated if img_meta_id is NULL, and that lat/long is NULL if img_meta_id is NOT NULL
+  DBI::dbExecute(con, "
+               CREATE OR REPLACE FUNCTION enforce_lat_lon_constraints()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- If img_meta_id is NOT NULL, ensure latitude and longitude are NULL
+                  IF NEW.img_meta_id IS NOT NULL THEN
+                      IF NEW.latitude IS NOT NULL OR NEW.longitude IS NOT NULL THEN
+                          RAISE EXCEPTION 'When img_meta_id is NOT NULL, latitude and longitude must be NULL.';
+                      END IF;
+                  -- If img_meta_id is NULL, ensure latitude and longitude are NOT NULL
+                  ELSE
+                      IF NEW.latitude IS NULL OR NEW.longitude IS NULL THEN
+                          RAISE EXCEPTION 'When img_meta_id is NULL, latitude and longitude must be NOT NULL.';
+                      END IF;
+                  END IF;
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+               CREATE TRIGGER trigger_enforce_lat_lon_constraints
+                BEFORE INSERT OR UPDATE ON images
+                FOR EACH ROW
+                EXECUTE FUNCTION enforce_lat_lon_constraints();
+")
+  
+  # Make function/trigger on table images that enforces most restrictive share_with for tables images and images_index table. In other words, if images_index is NOT {1}, then images should not be {1}. However, if images_index is {1}, then images can be {2,3,4} or {1}
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION enforce_share_with_restriction()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- Skip check if img_meta_id is NULL
+                  IF NEW.img_meta_id IS NULL THEN
+                      RETURN NEW;
+                  END IF;
+                  
+                  -- Check if images_index.share_with is NOT {1}
+                  IF NOT (1 = ANY(NEW.share_with)) THEN
+                      -- Retrieve the corresponding share_with from images_index
+                      PERFORM 1
+                      FROM images_index
+                      WHERE img_meta_id = NEW.img_meta_id
+                        AND NOT (1 = ANY(share_with));
+                        
+                      -- If images_index.share_with is NOT {1}, raise an exception
+                      IF FOUND THEN
+                          RAISE EXCEPTION 'images_index entry for img_meta_id % has a restrictive share_with, images.share_with cannot be {1}', NEW.img_meta_id;
+                      END IF;
+                  END IF;
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+               CREATE TRIGGER trigger_enforce_share_with_restriction
+              BEFORE INSERT OR UPDATE ON images
+              FOR EACH ROW
+              EXECUTE FUNCTION enforce_share_with_restriction();
+               ")
+  
 
   # forecasts table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists forecasts (
@@ -484,13 +553,43 @@ EXECUTE FUNCTION check_approval_exists_daily();
                  latitude NUMERIC NOT NULL,
                  longitude NUMERIC NOT NULL
                  contact TEXT,
+                 install_purpose TEXT,
+                 current_purpose TEXT,
                  geom_id INTEGER NOT NULL,
+                 location_images INTEGER[],
                  note TEXT,
                  visibility_public TEXT NOT NULL CHECK(visibility_public IN ('exact', 'region', 'jitter')) DEFAULT 'exact',
                  share_with INTEGER[] NOT NULL DEFAULT '{1}',
-                 owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE
                  );")
-  
+  # function/trigger to make sure that array elements of location_images are all valid image_ids in table 'images'
+  DBI::dbExecute(con, "
+                      CREATE OR REPLACE FUNCTION check_location_images()
+                      RETURNS TRIGGER AS $$
+                      BEGIN
+                          IF NEW.location_images IS NOT NULL THEN
+                              -- Loop through each element in the location_images array
+                              FOR i IN 1..array_length(NEW.location_images, 1) LOOP
+                                  -- Check if the image_id exists in the images table
+                                  PERFORM 1
+                                  FROM images
+                                  WHERE image_id = NEW.location_images[i];
+                                  
+                                  -- If image_id is not found, raise an exception
+                                  IF NOT FOUND THEN
+                                      RAISE EXCEPTION 'Invalid image_id: %, for location_id: %', NEW.location_images[i], NEW.location_id;
+                                  END IF;
+                              END LOOP;
+                          END IF;
+                          RETURN NEW;
+                      END;
+                      $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+                 CREATE TRIGGER trigger_check_location_images
+                BEFORE INSERT OR UPDATE ON locations
+                FOR EACH ROW
+                EXECUTE FUNCTION check_location_images();
+")
   
   DBI::dbExecute(con, "COMMENT ON COLUMN public.locations.visibility IS 'Visibility of the location on the map. Exact means the location is to be shown exactly where it is. Region means the location is to be shown generally with a region. Jitter means the location is shown at a random location within a toroid of inner/outer radius 2, 5 km around the exact point location. This column does not apply if column public is FALSE.'")
   
@@ -1854,6 +1953,7 @@ USING (
                   asset_tag TEXT,
                   date_in_service DATE,
                   date_purchased DATE,
+                  date_end_of_life DATE,
                   retired_by TEXT,
                   date_retired DATE,
                   create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -1868,15 +1968,16 @@ USING (
   
   DBI::dbExecute(con,
                  "CREATE TABLE instruments.instrument_deployment (
+                  deployment_id SERIAL PRIMARY KEY,
                   instrument_id INTEGER NOT NULL,
                   deployment_start_date DATE NOT NULL,
                   deployment_end_date DATE,
                   deployment_location TEXT,
                   deployment_purpose TEXT,
                   deployment_notes TEXT,
-                  location_id INTEGER NOT NULL REFERENCES instruments.locations(location_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                  location_id INTEGER NOT NULL REFERENCES locations(location_id) ON UPDATE CASCADE ON DELETE SET NULL,
                   create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                  modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (instrument_id) REFERENCES instruments.instruments(instrument_id) ON UPDATE CASCADE ON DELETE CASCADE
                   )
                  ;")
@@ -1897,10 +1998,10 @@ USING (
                   sensor_serial TEXT NOT NULL,
                   sensor_make TEXT NOT NULL,
                   sensor_model TEXT NOT NULL,
-                  sensor_date_in_service DATE,
-                  sensor_date_purchased DATE,
-                  sensor_retired_by TEXT,
-                  sensor_date_retired DATE,
+                  date_in_service DATE,
+                  date_purchased DATE,
+                  retired_by TEXT,
+                  date_retired DATE,
                   sensor_asset_tag TEXT,
                   sensor_notes TEXT,
                   UNIQUE (sensor_serial),
@@ -1911,7 +2012,7 @@ USING (
                  ;")
   
   
-  ## Create "maintenance" tables ########################################
+  ## Create instrument and sensor "maintenance" tables ########################################
   DBI::dbExecute(con,
                  "CREATE TABLE instruments.instrument_maintenance (
                   event_id SERIAL PRIMARY KEY,
@@ -1919,6 +2020,7 @@ USING (
                   observer INTEGER NOT NULL,
                   obs_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                   note TEXT NOT NULL,
+                  date_maintenance_due DATE,
                   create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                   modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (instrument_id) REFERENCES instruments.instruments(instrument_id) ON UPDATE CASCADE ON DELETE CASCADE,
@@ -1974,6 +2076,7 @@ USING (
                   obs_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                   id_sensor_holder INTEGER NOT NULL,
                   id_handheld_meter INTEGER,
+                  purpose TEXT,
                   complete BOOLEAN NOT NULL DEFAULT FALSE,
                   create_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                   modify_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -2113,25 +2216,15 @@ USING (
     "))
   }
   
-  ## Modify the serach path to include the 'instruments' schema
+  ## Modify the search path to include the 'instruments' schema
   DBI::dbExecute(con, "ALTER ROLE AquaCache SET search_path TO public, instruments;")
   
   
   
   # Create metadata tables for the main database that link to the 'instruments' schema as well ########################################
-  # Location metadata fixed in time is part of table 'locations'
-  # Remove column 'owner' from table 'locations' as it can change with time
-  DBI::dbExecute(con, "ALTER TABLE locations DROP COLUMN owner")
-  # Add a few columns
-  DBI::dbExecute(con, "
-               ALTER TABLE locations 
-               ADD COLUMN install_purpose TEXT")
-  DBI::dbExecute(con, "ALTER TABLE locations
-               ADD COLUMN current_purpose TEXT")
-  
   
   # Locations metadata that can change over time and for which records should be kept is part of table 'location_metadata_xxx'
-  # Location ownership metadata
+  ## Location ownership metadata ########################################
   DBI::dbExecute(con, "
                CREATE TABLE locations_metadata_owners_operators (
                id SERIAL PRIMARY KEY,
@@ -2191,7 +2284,7 @@ USING (
               EXECUTE FUNCTION fill_locations_metadata_owners_operators_missing();
 ")
   
-  # Site access metadata
+  ## Site access metadata ########################################
   DBI::dbExecute(con, "
                CREATE TABLE locations_metadata_access (
                id SERIAL PRIMARY KEY,
@@ -2265,32 +2358,110 @@ USING (
               EXECUTE FUNCTION fill_locations_metadata_access_missing();
 ")
   
-  # Data transmission metadata
+  ## Table for location maintenance such as brushing, cleaning, etc. ########################################
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_maintenance (
+               location_maintenance_id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id),
+               maintenance_performed TEXT,
+               date_performed DATE
+               maintenance_due TEXT,
+               maintenance_flag BOOLEAN
+               ")
+  
+  DBI::dbExecute(con, "
+               CREATE OR REPLACE FUNCTION enforce_maintenance_constraints()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Check if at least one of maintenance_performed or maintenance_due is not NULL
+    IF NEW.maintenance_performed IS NULL AND NEW.maintenance_due IS NULL THEN
+        RAISE EXCEPTION 'Either maintenance_performed or maintenance_due must be provided.';
+    END IF;
+
+    -- If maintenance_due is not NULL, set maintenance_flag to TRUE
+    IF NEW.maintenance_due IS NOT NULL THEN
+        NEW.maintenance_flag := TRUE;
+    END IF;
+
+    -- If maintenance_performed is not NULL, ensure date_performed is also provided
+    IF NEW.maintenance_performed IS NOT NULL AND NEW.date_performed IS NULL THEN
+        RAISE EXCEPTION 'date_performed cannot be NULL when maintenance_performed is provided.';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+")
+  
+  DBI::dbExecute(con, "
+               CREATE TRIGGER trigger_enforce_maintenance_constraints
+BEFORE INSERT OR UPDATE ON locations_metadata_maintenance
+FOR EACH ROW
+EXECUTE FUNCTION enforce_maintenance_constraints();
+")
+  
+  ## Data transmission metadata ########################################
   DBI::dbExecute(con, "
                CREATE TABLE locations_metadata_transmission (
                id SERIAL PRIMARY KEY,
                location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-               method TEXT NOT NULL, -- manual download, GOES, Iridium, etc.
+               method TEXT NOT NULL, -- GOES, Iridium, etc.
                transmitter INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
                transmission_code TEXT,
                battery INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
                solar_panel INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
-               instruments INTEGER[],
                start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                end_datetime TIMESTAMP WITH TIME ZONE,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                modified TIMESTAMP WITH TIME ZONE);
                ")
   DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_transmission IS 'Data transmission metadata for locations.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.method IS 'Method of data transmission, such as manual download, GOES, etc.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.method IS 'Method of data transmission, such as GOES, cellular, Iridium, etc.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.transmitter IS 'Transmitter instrument ID.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.battery IS 'Battery instrument ID.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.solar_panel IS 'Solar panel instrument ID.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.transmission_code IS 'Transmission code, if applicable.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_transmission.instruments IS 'Array of instrument IDs used for data transmission. Each array element must exist in table instruments.instruments, enforced with a trigger and function.'")
+  
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION fill_locations_metadata_transmission_missing()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- If a previous entry exists without an end_datetime, update its end_datetime
+                  UPDATE locations_metadata_transmission
+                  SET end_datetime = NEW.start_datetime
+                  WHERE location_id = NEW.location_id
+                    AND end_datetime IS NULL;
+                    
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER fill_locations_metadata_transmission_missing_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_transmission
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_transmission_missing();
+")
+  
+  
+  ## Data acquisition metadata ########################################
+  DBI::dbExecute(con, "
+               CREATE TABLE locations_metadata_acquisition (
+               id SERIAL PRIMARY KEY,
+               location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+               instruments INTEGER[] NOT NULL,
+               start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+               end_datetime TIMESTAMP WITH TIME ZONE,
+               created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               modified TIMESTAMP WITH TIME ZONE);
+               ")
+  DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_acquisition IS 'Data acquisition metadata for locations, such as sondes, instrument arrays, etc. These may depend on instruments in table locations_metadata_transmission for data transmission.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_acquisition.instruments IS 'Array of instrument IDs used for data acquisition, such as sonde IDs, loggers, etc. Each array element must exist in table instruments.instruments, enforced with a trigger and function.'")
+  
+  
   # Add check that all elements of 'instruments' exist in table 'instruments.instruments' as this can't be done with a foreign key on the array
   DBI::dbExecute(con, "
-              CREATE OR REPLACE FUNCTION check_locations_metadata_transmission_instruments()
+              CREATE OR REPLACE FUNCTION check_locations_metadata_acquisition_instruments()
               RETURNS TRIGGER AS $$
               BEGIN
                   IF NEW.instruments IS NOT NULL THEN
@@ -2305,13 +2476,36 @@ USING (
               $$ LANGUAGE plpgsql;
 ")
   DBI::dbExecute(con, "
-              CREATE TRIGGER check_locations_metadata_transmission_instruments_trigger
-              BEFORE INSERT OR UPDATE ON locations_metadata_transmission
+              CREATE TRIGGER check_locations_metadata_acquisition_instruments_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_acquisition
               FOR EACH ROW
-              EXECUTE FUNCTION check_locations_metadata_transmission_instruments();
+              EXECUTE FUNCTION check_locations_metadata_acquisition_instruments();
 ")
   
-  # General infrastructure metadata
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE FUNCTION fill_locations_metadata_acquisition_missing()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                  -- If a previous entry exists without an end_datetime, update its end_datetime
+                  UPDATE locations_metadata_acquisition
+                  SET end_datetime = NEW.start_datetime
+                  WHERE location_id = NEW.location_id
+                    AND end_datetime IS NULL;
+                    
+                  RETURN NEW;
+              END;
+              $$ LANGUAGE plpgsql;
+")
+  DBI::dbExecute(con, "
+              CREATE TRIGGER fill_locations_metadata_acquisition_missing_trigger
+              BEFORE INSERT OR UPDATE ON locations_metadata_acquisition
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_acquisition_missing();
+")
+  
+  
+  
+  ## General infrastructure metadata ########################################
   DBI::dbExecute(con, "
                CREATE TABLE locations_metadata_infrastructure (
                id SERIAL PRIMARY KEY,
@@ -2371,7 +2565,7 @@ USING (
               EXECUTE FUNCTION fill_locations_metadata_infrastructure_missing();
 ")
   
-  # Hydrometric-specific infrastructure metadata
+  ## Hydrometric-specific infrastructure metadata ########################################
   DBI::dbExecute(con, "
                CREATE TABLE locations_metadata_infrastructure_hydromet (
                id SERIAL PRIMARY KEY,
@@ -2385,6 +2579,8 @@ USING (
                reach_grade NUMERIC,
                reach_note TEXT,
                health_safety TEXT,
+               local_g NUMERIC,
+               magnetic_declination NUMERIC,
                start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                end_datetime TIMESTAMP WITH TIME ZONE,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2398,6 +2594,7 @@ USING (
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.reach_substrate IS 'Substrate type at reach.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.reach_grade IS 'Grade of reach (approximate, degrees).'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.reach_note IS 'Additional notes about reach.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_infrastructure_hydromet.local_g IS 'Location-specific gravitational constant'")
   DBI::dbExecute(con, "
               CREATE OR REPLACE FUNCTION fill_locations_metadata_infrastructure_hydromet()
               RETURNS TRIGGER AS $$
@@ -2419,12 +2616,11 @@ USING (
               EXECUTE FUNCTION fill_locations_metadata_infrastructure_hydromet();
 ")
   
-  # GW-specific infrastructure metadata
+  ## GW-specific infrastructure metadata ########################################
   DBI::dbExecute(con, "
                CREATE TABLE locations_metadata_infrastructure_groundwater (
                id SERIAL PRIMARY KEY,
                location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-               well_depth_btoc_m NUMERIC,
                well_diameter_cm NUMERIC,
                stick_up_m NUMERIC,
                start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -2458,6 +2654,7 @@ USING (
               EXECUTE FUNCTION fill_locations_metadata_infrastructure_groundwater();
 ")
   
+  ## Stream cross-section metadata ########################################
   DBI::dbExecute(con, "
                CREATE TABLE locations_metadata_xsections (
                id SERIAL PRIMARY KEY,
@@ -2466,11 +2663,11 @@ USING (
                y_top_m NUMERIC[] DEFAULT '{0}',
                y_bot_m NUMERIC[],
                mean_velocity_m_s NUMERIC[],
+               instrument INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
                angle_deg NUMERIC DEFAULT 90,
                water_level_m NUMERIC,
                xsection_substrate TEXT,
                xsection_note TEXT,
-               instrument INTEGER REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
                measurement_grade TEXT REFERENCES grades(code) ON DELETE SET NULL ON UPDATE CASCADE,
                valid TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2478,19 +2675,20 @@ USING (
                ")
   DBI::dbExecute(con, "COMMENT ON TABLE locations_metadata_xsections IS 'Cross-section and reach metadata for hydrometric sites.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.x_m IS 'Distance along cross-section from left bank in meters.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.y_top_m IS 'Top elevation of cross-section (default 0).'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.y_bot_m IS 'Bottom elevation of cross-section.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.mean_velocity_m_s IS 'Mean velocity of water at cross-section x-value.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.angle_deg IS 'Angle of cross-section relative to perpendicular to channel orientation. 90 is perpendicular.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.water_level_m IS 'Water level at time of cross-section measurements.'")
-  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.xsection_substrate IS 'Substrate type at cross-section.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.y_top_m IS 'Top elevation of cross-section in meters (default 0).'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.y_bot_m IS 'Bottom elevation of cross-section in meters.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.mean_velocity_m_s IS 'Mean velocity of water at cross-section x-value in cubic meters per second.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.instrument IS 'Instrument used to measure velocity, referencing instruments.instruments table.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.angle_deg IS 'Angle of cross-section relative to perpendicular to channel orientation. 90 (default) is perpendicular.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.water_level_m IS 'Water level at time of cross-section measurements in meters.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.xsection_substrate IS 'Substrate type at cross-section (description).'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.xSection_note IS 'Additional notes about cross-section.'")
   DBI::dbExecute(con, "COMMENT ON COLUMN locations_metadata_xsections.valid IS 'Timestamp of validity of data.'")
   
   
   # Function and Trigger to update the `modified` column on update
   DBI::dbExecute(con, "
-    CREATE OR REPLACE FUNCTION update_modify_datetime()
+    CREATE OR REPLACE FUNCTION update_modified()
     RETURNS TRIGGER AS $$
     BEGIN
       NEW.modified = CURRENT_TIMESTAMP;
@@ -2500,29 +2698,202 @@ USING (
   ")
   
   # Creating triggers for tables
-  tables_to_update <- c('locations_metadata_owners_operators', 'locations_metadata_access', 'locations_metadata_transmission', 'locations_metadata_infrastructure', 'locations_metadata_infrastructure_hydromet', 'locations_metadata_infrastructure_groundwater', 'locations_metadata_xsections')
+  tables_to_update <- c('locations_metadata_owners_operators', 'locations_metadata_access', 'locations_metadata_transmission', 'locations_metadata_acquisition', 'locations_metadata_infrastructure', 'locations_metadata_infrastructure_hydromet', 'locations_metadata_infrastructure_groundwater', 'locations_metadata_xsections')
   
   for (table in tables_to_update) {
     DBI::dbExecute(con, paste0("
-      CREATE TRIGGER update_", table, "_modify_datetime
+      CREATE TRIGGER update_", table, "_modified
       BEFORE UPDATE ON ", table, "
       FOR EACH ROW
-      EXECUTE FUNCTION update_modify_datetime();
+      EXECUTE FUNCTION update_modified();
     "))
   }
   
   
+  # Create metadata view tables for internal purposes 3
+#   DBI::dbExecute(con, "
+#   CREATE OR REPLACE VIEW location_core_metadata AS
+#   SELECT
+#   l.location_id,
+#   l.location,
+#   l.name,
+#   l.latitude,
+#   l.longitude,
+#   l.contact,
+#   l.install_purpose,
+#   l.current_purpose,
+#   l.note,
+#   -- Owners and Operators
+#   oo.owner,
+#   oo.operator,
+#   -- Access Metadata
+#   a.method AS access_method,
+#   a.health_safety AS access_health_safety,
+#   a.notes AS access_notes,
+#   -- Maintenance Metadata
+#   m.maintenance_performed AS last_maintenance_performed,
+#   m.date_performed AS last_maintenance_performed_date,
+#   m.maintenance_due,
+#   m.maintenance_flag,
+#   -- Transmission Metadata
+#   t.method AS transmission_method,
+#   t.transmitter,
+#   t.transmission_code,
+#   t.battery,
+#   t.solar_panel,
+#   t.instruments AS transmission_instruments,
+#   -- General Infrastructure Metadata
+#   i.site_description,
+#   i.infrastructure_description
+#   FROM
+#   locations l
+#   -- Join with Owners and Operators metadata (latest entry)
+#   LEFT JOIN LATERAL (
+#     SELECT *
+#       FROM locations_metadata_owners_operators oo
+#     WHERE oo.location_id = l.location_id
+#     AND oo.start_datetime <= NOW()
+#     AND (oo.end_datetime IS NULL OR oo.end_datetime > NOW())
+#     ORDER BY oo.start_datetime DESC
+#     LIMIT 1
+#   ) oo ON TRUE
+#   -- Join with Access metadata (latest entry)
+#   LEFT JOIN LATERAL (
+#     SELECT *
+#       FROM locations_metadata_access a
+#     WHERE a.location_id = l.location_id
+#     AND a.start_datetime <= NOW()
+#     AND (a.end_datetime IS NULL OR a.end_datetime > NOW())
+#     ORDER BY a.start_datetime DESC
+#     LIMIT 1
+#   ) a ON TRUE
+#   -- Join with Maintenance metadata (latest entry)
+#   LEFT JOIN LATERAL (
+#     SELECT *
+#       FROM locations_metadata_maintenance m
+#     WHERE m.location_id = l.location_id
+#     ORDER BY m.date_performed DESC
+#     LIMIT 1
+#   ) m ON TRUE
+#   -- Join with Transmission metadata (latest entry)
+#   LEFT JOIN LATERAL (
+#     SELECT *
+#       FROM locations_metadata_transmission t
+#     WHERE t.location_id = l.location_id
+#     AND t.start_datetime <= NOW()
+#     AND (t.end_datetime IS NULL OR t.end_datetime > NOW())
+#     ORDER BY t.start_datetime DESC
+#     LIMIT 1
+#   ) t ON TRUE
+#   -- Join with General Infrastructure metadata (latest entry)
+#   LEFT JOIN LATERAL (
+#     SELECT *
+#       FROM locations_metadata_infrastructure i
+#     WHERE i.location_id = l.location_id
+#     AND i.start_datetime <= NOW()
+#     AND (i.end_datetime IS NULL OR i.end_datetime > NOW())
+#     ORDER BY i.start_datetime DESC
+#     LIMIT 1
+#   ) i ON TRUE
+#   ORDER BY
+#   l.location_id;
+#   ")
+#   
+#   DBI::dbExecute(con, "CREATE OR REPLACE VIEW location_hydrometric_metadata AS
+# SELECT
+#     l.location_id,
+#     l.location,
+#     l.name,
+#     l.latitude,
+#     l.longitude,
+#     -- Hydrometric Infrastructure Metadata
+#     ih.stilling_well,
+#     ih.staff_gauge,
+#     ih.tower,
+#     ih.shelter,
+#     ih.cableway,
+#     ih.reach_substrate,
+#     ih.reach_grade,
+#     ih.reach_note,
+#     ih.health_safety AS hydromet_health_safety,
+#     ih.local_g,
+#     ih.magnetic_declination,
+#     ih.start_datetime AS hydromet_start,
+#     ih.end_datetime AS hydromet_end
+# FROM
+#     locations l
+#     -- Join with Hydrometric Infrastructure metadata (latest entry)
+#     INNER JOIN LATERAL (
+#         SELECT *
+#         FROM locations_metadata_infrastructure_hydromet ih
+#         WHERE ih.location_id = l.location_id
+#           AND ih.start_datetime <= NOW()
+#           AND (ih.end_datetime IS NULL OR ih.end_datetime > NOW())
+#         ORDER BY ih.start_datetime DESC
+#         LIMIT 1
+#     ) ih ON TRUE
+# ORDER BY
+#     l.location_id;
+# ")
+#   
+#   DBI::dbExecutE(con, "CREATE OR REPLACE VIEW location_groundwater_metadata AS
+# SELECT
+#     l.location_id,
+#     l.location,
+#     l.name,
+#     l.latitude,
+#     l.longitude,
+#     -- Groundwater Infrastructure Metadata
+#     ig.well_depth_btoc_m,
+#     ig.well_diameter_cm,
+#     ig.stick_up_m,
+#     ig.start_datetime AS groundwater_start,
+#     ig.end_datetime AS groundwater_end
+# FROM
+#     locations l
+#     -- Join with Groundwater Infrastructure metadata (latest entry)
+#     INNER JOIN LATERAL (
+#         SELECT *
+#         FROM locations_metadata_infrastructure_groundwater ig
+#         WHERE ig.location_id = l.location_id
+#           AND ig.start_datetime <= NOW()
+#           AND (ig.end_datetime IS NULL OR ig.end_datetime > NOW())
+#         ORDER BY ig.start_datetime DESC
+#         LIMIT 1
+#     ) ig ON TRUE
+# ORDER BY
+#     l.location_id;
+# ")
   
-  
-  # Create a read-only account ########################################
+  # Create accounts ########################################
   tryCatch({
     DBI::dbExecute(con, "CREATE ROLE AquaCache_read WITH LOGIN PASSWORD 'AquaCache';")
-    DBI::dbExecute(con, "GRANT CONNECT ON DATABASE AquaCache TO AquaCache_read;")
+    DBI::dbExecute(con, 'GRANT CONNECT ON DATABASE "AquaCache" TO AquaCache_read;')
     DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO AquaCache_read;")
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA instruments TO AquaCache_read;")
     DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO AquaCache_read;")
+    DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA instruments TO AquaCache_read;")
   }, error = function(e) {
     warning("May have failed to create new read only account with name AquaCache_read. Ignore this message if it already exists (this function would not have erased the old account).")
   })
+  # Account able to add/edit/delete data and metadata
+  tryCatch({
+    DBI::dbExecute(con, "CREATE ROLE AC_editor WITH LOGIN PASSWORD '!Water2024';")
+    DBI::dbExecute(con, 'GRANT CONNECT ON DATABASE "AquaCache" TO AC_editor;')
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO AC_editor;")
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA instruments TO AC_editor;")
+    DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO AC_editor;")
+    DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA instruments TO AC_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO AC_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES IN SCHEMA instruments GRANT INSERT, UPDATE, DELETE ON TABLES TO AC_editor;")
+    
+    DBI::dbExecute(con, "GRANT INSERT, UPDATE, DELETE ON TABLE public.corrections, public.datum_conversions, public.documents, public.documents_spatial, public.extrema, public.forecasts, public.images, public.images_index, public.laboratories, public.locations, public.locations_metadata_access, public.locations_metadata_infrastructure, public.locations_metadata_infrastructure_groundwater, public.locations_metadata_infrastructure_hydromet, public.locations_metadata_maintenance, public.locations_metadata_owners_operators, public.locations_metadata_transmission, public.locations_metadata_xsections, public.locations_networks, public.locations_projects, public.measurements_continuous, public.measurements_discrete, public.networks, public.owners_contributors, public.projects, public.rasters, public.rasters_reference, public.thresholds, public.timeseries, public.vectors TO AC_editor;")
+    DBI::dbExecute(con, "GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA instruments TO AC_editor;")
+    
+  }, error = function(e) {
+    warning("May have failed to create new read only account with name AquaCache_read. Ignore this message if it already exists (this function would not have erased the old account).")
+  })
+  
 
   message("The database was successfully created. If a read-only account was created it has username AquaCache_read and password AquaCache")
 }
