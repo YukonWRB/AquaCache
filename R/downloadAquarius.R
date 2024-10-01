@@ -10,7 +10,7 @@
 
 #'
 #' @param location The location ID, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `29EA001` or `YOWN-0804`.
-#' @param param_code The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `Wlevel_bgs.Calculated`.
+#' @param parameter_id The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `Wlevel_bgs.Calculated`.
 #' @param start_datetime The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.
 #' @param end_datetime The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.
 #' @param login Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.
@@ -21,7 +21,7 @@
 #' @export
 
 downloadAquarius <- function(location,
-                             param_code,
+                             parameter_id,
                              start_datetime,
                              end_datetime = Sys.Date(),
                              login = Sys.getenv(c("AQUSER", "AQPASS")),
@@ -46,7 +46,7 @@ downloadAquarius <- function(location,
     server = server,
     username = login[1],
     password = login[2],
-    timeSeriesName = paste0(param_code, "@", location)
+    timeSeriesName = paste0(parameter_id, "@", location)
   )
 
   # Connect to Aquarius server

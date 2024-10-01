@@ -118,7 +118,7 @@ insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, 
   if (update) {
     DBI::dbExecute(con, paste0("UPDATE images SET ", if (!is.null(fetch_datetime)) paste0("fetch_datetime = '", fetch_datetime, "', "), if (!is.null(description)) paste0("description = '", description, "', "), if (!is.null(owner)) paste0("owner = '", owner, "', "), if (!is.null(contributor)) paste0("contributor = '", contributor, "', "), "share_with = {", paste(share_with, collapse = ","), "}, format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE img_meta_id = ", img_meta_id, " AND datetime = '", datetime, "';"))
   } else {
-    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, share_with, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', {",  paste(share_with, collapse = ","), "} '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+    DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, share_with, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '{",  paste(share_with, collapse = ","), "}', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
     if (!is.null(owner)) {
       DBI::dbExecute(con, paste0("UPDATE images SET owner = '", owner, "' WHERE img_meta_id = ", img_meta_id, " AND datetime = '", datetime, "';"))
     }

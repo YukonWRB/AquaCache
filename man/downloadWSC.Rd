@@ -4,12 +4,12 @@
 \alias{downloadWSC}
 \title{Get realtime data from the WSC}
 \usage{
-downloadWSC(location, param_code, start_datetime, end_datetime = Sys.time())
+downloadWSC(location, parameter_id, start_datetime, end_datetime = Sys.time())
 }
 \arguments{
 \item{location}{A WSC station number.}
 
-\item{param_code}{A WSC parameter code. 47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46 for level, 5 for water temperature, 4 for air temperature. See the full list using \link[tidyhydat:param_id]{tidyhydat::param_id}.}
+\item{parameter_id}{A WSC parameter code. 47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46 for level, 5 for water temperature, 4 for air temperature. See the full list using \link[tidyhydat:param_id]{tidyhydat::param_id}.}
 
 \item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 

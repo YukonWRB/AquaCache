@@ -6,7 +6,7 @@
 #' A function used to fetch weather data from ECCC, using the weathercan package for speed and simplicity. Since ECCC weather data comes in as a tibble with ~36 rows (all parameters)and there is no way to tailor the request to a single parameter, this function will save the output of the first download as an .rdata file to the session temporary folder. Subsequent runs of the function will search the temporary folder for a suitable file and attempt to use it, downloading again only if no suitable file is found. Temporary folder contents are deleted when the R session is closed.
 #'
 #' @param location An ECCC Station ID (not to be mistaken for other IDs such as the Nav Canada ID, the WMO ID, or the Climate ID). See [weathercan::stations()] for help finding the right ID.
-#' @param param_code The name of the column containing the desired data, as output in the data.frame given by [weathercan::weather_dl()]. Taken from the param_code column of the 'settings' table. Note that this column name varies depending on the interval specified (hour, day, month).
+#' @param parameter_id The name of the column containing the desired data, as output in the data.frame given by [weathercan::weather_dl()]. Taken from the parameter_id column of the 'settings' table. Note that this column name varies depending on the interval specified (hour, day, month).
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param interval The interval to pass to [weathercan::weather_dl()], one of "hour", "day", "month".
@@ -15,7 +15,7 @@
 #' @export
 
 
-downloadECCCwx <- function(location, param_code, start_datetime, end_datetime = Sys.time(), interval)
+downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), interval)
 {
 
   # Checking start_datetime parameter
@@ -72,11 +72,11 @@ downloadECCCwx <- function(location, param_code, start_datetime, end_datetime = 
     save(dl, file = paste0(tempdir(), "/downloadECCCwx/", location, "_", interval, "_", substr(start_datetime, 1, 10), "_", substr(end_datetime, 1, 10), ".rdata"))
   }
 
-  #Extract the necessary information according to the param_code
+  #Extract the necessary information according to the parameter_id
   if (nrow(dl) > 0) {
     if ("time" %in% names(dl)) { #Must be hourly
       data <- data.frame(datetime = dl$time,
-                         value = dl[[param_code]]) #Note the different subsetting because dl is a tibble.
+                         value = dl[[parameter_id]]) #Note the different subsetting because dl is a tibble.
       data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
       if (nrow(data) > 0) {
         data$grade <- "U"
@@ -84,7 +84,7 @@ downloadECCCwx <- function(location, param_code, start_datetime, end_datetime = 
       }
     } else if (("date" %in% names(dl)) & !("time" %in% names(dl))) { #Must be daily or more
       data <- data.frame(datetime = as.POSIXct(dl$date, tz = "UTC") + 30*60*60,  #Observations building daily values end at 6 UTC on following day (so values reported on the 24th include hours 07 to 23 on the 24th plus 00 to 06 on the 25th)
-                         value = dl[[param_code]]) #Note the different subsetting because dl is a tibble.
+                         value = dl[[parameter_id]]) #Note the different subsetting because dl is a tibble.
       data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
       if (nrow(data) > 0) {
         data$grade <- "U"

@@ -31,7 +31,7 @@
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty data.frame.
 #' 
 #' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'param_code' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
+#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'parameter_id' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #' 
 #' ## Sharing privileges and ownership
 #' The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data, unless the source function returns populated columns for owner and share_with.
@@ -53,9 +53,9 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
   
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)) {
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'discrete', or has no function specified in column source_fx.")
     }
@@ -73,7 +73,7 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
   snowCon <- NULL
   for (i in 1:nrow(all_timeseries)) {
     loc <- all_timeseries$location[i]
-    parameter <- all_timeseries$parameter[i]
+    parameter <- all_timeseries$parameter_id[i]
     period_type <- all_timeseries$period_type[i]
     record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
@@ -91,14 +91,14 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
     }
     source_fx_args <- all_timeseries$source_fx_args[i]
     if (is.na(record_rate)) {
-      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
+      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
     } else {
-      param_code <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
     }
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
 
     tryCatch({
-      args_list <- list(location = loc, param_code = param_code, start_datetime = last_data_point)
+      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = last_data_point)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
       if (source_fx == "downloadEQWin") {
         args_list[["EQcon"]] <- EQcon
@@ -210,8 +210,8 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
         }
         
         # Get the result_speciation and sample_fraction boolean values for the parameter. If TRUE then ts must contain columns result_speciation and sample_fraction.
-        result_speciation <- DBI::dbGetQuery(con, paste0("SELECT result_speciation FROM parameters WHERE param_code = '", parameter, "';"))[1,1]
-        sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT sample_fraction FROM parameters WHERE param_code = '", parameter, "';"))[1,1]
+        result_speciation <- DBI::dbGetQuery(con, paste0("SELECT result_speciation FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
+        sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT sample_fraction FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
         if (result_speciation == TRUE) {
           if (!("result_speciation" %in% names(ts))) {
             stop("The source function did not return a column 'result_speciation' but the parameter in the database has result_speciation set to TRUE.")

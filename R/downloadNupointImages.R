@@ -21,13 +21,18 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
     stop("Parameter start_datetime must be a POSIXct.")
   }
   
+  # for variables left as "Sys.getenv(xxxx)", check that these exist
+  if (is.null(Sys.getenv("nupointUser")) | is.null(Sys.getenv("nupointPass")) | is.null(Sys.getenv("nupointServer")) | is.null(Sys.getenv("nupointPort")) | is.null(Sys.getenv("nupointFolder")) ) {
+    stop("One or more of the necessary environment variables are missing. Please ensure that nupointUser, nupointPass, nupointServer, nupointPort, and nupointFolder are set in your .Renviron file OR specify them yourself in the funciton call.")
+  }
+  
   # Create connection setup to nupoint
   nupoint <- sftp::sftp_connect(
-    server = Sys.getenv("nupointServer"),
-    folder = Sys.getenv("nupointFolder"),
-    username = Sys.getenv("nupointUser"),
-    password = Sys.getenv("nupointPass"),
-    port = Sys.getenv("nupointPort"),
+    server = url,
+    folder = folder,
+    username = username,
+    password = password,
+    port = port,
     timeout = 120)
   
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
@@ -52,7 +57,7 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
     links <- sftp::sftp_listfiles(nupoint, verbose = FALSE)$name
     tbl <-  data.frame(link = links,
                          datetime = as.POSIXct(sub(".*_(\\d{14}).*", "\\1", links), format = "%Y%m%d%H%M%S", tz = "UTC"),
-                         location = sub("^([0-9]{2}[A-Za-z]{2}[0-9]{3}).*", "\\1", links))
+                         location = sub("^(.*)_\\d{14}.*$", "\\1", links))
     
     suppressWarnings(dir.create(paste0(tempdir(), "/downloadNupointImages")))
     name <- gsub(" ", "", Sys.time())
