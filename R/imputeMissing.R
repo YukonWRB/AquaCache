@@ -58,24 +58,24 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     exist.values <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", start, "' AND datetime <= '", end, "';"))
   } else { # daily is TRUE
     exist.cont <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", start, "' AND datetime <= '", end, "';"))
-    if (nrow(exist.cont) > 0) {  # Now see if there are entries in calculated_daily that are NOT in the datetime range of exist.cont
-      exist.values <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", as.Date(max(exist.cont$datetime)), "' AND date <= '", as.Date(min(exist.cont$datetime)), "';"))
+    if (nrow(exist.cont) > 0) {  # Now see if there are entries in measurements_calculated_daily that are NOT in the datetime range of exist.cont
+      exist.values <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", as.Date(max(exist.cont$datetime)), "' AND date <= '", as.Date(min(exist.cont$datetime)), "';"))
       exist.values$datetime <- as.POSIXct(exist.values$date, tz = "UTC")
       exist.values$date <- NULL
       if (nrow(exist.values) == 0) {
         exist.values <- exist.cont
         daily <- FALSE
-        warning("There are no values in the datetime range you provided in the calculated_daily table. Working with entries to table measurements_continuous instead.")
+        warning("There are no values in the datetime range you provided in the measurements_calculated_daily table. Working with entries to table measurements_continuous instead.")
       }
     } else {
-      exist.values <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", as.Date(start), "' AND date <= '", as.Date(end), "';"))
+      exist.values <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", as.Date(start), "' AND date <= '", as.Date(end), "';"))
       exist.values$datetime <- as.POSIXct(exist.values$date, tz = "UTC")
       exist.values$date <- NULL
     }
     if (nrow(exist.values) == 0) {
       exist.values <- exist.cont
       daily <- FALSE
-      warning("There are no values in the datetime range you provided in the calculated_daily table. Working with entries to table measurements_continuous instead.")
+      warning("There are no values in the datetime range you provided in the measurements_calculated_daily table. Working with entries to table measurements_continuous instead.")
     }
   }
   
@@ -115,7 +115,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       while (nrow(exist.values) < 50) {
         day.start <- day.start - missing
         day.end <- day.end + missing
-        exist.values <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", day.start, "' AND date <= '", day.end, "';"))
+        exist.values <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", day.start, "' AND date <= '", day.end, "';"))
         exist.values$datetime <- as.POSIXct(exist.values$date, tz = "UTC")
         exist.values$date <- NULL
       }
@@ -147,8 +147,8 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     if (is.na(exist.values[exist.values$datetime == max(exist.values$datetime), "value"])) {
       if (daily) {
         # Find the next non-NA value and add data to that point
-        goto_date <- DBI::dbGetQuery(con, paste0("SELECT min(date) FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date > '", as.Date(end), "' AND value IS NOT NULL AND imputed IS FALSE;"))[1,1]
-        goto_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date <= '", goto_date, "' AND date > '", as.Date(end), "' AND imputed IS FALSE;"))
+        goto_date <- DBI::dbGetQuery(con, paste0("SELECT min(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date > '", as.Date(end), "' AND value IS NOT NULL AND imputed IS FALSE;"))[1,1]
+        goto_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date <= '", goto_date, "' AND date > '", as.Date(end), "' AND imputed IS FALSE;"))
         goto_data$datetime <- as.POSIXct(goto_data$date, tz = "UTC")
         goto_data$date <- NULL
         rbind(exist.values, goto_data)
@@ -162,9 +162,9 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     # Check to make sure the first value is not NA UNLESS the start_predict is prior to the entry in timeseries table
     if (is.na(exist.values[exist.values$datetime == min(exist.values$datetime), "value"])) {
       if (daily) {
-        gofrom_date <- DBI::dbGetQuery(con, paste0("SELECT max(date) FROM calculated_daily WHERE timeseries_id = ", tsid, " AND value IS NOT NULL AND date < '", as.Date(start), "' AND imputed IS FALSE;"))[1,1]
+        gofrom_date <- DBI::dbGetQuery(con, paste0("SELECT max(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND value IS NOT NULL AND date < '", as.Date(start), "' AND imputed IS FALSE;"))[1,1]
         # Find the next non-NA value and add data to that point
-        gofrom_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", gofrom_date, "' AND date < '", as.Date(start), "';"))
+        gofrom_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", gofrom_date, "' AND date < '", as.Date(start), "';"))
         gofrom_data$datetime <- as.POSIXct(gofrom_data$date, tz = "UTC")
         gofrom_data$date <- NULL
         exist.values <- rbind(gofrom_data, exist.values)
@@ -180,8 +180,8 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     if (is.na(exist.values[exist.values$datetime == max(exist.values$datetime), "value"])) {
       if (daily) {
         # Find the next non-NA value and add data to that point
-        goto_date <- DBI::dbGetQuery(con, paste0("SELECT min(date) FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date > '", as.Date(end), "' AND value IS NOT NULL;"))[1,1]
-        goto_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date <= '", goto_date, "' AND date > '", as.Date(end), "';"))
+        goto_date <- DBI::dbGetQuery(con, paste0("SELECT min(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date > '", as.Date(end), "' AND value IS NOT NULL;"))[1,1]
+        goto_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date <= '", goto_date, "' AND date > '", as.Date(end), "';"))
         goto_data$datetime <- as.POSIXct(goto_data$date, tz = "UTC")
         goto_data$date <- NULL
         exist.values <- rbind(exist.values, goto_data)
@@ -195,9 +195,9 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     # Check to make sure the first value is not NA UNLESS the start_predict is prior to the entry in timeseries table
     if (is.na(exist.values[exist.values$datetime == min(exist.values$datetime), "value"])) {
       if (daily) {
-        gofrom_date <- DBI::dbGetQuery(con, paste0("SELECT max(date) FROM calculated_daily WHERE timeseries_id = ", tsid, " AND value IS NOT NULL AND date < '", as.Date(start), "';"))[1,1]
+        gofrom_date <- DBI::dbGetQuery(con, paste0("SELECT max(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND value IS NOT NULL AND date < '", as.Date(start), "';"))[1,1]
         # Find the next non-NA value and add data to that point
-        gofrom_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", gofrom_date, "' AND date < '", as.Date(start), "';"))
+        gofrom_data <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", gofrom_date, "' AND date < '", as.Date(start), "';"))
         gofrom_data$datetime <- as.POSIXct(gofrom_data$date, tz = "UTC")
         gofrom_data$date <- NULL
         exist.values <- rbind(gofrom_data, exist.values)
@@ -235,7 +235,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   returns[["db_extract_w_NAs"]] <- full_dt
 
   if (nrow(full_dt[is.na(full_dt$value) , ]) == 0) {
-    return("There are no missing values in the datetime range (or expanded datetime range) under consideration. If you wanted to recalculate previously imputed values, leave parameter 'imputed' to the default TRUE. If you want to impute data that's only in the calculated_daily table, set parameter 'daily' to TRUE.")
+    return("There are no missing values in the datetime range (or expanded datetime range) under consideration. If you wanted to recalculate previously imputed values, leave parameter 'imputed' to the default TRUE. If you want to impute data that's only in the measurements_calculated_daily table, set parameter 'daily' to TRUE.")
   }
 
   # Find the same parameter at nearby locations, or at same location but with different record_rate
@@ -322,7 +322,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
           #Get data from start to end
           df <- DBI::dbGetQuery(con, paste0("SELECT datetime, value FROM measurements_continuous WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND datetime >= '", start, "' AND datetime <= '", end, "';"))
           if (daily) {
-            to_add <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND date >= '", as.Date(start), "' AND date <= '", if (nrow(df) > 0) as.Date(min(df$datetime)) else as.Date(end), "';"))
+            to_add <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM measurements_calculated_daily WHERE timeseries_id = ", similar[i, "timeseries_id"], " AND date >= '", as.Date(start), "' AND date <= '", if (nrow(df) > 0) as.Date(min(df$datetime)) else as.Date(end), "';"))
             if (nrow(to_add) > 0) {
               to_add$datetime <- as.POSIXct(to_add$date)
               to_add$date <- NULL
@@ -663,8 +663,8 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     if (daily) {
       to_push$date <- as.Date(to_push$datetime)
       to_push$datetime <- NULL
-      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid, " AND date IN ('", paste(to_push$date, collapse = "', '"), "')")) #delete is here in case previously imputed values are being over-written
-      DBI::dbAppendTable(con, "calculated_daily", to_push)
+      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date IN ('", paste(to_push$date, collapse = "', '"), "')")) #delete is here in case previously imputed values are being over-written
+      DBI::dbAppendTable(con, "measurements_calculated_daily", to_push)
       calculate_stats(con = con, timeseries_id = tsid, start_recalc = min(to_push$date))
     } else {
       if (entry$period_type != "instantaneous") {

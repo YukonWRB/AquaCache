@@ -11,7 +11,7 @@
 #' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
 #' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
-#' @param settings_df A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist. Calls function [addACImportFlow()] if necessary.
+#' @param settings_df A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return One or more new entries are created in the table 'timeseries'
@@ -125,7 +125,7 @@ addACTimeseries <- function(timeseries_df, settings_df = NULL, con = AquaConnect
       }
     }
   }
-
+  
   #Add the timeseries #######################################################################################################
   timeseries_df$location_id <- NA
   failed_rows <- c()

@@ -69,8 +69,8 @@ addACLocation(
 \item{con}{A connection to the AquaCache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
-Success/error messages and new entries to the database.
+Success/error messages and new entries added to the database.
 }
 \description{
-Add location to AquaCache
+Adds a new location to the AquaCache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 }

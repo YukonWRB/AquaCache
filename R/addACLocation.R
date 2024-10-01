@@ -1,4 +1,6 @@
 #' Add location to AquaCache
+#' 
+#' Adds a new location to the AquaCache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
 #' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA.
 #' @param location A character vector of the location code(s).
@@ -21,50 +23,50 @@
 #' @param project A numeric vector of the project(s) to which the location(s) belong.
 #' @param con A connection to the AquaCache database. Default uses [AquaConnect()].
 #'
-#' @return Success/error messages and new entries to the database.
+#' @return Success/error messages and new entries added to the database.
 #' @export
-#'
+
 addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = NA, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = AquaConnect()) {
   
-  
-  df <- data.frame(location = "Yukon_Abv_YDA",
-                   name = "Yukon River Above Dawson",
-                   name_fr = "Riviere Yukon en amont de Dawson",
-                   latitude = 63.99564,
-                   longitude = -139.65884,
-                   visibility_public = "exact",
-                   share_with = 1,
-                   owner = NA,
-                   data_sharing_agreement_id = NA,
-                   location_type = 1,
-                   datum_id_from = 10,
-                   datum_id_to = 10,
-                   conversion_m = 0,
-                   current = TRUE,
-                   network = 1,
-                   project = NA,
-                   note = "NuPoint camera maintained by WSC, no flow/level monitoring.",
-                   contact = NA)
-  
-  location <- NA
-  name <- NA
-  name_fr <- NA
-  latitude <- NA
-  longitude <- NA
-  visibility_public <- NA
-  share_with <- NA
-  owner <- NA
-  data_sharing_agreement_id <- NA
-  location_type <- NA
-  note <- NA
-  contact <- NA
-  datum_id_from <- NA
-  datum_id_to <- NA
-  conversion_m <- NA
-  current <- NA
-  network <- NA
-  project <- NA
-  
+   
+  # df <- data.frame(location = "Yukon_Abv_YDA",
+  #                  name = "Yukon River Above Dawson",
+  #                  name_fr = "Riviere Yukon en amont de Dawson",
+  #                  latitude = 63.99564,
+  #                  longitude = -139.65884,
+  #                  visibility_public = "exact",
+  #                  share_with = 1,
+  #                  owner = NA,
+  #                  data_sharing_agreement_id = NA,
+  #                  location_type = 1,
+  #                  datum_id_from = 10,
+  #                  datum_id_to = 10,
+  #                  conversion_m = 0,
+  #                  current = TRUE,
+  #                  network = 1,
+  #                  project = NA,
+  #                  note = "NuPoint camera maintained by WSC, no flow/level monitoring.",
+  #                  contact = NA)
+  # 
+  # location <- NA
+  # name <- NA
+  # name_fr <- NA
+  # latitude <- NA
+  # longitude <- NA
+  # visibility_public <- NA
+  # share_with <- NA
+  # owner <- NA
+  # data_sharing_agreement_id <- NA
+  # location_type <- NA
+  # note <- NA
+  # contact <- NA
+  # datum_id_from <- NA
+  # datum_id_to <- NA
+  # conversion_m <- NA
+  # current <- NA
+  # network <- NA
+  # project <- NA
+  # 
   
   if (!is.null(df)) {
     # Check that all other parameters are NA

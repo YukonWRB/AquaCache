@@ -108,8 +108,8 @@ EXECUTE FUNCTION prevent_delete_public_group();
   COMMENT ON COLUMN public.measurements_continuous.imputed IS 'Imputed values may be user-entered. Imputed values are automatically replaced if/when a value becomes available on the remote data store.';
   ")
 
-  # calculated_daily table #################
-  DBI::dbExecute(con, "CREATE TABLE if not exists calculated_daily (
+  # measurements_calculated_daily table #################
+  DBI::dbExecute(con, "CREATE TABLE if not exists measurements_calculated_daily (
                  timeseries_id INTEGER NOT NULL,
                  date DATE NOT NULL,
                  value NUMERIC,
@@ -131,24 +131,24 @@ EXECUTE FUNCTION prevent_delete_public_group();
                  owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                  contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                  PRIMARY KEY (timeseries_id, date));")
-  DBI::dbExecute(con, "COMMENT ON TABLE public.calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the AquaCache package function calculate_stats.'
+  DBI::dbExecute(con, "COMMENT ON TABLE public.measurements_calculated_daily IS 'Stores calculated daily mean values for timeseries present in table measurements_continuous. Values should not be entered or modified manually but instead are calculated by the AquaCache package function calculate_stats.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed, or, for daily means provided solely in the HYDAT database, that a value was imputed directly to this table.'
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_calculated_daily.imputed IS 'TRUE in this column means that at least one of the measurements used for the daily mean calculation was imputed, or, for daily means provided solely in the HYDAT database, that a value was imputed directly to this table.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.percent_historic_range IS 'The percent of historical range for that measurement compared to all previous records for the same day of year (not including the current measurement). Only populated once a minimum of three values exist for the current day of year (including the current value). February 29 values are the mean of February 28 and March 1. 
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_calculated_daily.percent_historic_range IS 'The percent of historical range for that measurement compared to all previous records for the same day of year (not including the current measurement). Only populated once a minimum of three values exist for the current day of year (including the current value). February 29 values are the mean of February 28 and March 1. 
 
 For example, a value equal to the maximum historic value is equal to 100% of historical range, while one at the miniumu value is 0%. Values above or below the historical range can have values of less than 0 or greater than 100.
 
 The formula used for the calculation is ((current - min) / (max - min)) * 100'
   ")
   
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.max IS 'Historical max for the day of year, excluding current measurement.'
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_calculated_daily.max IS 'Historical max for the day of year, excluding current measurement.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.min IS 'Historical min for the day of year, excluding current measurement.'
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_calculated_daily.min IS 'Historical min for the day of year, excluding current measurement.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.q50 IS 'Historical 50th quantile or median, excluding current measurement.'
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_calculated_daily.q50 IS 'Historical 50th quantile or median, excluding current measurement.'
   ")
-  DBI::dbExecute(con, "COMMENT ON COLUMN public.calculated_daily.q25 IS 'Number of measurements existing in the calculated_daily table for each day including historic and current measurement.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN public.measurements_calculated_daily.q25 IS 'Number of measurements existing in the measurements_calculated_daily table for each day including historic and current measurement.'")
 
   # images table #################
   DBI::dbExecute(con, "CREATE TABLE if not exists images (
@@ -409,7 +409,7 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
   DBI::dbExecute(con,
-                 "ALTER TABLE calculated_daily
+                 "ALTER TABLE measurements_calculated_daily
                  ADD CONSTRAINT fk_grade
                  FOREIGN KEY (grade)
                  REFERENCES grades(code)
@@ -442,7 +442,7 @@ END;
 $$ LANGUAGE plpgsql;
 ")
   DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_grade_daily
-BEFORE INSERT OR UPDATE OF grade ON calculated_daily
+BEFORE INSERT OR UPDATE OF grade ON measurements_calculated_daily
 FOR EACH ROW
 EXECUTE FUNCTION check_grade_exists_daily();
 ")
@@ -464,7 +464,7 @@ EXECUTE FUNCTION check_grade_exists_daily();
                  ON DELETE CASCADE
                  ON UPDATE CASCADE;")
   DBI::dbExecute(con,
-                 "ALTER TABLE calculated_daily
+                 "ALTER TABLE measurements_calculated_daily
                  ADD CONSTRAINT fk_approval
                  FOREIGN KEY (approval)
                  REFERENCES approvals(code)
@@ -497,7 +497,7 @@ END;
 $$ LANGUAGE plpgsql;
 ")
   DBI::dbExecute(con, "CREATE TRIGGER before_insert_or_update_approval_on_daily
-BEFORE INSERT OR UPDATE OF approval ON calculated_daily
+BEFORE INSERT OR UPDATE OF approval ON measurements_calculated_daily
 FOR EACH ROW
 EXECUTE FUNCTION check_approval_exists_daily();
 ")
@@ -1139,7 +1139,7 @@ EXECUTE FUNCTION update_geom_type();
                  ON UPDATE CASCADE ON DELETE CASCADE;")
 
   DBI::dbExecute(con,
-                 "ALTER TABLE calculated_daily
+                 "ALTER TABLE measurements_calculated_daily
   ADD CONSTRAINT fk_timeseries_id
   FOREIGN KEY (timeseries_id)
   REFERENCES timeseries(timeseries_id)
@@ -1675,7 +1675,7 @@ BEGIN
     EXECUTE 'UPDATE timeseries SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
     EXECUTE 'UPDATE measurements_continuous SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
     EXECUTE 'UPDATE measurements_discrete SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
-    EXECUTE 'UPDATE calculated_daily SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
+    EXECUTE 'UPDATE measurements_calculated_daily SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
     EXECUTE 'UPDATE images SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
     EXECUTE 'UPDATE images_index SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
     EXECUTE 'UPDATE documents SET share_with = array_remove(share_with, $1) WHERE $1 = ANY(share_with)' USING OLD.group_id;
@@ -1775,8 +1775,8 @@ BEFORE INSERT OR UPDATE ON measurements_discrete
 FOR EACH ROW
 EXECUTE FUNCTION validate_share_with();")
   
-  DBI::dbExecute(con, "CREATE TRIGGER validate_share_with_trigger_calculated_daily
-BEFORE INSERT OR UPDATE ON calculated_daily
+  DBI::dbExecute(con, "CREATE TRIGGER validate_share_with_trigger_measurements_calculated_daily
+BEFORE INSERT OR UPDATE ON measurements_calculated_daily
 FOR EACH ROW
 EXECUTE FUNCTION validate_share_with();")
   
@@ -1797,12 +1797,12 @@ EXECUTE FUNCTION validate_share_with();")
   
 
   
-  # Enable row level security on tables locations, timeseries, measurements_continuous, measurements_discrete, calculated_daily, images, images_index, and documents ########################################
+  # Enable row level security on tables locations, timeseries, measurements_continuous, measurements_discrete, measurements_calculated_daily, images, images_index, and documents ########################################
   DBI::dbExecute(con, "ALTER TABLE locations ENABLE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE timeseries ENABLE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE measurements_continuous ENABLE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE measurements_discrete ENABLE ROW LEVEL SECURITY;")
-  DBI::dbExecute(con, "ALTER TABLE calculated_daily ENABLE ROW LEVEL SECURITY;")
+  DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily ENABLE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE images ENABLE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE images_index ENABLE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE documents ENABLE ROW LEVEL SECURITY;")
@@ -1844,7 +1844,7 @@ USING (
     WHERE u.username = current_setting('logged_in_user.username', true)
   )
 );")
-  DBI::dbExecute(con, "CREATE POLICY calculated_daily_policy ON calculated_daily
+  DBI::dbExecute(con, "CREATE POLICY measurements_calculated_daily_policy ON measurements_calculated_daily
 USING (
   EXISTS (
     SELECT 1
@@ -1887,7 +1887,7 @@ USING (
   DBI::dbExecute(con, "ALTER TABLE timeseries FORCE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE measurements_continuous FORCE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE measurements_discrete FORCE ROW LEVEL SECURITY;")
-  DBI::dbExecute(con, "ALTER TABLE calculated_daily FORCE ROW LEVEL SECURITY;")
+  DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily FORCE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE images FORCE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE images_index FORCE ROW LEVEL SECURITY;")
   DBI::dbExecute(con, "ALTER TABLE documents FORCE ROW LEVEL SECURITY;")
@@ -2768,6 +2768,28 @@ EXCLUDE USING gist (
     "))
   }
   
+  tables_to_update2 <- c("measurements_continuous", "measurements_discrete", "measurements_calculated_daily")
+  
+  # Create the trigger function
+  DBI::dbExecute(con, "
+  CREATE OR REPLACE FUNCTION update_created_modified()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    NEW.created_modified = CURRENT_TIMESTAMP;
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+")
+  
+  # Create triggers for each table
+  for (table in tables_to_update2) {
+    DBI::dbExecute(con, paste0("
+    CREATE TRIGGER update_", table, "_created_modified
+    BEFORE INSERT OR UPDATE ON ", table, "
+    FOR EACH ROW
+    EXECUTE FUNCTION update_created_modified();
+  "))
+  }
   
   # Create metadata view tables for internal purposes 3
 #   DBI::dbExecute(con, "

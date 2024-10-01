@@ -16,7 +16,7 @@
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'. Specifying 'all' will work on all continuous category timeseries.
 #' @param start_recalc The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.
 #'
-#' @return Updated entries in the 'calculated_daily' table.
+#' @return Updated entries in the 'measurements_calculated_daily' table.
 #' @export
 #'
 
@@ -51,8 +51,8 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
     start_recalc_i <- start_recalc
     skip <- FALSE
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
-      last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
-      earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
+      last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
+      earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
       
       # Below lines deal with timeseries that don't have daily values but should, or don't have them far enough in the past. We check if it's necessary to calculate further back in time than start_recalc_i.
@@ -80,9 +80,9 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
           if (earliest_day_historic < earliest_day_measurements) {
             last_day_historic <- max(earliest_day_historic, start_recalc_i)
           } else {
-            last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, start_recalc_i) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in calculated_daily yet
+            last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, start_recalc_i) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in measurements_calculated_daily yet
           }
-        } else { # There are no measurements, so we can only calculate from the earliest day in the calculated_daily table
+        } else { # There are no measurements, so we can only calculate from the earliest day in the measurements_calculated_daily table
           if (start_recalc_i < earliest_day_historic) {
             last_day_historic <- earliest_day_historic
           } else {
@@ -95,7 +95,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
         } else if (is.na(last_day_historic) & !is.na(earliest_day_measurements)) { #say, a new timeseries that isn't in hydat yet or one that's just being added and has no calculations yet
           last_day_historic <- earliest_day_measurements
         } else { # a timeseries that is only in HYDAT, has no realtime measurements
-          last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM calculated_daily WHERE timeseries_id = ", i, " AND max IS NULL;"))[1,]
+          last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND max IS NULL;"))[1,]
         }
       }
 
@@ -168,9 +168,9 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
                 gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "grade" = NA, "approval" = NA, "imputed" = FALSE, "owner" = owner, "contributor" = contributor, "share_with" = share))
               }
               
-              if (last_day_historic < min(gap_measurements$date)) { #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with HYDAT values where they exist, taking from the database first for any imputed values and then directly from HYDAT.
+              if (last_day_historic < min(gap_measurements$date)) { #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the measurements_calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with HYDAT values where they exist, taking from the database first for any imputed values and then directly from HYDAT.
                 
-                backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed, owner, contributor, share_with FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
+                backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed, owner, contributor, share_with FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
                 
                 grade_mapping <- c("-1" = "U",
                                    "10" = "I",
@@ -210,13 +210,13 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
               gap_measurements[is.na(gap_measurements$grade) , "grade"] <- "U"
               gap_measurements[is.na(gap_measurements$approval) , "approval"] <- "U"
               
-              all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", last_hydat, "';"))
+              all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", last_hydat, "';"))
               #Need to rbind only the calculated daily means AFTER last_hydat
               all_stats <- rbind(all_stats, gap_measurements[gap_measurements$date >= last_hydat, c("date", "value")])
               missing_stats <- gap_measurements
             } else { #There is no new measurement data, but stats may still need to be calculated because of new HYDAT data
               
-              all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed, owner, contributor, share_with FROM calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
+              all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed, owner, contributor, share_with FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
               
               grade_mapping <- c("-1" = "U",
                                  "10" = "I",
@@ -289,20 +289,20 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             gap_measurements[is.na(gap_measurements$grade) , "grade"] <- "U"
             gap_measurements[is.na(gap_measurements$approval) , "approval"] <- "U"
             
-            all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "';"))
+            all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "';"))
             all_stats <- rbind(all_stats, gap_measurements[, c("date", "value")])
             missing_stats <- gap_measurements
           } else { #There is no new measurement data, but stats may still need to be calculated
-            missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, owner, contributor, share_with, imputed FROM calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
+            missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, owner, contributor, share_with, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
             if (nrow(missing_stats) > 0) {
-              all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM calculated_daily WHERE timeseries_id = ", i, ";"))
+              all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))
             }
           }
         }
         
         # Now calculate stats where they are missing
         if (nrow(missing_stats) > 0) {
-          # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the calculated_daily table without replacing it.
+          # Remove Feb. 29 data as it would mess with the percentiles; save the missing_stats ones and add them back in later. This is also important as it prevents deleting Feb 29 data in the measurements_calculated_daily table without replacing it.
           feb_29 <- missing_stats[(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
           missing_stats <- missing_stats[!(lubridate::month(missing_stats$date) == "2" & lubridate::mday(missing_stats$date) == "29"), , drop = FALSE]
           all_stats <- all_stats[!(lubridate::month(all_stats$date) == "2" & lubridate::mday(all_stats$date) == "29"), , drop = FALSE]
@@ -352,8 +352,8 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             DBI::dbWithTransaction(
               con,
               {
-                DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", i, " AND date IN ('", paste(first_instance_no_stats$date, collapse = "', '"), "')"))
-                DBI::dbAppendTable(con, "calculated_daily", first_instance_no_stats)
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date IN ('", paste(first_instance_no_stats$date, collapse = "', '"), "')"))
+                DBI::dbAppendTable(con, "measurements_calculated_daily", first_instance_no_stats)
                 if (nrow(missing_stats) == 0) {  #If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
                   DBI::dbExecute(con, paste0("UPDATE timeseries SET last_daily_calculation = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", i, ";"))
                 }
@@ -419,7 +419,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
         missing_stats <- missing_stats[order(missing_stats$date), ]
         missing_stats <- hablar::rationalize(missing_stats)  # Occasionally % historic range is dividing by zero (snowpack), so this replaces Inf, -Inf with NAs
         # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no calculated stats even if they are between the start and end date of missing_stats.
-        delete_query <- paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", i, " AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "'")
+        delete_query <- paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "'")
         remaining_dates <- as.Date(setdiff(seq.Date(min(as.Date(missing_stats$date)), max(as.Date(missing_stats$date)), by = "day"), as.Date(missing_stats$date)), origin = "1970-01-01")
         if (length(remaining_dates) > 0) {
           delete_query <- paste0(delete_query, " AND date NOT IN ('", paste(remaining_dates, collapse = "','"), "')")
@@ -429,7 +429,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
           con,
           {
             DBI::dbExecute(con, delete_query)
-            DBI::dbAppendTable(con, "calculated_daily", missing_stats) # Append the missing_stats data to the calculated_daily table
+            DBI::dbAppendTable(con, "measurements_calculated_daily", missing_stats) # Append the missing_stats data to the measurements_calculated_daily table
             DBI::dbExecute(con, paste0("UPDATE timeseries SET last_daily_calculation = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", i, ";"))
           }
         )

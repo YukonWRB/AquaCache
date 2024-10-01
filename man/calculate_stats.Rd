@@ -18,7 +18,7 @@ calculate_stats(
 \item{start_recalc}{The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.}
 }
 \value{
-Updated entries in the 'calculated_daily' table.
+Updated entries in the 'measurements_calculated_daily' table.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

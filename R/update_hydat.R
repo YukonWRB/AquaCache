@@ -95,7 +95,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "parameter_id" = parameter_id,
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
-                                    "record_rate" = "< 1 day", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'calculated_daily' table here.
+                                    "record_rate" = "< 1 day", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
                                     "media_id" = media_id,
                                     "start_datetime" = min(new_flow$date),
                                     "end_datetime" = max(new_flow$date),
@@ -108,14 +108,14 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
             new_flow$approval <- "A"
             new_flow$imputed <- FALSE
             new_flow$timeseries_id <- tsid_flow
-            DBI::dbAppendTable(con, "calculated_daily", new_flow)
+            DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
             calculate_stats(timeseries_id = tsid_flow,
                             con = con,
                             start_recalc = min(new_flow$date))
             message("Found historical flow daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats.")
           } else { #There is a corresponding tsid in the database
-            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", tsid_flow))
-            if (nrow(existing) > 0) { #There is an entry in timeseries table AND existing data in calculated_daily
+            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow))
+            if (nrow(existing) > 0) { #There is an entry in timeseries table AND existing data in measurements_calculated_daily
               #Find out if any imputed data should be left alone
               imputed <- existing[existing$imputed == TRUE , ]
               imputed.remains <- data.frame()
@@ -156,11 +156,11 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                   con,
                   {
                     if (nrow(imputed.remains) > 0) {
-                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
-                      DBI::dbAppendTable(con, "calculated_daily", new_flow)
+                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
+                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
                     } else {
-                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "';"))
-                      DBI::dbAppendTable(con, "calculated_daily", new_flow)
+                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "';"))
+                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
                     }
                     start <- min(existing$date, new_flow$date)
                     DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
@@ -176,14 +176,14 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               new_flow$timeseries_id <- tsid_flow
               DBI::dbWithTransaction(
                 con, {
-                  DBI::dbAppendTable(con, "calculated_daily", new_flow)
+                  DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
                   DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_flow$date), "'WHERE timeseries_id = ", tsid_flow, ";"))
                 }
               )
               calculate_stats(timeseries_id = tsid_flow,
                               con = con,
                               start_recalc = min(new_flow$date))
-              message("Found historical flow daily means for a location that only had realtime data. Added new entries to calculated_daily and calculated daily stats.")
+              message("Found historical flow daily means for a location that only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
             }
           }
 
@@ -204,7 +204,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "parameter_id" = parameter_id,
                                     "category" = "continuous",
                                     "period_type" = "instantaneous",
-                                    "record_rate" = "< 1 day",  #HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'calculated_daily' table here.
+                                    "record_rate" = "< 1 day",  #HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
                                     "media_id" = media_id,
                                     "start_datetime" = min(new_level$date),
                                     "end_datetime" = max(new_level$date),
@@ -217,13 +217,13 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
             new_level$approval <- "A"
             new_level$imputed <- FALSE
             new_level$timeseries$id <- tsid_level
-            DBI::dbAppendTable(con, "calculated_daily", new_level)
+            DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
             calculate_stats(timeseries_id = tsid_level,
                             con = con,
                             start_recalc = min(new_level$date))
             message("Found historical level daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats.")
           } else {
-            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM calculated_daily WHERE timeseries_id = ", tsid_level))
+            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level))
             if (nrow(existing) > 0) { #There is an entry in timeseries table AND existing data
               #Find out if any imputed data should be left alone
               imputed <- existing[existing$imputed == TRUE , ]
@@ -264,11 +264,11 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                   con,
                   {
                     if (nrow(imputed.remains) > 0) {
-                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
-                      DBI::dbAppendTable(con, "calculated_daily", new_level)
+                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
+                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
                     } else {
-                      DBI::dbExecute(con, paste0("DELETE FROM calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "';"))
-                      DBI::dbAppendTable(con, "calculated_daily", new_level)
+                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "';"))
+                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
                     }
                     start <- min(min(existing$date), new_level$date)
                     DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_level, ";"))
@@ -284,14 +284,14 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               new_level$timeseries_id <- tsid_level
               DBI::dbWithTransaction(
                 con, {
-                  DBI::dbAppendTable(con, "calculated_daily", new_level)
+                  DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
                   DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_level$date), "'WHERE timeseries_id = ", tsid_level, ";"))
                 }
               )
               calculate_stats(timeseries_id = tsid_level,
                               con = con,
                               start_recalc = min(new_level$date))
-              message("Found historical level daily means for a location that only had realtime data. Added new entries to calculated_daily and calculated daily stats.")
+              message("Found historical level daily means for a location that only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
             }
           }
 
