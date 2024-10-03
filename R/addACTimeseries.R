@@ -351,7 +351,7 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
                         category = category[i],
                         period_type = period_type[i],
                         record_rate = record_rate[i],
-                        share_with = paste0("{", share_with[i], "}"),
+                        share_with = paste0("{", paste(share_with[i], collapse = ", "), "}"),
                         owner = owner[i],
                         source_fx = source_fx[i],
                         source_fx_args = source_fx_args[i],
