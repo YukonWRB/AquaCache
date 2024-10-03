@@ -48,7 +48,6 @@ getNewContinuous <- function(con = AquaConnect(silent = TRUE), timeseries_id = "
     stop("Could not find any timeseries matching your input parameters.")
   }
   
-  
   count <- 0 #counter for number of successful new pulls
   success <- data.frame("location" = NULL, "parameter_id" = NULL, "timeseries" = NULL)
   
@@ -64,16 +63,16 @@ getNewContinuous <- function(con = AquaConnect(silent = TRUE), timeseries_id = "
     share_with <- all_timeseries$share_with[i]
     owner <- all_timeseries$owner[i]
     if (is.na(record_rate)) {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
+      remote_parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
     } else {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+      remote_parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
     }
 
 
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
 
     tryCatch({
-      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = last_data_point)
+      args_list <- list(location = loc, parameter_id = remote_parameter_id, start_datetime = last_data_point)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair) {

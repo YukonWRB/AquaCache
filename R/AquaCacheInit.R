@@ -168,7 +168,7 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                    owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                    contributor INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
                    UNIQUE (img_meta_id, latitude, longitude, datetime));")
-  DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images of local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images. NOT intended to capture what the instrumentation looks like, only what the conditions at the location are.'")
+  DBI::dbExecute(con, "COMMENT ON TABLE public.images IS 'Holds images of local conditions specific to each location. Originally designed to hold auto-captured images at WSC locations, but could be used for other location images such as setup documentation. For image series or images necessarily associated with a location, images are linked to the images_index table using the img_meta_id.'")
 
   # images_index table #################
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS images_index (
@@ -180,7 +180,7 @@ The formula used for the calculation is ((current - min) / (max - min)) * 100'
                  source_fx TEXT,
                  source_fx_args TEXT,
                  description TEXT,
-                 location_id INTEGER NOT NULL,
+                 location_id INTEGER NOT NULL REFERENCES locations (location_id) ON DELETE CASCADE ON UPDATE CASCADE,
                  visibility_public TEXT NOT NULL CHECK(visibility_public IN ('exact', 'region', 'jitter')) DEFAULT 'exact',
                  share_with INTEGER[] NOT NULL DEFAULT '{1}',
                  owner INTEGER DEFAULT NULL REFERENCES owners_contributors (owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
