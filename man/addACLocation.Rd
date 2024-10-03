@@ -12,7 +12,7 @@ addACLocation(
   latitude = NA,
   longitude = NA,
   visibility_public = NA,
-  share_with = NA,
+  share_with = 1,
   owner = NA,
   data_sharing_agreement_id = NA,
   location_type = NA,
@@ -28,7 +28,7 @@ addACLocation(
 )
 }
 \arguments{
-\item{df}{A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA.}
+\item{df}{A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.}
 
 \item{location}{A character vector of the location code(s).}
 

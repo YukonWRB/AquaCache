@@ -3,307 +3,441 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function [addACTimeseriesTemplate()] for help in formatting the data.frames to pass to `timeseries_df`. To add an image series see [addACImageSeries()], for raster series see [addACRasterSeries()]. For one-off images use [insertACImage()] and for rasters [insertACRaster()]. For documents use [insertACDocument()].
+#' This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function [addACLocation()] for adding a location to which timeseries must be attached). To add an image series see [addACImageSeries()], for raster series see [addACRasterSeries()]. For one-off images use [insertACImage()] and for rasters [insertACRaster()]. For documents use [insertACDocument()].
 #'
+#' You will be prompted to add locations that don't exist yet if any fall into this category.
+#' 
 #' @details
-#' You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
+#' You can add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries. For Water Survey of Canada data, this function will also seek out level and flow data from the HYDAT database, downloading or checking for updates to it before use.
 #'
 #' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
 #'
-#' @param timeseries_df A data.frame containing the information necessary to add the timeseries (see details for template).
-#' @param settings_df A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist.
+#' @param df A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters must be NA or left as their default values.
+#' @param start_datetime A character or posixct vector of datetimes from which to look for new data.
+#' @param location A numeric vector corresponding to column 'location' of table 'locations'.
+#' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
+#' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
+#' @param media A numeric vector corresponding to column 'media_id' of table 'media_types'.
+#' @param sensor_priority A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.
+#' @param category A character vector comprised of either 'discrete' or 'continuous'; classifies the data as either category.
+#' @param period_type A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.
+#' @param record_rate A broad categorization of the rate at which recording takes place, only used for 'continuous' category data.. Select from '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'; set to NA for discrete timeseries.
+#' @param share_with A *character* vector of the user group(s) with which to share the timeseries, selected from column 'group_id' of table 'user_groups'. Default is 1. Pass multiple groups as a single string, e.g. "1, 2, 3" or strings, e.g. c("1, 2, 3", "2, 4").
+#' @param owner A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!
+#' @param source_fx The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.
+#' @param source_fx_args Additional arguments to pass to the function(s) specified in parameter 'source_fx'.
+#' @param note Text notes to append to the timeseries.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
 #' @seealso [addACTimeseriesTemplate()] to see templates for timeseries_df and settings_df
+#' @examples
+#' /dontrun
+#' #Make a data.frame to pass to the function:
+#'   df <- data.frame(start_datetime = "2015-01-01 00:00",
+#' location = "09AA-M3",
+#' z = c(NA, 3),
+#' parameter = c(34, 1154),
+#' media = 7,
+#' sensor_priority = 1,
+#' category = "continuous",
+#' period_type = c("sum", "mean"),
+#' record_rate = "< 1 day",
+#' share_with = "1",
+#' owner = 2,
+#' source_fx = "downloadAquarius",
+#' source_fx_args = NA,
+#' note = c("Total precipitation from standpipe, reset every year in the fall.", "Hourly average of wind speeds recorded every minute")
+#' )
+#' #Add the timeseries using the data.frame
+#' addACTimeseries(df)
 
-addACTimeseries <- function(timeseries_df, settings_df = NULL, con = AquaConnect()) {
-
+addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "1", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = AquaConnect()) {
   
-  #TODO: add a way to pass new parameters using params_df
+  # Testing parameters
+  # df <- data.frame(start_datetime = "2015-01-01 00:00",
+  #                  location = "09AA-M3",
+  #                  z = c(NA, 3),
+  #                  parameter = c(34, 1154),
+  #                  media = 7,
+  #                  sensor_priority = 1,
+  #                  category = "continuous",
+  #                  period_type = c("sum", "mean"),
+  #                  record_rate = "< 1 day",
+  #                  share_with = "1",
+  #                  owner = 2,
+  #                  source_fx = "downloadAquarius",
+  #                  source_fx_args = NA,
+  #                  note = c("Total precipitation from standpipe, reset every year in the fall.", "Hourly average of wind speeds recorded every minute")
+  #                  )
+  # start_datetime <- NA
+  # location <- NA
+  # z <- NA
+  # parameter <- NA
+  # media <- NA
+  # sensor_priority <- 1
+  # category <- NA
+  # period_type <- 'instantaneous'
+  # record_rate <- NA
+  # share_with <- "1"
+  # owner <- NA
+  # source_fx <- NA
+  # source_fx_args <- NA
+  # note <- NA
   
-  #Check the names of timeseries_df
-  if (!all(c("location", "parameter", "category", "period_type", "record_rate", "media_type", "public", "public_delay", "source_fx", "source_fx_args", "start_datetime", "note") %in% names(timeseries_df))) {
-    stop("It looks like you're either missing columns in timeseries_df or that you have a typo. Please review that you have columns named c('location', 'parameter', 'category', 'period_type', 'record_rate', 'media_type', 'start_datetime', 'public', 'public_delay', source_fx', 'source_fx_args', 'note'). Use NA to indicate a column with no applicable value.")
-  }
   
-  #Check that every location in the timeseries_df already exists
-  new_locs <- NULL
-  exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
-  if (!all(timeseries_df$location %in% exist_locs)) {
-    new_locs <- timeseries_df$location[!(timeseries_df$location %in% exist_locs)]
-    stop("Not all of the locations in your timeseries_df are already in the database. Please add the following location(s) first using addACLocation(): ", paste(new_locs, collapse = ", "), ", or use one of the existing locations.")
-  }
-
-
-  #modify some columns
-  timeseries_df$parameter <- tolower(timeseries_df$parameter)
-  timeseries_df$category <- tolower(timeseries_df$category)
-  timeseries_df$period_type <- tolower(timeseries_df$period_type)
-  timeseries_df$media_type <- tolower(timeseries_df$media_type)
-  timeseries_df$record_rate <- as.character(timeseries_df$record_rate)
-
-  # Check that cols in the timeseries_df meets constraints
-  if (!all(timeseries_df$category %in% c("discrete", "continuous"))) {
-    stop("One of the rows in your timeseries_df has a disallowed value: column 'category' can only be one of 'discrete' or 'continuous'.")
-  }
-  if (!all(timeseries_df$media_type %in% c('surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'))) {
-    stop("One of the rows in your timeseries_df has a disallowed value: column 'media_type' can only be one of 'surface water', 'ground water', 'waste water', 'waste water effluent', 'seep', 'drinking water', 'meteorological'.")
-  }
-  if (!all(timeseries_df$period_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
-    stop("One of the rows in your timeseries_df has a disallowed value: column 'period_type' can only be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.")
-  }
-  #Check column public_delay can be converted to a period
-  check <- lubridate::period(timeseries_df[!is.na(timeseries_df$public_delay), "public_delay"])
-  if (NA %in% check) {
-    stop("At least one of your entries to timeseries_df in column 'public_delay' is not NA and cannot be coerced to a duration Use ISO8601 format only, or NA for no entry.")
-  }
-
-  sub.discrete <- timeseries_df[timeseries_df$category == "discrete", ]
-  if (!all(is.na(sub.discrete$record_rate))) {
-    stop("One of the rows in your timeseries_df has a disallowed value: column 'record_rate' can only be NULL where column 'category' is 'discrete'.")
-  }
-  sub.cont <- timeseries_df[timeseries_df$category == "continuous", ]
-  if (!all(sub.cont$record_rate %in% c('< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'))) {
-    stop("One of the rows in your timeseries_df has a disallowed value: column 'record_rate' can only be one of '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year' where column 'category' is 'continuous'.")
-  }
-
-  if (!is.null(settings_df)) {
-    if (!all(names(settings_df) %in% c("source_fx", "parameter", "period_type", "record_rate", "remote_param_name"))) {
-      stop("You provided a data.frame for 'settings_df' with incorrect names. Refer to function addACTimeseriesTemplate or to this function's help.")
+  if (!is.null(df)) {
+    # Check that a few of the other parameters are NA
+    if (!all(is.na(c(location, start_datetime, z, parameter, media, category, record_rate, owner, source_fx, source_fx_args, note)))) {
+      stop("You cannot provide a data.frame and other parameters at the same time.")
     }
-    #modify some col names
-    settings_df$parameter <- tolower(settings_df$parameter)
-    settings_df$period_type <- tolower(settings_df$period_type)
-    settings_df$record_rate <- as.character(settings_df$record_rate) #to align with what comes out of the DB
+    # Check that the data.frame is not empty
+    if (nrow(df) == 0) {
+      stop("The data.frame provided is empty.")
+    }
+    
+    # Check that there is a column name for each function parameter that is not 'df'
+    if (!all(c("start_datetime", "location", "z", "parameter", "media", "sensor_priority", "category", "period_type", "record_rate", "share_with", "owner", "source_fx", "source_fx_args", "note") %in% colnames(df))) {
+      stop("The data.frame provided does not contain all the necessary columns.")
+    }
+    
+    # Assign each column of the data.frame to the corresponding function parameter
+    start_datetime <- df$start_datetime
+    location <- df$location
+    z <- df$z
+    parameter <- df$parameter
+    media <- df$media
+    sensor_priority <- df$sensor_priority
+    category <- df$category
+    period_type <- df$period_type
+    record_rate <- df$record_rate
+    share_with <- df$share_with
+    owner <- df$owner
+    source_fx <- df$source_fx
+    source_fx_args <- df$source_fx_args
+    note <- df$note
+  } 
+  
+  
+  # Check on arguments
+  
+  # Find the longest argument, then make sure all are either NA, length 1, or the same length.
+  length <- max(length(start_datetime), length(location), length(z), length(parameter), length(media), length(sensor_priority), length(category), length(period_type), length(record_rate), length(owner), length(source_fx), length(source_fx_args), length(note))
+  
+  if (length(share_with) != 1 && length(share_with) != length) {
+    stop("share_with must be a single value or a vector of the same length as the other parameters. Please check the function documentation.")
+  }
+  
+  if (any(is.na(start_datetime))) {
+    stop("start_datetime cannot contain NA values")
+  } else {
+    if (length(start_datetime) == 1 && length > 1) {
+      start_datetime <- rep(start_datetime, length)
+    }
+    if (!inherits(start_datetime, "POSIXct")) {
+      start_datetime <- as.POSIXct(start_datetime)
+      if (any(is.na(start_datetime))) {
+        stop("Could not coerce your start_datetime vector to a POSIXct object.")
+      }
+    }
   }
 
-  # Check that the proper entries exist in the settings table. Make entry to DB if necessary/possible ################
-  for (i in 1:nrow(timeseries_df)) {
-    source_fx <- timeseries_df[i, "source_fx"]
-    record_rate <- timeseries_df[i, "record_rate"]
-    parameter <- timeseries_df[i, "parameter"]
-    parameter_id <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", parameter, "';"))[,1]
-    period_type <- timeseries_df[i, "period_type"]
-
-    if (is.na(record_rate)) {
-      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate IS NULL AND parameter = ", parameter_id, " AND period_type = '", period_type, "';"))
+  if (any(is.na(location))) {
+    stop("location cannot contain NA values")
+  } else {
+    if (!inherits(location, "character")) {
+      stop("location must be a character vector")
+    }
+    if (length(location) == 1 && length > 1) {
+      location <- rep(location, length)
+    }
+    #Check that every location in 'location' already exists
+    new_locs <- NULL
+    exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
+    if (!all(location %in% exist_locs)) {
+      new_locs <- location[!(location %in% exist_locs)]
+      stop("Not all of the locations in your timeseries_df are already in the database. Please add the following location(s) first using addACLocation(): ", paste(new_locs, collapse = ", "), ", or use one of the existing locations.")
+    }
+  }
+  
+  if (any(!is.na(z))) {
+    if (!inherits(z, "numeric")) {
+      stop("z must be a numeric vector or left as NA")
+    }
+  }
+  if (length(z) == 1 && length > 1) {
+    z <- rep(z, length)
+  }
+  
+  
+  if (any(is.na(parameter))) {
+    stop("parameter cannot contain NA values")
+  } else {
+    if (!inherits(parameter, "numeric")) {
+      stop("parameter must be a numeric vector")
+    }
+    if (length(parameter) == 1 && length > 1) {
+      parameter <- rep(parameter, length)
+    }
+    db_param <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE parameter_id IN (", paste(unique(parameter), collapse = ", "), ");"))
+    
+    if (nrow(db_param) < length(unique(parameter))) {
+      stop("At least one of the parameter_ids you specified does not exist in the database.")
+    }
+  }
+  
+  if (any(is.na(media))) {
+    stop("media cannot contain NA values")
+  } else {
+    if (!inherits(media, "numeric")) {
+      stop("media must be a numeric vector")
+    }
+    if (length(media) == 1 && length > 1) {
+      media <- rep(media, length)
+    }
+    db_media <- DBI::dbGetQuery(con, paste0("SELECT media_id FROM media_types WHERE media_id IN (", paste(unique(media), collapse = ", "), ");"))
+    if (nrow(db_media) < length(unique(media))) {
+      stop("At least one of the media_ids you specified does not exist in the database.")
+    }
+  }
+  
+  if (any(is.na(sensor_priority))) {
+    if (!inherits(sensor_priority, "numeric")) {
+      stop("sensor_priority must be a numeric vector")
+    }
+    sensor_priority[is.na(sensor_priority)] <- 1
+  } else if (!inherits(sensor_priority, "numeric")) {
+    stop("sensor_priority must be a numeric vector")
+  }
+  if (length(sensor_priority) == 1 && length > 1) {
+    sensor_priority <- rep(sensor_priority, length)
+  }
+  
+  if (any(is.na(category))) {
+    stop("category cannot contain NA values")
+  } else {
+    if (!(all(category %in% c("discrete", "continuous")))) {
+      stop("category must only be discrete or continuous")
+    }
+    if (length(category) == 1 && length > 1) {
+      category <- rep(category, length)
+    }
+  }
+  
+  if (any(is.na(period_type))) {
+    stop("period_type cannot contain NA values")
+  } else {
+    if (!all(period_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
+      stop("period_type must be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'")
+    }
+    if (length(period_type) == 1 && length > 1) {
+      period_type <- rep(period_type, length)
+    }
+  }
+  
+  
+  if (any(is.na(record_rate))) {
+    stop("record_rate cannot contain NA values")
+  } else {
+    if (length(record_rate) == 1 && length > 1) {
+      record_rate <- rep(record_rate, length)
+    }
+  }
+  
+  if ('discrete' %in% category) {
+    # check that elements of vector 'category' that are 'discrete' have corresponding NA in 'record_rate'
+    if (!all(is.na(record_rate[category == 'discrete']))) {
+      stop("record_rate must be NA for discrete timeseries.")
+    }
+  }
+  if ('continuous' %in% category) {
+    # check that elements of vector 'category' that are 'continuous' have corresponding non-NA in 'record_rate'
+    if (!all(!is.na(record_rate[category == 'continuous']))) {
+      stop("record_rate must be specified for continuous timeseries. ")
+    }
+    # Check that record rate elements that are not NA are in the correct format
+    rec_rate_no_na <- record_rate[!is.na(record_rate)]
+    if (!all(rec_rate_no_na %in% c('< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'))) {
+      stop("record_rate must be one of '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year', except for discrete timeseries.")
+    }
+  }
+  
+  if (any(is.na(share_with))) {
+    if (!inherits(share_with, "character")) {
+      stop("share_with must be a character vector (yes, even though it's numbers. Check the function documentation.).")
+    }
+    share_with[is.na(share_with)] <- 1
+  } else if (!inherits(share_with, "character")) {
+    stop("share_with must be a character vector (yes, even though it's numbers. Check the function documentation.).")
+  }
+  if (length(share_with) == 1 && length > 1) {
+    share_with <- rep(share_with, length)
+  }
+  db_share <- DBI::dbGetQuery(con, paste0("SELECT group_id FROM user_groups WHERE group_id IN (", paste(unique(share_with), collapse = ", "), ");"))
+  if (nrow(db_share) < length(unique(share_with))) {
+    stop("At least one of the share_with groups ids you specified does not exist in the database.")
+  }
+  
+  if (any(is.na(owner))) {
+    stop("owner cannot be NA")
+  } else if (!inherits(owner, "numeric")) {
+    stop("owner must be a numeric vector")
+  }
+  if (length(owner) == 1 && length > 1) {
+    owner <- rep(owner, length)
+  }
+  db_owner <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors WHERE owner_contributor_id IN (", paste(unique(owner), collapse = ", "), ");"))
+  if (nrow(db_owner) < length(unique(owner))) {
+    stop("At least one of the owners you specified does not exist in the database.")
+  }
+  
+  if (any(is.na(source_fx))) {
+    warning("At least one of the source_fx you entered is NA. This will not allow for automatic fetching of new data. The timeseries will be added to the database, but you will need to manually add data.")
+  } 
+  source_fx_check <- source_fx[!is.na(source_fx)]
+  if (length(source_fx_check) > 0) {
+    if (!all(source_fx_check %in% ls("package:AquaCache"))) {
+      stop("At least one of the source_fx strings you entered does not exist in the AquaCache package.")
+    }
+  }
+  
+  if (!any(is.na(source_fx_args))) {
+    if (!all(grepl("\\{.*?\\}", source_fx_args))) {
+      stop("source_fx_args must be in the form of '{param1 = arg1}, {param2 = arg2}', with each parameter:argument pair enclosed in curly brackets.")
+    }
+  }
+  if (length(source_fx_args) == 1 && length > 1) {
+    stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
+  }
+  
+  if (!any(is.na(note))) {
+    if (!inherits(note, "character")) {
+      stop("note must be a character vector or left NA.")
+    }
+  }
+  if (length(note) == 1 && length > 1) {
+    stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
+  }
+  
+  # Check that the proper entries exist in the settings database table. Make entry to DB if necessary/possible ################
+  for (i in 1:length(location)) {
+    sfx <- source_fx[i]
+    rec_rate <- record_rate[i]
+    param <- parameter[i]
+    p_type <- period_type[i]
+    
+    if (is.na(rec_rate)) {
+      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", sfx, "' AND record_rate IS NULL AND parameter_id = ", param, " AND period_type = '", p_type, "';"))
     } else {
-      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", source_fx, "' AND record_rate = '", record_rate, "' AND parameter = ", parameter_id, " AND period_type = '", period_type, "';"))
+      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", sfx, "' AND record_rate = '", rec_rate, "' AND parameter_id = ", param, " AND period_type = '", p_type, "';"))
     }
-    if (!is.null(settings_df)) { # A df was provided with settings info
-      if (nrow(setting) == 1) { # There already is a setting in the DB for that combination, so do nothing
-      } else if (nrow(setting) == 0) { # A df was provided, and there is no existing entry for this combination. Make a new entry if possible
-        if (is.na(record_rate)) {
-          sub.settings_df <- settings_df[settings_df$source_fx == source_fx & is.na(settings_df$record_rate) & settings_df$parameter == parameter & settings_df$period_type == period_type, ]
-        } else {
-          sub.settings_df <- settings_df[settings_df$source_fx == source_fx & settings_df$record_rate == record_rate & settings_df$parameter == parameter & settings_df$period_type == period_type, ]
-        }
-        if (row.names(sub.settings_df) == "NA") {
-          sub.settings_df <- data.frame()
-        }
-        if (nrow(sub.settings_df) == 1) {
-          # Check if the parameter exists in the parameters table already
-          if (nrow(DBI::dbGetQuery(con, paste0("SELECT * FROM parameters WHERE param_name = '", parameter, "';"))) == 0) {
-            stop("The parameter '", parameter, "' does not exist in the parameters table. Please add it first using the function parameter param_df.")
-          } else {
-            # Get the parameter_id for the parameter and sub it in to sub.settings_df
-            parameter_id <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", parameter, "';"))[,1]
-            sub.settings_df$parameter <- parameter_id
-          }
-          DBI::dbAppendTable(con, "settings", sub.settings_df)
-        } else if (nrow(sub.settings_df) > 1) {
-          DBI::dbAppendTable(con, "settings", sub.settings_df[1, ])
-        } else {
-          stop("There is no entry in the 'settings' database table corresponding to row ", i, " of timeseries_df, and no valid entry in settings_df to use for adding the required settings. Please review your input parameters.")
-        }
-      }
-    } else { #no df was provided
-      if (nrow(setting) == 0) {
-        stop("There is no existing entry in the 'settings' table for row ", i, " of the supplied timeseries_df. Please provide a data.frame for the settings_df parameter to address this.")
-      }
+    if (nrow(setting) == 0) {
+      stop("There is no existing entry in the 'settings' table for source_fx ", sfx, ", parameter ", param, ", and period_type ", p_type, ". Please add a corresponding entry to the database table 'settings' to address this and try again. I need to know how to fetch the data for this timeseries!!!")
     }
   }
+  
   
   #Add the timeseries #######################################################################################################
-  timeseries_df$location_id <- NA
-  failed_rows <- c()
-  for (i in 1:nrow(timeseries_df)) {
-    timeseries_df[i, "location_id"] <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", timeseries_df[i, "location"], "';"))
+  for (i in 1:length(location)) {
+    loc_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", location[i], "';"))
     tryCatch({
-      add <- timeseries_df[i, -which(names(timeseries_df) == "start_datetime")]
-      
-      loc <- add$location
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", add$parameter, "';"))[,1]
-      media_code <- DBI::dbGetQuery(con, paste0("SELECT media_code FROM media_types WHERE media_type = '", add$media_type, "';"))[,1]
-      source_fx <- add$source_fx
-      period_type <- add$period_type
-      record_rate <- add$record_rate
-      source_fx_args <- add$source_fx_args
-      param_name <- add$parameter
-      add$parameter <- parameter_id
-      add$media_type <- media_code
+      add <- data.frame(location = location[i],
+                        location_id = loc_id,
+                        z = z[i],
+                        parameter_id = parameter[i],
+                        media_id = media[i],
+                        sensor_priority = sensor_priority[i],
+                        category = category[i],
+                        period_type = period_type[i],
+                        record_rate = record_rate[i],
+                        share_with = paste0("{", share_with[i], "}"),
+                        owner = owner[i],
+                        source_fx = source_fx[i],
+                        source_fx_args = source_fx_args[i],
+                        note = note[i],
+                        end_datetime = start_datetime[i] - 1)
       tryCatch({
         DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
-        message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", param_name, ", category ", add$category, ", media_type ", add$media_type, ", and period_type ", add$period_type, ".")
+        message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", add$parameter_id, ", category ", add$category, ", media_type ", add$media_id, ", and period_type ", add$period_type, ".")
+        new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND category = '", add$category, "' AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
       }, error = function(e) {
-        message("It looks like the timeseries has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and this function automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries.")
-      })
-      
-      new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter = ", parameter_id, " AND category = '", add$category, "' AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
-
-      if (is.na(record_rate)) {
-        parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", parameter_id, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
-      } else {
-        parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter = ", parameter_id, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+        message("It looks like the timeseries for for location ", add$location, ", parameter ", add$parameter_id, ", category ", add$category, ", media_type ", add$media_id, ", and period_type ", add$period_type, " has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries Don't worry, I'm still checking for data.")
+        new_tsid <<- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND category = '", add$category, "' AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
+        # Modify the end_datetime in the DB to be one second before the start_datetime
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", add$end_datetime, "' WHERE timeseries_id = ", new_tsid, ";"))
       }
-
-      if (!is.na(add$source_fx)) {
-        args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = timeseries_df[i, "start_datetime"])
-        if (!is.na(source_fx_args)) {#add some arguments if they are specified
-          args <- strsplit(source_fx_args, "\\},\\s*\\{")
-          pairs <- lapply(args, function(pair) {
-            gsub("[{}]", "", pair)
-          })
-          pairs <- lapply(pairs, function(pair) {
-            gsub("\"", "", pair)
-          })
-          pairs <- lapply(pairs, function(pair) {
-            gsub("'", "", pair)
-          })
-          pairs <- strsplit(unlist(pairs), "=")
-          pairs <- lapply(pairs, function(pair) {
-            trimws(pair)
-          })
-          for (j in 1:length(pairs)) {
-            args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-          }
-        }
-
-        ts <- do.call(source_fx, args_list) #Get the data using the args_list
-        ts <- ts[!is.na(ts$value) , ]
-
+      )
+      
+      if (!is.na(source_fx[i])) {
+        param_name <- DBI::dbGetQuery(con, paste0("SELECT param_name FROM parameters WHERE parameter_id = ", add$parameter_id, ";"))[1,1]
+        
+        # Call the relevant 'get' functions to bring in data
         if (add$category == "continuous") {
-          if (nrow(ts) > 0) {
-            if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
-              ts$period <- "00:00:00"
-            } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
-              ts <- ts[order(ts$datetime) ,] #Sort ascending
-              diffs <- as.numeric(diff(ts$datetime), units = "hours")
-              smoothed_diffs <- zoo::rollmedian(diffs, k = 3, fill = NA, align = "center")
-              # Initialize variables to track changes
-              consecutive_count <- 0
-              changes <- data.frame()
-              last_diff <- 0
-              for (j in 1:length(smoothed_diffs)) {
-                if (!is.na(smoothed_diffs[j]) && smoothed_diffs[j] < 25 && smoothed_diffs[j] != last_diff) { # Check if smoothed interval is less than threshold, which is set to more than a whole day (greatest interval possible is 24 hours) as well as not the same as the last recorded diff
-                  consecutive_count <- consecutive_count + 1
-                  if (consecutive_count == 3) { # At three consecutive new measurements it's starting to look like a pattern
-                    last_diff <- smoothed_diffs[j]
-                    change <- data.frame(datetime = ts$datetime[j - 3],
-                                         period = last_diff)
-                    changes <- rbind(changes, change)
-                    consecutive_count <- 0
-                  }
-                } else {
-                  consecutive_count <- 0
-                }
-              }
-              # Calculate the duration in days, hours, minutes, and seconds and assign to the right location in ts
-              ts$period <- NA
-              if (nrow(changes) > 0) {
-                for (j in 1:nrow(changes)) {
-                  days <- floor(changes$period[j] / 24)
-                  remaining_hours <- changes$period[j] %% 24
-                  minutes <- floor((remaining_hours - floor(remaining_hours)) * 60)
-                  seconds <- round(((remaining_hours - floor(remaining_hours)) * 60 - minutes) * 60)
-                  ts[ts$datetime == changes$datetime[j], "period"] <- paste("P", days, "DT", floor(remaining_hours), "H", minutes, "M", seconds, "S", sep = "")
-                }
-                #carry non-na's forward and backwards, if applicable
-                ts$period <- zoo::na.locf(zoo::na.locf(ts$period, na.rm = FALSE), fromLast = TRUE)
-
-              } else { #In this case there were too few measurements to conclusively determine a period, so set to NA. They can be calculated once more data gets added.
-                ts$period <- NA
-              }
-            } else { #Check to make sure that the supplied period can actually be coerced to a period
-              check <- lubridate::period(unique(ts$period))
-              if (NA %in% check) { #Can't be coerced, so set to NA
-                ts$period <- NA
-              }
-            }
-            ts$timeseries_id <- new_tsid
-            ts$imputed <- FALSE
-
-            tryCatch({
-              DBI::dbAppendTable(con, "measurements_continuous", ts)
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
-              message("Success! Added new realtime data for ", add$location, " and parameter ", param_name, ".")
-            }, error = function(e) {
-              warning("Unable to add new values to the measurements_continuous table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
-            })
+          remove_after_hydat <- FALSE
+          tryCatch({
+            DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", new_tsid, " AND datetime >= '", add$end_datetime, "';"))
+            getNewContinuous(con = con, timeseries_id = new_tsid)
+            new_start <- DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", new_tsid, ";"))
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", new_start$min, "' WHERE timeseries_id = ", new_tsid, ";"))
+          }, error = function(e) {
+            message("Failed to add new continuous data for location ", add$location, " and parameter ", add$parameter_id, ".")
             if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "discharge, river/stream")) {
-              message("Adding historical data from HYDAT database")
-              suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
+              message("Attempting to add historical data from HYDAT database")
+              remove_after_hydat <<- TRUE
+            } else {
+              DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
+              message("Deleted the timeseries entry for location ", add$location, " and parameter ", add$parameter_id, ".")
             }
-            tryCatch({
-              if (add$record_rate %in% c('1 day', '< 1 day')) {
-                calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = NULL)
-              message("Success! Calculated daily means and statistics for ", add$location, " and parameter ", param_name, ".")
-              } else {
-                message("Not calculating daily statistics for ", add$location, " and parameter ", param_name, " as recording rate is greater than 1 day.")
+          })
+          
+          # Now conditionally check for HYDAT data
+          if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "discharge, river/stream")) {
+            message("Adding historical data from HYDAT database")
+            suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
+            if (remove_after_hydat) {
+              # see if anything exists in table measurements_calculated_daily for this timeseries_id. If not, delete the timeseries.
+              exist <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM measurements_calculated_daily WHERE timeseries_id = ", new_tsid, ";"))
+              if (nrow(exist) == 0) {
+                DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
+                message("Deleted the timeseries entry for location ", add$location, " and parameter ", add$parameter_id, " as no realtime or daily means data could be found.")
               }
-            }, error = function(e) {
-              message("Unable to calculate daily means and statistics for ", add$location, " and parameter ", param_name, ".")
-            }, warning = function(e) {
-              message("May have failed to calculate daily means and statistics for ", add$location, " and parameter ", param_name, ".")
-            })
-          } else { #There is no data to associated with this timeseries. Delete it and see if the location should also be deleted.
-            failed_rows <- c(failed_rows, i)
-            DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
-            loc_necessary <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", loc, "'"))
-            # see if the location is referenced by other rows in timeseries_df that are not also excluded by failed_rows. If so, don't delete the location.
-            sub.tsdf <- timeseries_df[-failed_rows,]
-            loc_elsewhere <- nrow(sub.tsdf[sub.tsdf$location == loc,])
-            if (nrow(loc_necessary) == 0 && loc_elsewhere == 0) {
-              DBI::dbExecute(con, paste0("DELETE FROM locations WHERE location = '", loc, "';"))
             }
-            message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
-            next
           }
+          tryCatch({
+            if (add$record_rate %in% c('1 day', '< 1 day')) {
+              calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = NULL)
+              message("Success! Calculated daily means and statistics for ", add$location, " and parameter ", param_name, ".")
+            } else {
+              message("Not calculating daily statistics for ", add$location, " and parameter ", param_name, " as recording rate is greater than 1 day.")
+            }
+          }, error = function(e) {
+            message("Unable to calculate daily means and statistics for ", add$location, " and parameter ", param_name, " with message ", e$message, ".")
+          }, warning = function(e) {
+            message("May have failed to calculate daily means and statistics for ", add$location, " and parameter ", param_name, ".")
+          })
         } else { #Add the non-continuous data
-          if (nrow(ts) > 0) {
-            ts$timeseries_id <- new_tsid
-            tryCatch({
-              DBI::dbAppendTable(con, "measurements_discrete", ts)
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(ts$datetime), "', end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", new_tsid, ";"))
-              message("Success! Added new discrete data for ", add$location, " and parameter ", param_name, ".")
-            }, error = function(e) {
-              message("Unable to add new values to the measurements_discrete table for row ", i, ". It looks like there is already data there for this location/parameter/period_type/categeory combination.")
-            })
-          } else { #There is no data to associate with this timeseries. Delete it and see if the location should also be deleted.
-            failed_rows <- c(failed_rows, i)
+          tryCatch({
+            DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", new_tsid, " AND datetime >= '", add$end_datetime, "';"))
+            getNewDiscrete(con = con, timeseries_id = new_tsid)
+            new_start <- DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_discrete WHERE timeseries_id = ", new_tsid, ";"))
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", new_start$min, "' WHERE timeseries_id = ", new_tsid, ";"))
+          }, error = function(e) {
+            message("Failed to add new discrete data for location ", add$location, " and parameter ", add$parameter_id, ".")
             DBI::dbExecute(con, paste0("DELETE FROM timeseries WHERE timeseries_id = ", new_tsid, ";"))
-            loc_necessary <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", loc, "'"))
-            # see if the location is referenced by other rows in timeseries_df that are not also excluded by failed_rows. If so, don't delete the location.
-            sub.tsdf <- timeseries_df[-failed_rows,]
-            loc_elsewhere <- nrow(sub.tsdf[sub.tsdf$location == loc,])
-            if (nrow(loc_necessary) == 0 && loc_elsewhere == 0) {
-              DBI::dbExecute(con, paste0("DELETE FROM locations WHERE location = '", loc, "';"))
-            }
-            message("There was no data found for row ", i, " using the source_fx you specified. The corresponding timeseries_id has been deleted from the timeseries table, while the location was deleted if not referenced by other timeseries in the database.")
-            next
-          }
+            message("Deleted the timeseries entry for location ", add$location, " and parameter ", add$parameter_id, ".")
+          })
+          
         } #End of loop adding discrete data
       } else {
         message("You didn't specify a source_fx. No data was added to the measurements_continuous or measurements_discrete table, so make sure you go and add that data ASAP. If you made a mistake delete the timeseries from the timeseries table and restart. The timeseries ID for this new entry is ", new_tsid)
       }
     }, error = function(e) {
-      warning("Failed to add new data for row number ", i, " in the provided timeseries_df data.frame.")
+      warning("Failed to add new data for location ", add$location, " and parameter ", add$parameter_id, ". Returned error: ", e$message)
     })
+    
+  } #End of loop iterating over each new  timeseries entry
   
-    } #End of loop iterating over each new  timeseries entry
-
-
+  
 }
 

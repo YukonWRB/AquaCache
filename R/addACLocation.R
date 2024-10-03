@@ -2,7 +2,7 @@
 #' 
 #' Adds a new location to the AquaCache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
-#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA.
+#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.
 #' @param location A character vector of the location code(s).
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French.
@@ -26,7 +26,7 @@
 #' @return Success/error messages and new entries added to the database.
 #' @export
 
-addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = NA, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = AquaConnect()) {
+addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = 1, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = AquaConnect()) {
   
    
   # df <- data.frame(location = "Yukon_Abv_YDA",

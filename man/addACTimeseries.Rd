@@ -4,12 +4,55 @@
 \alias{addACTimeseries}
 \title{Add timeseries to AquaCache database}
 \usage{
-addACTimeseries(timeseries_df, settings_df = NULL, con = AquaConnect())
+addACTimeseries(
+  df = NULL,
+  start_datetime = NA,
+  location = NA,
+  z = NA,
+  parameter = NA,
+  media = NA,
+  sensor_priority = 1,
+  category = NA,
+  period_type = "instantaneous",
+  record_rate = NA,
+  share_with = "1",
+  owner = NA,
+  source_fx = NA,
+  source_fx_args = NA,
+  note = NA,
+  con = AquaConnect()
+)
 }
 \arguments{
-\item{timeseries_df}{A data.frame containing the information necessary to add the timeseries (see details for template).}
+\item{df}{A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters must be NA or left as their default values.}
 
-\item{settings_df}{A data.frame containing new entries for the 'settings' table. Only necessary if you are asking for a new combination of source_fx, parameter, period_type, and record_rate. Function will double check that required entries exist. Calls function \code{\link[=addACImportFlow]{addACImportFlow()}} if necessary.}
+\item{start_datetime}{A character or posixct vector of datetimes from which to look for new data.}
+
+\item{location}{A numeric vector corresponding to column 'location' of table 'locations'.}
+
+\item{z}{A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.}
+
+\item{parameter}{A numeric vector corresponding to column 'parameter_id' of table 'parameters'.}
+
+\item{media}{A numeric vector corresponding to column 'media_id' of table 'media_types'.}
+
+\item{sensor_priority}{A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.}
+
+\item{category}{A character vector comprised of either 'discrete' or 'continuous'; classifies the data as either category.}
+
+\item{period_type}{A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.}
+
+\item{record_rate}{A broad categorization of the rate at which recording takes place, only used for 'continuous' category data.. Select from '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'; set to NA for discrete timeseries.}
+
+\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, selected from column 'group_id' of table 'user_groups'. Default is 1. Pass multiple groups as a single string, e.g. "1, 2, 3" or strings, e.g. c("1, 2, 3", "2, 4").}
+
+\item{owner}{A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!}
+
+\item{source_fx}{The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.}
+
+\item{source_fx_args}{Additional arguments to pass to the function(s) specified in parameter 'source_fx'.}
+
+\item{note}{Text notes to append to the timeseries.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
@@ -19,12 +62,35 @@ One or more new entries are created in the table 'timeseries'
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function \code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} for help in formatting the data.frames to pass to \code{timeseries_df}. To add an image series see \code{\link[=addACImageSeries]{addACImageSeries()}}, for raster series see \code{\link[=addACRasterSeries]{addACRasterSeries()}}. For one-off images use \code{\link[=insertACImage]{insertACImage()}} and for rasters \code{\link[=insertACRaster]{insertACRaster()}}. For documents use \code{\link[=insertACDocument]{insertACDocument()}}.
+This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function \code{\link[=addACLocation]{addACLocation()}} for adding a location to which timeseries must be attached). To add an image series see \code{\link[=addACImageSeries]{addACImageSeries()}}, for raster series see \code{\link[=addACRasterSeries]{addACRasterSeries()}}. For one-off images use \code{\link[=insertACImage]{insertACImage()}} and for rasters \code{\link[=insertACRaster]{insertACRaster()}}. For documents use \code{\link[=insertACDocument]{insertACDocument()}}.
+
+You will be prompted to add locations that don't exist yet if any fall into this category.
 }
 \details{
-You can also add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries.
+You can add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries. For Water Survey of Canada data, this function will also seek out level and flow data from the HYDAT database, downloading or checking for updates to it before use.
 
 Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
+}
+\examples{
+/dontrun
+#Make a data.frame to pass to the function:
+  df <- data.frame(start_datetime = "2015-01-01 00:00",
+location = "09AA-M3",
+z = c(NA, 3),
+parameter = c(34, 1154),
+media = 7,
+sensor_priority = 1,
+category = "continuous",
+period_type = c("sum", "mean"),
+record_rate = "< 1 day",
+share_with = "1",
+owner = 2,
+source_fx = "downloadAquarius",
+source_fx_args = NA,
+note = c("Total precipitation from standpipe, reset every year in the fall.", "Hourly average of wind speeds recorded every minute")
+)
+#Add the timeseries using the data.frame
+addACTimeseries(df)
 }
 \seealso{
 \code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} to see templates for timeseries_df and settings_df
