@@ -33,7 +33,7 @@
 #' @export
 #' @seealso [addACTimeseriesTemplate()] to see templates for timeseries_df and settings_df
 #' @examples
-#' /dontrun
+#' \dontrun{
 #' #Make a data.frame to pass to the function:
 #'   df <- data.frame(start_datetime = "2015-01-01 00:00",
 #' location = "09AA-M3",
@@ -48,10 +48,12 @@
 #' owner = 2,
 #' source_fx = "downloadAquarius",
 #' source_fx_args = NA,
-#' note = c("Total precipitation from standpipe, reset every year in the fall.", "Hourly average of wind speeds recorded every minute")
+#' note = c("Total precipitation from standpipe, reset every year in the fall.",
+#' "Hourly average of wind speeds recorded every minute")
 #' )
 #' #Add the timeseries using the data.frame
 #' addACTimeseries(df)
+#' }
 
 addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "1", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = AquaConnect()) {
   
