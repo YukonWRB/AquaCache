@@ -27,11 +27,11 @@
 #' @param source_fx The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.
 #' @param source_fx_args Additional arguments to pass to the function(s) specified in parameter 'source_fx'.
 #' @param note Text notes to append to the timeseries.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. Leave NULL to use the package default connection and have it closed afterwards automatically.
 #'
 #' @return One or more new entries are created in the table 'timeseries'
 #' @export
-#' @seealso [addACTimeseriesTemplate()] to see templates for timeseries_df and settings_df
+#' 
 #' @examples
 #' \dontrun{
 #' #Make a data.frame to pass to the function:
@@ -55,7 +55,7 @@
 #' addACTimeseries(df)
 #' }
 
-addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "1", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = AquaConnect()) {
+addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "1", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
   
   # Testing parameters
   # df <- data.frame(start_datetime = "2015-01-01 00:00",
@@ -88,6 +88,10 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
   # source_fx_args <- NA
   # note <- NA
   
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
   
   if (!is.null(df)) {
     # Check that a few of the other parameters are NA

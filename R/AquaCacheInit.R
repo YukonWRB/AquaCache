@@ -1900,6 +1900,9 @@ USING (
   
   DBI::dbExecute(con, "CREATE SCHEMA instruments;")
   
+  # Set search_path for the current session (it's set later on for all future sessions)
+  DBI::dbExecute(con, 'SET search_path TO public, instruments')
+  
   ## Create "instruments" and related tables ########################################
   
   DBI::dbExecute(con, "CREATE TABLE instruments.instrument_type (
@@ -2215,10 +2218,6 @@ USING (
       EXECUTE FUNCTION instruments.update_modify_datetime();
     "))
   }
-  
-  ## Modify the search path to include the 'instruments' schema
-  DBI::dbExecute(con, "ALTER ROLE AquaCache SET search_path TO public, instruments;")
-  
   
   
   # Create metadata tables for the main database that link to the 'instruments' schema as well ########################################
@@ -2945,6 +2944,13 @@ EXCLUDE USING gist (
 # ORDER BY
 #     l.location_id;
 # ")
+  
+  
+  # Modify the search path to include all schemas ########################################
+  DBI::dbExecute(con, 'ALTER DATABASE "AquaCache" SET search_path TO public, instruments, information;')
+  # Set search_path for the current session in case the user doesn't disconnect right away
+  DBI::dbExecute(con, 'SET search_path TO public, instruments, information')
+  
   
   # Create accounts ########################################
   tryCatch({

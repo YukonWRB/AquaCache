@@ -20,7 +20,7 @@ addACTimeseries(
   source_fx = NA,
   source_fx_args = NA,
   note = NA,
-  con = AquaConnect()
+  con = NULL
 )
 }
 \arguments{
@@ -54,7 +54,7 @@ addACTimeseries(
 
 \item{note}{Text notes to append to the timeseries.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. Leave NULL to use the package default connection and have it closed afterwards automatically.}
 }
 \value{
 One or more new entries are created in the table 'timeseries'
@@ -87,12 +87,10 @@ share_with = "1",
 owner = 2,
 source_fx = "downloadAquarius",
 source_fx_args = NA,
-note = c("Total precipitation from standpipe, reset every year in the fall.", "Hourly average of wind speeds recorded every minute")
+note = c("Total precipitation from standpipe, reset every year in the fall.",
+"Hourly average of wind speeds recorded every minute")
 )
 #Add the timeseries using the data.frame
 addACTimeseries(df)
 }
-}
-\seealso{
-\code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} to see templates for timeseries_df and settings_df
 }

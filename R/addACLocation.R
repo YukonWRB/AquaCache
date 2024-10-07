@@ -21,12 +21,12 @@
 #' @param current A logical vector of whether the conversion factor(s) are current.
 #' @param network A numeric vector of the network(s) to which the location(s) belong.
 #' @param project A numeric vector of the project(s) to which the location(s) belong.
-#' @param con A connection to the AquaCache database. Default uses [AquaConnect()].
+#' @param con A connection to the AquaCache database. Default uses [AquaConnect()]. If left NULL the function will attempt to connect to the database and automatically disconnect afterwards.
 #'
 #' @return Success/error messages and new entries added to the database.
 #' @export
 
-addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = 1, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = AquaConnect()) {
+addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = 1, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = NULL) {
   
    
   # df <- data.frame(location = "Yukon_Abv_YDA",
@@ -67,6 +67,11 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   # network <- NA
   # project <- NA
   # 
+  
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
   
   if (!is.null(df)) {
     # Check that all other parameters are NA

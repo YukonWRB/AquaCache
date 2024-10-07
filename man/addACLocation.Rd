@@ -24,7 +24,7 @@ addACLocation(
   current = NA,
   network = NA,
   project = NA,
-  con = AquaConnect()
+  con = NULL
 )
 }
 \arguments{
@@ -66,7 +66,7 @@ addACLocation(
 
 \item{project}{A numeric vector of the project(s) to which the location(s) belong.}
 
-\item{con}{A connection to the AquaCache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the AquaCache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL the function will attempt to connect to the database and automatically disconnect afterwards.}
 }
 \value{
 Success/error messages and new entries added to the database.

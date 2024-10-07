@@ -8,16 +8,19 @@
 #' @param source_fx_args Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
 #' @param share_with Which user groups should the image series be shared with? Default is '1', the public group.
 #' @param visibility_public How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'. 
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #'
 #' @return TRUE if successful, and a new entry in the database with images fetched.
 #' @export
 #'
 
-addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = 1, visibility_public = 'exact', con = AquaConnect(silent = TRUE)) {
+addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = 1, visibility_public = 'exact', con = NULL) {
   #function will add entry to images_index, then trigger getNewImages from the user-specified start_datetime
 
-  on.exit(DBI::dbDisconnect(con))
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
 
   if (inherits(location, "character")) {
       location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", location,  "';"))[1,1]
