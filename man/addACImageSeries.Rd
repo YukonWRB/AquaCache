@@ -11,7 +11,7 @@ addACImageSeries(
   source_fx_args = NA,
   share_with = 1,
   visibility_public = "exact",
-  con = AquaConnect(silent = TRUE)
+  con = NULL
 )
 }
 \arguments{
@@ -27,7 +27,7 @@ addACImageSeries(
 
 \item{visibility_public}{How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
 }
 \value{
 TRUE if successful, and a new entry in the database with images fetched.
