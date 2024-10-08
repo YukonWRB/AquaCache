@@ -1,7 +1,7 @@
 #' Check for patches to apply to the AquaCache database
 #' 
 #' @description
-#' The functions in this package are dependent on a consistent database schema. However, sometimes changes need to be made to the datbase schema either for the sake of data organization in the DB or to facilitate or allow new functionality via this package. This function checks for patches that need to be applied to the database to ensure that the schema is up-to-date before running any functions that depend on it.
+#' The functions in this package are dependent on a consistent database schema. However, sometimes changes need to be made to the database schema either for the sake of data organization in the DB or to facilitate or allow new functionality via this package. This function checks for patches that need to be applied to the database to ensure that the schema is up-to-date before running any functions that depend on it.
 #' 
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL a connection will be created using the default settings in [AquaConnect()] and closed afterwards.
 #' 
