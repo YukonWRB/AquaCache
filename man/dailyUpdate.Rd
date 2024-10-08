@@ -30,5 +30,5 @@ Calls several functions in sequence: \code{\link[=getNewContinuous]{getNewContin
 
 Note that new timeseries should be added using function \code{\link[=addACTimeseries]{addACTimeseries()}}.
 
-Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function, and \code{\link[=addACTimeseriesTemplate]{addACTimeseriesTemplate()}} for details on how to format the parameters to pass to \code{\link[=addACTimeseries]{addACTimeseries()}}.
+Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function.
 }

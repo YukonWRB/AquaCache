@@ -37,7 +37,7 @@ tbl <- data.frame(item = c("AquaCache R package used for last patch", "Last patc
 DBI::dbWriteTable(con, "version_info", tbl, append = TRUE, row.names = FALSE)
 
 
-# Check that the table has two row and is in the right schema
+# Check that the table has two rows and is in the right schema
 check <- DBI::dbGetQuery(con, "SELECT COUNT(*) FROM information.version_info")
 
 if (nrow(check) != 2) {
