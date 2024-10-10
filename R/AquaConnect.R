@@ -19,34 +19,34 @@
 AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), port = Sys.getenv("AquaCachePort"), username = Sys.getenv("AquaCacheAdminUser"), password = Sys.getenv("AquaCacheAdminPass"), silent = FALSE){
 
   tryCatch({
-    hydro <- DBI::dbConnect(drv = RPostgres::Postgres(),
+    con <- DBI::dbConnect(drv = RPostgres::Postgres(),
                             dbname = name,
                             host = host,
                             port = port,
                             user = username,
                             password = password)
 
-    if (!DBI::dbGetQuery(hydro, "SELECT rolsuper FROM pg_roles WHERE rolname = current_user;")[1,1]) {
+    if (!DBI::dbGetQuery(con, "SELECT rolsuper FROM pg_roles WHERE rolname = current_user;")[1,1]) {
       if (interactive()) {
         # Prompt the user to enter their username and password
         message("You are not connecting to the database as a supersuer. Please enter your username and password to view records other than the 'public' ones, or enter nothing to log in as public.")
         username <- readline("Username: ")
         if (nchar(username) > 0) {
           password <- readline("Password: ")
-          res <- validateACUser(username, password, hydro)
+          res <- validateACUser(username, password, con)
           if (res) {
-            DBI::dbExecute(hydro, paste0("SET logged_in_user.username = '", username, "';"))
+            DBI::dbExecute(con, paste0("SET logged_in_user.username = '", username, "';"))
             message("You are now logged in as '", username, "'.")
           } else {
-            DBI::dbExecute(hydro, "SET logged_in_user.username = 'public';")
+            DBI::dbExecute(con, "SET logged_in_user.username = 'public';")
             message("Username or password failed. You are now logged in as 'public'.")
           }
         } else {
-          DBI::dbExecute(hydro, "SET logged_in_user.username = 'public';")
+          DBI::dbExecute(con, "SET logged_in_user.username = 'public';")
           message("You are now logged in as 'public'.")
         }
       } else {
-        DBI::dbExecute(hydro, "SET logged_in_user.username = 'public';")
+        DBI::dbExecute(con, "SET logged_in_user.username = 'public';")
         message("You are now logged in as 'public'. If you need to change this either connect using an interactive session or use superuser credentials.")
       }
     }
@@ -56,10 +56,10 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
     }
     
     # Now check for patches
-    AquaPatchCheck()
+    AquaPatchCheck(con = con)
     
-    return(hydro)
+    return(con)
   }, error = function(e) {
-    stop("Connection failed.")
+    stop("Connection failed. Error message: ", e$message)
   })
 }
