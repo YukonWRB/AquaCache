@@ -3,18 +3,13 @@
 #' @description
 #' The functions in this package are dependent on a consistent database schema. However, sometimes changes need to be made to the database schema either for the sake of data organization in the DB or to facilitate or allow new functionality via this package. This function checks for patches that need to be applied to the database to ensure that the schema is up-to-date before running any functions that depend on it.
 #' 
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL a connection will be created using the default settings in [AquaConnect()] and closed afterwards.
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' 
 #' @return A message indicating whether or not patches need to be applied.
 #' @export
 #'
 
-AquaPatchCheck <- function(con = NULL) {
-  
-  if (is.null(con)) {
-    con <- AquaConnect(silent = TRUE)
-    on.exit(DBI::dbDisconnect(con))
-  }
+AquaPatchCheck <- function(con) {
   
   # See if table information.version_info exists, else set last_patch to 0
   if (!DBI::dbExistsTable(con, DBI::SQL('"information"."version_info"'))) {
@@ -24,11 +19,13 @@ AquaPatchCheck <- function(con = NULL) {
     last_patch <- DBI::dbGetQuery(con, "SELECT version FROM information.version_info WHERE item  = 'Last patch number'")
     if (nrow(last_patch) == 0) {
       last_patch <- 0
+    } else {
+      last_patch <- as.numeric(last_patch$version)
     }
   }
   # Get last patch available from package. These are in inst/patches folder and named "patch_X.R"
   patch_files <- list.files(system.file("patches", package = "AquaCache"), pattern = "patch_[0-9]+\\.R", full.names = FALSE)
-  last_patch_file <- as.numeric(gsub("patch_|.R", "", patch_files))
+  last_patch_file <- max(as.numeric(gsub("patch_|.R", "", patch_files)))
   
   
   if (last_patch < last_patch_file) {
@@ -60,5 +57,5 @@ AquaPatchCheck <- function(con = NULL) {
       warning("Invalid choice. Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().")
       
     }
-  }
+  }  # Else do nothing
 }
