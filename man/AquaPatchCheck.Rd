@@ -4,10 +4,10 @@
 \alias{AquaPatchCheck}
 \title{Check for patches to apply to the AquaCache database}
 \usage{
-AquaPatchCheck(con = NULL)
+AquaPatchCheck(con)
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL a connection will be created using the default settings in \code{\link[=AquaConnect]{AquaConnect()}} and closed afterwards.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
 A message indicating whether or not patches need to be applied.

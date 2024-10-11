@@ -16,18 +16,23 @@
 #' ## Sharing privileges and ownership
 #' The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data.
 #' 
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 
-getNewContinuous <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", active = 'default')
+getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'default')
 {
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
   }
   
   # Create table of timeseries
@@ -97,6 +102,11 @@ getNewContinuous <- function(con = AquaConnect(silent = TRUE), timeseries_id = "
       ts <- ts[!is.na(ts$value) , ]
 
       if (nrow(ts) > 0) {
+        # Check that ts has columns named 'value' and 'datetime' at minimum
+        if (!("value" %in% names(ts)) | !("datetime" %in% names(ts))) {
+          stop("getNewContinuous: The data returned by source_fx does not have columns named 'value' and 'datetime'.")
+        }
+        
         #assign a period to the data
         if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
           ts$period <- "00:00:00"
@@ -113,15 +123,38 @@ getNewContinuous <- function(con = AquaConnect(silent = TRUE), timeseries_id = "
         ts$imputed <- FALSE
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
         if (!is.na(owner)) {
-          ts$owner <- owner
+          if (!("owner" %in% names(ts))) {
+            ts$owner <- owner
+          }
         }
-        ts$share_with <- share_with
+        if (!("share_with" %in% names(ts))) {
+          ts$share_with <- share_with
+        }
+        
+        if (!("approval" %in% names(ts))) {
+          ts$approval <- 6
+        }
+        
+        if (!("grade" %in% names(ts))) {
+          ts$grade <- 11
+        }
+        
+        if (!("qualifier" %in% names(ts))) {
+          ts$qualifier <- 8
+        }
         
         DBI::dbWithTransaction(
           con, {
             if (min(ts$datetime) < last_data_point - 1) {
               DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
             }
+            
+            adjust_grade(con, tsid, ts[, c("datetime", "grade")])
+            adjust_approval(con, tsid, ts[, c("datetime", "approval")])
+            adjust_qualifier(con, tsid, ts[, c("datetime", "qualifier")])
+            adjust_owner(con, tsid, ts[, c("datetime", "owner")])
+            adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
+            
             DBI::dbAppendTable(con, "measurements_continuous", ts)
             #make the new entry into table timeseries
             DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))

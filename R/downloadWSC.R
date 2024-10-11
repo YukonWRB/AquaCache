@@ -60,24 +60,34 @@ downloadWSC <- function(location, parameter_id, start_datetime, end_datetime = S
   datetime_string <- paste0("start_date=", substr(start_datetime, 1, 10), "%20", substr(start_datetime, 12, 19), "&end_date=", substr(end_datetime, 1, 10), "%20", substr(end_datetime, 12, 19))
   url <- paste0(baseurl, location_string, "&", parameters_string, "&", datetime_string)
 
-  data <- data.table::fread(url, showProgress = FALSE, data.table = FALSE, select = c("Date", "Value/Valeur", "Symbol/Symbole", "Approval/Approbation"), col.names = c("datetime", "value", "grade", "approval"))
-
+  data <- data.table::fread(url, showProgress = FALSE, data.table = FALSE, select = c("Date" = "POSIXct", "Value/Valeur" = "numeric", "Symbol/Symbole" = "character", "Approval/Approbation" = "character", "Qualifier/Qualificatif" = "character"), col.names = c("datetime", "value", "grade", "approval", "qualifier"))
+  
   if (nrow(data) > 0) {
-    grade_mapping <- c("-1" = "U",
-                       "10" = "I",
-                       "20" = "E",
-                       "30" = "D",
-                       "40" = "N",
-                       "50" = "U")
-    approval_mapping <- c("Final/Finales" = "A",
-                          "Provisional/Provisoire" = "N")
-    data$grade <- ifelse(data$grade %in% names(grade_mapping),
-                         grade_mapping[data$grade],
-                         "Z")
+    qualifier_mapping <- c("-1" = "7",
+                       "10" = "1",
+                       "20" = "4",
+                       "30" = "7",
+                       "40" = "2",
+                       "50" = "8",
+                       "-2" = "8",
+                       "0" = "8")
+    data$qualifier <- ifelse(data$qualifier %in% names(qualifier_mapping),
+                         qualifier_mapping[data$qualifier],
+                         "8")
+    data$qualifier <- as.integer(data$qualifier)
+    
+    approval_mapping <- c("Final/Finales" = "1",
+                          "Approved/Approuvée" = "1",
+                          "Provisional/Provisoire" = "4",
+                          "Preliminayr/Préliminaire" = "4",
+                          "Checked/Verifiée" = "3",
+                          "Unspecified/Non spécifié" = "5",
+                          "Undefined/Non défini" = "5")
+    
     data$approval <- ifelse(data$approval %in% names(approval_mapping),
                             approval_mapping[data$approval],
-                            "Z")
-
+                            "6")
+    data$approval <- as.integer(data$approval)
 
     return(data)
   } else {

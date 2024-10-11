@@ -9,7 +9,7 @@
 #'
 #'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
@@ -21,7 +21,7 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
+synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
 {
   
   if (!active %in% c('default', 'all')) {
@@ -36,7 +36,11 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
     stop("start_datetime must be a Date, character, or POSIXct object.")
   }
   
-  on.exit(DBI::dbDisconnect(con))
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
   start <- Sys.time()
 
   message("Synchronizing timeseries with synchronize...")
@@ -279,6 +283,13 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
                 }
+                
+                adjust_grade(con, tsid, ts[, c("datetime", "grade")])
+                adjust_approval(con, tsid, ts[, c("datetime", "approval")])
+                adjust_qualifier(con, tsid, ts[, c("datetime", "qualifier")])
+                adjust_owner(con, tsid, ts[, c("datetime", "owner")])
+                adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
+                
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
               } else if (category == "discrete") {
                 # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
