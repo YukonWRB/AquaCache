@@ -134,6 +134,12 @@ DBI::dbExecute(con,
 
 
 # Now let's apply the same principle to the 'approvals' and 'grades' tables.
+
+# modify some old names for consistency
+DBI::dbExecute(con, "UPDATE approvals SET description = 'Unspecified', description_fr = 'Non spécifié' WHERE description = 'Undefined';")
+DBI::dbExecute(con, "UPDATE grades SET description = 'Unspecified', description_fr = 'Non spécifié' WHERE description = 'Undefined';")
+
+
 ## Approvals
 # Create new table 'approval_types'. This is existing table 'approvals' but with a new '_id' column.
 exist_table_approvals <- DBI::dbGetQuery(con, "SELECT * FROM approvals")
