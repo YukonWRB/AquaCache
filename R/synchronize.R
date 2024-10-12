@@ -155,13 +155,13 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
         if (category == "continuous") {
           inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
           # Set aside any rows where no_update == TRUE
-          no_update <- inDB[inDB$no_update == TRUE, ]
-          inDB <- inDB[inDB$no_update == FALSE, ]
+          no_update <- inDB[inDB$no_update, ]
+          inDB <- inDB[!inDB$no_update, ]
           # Drop no_update columns
           inDB$no_update <- NULL
           no_update$no_update <- NULL
           #Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
-          imputed <- inDB[inDB$imputed == TRUE , ]
+          imputed <- inDB[inDB$imputed, ]
           imputed.remains <- data.frame()
           if (nrow(imputed) > 0) {
             for (i in 1:nrow(imputed)) {
@@ -173,8 +173,8 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
         } else if (category == "discrete") {
           inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
           # Set aside any rows where no_update == TRUE
-          no_update <- inDB[inDB$no_update == TRUE, ]
-          inDB <- inDB[inDB$no_update == FALSE, ]
+          no_update <- inDB[inDB$no_update, ]
+          inDB <- inDB[!inDB$no_update, ]
           # Drop no_update columns
           inDB$no_update <- NULL
           no_update$no_update <- NULL
@@ -202,9 +202,20 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
                 inRemote <- inRemote[!(inRemote$datetime %in% no_update$datetime), ]
                 inDB <- inDB[!(inDB$datetime %in% no_update$datetime), ]
               }
+              #check for changes to approval, grade, condition, owner, contributor if columns exist inRemote
+update_approval
+update_grade
+
+
+
+
+
+
+
+
               # Make keys
-              inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
-              inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, inDB$grade, inDB$approval, sep = "|")
+              inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, sep = "|")
+              inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, sep = "|")
             } else if (category == "discrete") {
               # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote. In this case though, entries are unique on datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type so things are slower
               if (nrow(no_update) > 0) {
