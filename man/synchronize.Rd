@@ -5,7 +5,7 @@
 \title{Synchronize hydro DB with remote sources}
 \usage{
 synchronize(
-  con = AquaConnect(silent = TRUE),
+  con = NULL,
   timeseries_id = "all",
   start_datetime,
   discrete = FALSE,
@@ -13,7 +13,7 @@ synchronize(
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 

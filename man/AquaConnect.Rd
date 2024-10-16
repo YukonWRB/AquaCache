@@ -10,7 +10,8 @@ AquaConnect(
   port = Sys.getenv("AquaCachePort"),
   username = Sys.getenv("AquaCacheAdminUser"),
   password = Sys.getenv("AquaCacheAdminPass"),
-  silent = FALSE
+  silent = FALSE,
+  dev = FALSE
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ AquaConnect(
 \item{password}{Password. By default searches the .Renviron file for parameter:value pair of form AquaCacheAdminPass:"password".}
 
 \item{silent}{TRUE suppresses messages except for errors.}
+
+\item{dev}{TRUE appends "_dev" to the database name.}
 }
 \value{
 A connection to the database.

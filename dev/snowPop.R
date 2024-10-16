@@ -38,7 +38,7 @@ snowPop <- function(old_snow_db_path = "//carver/infosys/Snow/DB/SnowDB.mdb", co
   agency <- DBI::dbReadTable(snowCon, "AGENCY")
   DBI::dbDisconnect(snowCon)
 
-  if (overwrite == TRUE) {
+  if (overwrite) {
     DBI::dbExecute(con, "DELETE FROM measurements")
     DBI::dbExecute(con, "DELETE FROM surveys")
     DBI::dbExecute(con, "DELETE FROM locations")

@@ -9,7 +9,7 @@
 #'
 #'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param discrete Should discrete data also be synchronized? Note that if timeseries_id = "all", then discrete timeseries will not be synchronized unless discrete = TRUE.
@@ -21,7 +21,7 @@
 
 #TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
 
-synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
+synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discrete = FALSE, active = 'default')
 {
   
   if (!active %in% c('default', 'all')) {
@@ -36,7 +36,11 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
     stop("start_datetime must be a Date, character, or POSIXct object.")
   }
   
-  on.exit(DBI::dbDisconnect(con))
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
   start <- Sys.time()
 
   message("Synchronizing timeseries with synchronize...")
@@ -73,7 +77,20 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
   }
   
   if (active == 'default') {
-    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
+    all_timeseries <- all_timeseries[all_timeseries$active, ]
+  }
+  
+  grade_unknown <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';")[1,1]
+  if (is.na(grade_unknown)) {
+    stop("synchronize: Could not find grade type 'Unknown' in the database.")
+  }
+  approval_unknown <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';")[1,1]
+  if (is.na(approval_unknown)) {
+    stop("synchronize: Could not find approval type 'Unknown' in the database.")
+  }
+  qualifier_unknown <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';")[1,1]
+  if (is.na(qualifier_unknown)) {
+    stop("synchronize: Could not find qualifier type 'Unknown' in the database.")
   }
 
   updated <- 0 #Counter for number of updated timeseries
@@ -109,7 +126,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
 
     tryCatch({
-      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt)
+      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair) {
@@ -149,15 +166,15 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
 
       if (nrow(inRemote) > 0) {
         if (category == "continuous") {
-          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
           # Set aside any rows where no_update == TRUE
-          no_update <- inDB[inDB$no_update == TRUE, ]
-          inDB <- inDB[inDB$no_update == FALSE, ]
+          no_update <- inDB[inDB$no_update, ]
+          inDB <- inDB[!inDB$no_update, ]
           # Drop no_update columns
           inDB$no_update <- NULL
           no_update$no_update <- NULL
           #Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
-          imputed <- inDB[inDB$imputed == TRUE , ]
+          imputed <- inDB[inDB$imputed, ]
           imputed.remains <- data.frame()
           if (nrow(imputed) > 0) {
             for (i in 1:nrow(imputed)) {
@@ -169,8 +186,8 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
         } else if (category == "discrete") {
           inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
           # Set aside any rows where no_update == TRUE
-          no_update <- inDB[inDB$no_update == TRUE, ]
-          inDB <- inDB[inDB$no_update == FALSE, ]
+          no_update <- inDB[inDB$no_update, ]
+          inDB <- inDB[!inDB$no_update, ]
           # Drop no_update columns
           inDB$no_update <- NULL
           no_update$no_update <- NULL
@@ -198,9 +215,42 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
                 inRemote <- inRemote[!(inRemote$datetime %in% no_update$datetime), ]
                 inDB <- inDB[!(inDB$datetime %in% no_update$datetime), ]
               }
+
+              # Prepare for checking for changes in attributes held in other tables than measurements_continuous. This is done each time, no checking for discrepancies as the process is just as quick.
+              if (!is.na(owner)) {  # There may not be an owner assigned in table timeseries
+                if (!("owner" %in% names(inRemote))) {
+                  inRemote$owner <- owner
+                }
+              }
+              if (!("share_with" %in% names(inRemote))) {
+                inRemote$share_with <- share_with
+              }
+              
+              if (!("approval" %in% names(inRemote))) {
+                inRemote$approval <- approval_unknown
+              }
+              
+              if (!("grade" %in% names(inRemote))) {
+                inRemote$grade <- grade_unknown
+              }
+              
+              if (!("qualifier" %in% names(inRemote))) {
+                inRemote$qualifier <- qualifier_unknown
+              }
+              
+              adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
+              adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
+              adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
+              if ("owner" %in% names(inRemote)) {
+                adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
+              }
+              if ("contributor" %in% names(inRemote)) {
+                adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
+              }
+              
               # Make keys
-              inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, inRemote$grade, inRemote$approval, sep = "|")
-              inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, inDB$grade, inDB$approval, sep = "|")
+              inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, sep = "|")
+              inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, sep = "|")
             } else if (category == "discrete") {
               # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote. In this case though, entries are unique on datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type so things are slower
               if (nrow(no_update) > 0) {
@@ -262,10 +312,8 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
             inRemote$imputed <- FALSE
           }
           inRemote$timeseries_id <- tsid
-          if (!is.na(owner)) {
-            inRemote$owner <- owner
-          }
           inRemote$share_with <- share_with
+          
           DBI::dbWithTransaction(
             con,
             {
@@ -279,6 +327,7 @@ synchronize <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
                 }
+                
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
               } else if (category == "discrete") {
                 # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
