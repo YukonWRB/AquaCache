@@ -50,35 +50,76 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
         }
       }
     }
+    
+    # Get owner_contributor_id for 'Water Survey of Canada'
+    owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada'")[1,1]
+    if (is.na(owner_contributor_id)) {
+      df <- data.frame(name = 'Water Survey of Canada')
+      DBI::dbAppendTable(con, "owner_contributors", df)
+    }
+    
+    grade_unspecified <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'")[1,1]
+    if (is.na(grade_unspecified)) {
+      stop("Grade type 'Unspecified' (column grade_type_description) not found in the database. Please add it before proceeding.")
+    }
+    approval_approved <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'A'")[1,1]
+    if (is.na(approval_approved)) {
+      stop("Approval type 'Approved' (column approval_type_description) not found in the database. Please add it before proceeding.")
+    }
+    
+    qualifiers <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
 
     #Now update historical HYDAT timeseries.
+    
+    qualifier_mapping <- c("-1" = qualifiers[qualifiers$qualifier_type_code == "UNS", "qualifier_id"],
+                           "10" = qualifiers[qualifiers$qualifier_type_code == "ICE", "qualifier_id"],
+                           "20" = qualifiers[qualifiers$qualifier_type_code == "EST", "qualifier_id"],
+                           "30" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"],
+                           "40" = qualifiers[qualifiers$qualifier_type_code == "DRY", "qualifier_id"],
+                           "50" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"],
+                           "-2" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"],
+                           "0" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
+    
+    
     message("Updating database with information in HYDAT due to new HYDAT version or request to force update...")
     for (i in unique(all_timeseries$location)) {
-      grade_mapping <- c("-1" = "U",
-                         "10" = "I",
-                         "20" = "E",
-                         "30" = "D",
-                         "40" = "N",
-                         "50" = "U")
       tryCatch({
         new_flow <- as.data.frame(tidyhydat::hy_daily_flows(i))
         new_flow <- new_flow[ , c("Date", "Value", "Symbol")]
-        names(new_flow) <- c("date", "value", "grade")
+        names(new_flow) <- c("date", "value", "qualifier")
         new_flow <- new_flow[!is.na(new_flow$value) , ]
-        new_flow$grade <- ifelse(new_flow$grade %in% names(grade_mapping),
-                                 grade_mapping[new_flow$grade],
-                                 "Z")
+        
+        new_flow$qualifier <- ifelse(new_flow$qualifier %in% names(qualifier_mapping),
+                                 qualifier_mapping[new_flow$qualifier],
+                                 qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
+        new_flow$qualifier <- as.integer(new_flow$qualifier)
+        
+        new_flow$owner <- owner_contributor_id
+        new_flow$contributor <- owner_contributor_id
+        new_flow$approval <- approval_approved
+        new_flow$grade <- grade_unspecified
+        new_flow$imputed <- FALSE
+        
       }, error = function(e) {
         new_flow <<- data.frame()
       })
       tryCatch({
         new_level <- as.data.frame(tidyhydat::hy_daily_levels(i))
         new_level <- new_level[ , c("Date", "Value", "Symbol")]
-        names(new_level) <- c("date", "value", "grade")
+        names(new_level) <- c("date", "value", "qualifier")
         new_level <- new_level[!is.na(new_level$value) , ]
-        new_level$grade <- ifelse(new_level$grade %in% names(grade_mapping),
-                                 grade_mapping[new_level$grade],
-                                 "Z")
+        
+        new_level$qualifier <- ifelse(new_level$qualifier %in% names(qualifier_mapping),
+                                     qualifier_mapping[new_level$qualifier],
+                                     qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
+        new_level$qualifier <- as.integer(new_level$qualifier)
+        
+        new_level$owner <- owner_contributor_id
+        new_level$contributor <- owner_contributor_id
+        new_level$approval <- approval_approved
+        new_level$grade <- grade_unspecified
+        new_level$imputed <- FALSE
+        
       }, error = function(e) {
         new_level <<- data.frame()
       })
@@ -101,23 +142,33 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "end_datetime" = max(new_flow$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
                                     "share_with" = "{1}",
+                                    "owner" = 1,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter_id = ", parameter_id, " AND source_fx = 'downloadWSC';"))[1,1]
-
-            new_flow$approval <- "A"
-            new_flow$imputed <- FALSE
             new_flow$timeseries_id <- tsid_flow
-            DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
+            
+            DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow[, c("date", "value", "imputed", "timeseries_id")])
             calculate_stats(timeseries_id = tsid_flow,
                             con = con,
                             start_recalc = min(new_flow$date))
+            
+            # Now adjust the other tables
+            names(new_flow[names(new_flow) == "date"]) <- "datetime"
+            new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
+          
+            adjust_approval(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "approval")])
+            adjust_qualifier(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "qualifier")])
+            adjust_owner(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "owner")])
+            adjust_grade(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "grade")])
+            adjust_contributor(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "contributor")])
+            
             message("Found historical flow daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats.")
           } else { #There is a corresponding tsid in the database
-            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow))
+            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow))
             if (nrow(existing) > 0) { #There is an entry in timeseries table AND existing data in measurements_calculated_daily
               #Find out if any imputed data should be left alone
-              imputed <- existing[existing$imputed == TRUE , ]
+              imputed <- existing[existing$imputed, ]
               imputed.remains <- data.frame()
               if (nrow(imputed) > 0) {
                 for (i in 1:nrow(imputed)) {
@@ -131,8 +182,8 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               # order both data.frames by date to compare them
               new_flow <- new_flow[order(new_flow$date), ]
               existing <- existing[order(existing$date), ]
-              new_flow$key <- paste(new_flow$date, new_flow$value, new_flow$grade, new_flow$approval, sep = "|")
-              existing$key <- paste(existing$date, existing$value, existing$grade, existing$approval, sep = "|")
+              new_flow$key <- paste(new_flow$date, new_flow$value, sep = "|")
+              existing$key <- paste(existing$date, existing$value, sep = "|")
 
               # Check for mismatches using set operations
               mismatch_keys <- setdiff(new_flow$key, existing$key)
@@ -149,8 +200,6 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               if (mismatch) {
                 new_flow$key <- NULL
                 new_flow <- new_flow[new_flow$date >= date , ]
-                new_flow$approval <- "A"
-                new_flow$imputed <- FALSE
                 new_flow$timeseries_id <- tsid_flow
                 DBI::dbWithTransaction(
                   con,
@@ -169,10 +218,18 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 calculate_stats(timeseries_id = tsid_flow,
                                 con = con,
                                 start_recalc = start)
+                
+                # Now adjust the other tables
+                names(new_flow[names(new_flow) == "date"]) <- "datetime"
+                new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
+                
+                adjust_approval(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "approval")])
+                adjust_qualifier(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "qualifier")])
+                adjust_owner(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "owner")])
+                adjust_grade(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "grade")])
+                adjust_contributor(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "contributor")])
               }
             } else { #There is an entry in timeseries table, but no daily data
-              new_flow$approval <- "A"
-              new_flow$imputed <- FALSE
               new_flow$timeseries_id <- tsid_flow
               DBI::dbWithTransaction(
                 con, {
@@ -183,10 +240,20 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               calculate_stats(timeseries_id = tsid_flow,
                               con = con,
                               start_recalc = min(new_flow$date))
+              
+              # Now adjust the other tables
+              names(new_flow[names(new_flow) == "date"]) <- "datetime"
+              new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
+              
+              adjust_approval(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "approval")])
+              adjust_qualifier(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "qualifier")])
+              adjust_owner(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "owner")])
+              adjust_grade(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "grade")])
+              adjust_contributor(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "contributor")])
+              
               message("Found historical flow daily means for a location that only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
             }
           }
-
         }, error = function(e){
           warning("Something went wrong when trying to add new flow data for location ", i)
         })
@@ -210,23 +277,33 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "end_datetime" = max(new_level$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
                                     "share_with" = "{1}",
+                                    "owner" = 1,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
             tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", i, "' AND parameter_id = ", parameter_id, " AND source_fx = 'downloadWSC';"))[1,1]
-
-            new_level$approval <- "A"
-            new_level$imputed <- FALSE
-            new_level$timeseries$id <- tsid_level
-            DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
+            new_level$timeseries_id <- tsid_level
+            
+            DBI::dbAppendTable(con, "measurements_calculated_daily", new_level[, c("date", "value", "imputed", "timeseries_id")])
             calculate_stats(timeseries_id = tsid_level,
                             con = con,
                             start_recalc = min(new_level$date))
+            
+            # Now adjust the other tables
+            names(new_level[names(new_level) == "date"]) <- "datetime"
+            new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
+            
+            adjust_approval(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "approval")])
+            adjust_qualifier(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "qualifier")])
+            adjust_owner(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "owner")])
+            adjust_grade(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "grade")])
+            adjust_contributor(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "contributor")])
+            
             message("Found historical level daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats.")
-          } else {
-            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, grade, approval, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level))
+          } else { # There is a corresponding tsid in the database
+            existing <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level))
             if (nrow(existing) > 0) { #There is an entry in timeseries table AND existing data
               #Find out if any imputed data should be left alone
-              imputed <- existing[existing$imputed == TRUE , ]
+              imputed <- existing[existing$imputed, ]
               imputed.remains <- data.frame()
               if (nrow(imputed) > 0) {
                 for (i in 1:nrow(imputed)) {
@@ -239,8 +316,8 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               # Order both data.frames by date to compare them
               new_level <- new_level[order(new_level$date), ]
               existing <- existing[order(existing$date), ]
-              new_level$key <- paste(new_level$date, new_level$value, new_level$grade, new_level$approval, sep = "|")
-              existing$key <- paste(existing$date, existing$value, existing$grade, existing$approval, sep = "|")
+              new_level$key <- paste(new_level$date, new_level$value, sep = "|")
+              existing$key <- paste(existing$date, existing$value, sep = "|")
 
               # Check for mismatches using set operations
               mismatch_keys <- setdiff(new_level$key, existing$key)
@@ -257,8 +334,6 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               if (mismatch) {
                 new_level$key <- NULL
                 new_level <- new_level[new_level$date >= date , ]
-                new_level$approval <- "A"
-                new_level$imputed <- FALSE
                 new_level$timeseries_id <- tsid_level
                 DBI::dbWithTransaction(
                   con,
@@ -277,10 +352,18 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 calculate_stats(timeseries_id = tsid_level,
                                 con = con,
                                 start_recalc = start)
+                
+                # Now adjust the other tables
+                names(new_level[names(new_level) == "date"]) <- "datetime"
+                new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
+                
+                adjust_approval(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "approval")])
+                adjust_qualifier(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "qualifier")])
+                adjust_owner(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "owner")])
+                adjust_grade(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "grade")])
+                adjust_contributor(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "contributor")])
               }
             } else { #There is an entry in timeseries table, but no daily data
-              new_level$approval <- "A"
-              new_level$imputed <- FALSE
               new_level$timeseries_id <- tsid_level
               DBI::dbWithTransaction(
                 con, {
@@ -291,6 +374,17 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               calculate_stats(timeseries_id = tsid_level,
                               con = con,
                               start_recalc = min(new_level$date))
+              
+              # Now adjust the other tables
+              names(new_level[names(new_level) == "date"]) <- "datetime"
+              new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
+              
+              adjust_approval(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "approval")])
+              adjust_qualifier(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "qualifier")])
+              adjust_owner(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "owner")])
+              adjust_grade(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "grade")])
+              adjust_contributor(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "contributor")])
+              
               message("Found historical level daily means for a location that only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
             }
           }
@@ -300,6 +394,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
         })
       } #End of for level loop
     } #End of for loop iterating over locations
+    
     DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", local_hydat, "' WHERE event = 'HYDAT_version'"))
     message("Completed update of HYDAT related data.")
   } else {

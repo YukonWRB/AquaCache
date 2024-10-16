@@ -9,12 +9,19 @@
 #' @param parameter_id A WSC parameter code. 47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46 for level, 5 for water temperature, 4 for air temperature. See the full list using [tidyhydat::param_id].
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
+#' @param con A connection to the AquaCache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.
 #'
 #' @return A data.table object of hydrometric data, with datetimes in UTC-0.
 #' @export
 
-downloadWSC <- function(location, parameter_id, start_datetime, end_datetime = Sys.time())
+downloadWSC <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), con = NULL)
 {
+  
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
   # Checking start_datetime parameter
   tryCatch({
     if (inherits(start_datetime, "character") & nchar(start_datetime) > 10) { #Does not necessarily default to 0 hour.
@@ -63,32 +70,47 @@ downloadWSC <- function(location, parameter_id, start_datetime, end_datetime = S
   data <- data.table::fread(url, showProgress = FALSE, data.table = FALSE, select = c("Date" = "POSIXct", "Value/Valeur" = "numeric", "Symbol/Symbole" = "character", "Approval/Approbation" = "character", "Qualifier/Qualificatif" = "character"), col.names = c("datetime", "value", "grade", "approval", "qualifier"))
   
   if (nrow(data) > 0) {
-    qualifier_mapping <- c("-1" = "7",
-                       "10" = "1",
-                       "20" = "4",
-                       "30" = "7",
-                       "40" = "2",
-                       "50" = "8",
-                       "-2" = "8",
-                       "0" = "8")
+    qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+    qualifier_mapping <- c("-1" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"],
+                           "10" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "ICE", "qualifier_type_id"],
+                           "20" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "EST", "qualifier_type_id"],
+                           "30" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"],
+                           "40" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "DRY", "qualifier_type_id"],
+                           "50" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"],
+                           "-2" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"],
+                           "0" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
     data$qualifier <- ifelse(data$qualifier %in% names(qualifier_mapping),
                          qualifier_mapping[data$qualifier],
-                         "8")
+                         qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
     data$qualifier <- as.integer(data$qualifier)
     
-    approval_mapping <- c("Final/Finales" = "1",
-                          "Approved/Approuvée" = "1",
-                          "Provisional/Provisoire" = "4",
-                          "Preliminayr/Préliminaire" = "4",
-                          "Checked/Verifiée" = "3",
-                          "Unspecified/Non spécifié" = "5",
-                          "Undefined/Non défini" = "5")
+    approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")    
+    approval_mapping <- c("Final/Finales" = approvals_DB[approvals_DB$qualifier_type_code == "A", "approval_type_id"],
+                          "Approved/Approuv\u00E9e" = approvals_DB[approvals_DB$qualifier_type_code == "A", "approval_type_id"],
+                          "Provisional/Provisoire" = approvals_DB[approvals_DB$qualifier_type_code == "N", "approval_type_id"],
+                          "Preliminary/Pr\u00E9liminaire" = approvals_DB[approvals_DB$qualifier_type_code == "N", "approval_type_id"],
+                          "Checked/Verifi\u00E9e" = approvals_DB[approvals_DB$qualifier_type_code == "R", "approval_type_id"],
+                          "Unspecified/Non sp\u00E9cifi\u00E9" = approvals_DB[approvals_DB$qualifier_type_code == "UNS", "approval_type_id"],
+                          "Undefined/Non d\u00E9fini" = approvals_DB[approvals_DB$qualifier_type_code == "UNS", "approval_type_id"])
     
     data$approval <- ifelse(data$approval %in% names(approval_mapping),
                             approval_mapping[data$approval],
                             "6")
     data$approval <- as.integer(data$approval)
-
+    
+    grade_DB <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grades WHERE grade_type_code = 'UNS'")[1,1]
+    data$grade <- grade_DB
+    
+    # Get owner_contributor_id for 'Water Survey of Canada'
+    owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada'")[1,1]
+    if (is.na(owner_contributor_id)) {
+      df <- data.frame(name = 'Water Survey of Canada')
+      DBI::dbAppendTable(con, "owner_contributors", df)
+    }
+    
+    data$owner <- owner_contributor_id
+    data$contributor <- owner_contributor_id
+    
     return(data)
   } else {
     data <- data.table::data.table()

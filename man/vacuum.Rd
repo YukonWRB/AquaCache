@@ -4,10 +4,10 @@
 \alias{vacuum}
 \title{Maintenance (vacuum) function for AquaCache database.}
 \usage{
-vacuum(con = AquaConnect(silent = TRUE))
+vacuum(con = NULL)
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database. If left NULL will use function AquaConnect and automatically disconnect when finished.}
 }
 \value{
 A vacuumed database.

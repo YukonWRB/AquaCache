@@ -10,7 +10,8 @@ downloadAquarius(
   start_datetime,
   end_datetime = Sys.Date(),
   login = Sys.getenv(c("AQUSER", "AQPASS")),
-  server = Sys.getenv("AQSERVER")
+  server = Sys.getenv("AQSERVER"),
+  con = NULL
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ downloadAquarius(
 \item{login}{Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.}
 
 \item{server}{The URL for your organization's Aquarius web server. Default pulls from your .renviron file; see details.}
+
+\item{con}{A connection to the AquaCache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
 }
 \value{
 A data.frame of timeseries data with columns for datetime, value, grade, approval.

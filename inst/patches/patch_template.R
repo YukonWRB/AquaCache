@@ -16,8 +16,23 @@
 
 # Step 3: Make the necessary changes. This could include simple operations like creating new columns or tables, or more complex operations like creating new functions and triggers, changing how data is stored, etc. This could involve operations directly in the DB, calculations or other done in R, or a combination of these. Make sure to consider any system limitations, especially memory and processing time.
 
+# !IMPORTANT! Do this within a BEGIN, COMMIT, ROLLBACK transaction block as such:
 
-# Step 4: If not successful, the patch should stop execution and give an error message which will get caught by AquaPatchCheck().
+# Begin a transaction
+# DBI::dbExecute(con, "BEGIN;")
+# tryCatch({
+#   # Do the things
+#   #
+#   #
+#   # Commit the transaction
+#   DBI::dbExecute(con, "COMMIT;")
+# }, error = function(e) {
+#   DBI::dbExecute(con, "ROLLBACK;")
+#   stop("Patch 3 failed and the DB has been rolled back to its earlier state. ", e$message)
+# })
+
+
+# Step 4: If not successful, the patch should stop execution, roll back the entire transaction, and give an error message which will get caught by AquaPatchCheck().
 
 # Example:
 # stop("Patch 1 failed: could not create new schema 'information' and table 'version_info'.")

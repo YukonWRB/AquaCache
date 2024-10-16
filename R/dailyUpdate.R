@@ -52,8 +52,8 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default')
   }
   
   if (active == 'default') {
-    continuous_ts <- continuous_ts[continuous_ts$active == TRUE, ]
-    discrete_ts <- discrete_ts[discrete_ts$active == TRUE, ]
+    continuous_ts <- continuous_ts[continuous_ts$active, ]
+    discrete_ts <- discrete_ts[discrete_ts$active, ]
   }
 
   #Get new data ################

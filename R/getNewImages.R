@@ -31,7 +31,7 @@ getNewImages <- function(image_meta_ids = "all", con = AquaConnect(silent = TRUE
   }
   
   if (active == 'default') {
-    meta_ids <- meta_ids[meta_ids$active == TRUE, ]
+    meta_ids <- meta_ids[meta_ids$active, ]
   }
 
   count <- 0 #counter for number of successful new pulls

@@ -12,16 +12,39 @@
 
 adjust_grade <- function(con, timeseries_id, data) {
   
+  # Make sure that column 'grade' is not all NA
+  if (all(is.na(data$grade))) {
+    return(message("adjust_grade: column 'grade' was all NA, skipped."))
+  }
+  
   # Check if 'grade' is character, if so match those characters to 'grade_type_code' in the 'grades' table
   if (inherits(data$grade[1], "character")) {
     grade_table <- DBI::dbGetQuery(con, "SELECT grade_type_id, grade_type_code FROM grade_types;")
     data$grade <- grade_table$grade_type_id[match(data$grade, grade_table$grade_type_code)]
   }
   
-  data$grade[is.na(data$grade)] <- 11
+  # Ensure that 'datetime' is POSIXct
+  if (!inherits(data$datetime[1], "POSIXct")) {
+    stop("Column'datetime' must be of class POSIXct.")
+  }
+
+  unknown_grade <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'")[1,1]
   
-  # Pull the grade table entries for this timeseries_id where the datetime is within the range of the data
-  exist <- DBI::dbGetQuery(con, paste0("SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt FROM grades WHERE timeseries_id = ", timeseries_id, " AND end_dt >= '", min(data$datetime), "';"))
+  data$grade[is.na(data$grade)] <- unknown_grade
+  
+  # Pull the grades table entries for this timeseries_id where the datetime is within the range of the data
+  exist <- DBI::dbGetQuery(con, paste0(
+    "SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt 
+    FROM grades 
+    WHERE timeseries_id = ", timeseries_id, " 
+      AND (end_dt >= '", min(data$datetime), "' 
+        OR end_dt = (SELECT MAX(end_dt)
+                     FROM grades
+                     WHERE timeseries_id = ", timeseries_id, ")
+          );
+    "))
+  
+  data <- data[order(data$datetime), ]
   
   index <- 1
   original_exist_rows <- nrow(exist)
@@ -106,16 +129,39 @@ adjust_grade <- function(con, timeseries_id, data) {
 
 adjust_qualifier <- function(con, timeseries_id, data) {
   
+  # Make sure that column 'qualifier' is not all NA
+  if (all(is.na(data$qualifier))) {
+    return(message("adjust_qualifier: column 'qualifier' was all NA, skipped."))
+  }
+  
   # Check if 'qualifier' is character, if so match those characters to 'qualifier_type_code' in the 'qualifiers' table
   if (inherits(data$qualifier[1], "character")) {
     qualifier_table <- DBI::dbGetQuery(con, "SELECT qualifier_type_id, qualifier_type_code FROM qualifier_types;")
     data$qualifier <- qualifier_table$qualifier_type_id[match(data$qualifier, qualifier_table$qualifier_type_code)]
   }
   
-  data$qualifier[is.na(data$qualifier)] <- 8
+  # Ensure that 'datetime' is POSIXct
+  if (!inherits(data$datetime[1], "POSIXct")) {
+    stop("Column'datetime' must be of class POSIXct.")
+  }
   
-  # Pull the qualifier table entries for this timeseries_id where the datetime is within the range of the data
-  exist <- DBI::dbGetQuery(con, paste0("SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt FROM qualifiers WHERE timeseries_id = ", timeseries_id, " AND end_dt >= '", min(data$datetime), "';"))
+  unknown_qualifier <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNS'")[1,1]
+  
+  data$qualifier[is.na(data$qualifier)] <- unknown_qualifier
+  
+  # Pull the qualifiers table entries for this timeseries_id where the datetime is within the range of the data
+  exist <- DBI::dbGetQuery(con, paste0(
+    "SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt 
+    FROM qualifiers 
+    WHERE timeseries_id = ", timeseries_id, " 
+      AND (end_dt >= '", min(data$datetime), "' 
+        OR end_dt = (SELECT MAX(end_dt)
+                     FROM qualifiers
+                     WHERE timeseries_id = ", timeseries_id, ")
+          );
+    "))
+  
+  data <- data[order(data$datetime), ]
   
   index <- 1
   original_exist_rows <- nrow(exist)
@@ -202,16 +248,39 @@ adjust_qualifier <- function(con, timeseries_id, data) {
 
 adjust_approval <- function(con, timeseries_id, data) {
   
+  # Make sure that column 'approval' is not all NA
+  if (all(is.na(data$approval))) {
+    return(message("adjust_owner: column 'approval' was all NA, skipped."))
+  }
+  
   # Check if 'approval' is character, if so match those characters to 'approval_type_code' in the 'approvals' table
   if (inherits(data$approval[1], "character")) {
     approval_table <- DBI::dbGetQuery(con, "SELECT approval_type_id, approval_type_code FROM approval_types;")
     data$approval <- approval_table$approval_type_id[match(data$approval, approval_table$approval_type_code)]
   }
   
-  data$approval[is.na(data$approval)] <- 6
+  # Ensure that 'datetime' is POSIXct
+  if (!inherits(data$datetime[1], "POSIXct")) {
+    stop("Column'datetime' must be of class POSIXct.")
+  }
   
-  # Pull the approval table entries for this timeseries_id where the datetime is within the range of the data
-  exist <- DBI::dbGetQuery(con, paste0("SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt FROM approvals WHERE timeseries_id = ", timeseries_id, " AND end_dt >= '", min(data$datetime), "';"))
+  unknown_approval <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNS'")[1,1]
+  
+  data$approval[is.na(data$approval)]  <- unknown_approval
+  
+  # Pull the approvals table entries for this timeseries_id where the datetime is within the range of the data
+  exist <- DBI::dbGetQuery(con, paste0(
+    "SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt 
+    FROM approvals 
+    WHERE timeseries_id = ", timeseries_id, " 
+      AND (end_dt >= '", min(data$datetime), "' 
+        OR end_dt = (SELECT MAX(end_dt)
+                     FROM approvals
+                     WHERE timeseries_id = ", timeseries_id, ")
+          );
+    "))
+  
+  data <- data[order(data$datetime), ]
   
   index <- 1
   original_exist_rows <- nrow(exist)
@@ -297,25 +366,45 @@ adjust_approval <- function(con, timeseries_id, data) {
 
 adjust_owner <- function(con, timeseries_id, data) {
   
+  
+  # Make sure that column 'owner' is not all NA
+  if (all(is.na(data$owner))) {
+    return(message("adjust_owner: column 'owner' was all NA, skipped."))
+  }
+  
   # Check if 'owner' is character, if so match those characters to 'name' in the 'owners_contributors' table
   if (inherits(data$owner[1], "character")) {
     owner_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors;")
     data$owner <- owner_table$owner_contributor_id[match(data$owner, owner_table$name)]
   }
   
-  data$owner[is.na(data$owner)] <- 6
+  # Ensure that 'datetime' is POSIXct
+  if (!inherits(data$datetime[1], "POSIXct")) {
+    stop("Column'datetime' must be of class POSIXct.")
+  }
   
-  # Pull the owner table entries for this timeseries_id where the datetime is within the range of the data
-  exist <- DBI::dbGetQuery(con, paste0("SELECT owner_id, timeseries_id, owner_type_id, start_dt, end_dt FROM owners WHERE timeseries_id = ", timeseries_id, " AND end_dt >= '", min(data$datetime), "';"))
+  # Pull the owners table entries for this timeseries_id where the datetime is within the range of the data
+  exist <- DBI::dbGetQuery(con, paste0(
+    "SELECT owner_id, timeseries_id, owner_contributor_id, start_dt, end_dt 
+    FROM owners 
+    WHERE timeseries_id = ", timeseries_id, " 
+      AND (end_dt >= '", min(data$datetime), "' 
+        OR end_dt = (SELECT MAX(end_dt)
+                     FROM owners
+                     WHERE timeseries_id = ", timeseries_id, ")
+          );
+    "))
+  
+  data <- data[order(data$datetime), ]
   
   index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (nrow(exist) > 0) exist$owner_type_id[1] else data$owner[1]
+  current <- if (nrow(exist) > 0) exist$owner_contributor_id[1] else data$owner[1]
   
   if (nrow(exist) == 0) {
     exist <- data.frame(owner_id = NA,
                         timeseries_id = timeseries_id,
-                        owner_type_id = data$owner[1],
+                        owner_contributor_id = data$owner[1],
                         start_dt = data$datetime[1],
                         end_dt = data$datetime[1])
   }
@@ -331,11 +420,11 @@ adjust_owner <- function(con, timeseries_id, data) {
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
           exist$start_dt[index] <- data$datetime[i]
           exist$end_dt[index] <- data$datetime[i]
-          exist$owner_type_id[index] <- data$owner[i]
+          exist$owner_contributor_id[index] <- data$owner[i]
         } else { # Create a new row with no owner_id
           to_append <- data.frame(owner_id = NA,
                                   timeseries_id = timeseries_id,
-                                  owner_type_id = data$owner[i],
+                                  owner_contributor_id = data$owner[i],
                                   start_dt = data$datetime[i],
                                   end_dt = data$datetime[i])
           exist <- rbind(exist, to_append)
@@ -348,14 +437,14 @@ adjust_owner <- function(con, timeseries_id, data) {
           exist$end_dt[nrow(exist)] <- data$datetime[i - 1]
           to_append <- data.frame(owner_id = NA,
                                   timeseries_id = timeseries_id,
-                                  owner_type_id = data$owner[i],
+                                  owner_contributor_id = data$owner[i],
                                   start_dt = data$datetime[i],
                                   end_dt = data$datetime[i])
           exist <- rbind(exist, to_append)
         } else {
           exist <- data.frame(owner_id = NA,
                               timeseries_id = timeseries_id,
-                              owner_type_id = data$owner[i],
+                              owner_contributor_id = data$owner[i],
                               start_dt = data$datetime[i],
                               end_dt = data$datetime[i])
         }
@@ -371,7 +460,7 @@ adjust_owner <- function(con, timeseries_id, data) {
   DBI::dbWithTransaction(con, {
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$owner_id[i])) {
-        DBI::dbExecute(con, paste0("UPDATE owners SET owner_type_id = ", exist$owner_type_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE owner_id = ", exist$owner_id[i], ";"))
+        DBI::dbExecute(con, paste0("UPDATE owners SET owner_contributor_id = ", exist$owner_contributor_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE owner_id = ", exist$owner_id[i], ";"))
       } else {
         DBI::dbAppendTable(con, "owners", exist[i, -which(names(exist) == "owner_id")])
       }
@@ -391,25 +480,44 @@ adjust_owner <- function(con, timeseries_id, data) {
 
 adjust_contributor <- function(con, timeseries_id, data) {
   
+  # Make sure that column 'contributor' is not all NA
+  if (all(is.na(data$contributor))) {
+    return(message("adjust_contributor: column 'contributor' was all NA, skipped."))
+  }
+  
   # Check if 'contributor' is character, if so match those characters to 'name' in the 'owners_contributors' table
   if (inherits(data$contributor[1], "character")) {
     contributor_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors;")
     data$contributor <- contributor_table$owner_contributor_id[match(data$contributor, contributor_table$name)]
   }
   
-  data$contributor[is.na(data$contributor)] <- 6
+  # Ensure that 'datetime' is POSIXct
+  if (!inherits(data$datetime[1], "POSIXct")) {
+    stop("Column'datetime' must be of class POSIXct.")
+  }
   
-  # Pull the contributor table entries for this timeseries_id where the datetime is within the range of the data
-  exist <- DBI::dbGetQuery(con, paste0("SELECT contributor_id, timeseries_id, contributor_type_id, start_dt, end_dt FROM contributors WHERE timeseries_id = ", timeseries_id, " AND end_dt >= '", min(data$datetime), "';"))
+  # Pull the contributors table entries for this timeseries_id where the datetime is within the range of the data
+  exist <- DBI::dbGetQuery(con, paste0(
+    "SELECT contributor_id, timeseries_id, owner_contributor_id, start_dt, end_dt 
+    FROM contributors 
+    WHERE timeseries_id = ", timeseries_id, " 
+      AND (end_dt >= '", min(data$datetime), "' 
+        OR end_dt = (SELECT MAX(end_dt)
+                     FROM contributors
+                     WHERE timeseries_id = ", timeseries_id, ")
+          );
+    "))
+  
+  data <- data[order(data$datetime), ]
   
   index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (nrow(exist) > 0) exist$contributor_type_id[1] else data$contributor[1]
+  current <- if (nrow(exist) > 0) exist$owner_contributor_id[1] else data$contributor[1]
   
   if (nrow(exist) == 0) {
     exist <- data.frame(contributor_id = NA,
                         timeseries_id = timeseries_id,
-                        contributor_type_id = data$contributor[1],
+                        owner_contributor_id = data$contributor[1],
                         start_dt = data$datetime[1],
                         end_dt = data$datetime[1])
   }
@@ -425,11 +533,11 @@ adjust_contributor <- function(con, timeseries_id, data) {
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
           exist$start_dt[index] <- data$datetime[i]
           exist$end_dt[index] <- data$datetime[i]
-          exist$contributor_type_id[index] <- data$contributor[i]
+          exist$owner_contributor_id[index] <- data$contributor[i]
         } else { # Create a new row with no contributor_id
           to_append <- data.frame(contributor_id = NA,
                                   timeseries_id = timeseries_id,
-                                  contributor_type_id = data$contributor[i],
+                                  owner_contributor_id = data$contributor[i],
                                   start_dt = data$datetime[i],
                                   end_dt = data$datetime[i])
           exist <- rbind(exist, to_append)
@@ -442,14 +550,14 @@ adjust_contributor <- function(con, timeseries_id, data) {
           exist$end_dt[nrow(exist)] <- data$datetime[i - 1]
           to_append <- data.frame(contributor_id = NA,
                                   timeseries_id = timeseries_id,
-                                  contributor_type_id = data$contributor[i],
+                                  owner_contributor_id = data$contributor[i],
                                   start_dt = data$datetime[i],
                                   end_dt = data$datetime[i])
           exist <- rbind(exist, to_append)
         } else {
           exist <- data.frame(contributor_id = NA,
                               timeseries_id = timeseries_id,
-                              contributor_type_id = data$contributor[i],
+                              owner_contributor_id = data$contributor[i],
                               start_dt = data$datetime[i],
                               end_dt = data$datetime[i])
         }
@@ -465,7 +573,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
   DBI::dbWithTransaction(con, {
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$contributor_id[i])) {
-        DBI::dbExecute(con, paste0("UPDATE contributors SET contributor_type_id = ", exist$contributor_type_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE contributor_id = ", exist$contributor_id[i], ";"))
+        DBI::dbExecute(con, paste0("UPDATE contributors SET owner_contributor_id = ", exist$owner_contributor_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE contributor_id = ", exist$contributor_id[i], ";"))
       } else {
         DBI::dbAppendTable(con, "contributors", exist[i, -which(names(exist) == "contributor_id")])
       }

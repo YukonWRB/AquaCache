@@ -77,7 +77,20 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
   }
   
   if (active == 'default') {
-    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
+    all_timeseries <- all_timeseries[all_timeseries$active, ]
+  }
+  
+  grade_unknown <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';")[1,1]
+  if (is.na(grade_unknown)) {
+    stop("synchronize: Could not find grade type 'Unknown' in the database.")
+  }
+  approval_unknown <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';")[1,1]
+  if (is.na(approval_unknown)) {
+    stop("synchronize: Could not find approval type 'Unknown' in the database.")
+  }
+  qualifier_unknown <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';")[1,1]
+  if (is.na(qualifier_unknown)) {
+    stop("synchronize: Could not find qualifier type 'Unknown' in the database.")
   }
 
   updated <- 0 #Counter for number of updated timeseries
@@ -113,7 +126,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
 
     tryCatch({
-      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt)
+      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair) {
@@ -153,7 +166,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
 
       if (nrow(inRemote) > 0) {
         if (category == "continuous") {
-          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, datetime, value, grade, approval, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
           # Set aside any rows where no_update == TRUE
           no_update <- inDB[inDB$no_update, ]
           inDB <- inDB[!inDB$no_update, ]
@@ -202,17 +215,39 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
                 inRemote <- inRemote[!(inRemote$datetime %in% no_update$datetime), ]
                 inDB <- inDB[!(inDB$datetime %in% no_update$datetime), ]
               }
-              #check for changes to approval, grade, condition, owner, contributor if columns exist inRemote
-update_approval
-update_grade
 
-
-
-
-
-
-
-
+              # Prepare for checking for changes in attributes held in other tables than measurements_continuous. This is done each time, no checking for discrepancies as the process is just as quick.
+              if (!is.na(owner)) {  # There may not be an owner assigned in table timeseries
+                if (!("owner" %in% names(inRemote))) {
+                  inRemote$owner <- owner
+                }
+              }
+              if (!("share_with" %in% names(inRemote))) {
+                inRemote$share_with <- share_with
+              }
+              
+              if (!("approval" %in% names(inRemote))) {
+                inRemote$approval <- approval_unknown
+              }
+              
+              if (!("grade" %in% names(inRemote))) {
+                inRemote$grade <- grade_unknown
+              }
+              
+              if (!("qualifier" %in% names(inRemote))) {
+                inRemote$qualifier <- qualifier_unknown
+              }
+              
+              adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
+              adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
+              adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
+              if ("owner" %in% names(inRemote)) {
+                adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
+              }
+              if ("contributor" %in% names(inRemote)) {
+                adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
+              }
+              
               # Make keys
               inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, sep = "|")
               inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, sep = "|")
@@ -277,10 +312,8 @@ update_grade
             inRemote$imputed <- FALSE
           }
           inRemote$timeseries_id <- tsid
-          if (!is.na(owner)) {
-            inRemote$owner <- owner
-          }
           inRemote$share_with <- share_with
+          
           DBI::dbWithTransaction(
             con,
             {
@@ -294,12 +327,6 @@ update_grade
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
                   DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
                 }
-                
-                adjust_grade(con, tsid, ts[, c("datetime", "grade")])
-                adjust_approval(con, tsid, ts[, c("datetime", "approval")])
-                adjust_qualifier(con, tsid, ts[, c("datetime", "qualifier")])
-                adjust_owner(con, tsid, ts[, c("datetime", "owner")])
-                adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
                 
                 DBI::dbAppendTable(con, "measurements_continuous", inRemote)
               } else if (category == "discrete") {

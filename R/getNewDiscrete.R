@@ -67,7 +67,7 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
   }
   
   if (active == 'default') {
-    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
+    all_timeseries <- all_timeseries[all_timeseries$active, ]
   }
 
   count <- 0 #counter for number of successful new pulls
@@ -217,7 +217,7 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
         # Get the result_speciation and sample_fraction boolean values for the parameter. If TRUE then ts must contain columns result_speciation and sample_fraction.
         result_speciation <- DBI::dbGetQuery(con, paste0("SELECT result_speciation FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
         sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT sample_fraction FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
-        if (result_speciation == TRUE) {
+        if (result_speciation) {
           if (!("result_speciation" %in% names(ts))) {
             stop("The source function did not return a column 'result_speciation' but the parameter in the database has result_speciation set to TRUE.")
           } else { # Check that all values in the result_speciation column are not NA
@@ -226,7 +226,7 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
             }
           }
         }
-        if (sample_fraction == TRUE) {
+        if (sample_fraction) {
           if (!("sample_fraction" %in% names(ts))) {
             stop("The source function did not return a column 'sample_fraction' but the parameter in the database has sample_fraction set to TRUE.")
           } else { # Check that all values in the sample_fraction column are not NA

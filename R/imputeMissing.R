@@ -142,7 +142,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
 
   # Now keep/remove imputed values depending on the user preference, and check if data exists at the start and end of the imputation period. If not, expand the range again if possible.
   if (imputed) {
-    exist.values[exist.values$imputed == TRUE, "value"] <- NA
+    exist.values[exist.values$imputed, "value"] <- NA
     # Check to make sure the last value is not NA, since it must be anchored somehow.
     if (is.na(exist.values[exist.values$datetime == max(exist.values$datetime), "value"])) {
       if (daily) {
@@ -624,7 +624,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   #plot and ask the user to confirm ok before modifying the DB
   plot_fx <- function(data) {
     without <- data # without will be data without imputed values
-    without[without$imputed == TRUE, "value"] <- NA
+    without[without$imputed, "value"] <- NA
     with <- data # with will be data with imputed values
     indices <- which(with$imputed) # indices of imputed values
     with[-c(indices, indices - 1, indices + 1), "value"] <- NA # Leave only the imputed values plus a point before and after, so the lines plot
@@ -655,17 +655,28 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   
   if (commit == 1) {
     message("Commiting the results to the DB and modifying tables. Please be patient. A message will be shown when finished.")
-    to_push <- imputed[imputed$imputed == TRUE, ]
+    to_push <- imputed[imputed$imputed, ]
     to_push$timeseries_id <- tsid
-    to_push$grade <- "U"
-    to_push$approval <- "U"
+    grade_unspecified <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_description = 'Unspecified';")[1,1]
+    approval_unspecified <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_description = 'Unspecified';")[1,1]
+    qualifier_unspecified <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_description = 'unspecified';")[1,1]
+    to_push$approval <- approval_unspecified
+    to_push$grade <- grade_unspecified
+    to_push$qualifier <- qualifier_unspecified
 
     if (daily) {
       to_push$date <- as.Date(to_push$datetime)
       to_push$datetime <- NULL
       DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date IN ('", paste(to_push$date, collapse = "', '"), "')")) #delete is here in case previously imputed values are being over-written
-      DBI::dbAppendTable(con, "measurements_calculated_daily", to_push)
+      
+      DBI::dbAppendTable(con, "measurements_calculated_daily", to_push[ , c("timeseries_id", "date", "value", "imputed")])
+      
       calculate_stats(con = con, timeseries_id = tsid, start_recalc = min(to_push$date))
+      
+      to_push$datetime <- as.POSIXct(to_push$date, tz = "UTC")
+      adjust_grade(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "grade")])
+      adjust_approval(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "approval")])
+      adjust_qualifier(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "qualifier")])
     } else {
       if (entry$period_type != "instantaneous") {
         #re-enter the period as ISO8601
@@ -682,7 +693,12 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       
       DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime IN ('", paste(to_push$datetime, collapse = "', '"), "')")) #delete is here in case previously imputed values are being over-written
       DBI::dbAppendTable(con, "measurements_continuous", to_push)
+      
       calculate_stats(con = con, timeseries_id = tsid, start_recalc = min(to_push$datetime))
+      
+      adjust_grade(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "grade")])
+      adjust_approval(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "approval")])
+      adjust_qualifier(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "qualifier")])
     }
     
     message("Timeseries_id ", tsid, " has been updated in the database and daily stats recalculated if necessary.")

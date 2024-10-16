@@ -10,13 +10,19 @@
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param interval The interval to pass to [weathercan::weather_dl()], one of "hour", "day", "month".
-#'
+#' @param con A connection to the AquaCache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.
+#' 
 #' @return A data.frame of hydrometric data, with datetimes in UTC-0.
 #' @export
 
 
-downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), interval)
+downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), interval, con = NULL)
 {
+  
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
 
   # Checking start_datetime parameter
   tryCatch({
@@ -85,9 +91,24 @@ downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime 
     }
     data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
     if (nrow(data) > 0) {
-      data$grade <- 9 #Unspecified
-      data$approval <- 5 #Unspecified
-      data$qualifier <- 7 #Unspecified
+      
+      # Get owner_contributor_id for 'Environment and Climate Change Canada'
+      owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada'")[1,1]
+      if (is.na(owner_contributor_id)) {
+        df <- data.frame(name = 'Environment and Climate Change Canada',
+                         name_fr = 'Environnement et Changement Climatique Canada')
+        DBI::dbAppendTable(con, "owner_contributors", df)
+      }
+      
+      grade_unspecified <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'")[1,1]
+      approval_unspecified <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNS'")[1,1]
+      qualifier_unspecified <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNS'")[1,1]
+      
+      data$grade <- grade_unspecified
+      data$approval <- approval_unspecified
+      data$qualifier <- qualifier_unspecified
+      data$owner <- owner_contributor_id
+      data$contributor <- owner_contributor_id
     }
   } else {
     data <- data.frame()

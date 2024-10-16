@@ -46,7 +46,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   }
   
   if (active == 'default') {
-    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
+    all_timeseries <- all_timeseries[all_timeseries$active, ]
   }
   
   if (nrow(all_timeseries) == 0) {
@@ -55,6 +55,19 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   
   count <- 0 #counter for number of successful new pulls
   success <- data.frame("location" = NULL, "parameter_id" = NULL, "timeseries" = NULL)
+  
+  grade_unknown <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';")[1,1]
+  if (is.na(grade_unknown)) {
+    stop("getNewContinuous: Could not find grade type 'Unknown' in the database.")
+  }
+  approval_unknown <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';")[1,1]
+  if (is.na(approval_unknown)) {
+    stop("getNewContinuous: Could not find approval type 'Unknown' in the database.")
+  }
+  qualifier_unknown <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';")[1,1]
+  if (is.na(qualifier_unknown)) {
+    stop("getNewContinuous: Could not find qualifier type 'Unknown' in the database.")
+  }
   
   # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)) {
@@ -77,7 +90,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
 
     tryCatch({
-      args_list <- list(location = loc, parameter_id = remote_parameter_id, start_datetime = last_data_point)
+      args_list <- list(location = loc, parameter_id = remote_parameter_id, start_datetime = last_data_point, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair) {
@@ -122,7 +135,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
         ts$timeseries_id <- tsid
         ts$imputed <- FALSE
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
-        if (!is.na(owner)) {
+        if (!is.na(owner)) {  # There may not be an owner assigned in table timeseries
           if (!("owner" %in% names(ts))) {
             ts$owner <- owner
           }
@@ -132,15 +145,15 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
         }
         
         if (!("approval" %in% names(ts))) {
-          ts$approval <- 6
+          ts$approval <- approval_unknown
         }
         
         if (!("grade" %in% names(ts))) {
-          ts$grade <- 11
+          ts$grade <- grade_unknown
         }
         
         if (!("qualifier" %in% names(ts))) {
-          ts$qualifier <- 8
+          ts$qualifier <- qualifier_unknown
         }
         
         DBI::dbWithTransaction(
@@ -152,8 +165,12 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
             adjust_grade(con, tsid, ts[, c("datetime", "grade")])
             adjust_approval(con, tsid, ts[, c("datetime", "approval")])
             adjust_qualifier(con, tsid, ts[, c("datetime", "qualifier")])
-            adjust_owner(con, tsid, ts[, c("datetime", "owner")])
-            adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
+            if ("owner" %in% names(ts)) {
+              adjust_owner(con, tsid, ts[, c("datetime", "owner")])
+            }
+            if ("contributor" %in% names(ts)) {
+              adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
+            }
             
             DBI::dbAppendTable(con, "measurements_continuous", ts)
             #make the new entry into table timeseries

@@ -97,7 +97,7 @@ downloadHRDPS <- function(param, start_datetime, url = "https://dd.weather.gc.ca
       download_url <- available[i, "link"[]]
       rast <- terra::rast(download_url)[[1]]
       file[["units"]] <- terra::units(rast) #Units is fetched now because the clip operation seems to remove them.
-      if (clipped == FALSE) { #Only project and clip once
+      if (!clipped) { #Only project and clip once
         if (!is.null(clip)) {
           clip <- terra::project(clip, rast) #project clip vector to crs of the raster
         }
