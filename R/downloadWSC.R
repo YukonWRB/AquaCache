@@ -85,20 +85,20 @@ downloadWSC <- function(location, parameter_id, start_datetime, end_datetime = S
     data$qualifier <- as.integer(data$qualifier)
     
     approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")    
-    approval_mapping <- c("Final/Finales" = approvals_DB[approvals_DB$qualifier_type_code == "A", "approval_type_id"],
-                          "Approved/Approuv\u00E9e" = approvals_DB[approvals_DB$qualifier_type_code == "A", "approval_type_id"],
-                          "Provisional/Provisoire" = approvals_DB[approvals_DB$qualifier_type_code == "N", "approval_type_id"],
-                          "Preliminary/Pr\u00E9liminaire" = approvals_DB[approvals_DB$qualifier_type_code == "N", "approval_type_id"],
-                          "Checked/Verifi\u00E9e" = approvals_DB[approvals_DB$qualifier_type_code == "R", "approval_type_id"],
-                          "Unspecified/Non sp\u00E9cifi\u00E9" = approvals_DB[approvals_DB$qualifier_type_code == "UNS", "approval_type_id"],
-                          "Undefined/Non d\u00E9fini" = approvals_DB[approvals_DB$qualifier_type_code == "UNS", "approval_type_id"])
+    approval_mapping <- c("Final/Finales" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"],
+                          "Approved/Approuv\u00E9e" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"],
+                          "Provisional/Provisoire" = approvals_DB[approvals_DB$approval_type_code == "N", "approval_type_id"],
+                          "Preliminary/Pr\u00E9liminaire" = approvals_DB[approvals_DB$approval_type_code == "N", "approval_type_id"],
+                          "Checked/Verifi\u00E9e" = approvals_DB[approvals_DB$approval_type_code == "R", "approval_type_id"],
+                          "Unspecified/Non sp\u00E9cifi\u00E9" = approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"],
+                          "Undefined/Non d\u00E9fini" = approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"])
     
     data$approval <- ifelse(data$approval %in% names(approval_mapping),
                             approval_mapping[data$approval],
                             "6")
     data$approval <- as.integer(data$approval)
     
-    grade_DB <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grades WHERE grade_type_code = 'UNS'")[1,1]
+    grade_DB <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'")[1,1]
     data$grade <- grade_DB
     
     # Get owner_contributor_id for 'Water Survey of Canada'

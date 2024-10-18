@@ -195,6 +195,38 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
           inDB <- inDB[, colSums(is.na(inDB)) < nrow(inDB)]
         }
         
+        # Prepare for checking for changes in attributes held in other tables than measurements_continuous. This is done each time, no checking for discrepancies as the process is just as quick.
+        if (!is.na(owner)) {  # There may not be an owner assigned in table timeseries
+          if (!("owner" %in% names(inRemote))) {
+            inRemote$owner <- owner
+          }
+        }
+        if (!("share_with" %in% names(inRemote))) {
+          inRemote$share_with <- share_with
+        }
+        
+        if (!("approval" %in% names(inRemote))) {
+          inRemote$approval <- approval_unknown
+        }
+        
+        if (!("grade" %in% names(inRemote))) {
+          inRemote$grade <- grade_unknown
+        }
+        
+        if (!("qualifier" %in% names(inRemote))) {
+          inRemote$qualifier <- qualifier_unknown
+        }
+        
+        adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
+        adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
+        adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
+        if ("owner" %in% names(inRemote)) {
+          adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
+        }
+        if ("contributor" %in% names(inRemote)) {
+          adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
+        }
+        
         if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch
           if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
             inDB <- inDB[inDB$datetime >= min(inRemote$datetime) , ]
@@ -214,38 +246,6 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
               if (nrow(no_update) > 0) {
                 inRemote <- inRemote[!(inRemote$datetime %in% no_update$datetime), ]
                 inDB <- inDB[!(inDB$datetime %in% no_update$datetime), ]
-              }
-
-              # Prepare for checking for changes in attributes held in other tables than measurements_continuous. This is done each time, no checking for discrepancies as the process is just as quick.
-              if (!is.na(owner)) {  # There may not be an owner assigned in table timeseries
-                if (!("owner" %in% names(inRemote))) {
-                  inRemote$owner <- owner
-                }
-              }
-              if (!("share_with" %in% names(inRemote))) {
-                inRemote$share_with <- share_with
-              }
-              
-              if (!("approval" %in% names(inRemote))) {
-                inRemote$approval <- approval_unknown
-              }
-              
-              if (!("grade" %in% names(inRemote))) {
-                inRemote$grade <- grade_unknown
-              }
-              
-              if (!("qualifier" %in% names(inRemote))) {
-                inRemote$qualifier <- qualifier_unknown
-              }
-              
-              adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
-              adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
-              adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
-              if ("owner" %in% names(inRemote)) {
-                adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
-              }
-              if ("contributor" %in% names(inRemote)) {
-                adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
               }
               
               # Make keys
@@ -314,34 +314,50 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
           inRemote$timeseries_id <- tsid
           inRemote$share_with <- share_with
           
-          DBI::dbWithTransaction(
-            con,
-            {
-              updated <- updated + 1
-              if (category == "continuous") {
-                # Now delete entries in measurements_continuous and measurements_calculated_daily that are no longer in the remote data and/or that need to be replaced
-                if (nrow(imputed.remains) > 0) { # Don't delete imputed data points unless there's new data to replace it!
-                  DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
-                  DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
-                } else {
-                  DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
-                  DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
-                }
-                
-                DBI::dbAppendTable(con, "measurements_continuous", inRemote)
-              } else if (category == "discrete") {
-                # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
-                DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
-                DBI::dbAppendTable(con, "measurements_discrete", inRemote)
+          
+          # Now commit the changes to the database
+          commit_fx <- function(con, category, imputed.remains, tsid, inRemote, end, inDB) {
+            if (category == "continuous") {
+              # Now delete entries in measurements_continuous and measurements_calculated_daily that are no longer in the remote data and/or that need to be replaced
+              if (nrow(imputed.remains) > 0) { # Don't delete imputed data points unless there's new data to replace it!
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(imputed.remains$datetime, collapse = "', '"), "');"))
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
+              } else {
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
               }
-              #make the new entry into table timeseries
-              end <- max(inRemote$datetime)
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-              if (min(inRemote$datetime) < min(inDB$datetime)) { #If the remote data starts before the local data, update the start_datetime in the timeseries table
-                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(inRemote$datetime), "' WHERE timeseries_id = ", tsid, ";"))
-              }
+              
+              DBI::dbAppendTable(con, "measurements_continuous", inRemote[, c("datetime", "value", "period", "timeseries_id", "imputed", "share_with")])
+            } else if (category == "discrete") {
+              # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
+              DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
+              DBI::dbAppendTable(con, "measurements_discrete", inRemote[, c("datetime", "value", "period", "timeseries_id", "imputed", "share_with")])
             }
-          ) # End of DB transaction block
+            #make the new entry into table timeseries
+            end <- max(inRemote$datetime)
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+            if (min(inRemote$datetime) < min(inDB$datetime)) { #If the remote data starts before the local data, update the start_datetime in the timeseries table
+              DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(inRemote$datetime), "' WHERE timeseries_id = ", tsid, ";"))
+            }
+          }
+          
+          if (!attr(con, "active_transaction")) {
+            DBI::dbBegin(con)
+            attr(con, "active_transaction") <- TRUE
+            tryCatch({
+              commit_fx(con, category, imputed.remains, tsid, inRemote, end, inDB)
+              DBI::dbCommit(con)
+              attr(con, "active_transaction") <- FALSE
+              updated <- updated + 1
+            }, error = function(e) {
+              DBI::dbRollback(con)
+              attr(con, "active_transaction") <<- FALSE
+            })
+          } else { # we're already in a transaction
+            commit_fx(con, category, imputed.remains, tsid, inRemote, end, inDB)
+            updated <- updated + 1
+          }
+          
           if (category == "continuous") {
             #Recalculate daily means and statistics
             calculate_stats(timeseries_id = tsid,

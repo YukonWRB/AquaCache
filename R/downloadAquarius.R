@@ -98,81 +98,86 @@ downloadAquarius <- function(location,
     ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%OS%z")
 
     #format approvals, grade, qualifiers times
-    approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment", "LevelDescription"))]
-    stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1]) - 5, nchar(approvals$StartTime[1]))
-    stoffset <- gsub(":", "", stoffset)
-    approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime) - 6), stoffset)
-    approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-    endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1]) - 5, nchar(approvals$EndTime[1]))
-    endoffset <- gsub(":", "", endoffset)
-    approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime) - 6), endoffset)
-    approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-
-    colnames(approvals) <- c("level", "start_time", "end_time")
-
     approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
-    approval_mapping <- c("800" = approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"],
-                          "900" = approvals_DB[approvals_DB$approval_type_code == "C", "approval_type_id"],
-                          "950" = approvals_DB[approvals_DB$approval_type_code == "C", "approval_type_id"],
-                          "975" = approvals_DB[approvals_DB$approval_type_code == "R", "approval_type_id"],
-                          "1200" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"],
-                          "1300" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"])
-    
-
-    
-    approvals$level <- ifelse(as.character(approvals$level) %in% names(approval_mapping),
-                                    approval_mapping[as.character(approvals$level)],
-                              approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"])
-
-    grades <- RawDL$Grades
-    stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1]) - 5, nchar(grades$StartTime[1]))
-    stoffset <- gsub(":", "", stoffset)
-    grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime) - 6), stoffset)
-    grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-    endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1]) - 5, nchar(grades$EndTime[1]))
-    endoffset <- gsub(":", "", endoffset)
-    grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime) - 6), endoffset)
-    grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-
-    colnames(grades) <- c("level", "start_time", "end_time")
+    if (is.null(nrow(RawDL$Approvals)) || nrow(RawDL$Approvals) == 0) {  # Then it's probably an empty list or data.frame because there are no approvals
+      approvals <- data.frame(level = approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+    } else {
+      approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment", "LevelDescription"))]
+      stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1]) - 5, nchar(approvals$StartTime[1]))
+      stoffset <- gsub(":", "", stoffset)
+      approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime) - 6), stoffset)
+      approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1]) - 5, nchar(approvals$EndTime[1]))
+      endoffset <- gsub(":", "", endoffset)
+      approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime) - 6), endoffset)
+      approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      
+      colnames(approvals) <- c("level", "start_time", "end_time")
+      approval_mapping <- c("800" = approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"],
+                            "900" = approvals_DB[approvals_DB$approval_type_code == "C", "approval_type_id"],
+                            "950" = approvals_DB[approvals_DB$approval_type_code == "C", "approval_type_id"],
+                            "975" = approvals_DB[approvals_DB$approval_type_code == "R", "approval_type_id"],
+                            "1200" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"],
+                            "1300" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"])
+      approvals$level <- ifelse(as.character(approvals$level) %in% names(approval_mapping),
+                                approval_mapping[as.character(approvals$level)],
+                                approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"])
+    }
     
     grades_DB <- DBI::dbGetQuery(con, "SELECT * FROM grade_types")
-
-    grade_mapping <- c("0" = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"],
-                       "-1" = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"],
-                       "5" = grades_DB[grades_DB$grade_type_code == "A", "grade_type_id"],
-                       "4" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"],
-                       "3" = grades_DB[grades_DB$grade_type_code == "C", "grade_type_id"],
-                       "2" = grades_DB[grades_DB$grade_type_code == "D", "grade_type_id"])
-    grades$level <- ifelse(as.character(grades$level) %in% names(grade_mapping),
-                              grade_mapping[as.character(grades$level)],
-                           grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"])
-    
-    qualifiers <- RawDL$Qualifiers
-    stoffset <- substr(qualifiers$StartTime[1], nchar(qualifiers$StartTime[1]) - 5, nchar(qualifiers$StartTime[1]))
-    stoffset <- gsub(":", "", stoffset)
-    qualifiers$StartTime <- paste0(substr(qualifiers$StartTime, 1, nchar(qualifiers$StartTime) - 6), stoffset)
-    qualifiers$StartTime <- as.POSIXct(qualifiers$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-    endoffset <- substr(qualifiers$EndTime[1], nchar(qualifiers$EndTime[1]) - 5, nchar(qualifiers$EndTime[1]))
-    endoffset <- gsub(":", "", endoffset)
-    qualifiers$EndTime <- paste0(substr(qualifiers$EndTime, 1, nchar(qualifiers$EndTime) - 6), endoffset)
-    qualifiers$EndTime <- as.POSIXct(qualifiers$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-    
-    colnames(qualifiers) <- c("level", "start_time", "end_time")
+    if (is.null(nrow(RawDL$Grades)) || nrow(RawDL$Grades) == 0) {  # Then it's probably an empty list or data.frame because there are no grades
+      grades <- data.frame(level = grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+    } else {
+      grades <- RawDL$Grades
+      stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1]) - 5, nchar(grades$StartTime[1]))
+      stoffset <- gsub(":", "", stoffset)
+      grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime) - 6), stoffset)
+      grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1]) - 5, nchar(grades$EndTime[1]))
+      endoffset <- gsub(":", "", endoffset)
+      grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime) - 6), endoffset)
+      grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      
+      colnames(grades) <- c("level", "start_time", "end_time")
+      grade_mapping <- c("0" = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"],
+                         "-1" = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"],
+                         "5" = grades_DB[grades_DB$grade_type_code == "A", "grade_type_id"],
+                         "4" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"],
+                         "3" = grades_DB[grades_DB$grade_type_code == "C", "grade_type_id"],
+                         "2" = grades_DB[grades_DB$grade_type_code == "D", "grade_type_id"])
+      grades$level <- ifelse(as.character(grades$level) %in% names(grade_mapping),
+                             grade_mapping[as.character(grades$level)],
+                             grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"])
+    }
     
     qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+    if (is.null(nrow(RawDL$Qualifiers)) || nrow(RawDL$Qualifiers) == 0) {  # Then it's probably an empty list or data.frame because there are no qualifiers
+      qualifiers <- data.frame(level = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+    } else {
+      qualifiers <- RawDL$Qualifiers
+      stoffset <- substr(qualifiers$StartTime[1], nchar(qualifiers$StartTime[1]) - 5, nchar(qualifiers$StartTime[1]))
+      stoffset <- gsub(":", "", stoffset)
+      qualifiers$StartTime <- paste0(substr(qualifiers$StartTime, 1, nchar(qualifiers$StartTime) - 6), stoffset)
+      qualifiers$StartTime <- as.POSIXct(qualifiers$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      endoffset <- substr(qualifiers$EndTime[1], nchar(qualifiers$EndTime[1]) - 5, nchar(qualifiers$EndTime[1]))
+      endoffset <- gsub(":", "", endoffset)
+      qualifiers$EndTime <- paste0(substr(qualifiers$EndTime, 1, nchar(qualifiers$EndTime) - 6), endoffset)
+      qualifiers$EndTime <- as.POSIXct(qualifiers$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      
+      colnames(qualifiers) <- c("level", "start_time", "end_time")
+      qualifier_mapping <- c("-1" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"],
+                             "10" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "ICE", "qualifier_type_id"],
+                             "20" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "EST", "qualifier_type_id"],
+                             "30" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"],
+                             "40" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "DRY", "qualifier_type_id"],
+                             "50" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"],
+                             "-2" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"],
+                             "0" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
+      qualifiers$level <- ifelse(as.character(qualifiers$level) %in% names(qualifier_mapping),
+                                 qualifier_mapping[as.character(qualifiers$level)],
+                                 qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
+    }
     
-    qualifier_mapping <- c("-1" = "7",
-                           "10" = "1",
-                           "20" = "4",
-                           "30" = "7",
-                           "40" = "2",
-                           "50" = "8",
-                           "-2" = "8",
-                           "0" = "8")
-    qualifiers$level <- ifelse(as.character(qualifiers$level) %in% names(qualifier_mapping),
-                           qualifier_mapping[as.character(qualifiers$level)],
-                           qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
     
 
     #Add in grades, approval, and qualifier columns
@@ -200,7 +205,19 @@ downloadAquarius <- function(location,
         ts[index,]$approval <- approvals$level[i]
       } # and if the last approval start is after then end of the ts, do nothing with it!
     }
-    ts <- tidyr::fill(ts, c("grade", "approval"), .direction = "down")
+    
+    ts$qualifier <- NA
+    for (i in 1:nrow(qualifiers)) {
+      if (min(ts$datetime) > qualifiers$start_time[i]) { #if the qualifier is prior to the first ts point
+        ts[ts$datetime == min(ts$datetime),]$qualifier <- qualifiers$level[i]
+      } else if (nrow(ts[ts$datetime == qualifiers$start_time[i],]) != 0) { #if the times line up properly (are snapped to a point)
+        ts[ts$datetime == qualifiers$start_time[i],]$qualifier <- qualifiers$level[i]
+      } else if (which.min(abs(ts$datetime - qualifiers$start_time[i])) != nrow(ts)) { #if the times do not line up with anything in ts (not snapped), but not after the ts end
+        index <- which.min(abs(ts$datetime - qualifiers$start_time[i])) + 1
+        ts[index,]$qualifier <- qualifiers$level[i]
+      } # and if the last qualifier start is after then end of the ts, do nothing with it!
+    }
+    ts <- tidyr::fill(ts, c("grade", "approval", "qualifier"), .direction = "down")
     attr(ts$datetime, "tzone") <- "UTC"
     return(ts)
   } else {

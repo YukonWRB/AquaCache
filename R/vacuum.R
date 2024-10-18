@@ -6,12 +6,13 @@
 #' Performs a VACUUM (ANALYZE) operation on the database, re-organizing and compacting tables.
 #'
 #' @param con A connection to the database. If left NULL will use function AquaConnect and automatically disconnect when finished.
+#' @param full If TRUE, performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space.
 #'
 #' @return A vacuumed database.
 #' @export
 #'
 
-vacuum <- function(con = NULL)
+vacuum <- function(con = NULL, full = FALSE)
 
 {
   if (is.null(con)) {

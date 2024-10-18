@@ -69,6 +69,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     stop("getNewContinuous: Could not find qualifier type 'Unknown' in the database.")
   }
   
+  message("Fetching new continuous data with getNewContinuous...")
   # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)) {
     loc <- all_timeseries$location[i]
@@ -120,18 +121,6 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
           stop("getNewContinuous: The data returned by source_fx does not have columns named 'value' and 'datetime'.")
         }
         
-        #assign a period to the data
-        if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
-          ts$period <- "00:00:00"
-        } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
-          ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
-        } else { #Check to make sure that the supplied period can actually be coerced to a period
-          check <- lubridate::period(unique(ts$period))
-          if (NA %in% check) {
-            ts$period <- NA
-          }
-        }
-        
         ts$timeseries_id <- tsid
         ts$imputed <- FALSE
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
@@ -156,29 +145,61 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
           ts$qualifier <- qualifier_unknown
         }
         
-        DBI::dbWithTransaction(
-          con, {
-            if (min(ts$datetime) < last_data_point - 1) {
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
+        commit_fx <- function(con, ts, last_data_point, tsid) {
+          
+          adjust_grade(con, tsid, ts[, c("datetime", "grade")])
+          adjust_approval(con, tsid, ts[, c("datetime", "approval")])
+          adjust_qualifier(con, tsid, ts[, c("datetime", "qualifier")])
+          if ("owner" %in% names(ts)) {
+            adjust_owner(con, tsid, ts[, c("datetime", "owner")])
+          }
+          if ("contributor" %in% names(ts)) {
+            adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
+          }
+          
+          # Drop columns no longer necessary
+          ts <- ts[, c("datetime", "value", "timeseries_id", "imputed", "share_with")]
+          
+          #assign a period to the data
+          if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
+            ts$period <- "00:00:00"
+          } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
+            ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
+          } else { #Check to make sure that the supplied period can actually be coerced to a period
+            check <- lubridate::period(unique(ts$period))
+            if (NA %in% check) {
+              ts$period <- NA
             }
-            
-            adjust_grade(con, tsid, ts[, c("datetime", "grade")])
-            adjust_approval(con, tsid, ts[, c("datetime", "approval")])
-            adjust_qualifier(con, tsid, ts[, c("datetime", "qualifier")])
-            if ("owner" %in% names(ts)) {
-              adjust_owner(con, tsid, ts[, c("datetime", "owner")])
-            }
-            if ("contributor" %in% names(ts)) {
-              adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
-            }
-            
-            DBI::dbAppendTable(con, "measurements_continuous", ts)
-            #make the new entry into table timeseries
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+          }
+          
+          if (min(ts$datetime) < last_data_point - 1) {
+            DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
+          }
+          DBI::dbAppendTable(con, "measurements_continuous", ts)
+          #make the new entry into table timeseries
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        }
+        
+        if (!attr(con, "active_transaction")) {
+          DBI::dbBegin(con)
+          attr(con, "active_transaction") <- TRUE
+          tryCatch({
+            commit_fx(con, ts, last_data_point, tsid)
+            DBI::dbCommit(con)
+            attr(con, "active_transaction") <- FALSE
             count <- count + 1
             success <- rbind(success, data.frame("location" = loc, "parameter_id" = parameter, "timeseries_id" = tsid))
-          }
-        )
+          }, error = function(e) {
+            DBI::dbRollback(con)
+            attr(con, "active_transaction") <<- FALSE
+            warning("getNewContinuous: Failed to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Returned error '", e$message, "'.")
+          })
+          
+        } else {
+          commit_fx(con, ts, last_data_point, tsid)
+          count <- count + 1
+          success <- rbind(success, data.frame("location" = loc, "parameter_id" = parameter, "timeseries_id" = tsid))
+        }
       }
     }, error = function(e) {
       warning("getNewContinuous: Failed to get new data or to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Returned error '", e$message, "'.")

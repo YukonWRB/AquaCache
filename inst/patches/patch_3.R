@@ -9,10 +9,11 @@ if (!check$can_create) {
   stop("You do not have the necessary privileges to create a new schema in this database.")
 }
 
-message("Working on Patch 3. This update will take a while, please be patient!")
+message("Working on Patch 3. This update will take a while, please be patient! Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?).")
 
 # Begin a transaction
 DBI::dbExecute(con, "BEGIN;")
+attr(con, "active_transaction") <- TRUE
 tryCatch({
   # Add column name_fr to owners_contributors
   DBI::dbExecute(con, "ALTER TABLE owners_contributors ADD COLUMN name_fr TEXT;")
@@ -631,10 +632,12 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   
   # Commit the transaction
   DBI::dbExecute(con, "COMMIT;")
+  attr(con, "active_transaction") <- FALSE
   
 }, error = function(e) {
   
   # Rollback the transaction
   DBI::dbExecute(con, "ROLLBACK;")
+  attr(con, "active_transaction") <<- FALSE
   stop("Patch 3 failed and the DB has been rolled back to its earlier state. ", e$message)
 })

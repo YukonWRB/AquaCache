@@ -201,20 +201,36 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 new_flow$key <- NULL
                 new_flow <- new_flow[new_flow$date >= date , ]
                 new_flow$timeseries_id <- tsid_flow
-                DBI::dbWithTransaction(
-                  con,
-                  {
-                    if (nrow(imputed.remains) > 0) {
-                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
-                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
-                    } else {
-                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "';"))
-                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
-                    }
-                    start <- min(existing$date, new_flow$date)
-                    DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
+                
+                commit_fx <- function(con, imputed.remains, tsid_flow, new_flow, existing) {
+                  if (nrow(imputed.remains) > 0) {
+                    DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
+                    DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow[, c("date", "value", "timeseries_id", "imputed")])
+                  } else {
+                    DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow, " AND date BETWEEN '", min(new_flow$date), "' AND '", max(new_flow$date), "';"))
+                    DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow[, c("date", "value", "timeseries_id", "imputed")])
                   }
-                )
+                  start <- min(existing$date, new_flow$date)
+                  DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
+                }
+                
+                if (!attr(con, "active_transaction")) {
+                  DBI::dbBegin(con)
+                  attr(con, "active_transaction") <- TRUE
+                  tryCatch({
+                    commit_fx(con, imputed.remains, tsid_flow, new_flow, existing)
+                    DBI::dbCommit(con)
+                    attr(con, "active_transaction") <- FALSE
+                  }, error = function(e) {
+                    DBI::dbRollback(con)
+                    attr(con, "active_transaction") <<- FALSE
+                    warning("update_hydat: Failed to add new flow data for location ", i)
+                  })
+                } else { # we're already in a transaction
+                  commit_fx(con, imputed.remains, tsid_flow, new_flow, existing)
+                }
+                
+                
                 calculate_stats(timeseries_id = tsid_flow,
                                 con = con,
                                 start_recalc = start)
@@ -231,12 +247,28 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               }
             } else { #There is an entry in timeseries table, but no daily data
               new_flow$timeseries_id <- tsid_flow
-              DBI::dbWithTransaction(
-                con, {
-                  DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow)
-                  DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_flow$date), "'WHERE timeseries_id = ", tsid_flow, ";"))
-                }
-              )
+              
+              commit_fx <- function(con, tsid_flow, new_flow) {
+                DBI::dbAppendTable(con, "measurements_calculated_daily", new_flow[, c("date", "value", "timeseries_id", "imputed")])
+                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_flow$date), "'WHERE timeseries_id = ", tsid_flow, ";"))
+              }
+              
+              if (!attr(con, "active_transaction")) {
+                DBI::dbBegin(con)
+                attr(con, "active_transaction") <- TRUE
+                tryCatch({
+                  commit_fx(con, tsid_flow, new_flow)
+                  DBI::dbCommit(con)
+                  attr(con, "active_transaction") <- FALSE
+                }, error = function(e) {
+                  DBI::dbRollback(con)
+                  attr(con, "active_transaction") <<- FALSE
+                  warning("update_hydat: Failed to add new flow data for location ", i)
+                })
+              } else { # we're already in a transaction
+                commit_fx(con, tsid_flow, new_flow)
+              }
+              
               calculate_stats(timeseries_id = tsid_flow,
                               con = con,
                               start_recalc = min(new_flow$date))
@@ -335,20 +367,35 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 new_level$key <- NULL
                 new_level <- new_level[new_level$date >= date , ]
                 new_level$timeseries_id <- tsid_level
-                DBI::dbWithTransaction(
-                  con,
-                  {
-                    if (nrow(imputed.remains) > 0) {
-                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
-                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
-                    } else {
-                      DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "';"))
-                      DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
-                    }
-                    start <- min(min(existing$date), new_level$date)
-                    DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_level, ";"))
+                
+                commit_fx <- function(con, imputed.remains, tsid_level, new_level, existing) {
+                  if (nrow(imputed.remains) > 0) {
+                    DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "' AND date NOT IN ('", paste(imputed.remains$date, collapse = "', '"), "');"))
+                    DBI::dbAppendTable(con, "measurements_calculated_daily", new_level[, c("date", "value", "timeseries_id", "imputed")])
+                  } else {
+                    DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level, " AND date BETWEEN '", min(new_level$date), "' AND '", max(new_level$date), "';"))
+                    DBI::dbAppendTable(con, "measurements_calculated_daily", new_level[, c("date", "value", "timeseries_id", "imputed")])
                   }
-                )
+                  start <- min(min(existing$date), new_level$date)
+                  DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_level, ";"))
+                }
+                
+                if (!attr(con, "active_transaction")) {
+                  DBI::dbBegin(con)
+                  attr(con, "active_transaction") <- TRUE
+                  tryCatch({
+                    commit_fx(con, imputed.remains, tsid_level, new_level, existing)
+                    DBI::dbCommit(con)
+                    attr(con, "active_transaction") <- FALSE
+                  }, error = function(e) {
+                    DBI::dbRollback(con)
+                    attr(con, "active_transaction") <<- FALSE
+                    warning("update_hydat: Failed to add new level data for location ", i)
+                  })
+                } else { # we're already in a transaction
+                  commit_fx(con, imputed.remains, tsid_level, new_level, existing)
+                }
+                
                 calculate_stats(timeseries_id = tsid_level,
                                 con = con,
                                 start_recalc = start)
@@ -365,12 +412,28 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               }
             } else { #There is an entry in timeseries table, but no daily data
               new_level$timeseries_id <- tsid_level
-              DBI::dbWithTransaction(
-                con, {
-                  DBI::dbAppendTable(con, "measurements_calculated_daily", new_level)
-                  DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_level$date), "'WHERE timeseries_id = ", tsid_level, ";"))
-                }
-              )
+              
+              commit_fx <- function(con, tsid_level, new_level) {
+                DBI::dbAppendTable(con, "measurements_calculated_daily", new_level[, c("date", "value", "timeseries_id", "imputed")])
+                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_level$date), "'WHERE timeseries_id = ", tsid_level, ";"))
+              }
+              
+              if (!attr(con, "active_transaction")) {
+                DBI::dbBegin(con)
+                attr(con, "active_transaction") <- TRUE
+                tryCatch({
+                  commit_fx(con, tsid_level, new_level)
+                  DBI::dbCommit(con)
+                  attr(con, "active_transaction") <- FALSE
+                }, error = function(e) {
+                  DBI::dbRollback(con)
+                  attr(con, "active_transaction") <<- FALSE
+                  warning("update_hydat: Failed to add new level data for location ", i)
+                })
+              } else { # we're already in a transaction
+                commit_fx(con, tsid_level, new_level)
+              }
+              
               calculate_stats(timeseries_id = tsid_level,
                               con = con,
                               start_recalc = min(new_level$date))

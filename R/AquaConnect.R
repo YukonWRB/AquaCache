@@ -4,6 +4,12 @@
 #' `r lifecycle::badge("stable")`
 #'
 #' This function exists to facilitate connecting to the hydrology database. A nearly identical function exists in package YGwater, but this one by default uses admin privileges while the other uses read-only privileges. Database superusers will have access to all database records, but other users will be asked to provide their username and password to access records other than the 'public' ones. Note that this is *not necessarily* the same username and password as the one used to log into the database itself.
+#' 
+#' See Details for more information for developers.
+#' 
+#' @details
+#' - To facilitate development, a dev database can be connected to by setting the dev parameter to TRUE. This will append "_dev" to the database name.
+#' - An attribute is added to the connection object to track if a transaction is active. This can be used by functions to determine if a transaction is already open, in which case functions can forgo opening a new transaction and instead use the existing one.
 #'
 #' @param name Database name.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form AquaCacheHost:"hostname".
@@ -81,10 +87,14 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
       if (nrow(privileges) == 0) {
         warning("You do not have write permissions to the database tables. Please contact your database administrator to apply patches. Queries may not work as expected until patches are applied.")
       } else {
-        message("There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recomment doing so before running any functions from this package. \n 1 = apply patches now \n 2 = exit without applying patches")
+        message("There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recomment doing so before running any functions from this package. \n 1 = apply patches now \n 2 = exit without applying patches  \n")
         choice <- readline(prompt = "Enter 1 or 2: ")
         
         if (choice == 1) {
+          
+          message("It is HIGHLY recommended that your database is backed up. Take the time to do this now or make sure your automatic workflow actually did its job. \n Hit enter to continue.")
+          readline(prompt = "")
+          
           # Apply patches in order
           tryCatch({
             for (i in (last_patch + 1):last_patch_file) {
@@ -101,6 +111,9 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
         }
       }
     }  # Else do nothing
+    
+    # Add a new attribute to the connection object to track if a transaction is active
+    attr(con, "active_transaction") <- FALSE
     
     return(con)
   }, error = function(e) {

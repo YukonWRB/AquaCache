@@ -20,16 +20,21 @@
 
 # Begin a transaction
 # DBI::dbExecute(con, "BEGIN;")
+# attr(con, "active_transaction") <- TRUE
 # tryCatch({
 #   # Do the things
 #   #
 #   #
 #   # Commit the transaction
 #   DBI::dbExecute(con, "COMMIT;")
+#   attr(con, "active_transaction") <- FALSE
 # }, error = function(e) {
 #   DBI::dbExecute(con, "ROLLBACK;")
+#   attr(con, "active_transaction") <<- FALSE
 #   stop("Patch 3 failed and the DB has been rolled back to its earlier state. ", e$message)
 # })
+
+# Note the use of the 'active_transaction' attribute on the connection; this is important as it ensures that the patch is applied atomically. Normally, other functions which may be called from within the patch use transactions, but transactions within transactions don't work in PostgreSQL. By using this attribute, the functions run without their own transactions, but the patch as a whole is atomic.
 
 
 # Step 4: If not successful, the patch should stop execution, roll back the entire transaction, and give an error message which will get caught by AquaPatchCheck().

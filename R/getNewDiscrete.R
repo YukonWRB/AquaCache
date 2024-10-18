@@ -237,18 +237,37 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
         }
         
         ts$timeseries_id <- tsid
-        DBI::dbWithTransaction(
-          con, {
-            if (min(ts$datetime) < last_data_point - 1) { #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
-            }
-            DBI::dbAppendTable(con, "measurements_discrete", ts)
-            #make the new entry into table timeseries
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        
+        # Now commit the changes to the database
+        commit_fx <- function(con, ts, last_data_point, tsid) {
+          if (min(ts$datetime) < last_data_point - 1) { #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
+            DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
+          }
+          DBI::dbAppendTable(con, "measurements_discrete", ts)
+          #make the new entry into table timeseries
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        }
+        
+        if (!attr(con, "active_transaction")) {
+          DBI::dbBegin(con)
+          attr(con, "active_transaction") <- TRUE
+          tryCatch({
+            commit_fx(con, ts, last_data_point, tsid)
+            DBI::dbCommit(con)
+            attr(con, "active_transaction") <- FALSE
             count <- count + 1
             success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries_id" = tsid))
-          }
-        )
+          }, error = function(e) {
+            DBI::dbRollback(con)
+            attr(con, "active_transaction") <<- FALSE
+            warning("getNewDiscrete: Failed to commit new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Error message: ", e$message)
+          })
+        } else { # we're already in a transaction
+          commit_fx(con, ts, last_data_point, tsid)
+          count <- count + 1
+          success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries_id" = tsid))
+        }
+        
       }
     }, error = function(e) {
       warning("getNewDiscrete: Failed to get new data or to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Error message: ", e$message)
