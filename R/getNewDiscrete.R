@@ -36,7 +36,7 @@
 #' ## Sharing privileges and ownership
 #' The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data, unless the source function returns populated columns for owner and share_with.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'discrete'.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 
@@ -45,10 +45,15 @@
 #' @export
 #'
 
-getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", active = 'default') {
+getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default') {
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
   }
   
   # Create table of timeseries
@@ -62,7 +67,7 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
   }
   
   if (active == 'default') {
-    all_timeseries <- all_timeseries[all_timeseries$active == TRUE, ]
+    all_timeseries <- all_timeseries[all_timeseries$active, ]
   }
 
   count <- 0 #counter for number of successful new pulls
@@ -212,7 +217,7 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
         # Get the result_speciation and sample_fraction boolean values for the parameter. If TRUE then ts must contain columns result_speciation and sample_fraction.
         result_speciation <- DBI::dbGetQuery(con, paste0("SELECT result_speciation FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
         sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT sample_fraction FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
-        if (result_speciation == TRUE) {
+        if (result_speciation) {
           if (!("result_speciation" %in% names(ts))) {
             stop("The source function did not return a column 'result_speciation' but the parameter in the database has result_speciation set to TRUE.")
           } else { # Check that all values in the result_speciation column are not NA
@@ -221,7 +226,7 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
             }
           }
         }
-        if (sample_fraction == TRUE) {
+        if (sample_fraction) {
           if (!("sample_fraction" %in% names(ts))) {
             stop("The source function did not return a column 'sample_fraction' but the parameter in the database has sample_fraction set to TRUE.")
           } else { # Check that all values in the sample_fraction column are not NA
@@ -232,18 +237,37 @@ getNewDiscrete <- function(con = AquaConnect(silent = TRUE), timeseries_id = "al
         }
         
         ts$timeseries_id <- tsid
-        DBI::dbWithTransaction(
-          con, {
-            if (min(ts$datetime) < last_data_point - 1) { #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
-            }
-            DBI::dbAppendTable(con, "measurements_discrete", ts)
-            #make the new entry into table timeseries
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        
+        # Now commit the changes to the database
+        commit_fx <- function(con, ts, last_data_point, tsid) {
+          if (min(ts$datetime) < last_data_point - 1) { #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
+            DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
+          }
+          DBI::dbAppendTable(con, "measurements_discrete", ts)
+          #make the new entry into table timeseries
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        }
+        
+        if (!attr(con, "active_transaction")) {
+          DBI::dbBegin(con)
+          attr(con, "active_transaction") <- TRUE
+          tryCatch({
+            commit_fx(con, ts, last_data_point, tsid)
+            DBI::dbCommit(con)
+            attr(con, "active_transaction") <- FALSE
             count <- count + 1
             success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries_id" = tsid))
-          }
-        )
+          }, error = function(e) {
+            DBI::dbRollback(con)
+            attr(con, "active_transaction") <<- FALSE
+            warning("getNewDiscrete: Failed to commit new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Error message: ", e$message)
+          })
+        } else { # we're already in a transaction
+          commit_fx(con, ts, last_data_point, tsid)
+          count <- count + 1
+          success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries_id" = tsid))
+        }
+        
       }
     }, error = function(e) {
       warning("getNewDiscrete: Failed to get new data or to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Error message: ", e$message)

@@ -4,7 +4,13 @@
 \alias{downloadWSC}
 \title{Get realtime data from the WSC}
 \usage{
-downloadWSC(location, parameter_id, start_datetime, end_datetime = Sys.time())
+downloadWSC(
+  location,
+  parameter_id,
+  start_datetime,
+  end_datetime = Sys.time(),
+  con = NULL
+)
 }
 \arguments{
 \item{location}{A WSC station number.}
@@ -14,6 +20,8 @@ downloadWSC(location, parameter_id, start_datetime, end_datetime = Sys.time())
 \item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 
 \item{end_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
+
+\item{con}{A connection to the AquaCache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
 }
 \value{
 A data.table object of hydrometric data, with datetimes in UTC-0.
