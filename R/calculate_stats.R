@@ -311,7 +311,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             first_instance_no_stats$doy_count <- 1
             
             # Now commit the changes to the database
-            commit_fx <- function(con, i, first_instance_no_stats, missing_stats) {
+            commit_fx1 <- function(con, i, first_instance_no_stats, missing_stats) {
               DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date IN ('", paste(first_instance_no_stats$date, collapse = "', '"), "')"))
               DBI::dbAppendTable(con, "measurements_calculated_daily", first_instance_no_stats)
               if (nrow(missing_stats) == 0) {  #If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
@@ -323,7 +323,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
               DBI::dbBegin(con)
               attr(con, "active_transaction") <- TRUE
               tryCatch({
-                commit_fx(con, i, first_instance_no_stats, missing_stats)
+                commit_fx1(con, i, first_instance_no_stats, missing_stats)
                 DBI::dbCommit(con)
                 attr(con, "active_transaction") <- FALSE
               }, error = function(e) {
@@ -332,7 +332,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
                 
               })
             } else { # we're already in a transaction
-              commit_fx(con, i, first_instance_no_stats, missing_stats)
+              commit_fx1(con, i, first_instance_no_stats, missing_stats)
             }
           } # End of dealing with first instance data
           
@@ -402,7 +402,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
 
         
         # Now commit the changes to the database
-        commit_fx <- function(con, delete_query, missing_stats, i) {
+        commit_fx2 <- function(con, delete_query, missing_stats, i) {
           DBI::dbExecute(con, delete_query)
           DBI::dbAppendTable(con, "measurements_calculated_daily", missing_stats) # Append the missing_stats data to the measurements_calculated_daily table
           DBI::dbExecute(con, paste0("UPDATE timeseries SET last_daily_calculation = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", i, ";"))
@@ -412,7 +412,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
           DBI::dbBegin(con)
           attr(con, "active_transaction") <- TRUE
           tryCatch({
-            commit_fx(con, delete_query, missing_stats, i)
+            commit_fx2(con, delete_query, missing_stats, i)
             DBI::dbCommit(con)
             attr(con, "active_transaction") <- FALSE
           }, error = function(e) {
@@ -420,7 +420,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
             attr(con, "active_transaction") <<- FALSE
           })
         } else { # we're already in a transaction
-          commit_fx(con, delete_query, missing_stats, i)
+          commit_fx2(con, delete_query, missing_stats, i)
         }
         
       }, error = function(e) {

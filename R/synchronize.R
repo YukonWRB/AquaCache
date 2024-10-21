@@ -316,7 +316,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
           
           
           # Now commit the changes to the database
-          commit_fx <- function(con, category, imputed.remains, tsid, inRemote, end, inDB) {
+          commit_fx <- function(con, category, imputed.remains, tsid, inRemote, inDB) {
             if (category == "continuous") {
               # Now delete entries in measurements_continuous and measurements_calculated_daily that are no longer in the remote data and/or that need to be replaced
               if (nrow(imputed.remains) > 0) { # Don't delete imputed data points unless there's new data to replace it!
@@ -345,7 +345,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
             DBI::dbBegin(con)
             attr(con, "active_transaction") <- TRUE
             tryCatch({
-              commit_fx(con, category, imputed.remains, tsid, inRemote, end, inDB)
+              commit_fx(con, category, imputed.remains, tsid, inRemote, inDB)
               DBI::dbCommit(con)
               attr(con, "active_transaction") <- FALSE
               updated <- updated + 1
@@ -354,7 +354,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
               attr(con, "active_transaction") <<- FALSE
             })
           } else { # we're already in a transaction
-            commit_fx(con, category, imputed.remains, tsid, inRemote, end, inDB)
+            commit_fx(con, category, imputed.remains, tsid, inRemote, inDB)
             updated <- updated + 1
           }
           
