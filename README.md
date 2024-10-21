@@ -64,7 +64,7 @@ If the user does not have write privileges to the required tables then an error 
 
 ### If making changes to the database schema, the following steps MUST be taken:
 
-0.  UNDERSTAND the process; review function AquaPatchCheck(), existing patches, and review the patch_template.R file in the /inst folder. Talk to others if anything is unclear.
+0.  UNDERSTAND the process; review function AquaPatchCheck(), existing patches, and review the patch_template.R file in the /inst folder. Talk to others if anything is unclear. ***Then*** you're ready to start.
 1.  CHECK with other developers to ensure that the changes are necessary and that they will not conflict with other changes that are being made.
 2.  COMMUNICATE the changes you plan to make to ensure that these are compatible with changes by others. Give others the opportunity to provide feedback on your changes.
 3.  WRITE an R script that contains the necessary SQL code to modify the database. This script should be saved in the `inst/patches` directory of the package, and a template file exists in the same directory to help with this.
