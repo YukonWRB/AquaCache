@@ -104,6 +104,15 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
       }
       
       if (!skip) {
+        
+        # Check if any corrections have been made to the timeseries since the last calculation. If not, save time and computations by getting values straight from measurements_continuous instead of the corrected tables.
+        corrections_apply <- DBI::dbGetQuery(con, paste0("SELECT correction_id FROM corrections WHERE timeseries_id = ", i, " AND end_dt > '", last_day_historic, "';"))
+        if (nrow(corrections_apply) > 1) {
+          corrections_apply <- TRUE
+        } else {
+          corrections_apply <- FALSE
+        }
+        
         missing_stats <- data.frame()
         flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
         if ((source_fx == "downloadWSC") & (last_day_historic < Sys.Date() - 30)) { #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
@@ -144,7 +153,12 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
           DBI::dbDisconnect(hydat_con)
           
           if (!flag) {
-            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed, share_with FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+            if (corrections_apply) {
+              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed, share_with FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+            } else {
+              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed, share_with FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+            }
+            
             
             if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date
               gap_measurements <- gap_measurements %>%
@@ -154,7 +168,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
                                  imputed = sort(.data$imputed, decreasing = TRUE)[1],
                                  share_with = sort(.data$share_with)[1],
                                  .groups = "drop")
-              gap_measurements <- gap_measurements[,c(3:10)]
+              gap_measurements <- gap_measurements[,c(3:6)]
               names(gap_measurements) <- c("date", "value", "imputed", "share_with")
               
               if (!((last_hydat + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
@@ -223,7 +237,12 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
         }
         
         if (!(source_fx == "downloadWSC") || flag) { #All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
-          gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, share_with, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+          if (corrections_apply) {
+            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, share_with, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+          } else {
+            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, share_with, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+            
+          }
           
           if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
             gap_measurements <- gap_measurements %>%
@@ -233,7 +252,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
                                imputed = sort(.data$imputed, decreasing = TRUE)[1], # Ensures that if there is even 1 imputed point in a day, the whole day is marked as imputed
                                share_with = sort(.data$share_with)[1],
                                .groups = "drop")
-            gap_measurements <- gap_measurements[,c(3:10)]
+            gap_measurements <- gap_measurements[,c(3:6)]
             names(gap_measurements) <- c("date", "value", "imputed", "share_with")
             
             if (!((last_day_historic + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.

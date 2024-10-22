@@ -60,7 +60,9 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
         message("You are now logged in as 'public'. If you need to change this either connect using an interactive session or use superuser credentials.")
       }
     }
-
+  }, error = function(e) {
+    stop("Connection failed. Error message: ", e$message)
+  })
     
     # Check for patches to apply ####################
     # See if table information.version_info exists, else set last_patch to 0
@@ -97,12 +99,12 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
           
           # Apply patches in order
           tryCatch({
-            for (i in (last_patch + 1):last_patch_file) {
-              source(system.file("patches", paste0("patch_", i, ".R"), package = "AquaCache"), local = TRUE, echo = TRUE)
+            for (patch in (last_patch + 1):last_patch_file) {
+              source(system.file("patches", paste0("patch_", patch, ".R"), package = "AquaCache"), local = TRUE)
             }
             message("Patches applied successfully.")
           }, error = function(e) {
-            stop("Patches not applied. An error occurred in patch ", i, " : ", e$message)
+            stop("Patches not applied. An error occurred in patch ", patch, " : ", e$message)
           })
         } else if (choice == 2) {
           warning("Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().")
@@ -116,7 +118,5 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
     attr(con, "active_transaction") <- FALSE
     
     return(con)
-  }, error = function(e) {
-    stop("Connection failed. Error message: ", e$message)
-  })
+
 }

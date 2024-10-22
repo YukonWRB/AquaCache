@@ -53,6 +53,10 @@ Credentials should be stored in a .Renviron file, while values such as parameter
 This is to ensure that the package and database remain in sync.
 function AquaPatchCheck() exists for this purpose and; see below for more information.
 
+## R software changes
+
+Changes to the R software that \*do not
+
 ## Database schema changes
 
 As this R package is designed to work directly with a postgres database, any additions or modifications to the package code that require modifications to the database schema should be accompanied by the necessary SQL code to create or modify the database.
@@ -71,3 +75,4 @@ If the user does not have write privileges to the required tables then an error 
 4.  CHECK and re-check that your patch works as intended and that ALL of the steps in the template script have been followed.
 5.  ENSURE that your patch can be applied when called from function AquaPatchCheck().
 6.  COMMUNICATE with other collaborators to ensure that they are aware of the changes you have made.
+7.  Write down what you did in the NEWS.md file.

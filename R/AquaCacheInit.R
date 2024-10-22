@@ -1,7 +1,7 @@
 #' Initial hydrometric/meteorological database creation.
 #'
 #' @description
-#' `r lifecycle::badge("experimental")`
+#' `r lifecycle::badge("deprecated")`
 #'
 #' NOTE: there is no guarantee that the code in this function will work as expected. It is intended to be a starting point for creating a database schema and populating it with initial values. The user should review the code and make any necessary changes to suit their needs. It may be necessary to run the code line by line rather than as a function if failure occurs, as it is possible that SQL errors exist in this script.
 #' 
@@ -16,6 +16,8 @@
 
 AquaCacheInit <- function(con = AquaConnect(), overwrite = FALSE) {
 
+  stop("This function is no longer being co-edited alon with database changes. We recommend contacting the package maintainer for a .SQL file that will enable you to be up to date with the latest database changes.")
+  
   # Initial setup ############################
   # Overwrite and vacuum if requested
   if (overwrite) {
@@ -2610,7 +2612,7 @@ EXECUTE FUNCTION enforce_maintenance_constraints();
 ")
   DBI::dbExecute(con, "
               CREATE TRIGGER fill_locations_metadata_infrastructure_hydromet_trigger
-              BEFORE INSERT OR UPDATE ON locations_metadata_infrastructure_hydromet
+              BEFORE INSERT ON locations_metadata_infrastructure_hydromet
               FOR EACH ROW
               EXECUTE FUNCTION fill_locations_metadata_infrastructure_hydromet();
 ")

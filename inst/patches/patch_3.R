@@ -9,9 +9,10 @@ if (!check$can_create) {
   stop("You do not have the necessary privileges to create a new schema in this database.")
 }
 
-message("Working on Patch 3. This update will take a while, please be patient! Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?).")
+message("Working on Patch 3. This update will take a while, please be patient! It's possible that your R console appears frozen but is not.\n  Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?).")
 
 # Begin a transaction
+message("Starting transaction...")
 DBI::dbExecute(con, "BEGIN;")
 attr(con, "active_transaction") <- TRUE
 tryCatch({
@@ -27,6 +28,7 @@ tryCatch({
     DBI::dbExecute(con, "DROP TABLE qualifier_types;")
   }
   
+  message("Working on qualifier tables")
   # Make new qualifiers and qualifier_types tables #################
   DBI::dbExecute(con, "CREATE TABLE public.qualifier_types (
   qualifier_type_id SERIAL PRIMARY KEY,
@@ -142,6 +144,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con, "UPDATE approvals SET description = 'Unspecified', description_fr = 'Non spécifié' WHERE description = 'Undefined';")
   DBI::dbExecute(con, "UPDATE grades SET description = 'Unspecified', description_fr = 'Non spécifié' WHERE description = 'Undefined';")
   
+  message("Working on approvals tables")
   # Create new table 'approval_types'. This is existing table 'approvals' but with a new '_id' column.
   exist_table_approvals <- DBI::dbGetQuery(con, "SELECT * FROM approvals")
   names(exist_table_approvals) <- c("approval_type_code", "approval_type_description", "approval_type_description_fr")
@@ -282,7 +285,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con, "ALTER TABLE rating_curves ADD CONSTRAINT rating_curves_approval_fkey FOREIGN KEY (approval) REFERENCES approval_types(approval_type_id) ON DELETE SET NULL ON UPDATE CASCADE;")
   
   
-  
+  message("Working on grades tables")
   # Do a full replacement of 'grades' column with the new 'grades' table ########
   # Drop foreign key constraints on grades for tables 'measurements_calculated_daily', 'measurements_continuous' so that CASCADE statements don't take effect
   DBI::dbExecute(con, "ALTER TABLE measurements_continuous DROP CONSTRAINT IF EXISTS fk_grade;")
@@ -400,6 +403,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   
   
   # Do a full replacement of 'owner' column with the owners_contributors table ########
+  message("Working on owners tables")
   # Drop foreign key constraints on owner for tables 'measurements_calculated_daily', 'measurements_continuous' so that CASCADE statements don't take effect
   DBI::dbExecute(con, "ALTER TABLE measurements_continuous DROP CONSTRAINT IF EXISTS measurements_continuous_owner_fkey;")
   DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP CONSTRAINT IF EXISTS calculated_daily_owner_fkey;")
@@ -460,7 +464,6 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
               ")
   
   
-  tsids <- DBI::dbGetQuery(con, "SELECT DISTINCT timeseries_id FROM measurements_continuous;")[,1]
   wsc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
   if (is.na(wsc_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "Water Survey of Canada"))
@@ -482,6 +485,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
     usgs_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
   }
   
+  tsids <- DBI::dbGetQuery(con, "SELECT DISTINCT timeseries_id FROM measurements_continuous;")[,1]
   for (i in tsids) {
     exist <- DBI::dbGetQuery(con, paste0("SELECT datetime, owner FROM measurements_continuous WHERE timeseries_id = ", i, " ORDER BY datetime;"))
     earliest_daily <- DBI::dbGetQuery(con, paste0("SELECT date AS datetime, owner FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(exist$datetime), "' AND value IS NOT NULL;"))
@@ -512,8 +516,8 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP COLUMN owner CASCADE;")
   
   
-  
   # Do a full replacement of 'contributor' column with the owners_contributors table ########
+  message("Working on contributors tables")
   # Drop foreign key constraints on contributors for tables 'measurements_calculated_daily', 'measurements_continuous' so that CASCADE statements don't take effect
   DBI::dbExecute(con, "ALTER TABLE measurements_continuous DROP CONSTRAINT IF EXISTS measurements_continuous_contributor_fkey;")
   DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP CONSTRAINT IF EXISTS calculated_daily_contributor_fkey;")
@@ -623,7 +627,96 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP COLUMN contributor CASCADE;")
   
   
+#   # Re-create the view tables that were dropped earlier and make some new ones #################
+#   message("Re-creating view tables (and adding a few new ones)")
+#   
+  # measurements_continuous_corrected table
+  DBI::dbExecute(con, "
+CREATE OR REPLACE VIEW measurements_continuous_corrected AS
+SELECT
+    mc.timeseries_id,
+    mc.datetime,
+    mc.value AS value_raw,
+    ac.value_corrected,
+    mc.period,
+    mc.imputed,
+    mc.share_with
+FROM
+    measurements_continuous mc
+CROSS JOIN LATERAL (
+    SELECT apply_corrections(mc.timeseries_id, mc.datetime, mc.value) AS value_corrected
+) ac
+WHERE
+    ac.value_corrected IS NOT NULL;
+")
+
+  # measurements_continuous_corrected_hourly table
+  DBI::dbExecute(con, "
+  CREATE OR REPLACE VIEW measurements_continuous_corrected_hourly AS
+SELECT
+    mcc.timeseries_id,
+    date_trunc('hour', mcc.datetime) AS datetime,
+    AVG(mcc.value_raw) AS value_raw,
+    AVG(mcc.value_corrected) AS value_corrected,
+    BOOL_OR(mcc.imputed) AS imputed
+FROM
+    measurements_continuous_corrected mcc
+GROUP BY
+    mcc.timeseries_id,
+    date_trunc('hour', mcc.datetime)
+ORDER BY
+    datetime;
+")
+  
+  
   # Wrap up #################
+  message("Wrapping up with a few tweaks...")
+  
+  # Fix some functions in the metadata tables that cause problems...
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE TRIGGER fill_locations_metadata_infrastructure_missing_trigger
+              BEFORE INSERT ON locations_metadata_infrastructure
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_infrastructure_missing();
+")
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE TRIGGER fill_locations_metadata_infrastructure_hydromet_trigger
+              BEFORE INSERT ON locations_metadata_infrastructure_hydromet
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_infrastructure_hydromet();
+")
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE TRIGGER fill_locations_metadata_infrastructure_groundwater_trigger
+              BEFORE INSERT ON locations_metadata_infrastructure_groundwater
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_infrastructure_groundwater();
+")
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE TRIGGER fill_locations_metadata_owners_operators_missing_trigger
+              BEFORE INSERT ON locations_metadata_owners_operators
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_owners_operators_missing();
+")
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE TRIGGER fill_locations_metadata_access_missing_trigger
+              BEFORE INSERT ON locations_metadata_access
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_access_missing();
+")
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE TRIGGER fill_locations_metadata_transmission_missing_trigger
+              BEFORE INSERT ON locations_metadata_transmission
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_transmission_missing();
+")
+  DBI::dbExecute(con, "
+              CREATE OR REPLACE TRIGGER fill_locations_metadata_acquisition_missing_trigger
+              BEFORE INSERT ON locations_metadata_acquisition
+              FOR EACH ROW
+              EXECUTE FUNCTION fill_locations_metadata_acquisition_missing();
+")
+  
+  
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '3' WHERE item = 'Last patch number';")
   DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))

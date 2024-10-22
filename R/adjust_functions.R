@@ -56,6 +56,14 @@ adjust_grade <- function(con, timeseries_id, data) {
   original_exist_rows <- nrow(exist)
   current <- if (original_exist_rows > 0) exist$grade_type_id[1] else data$grade[1]
   
+  if (original_exist_rows == 0) {
+    exist <- data.frame(grade_id = NA,
+                        timeseries_id = timeseries_id,
+                        grade_type_id = data$grade[1],
+                        start_dt = data$datetime[1],
+                        end_dt = data$datetime[1])
+  }
+  
   # Now loop through the data to find where the grade changes
   for (i in 1:nrow(data)) {
     if (data$grade[i] != current) {
@@ -210,9 +218,9 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   if (original_exist_rows == 0) {
     exist <- data.frame(qualifier_id = NA,
                         timeseries_id = timeseries_id,
-                        qualifier_type_id = data$qualifier[i],
-                        start_dt = data$datetime[i],
-                        end_dt = data$datetime[i])
+                        qualifier_type_id = data$qualifier[1],
+                        start_dt = data$datetime[1],
+                        end_dt = data$datetime[1])
   }
   
   # Now loop through the data to find where the qualifier changes
@@ -368,6 +376,14 @@ adjust_approval <- function(con, timeseries_id, data) {
   original_exist_rows <- nrow(exist)
   current <- if (original_exist_rows > 0) exist$approval_type_id[1] else data$approval[1]
   
+  if (original_exist_rows == 0) {
+    exist <- data.frame(approval_id = NA,
+                        timeseries_id = timeseries_id,
+                        approval_type_id = data$approval[1],
+                        start_dt = data$datetime[1],
+                        end_dt = data$datetime[1])
+  }
+  
   # Now loop through the data to find where the approval changes
   for (i in 1:nrow(data)) {
     if (data$approval[i] != current) {
@@ -517,6 +533,14 @@ adjust_owner <- function(con, timeseries_id, data) {
   original_exist_rows <- nrow(exist)
   current <- if (original_exist_rows > 0) exist$owner_contributor_id[1] else data$owner[1]
   
+  if (original_exist_rows == 0) {
+    exist <- data.frame(owner_id = NA,
+                        timeseries_id = timeseries_id,
+                        owner_contributor_id = data$owner[1],
+                        start_dt = data$datetime[1],
+                        end_dt = data$datetime[1])
+  }
+  
   # Now loop through the data to find where the owner changes
   for (i in 1:nrow(data)) {
     if (data$owner[i] != current) {
@@ -664,6 +688,14 @@ adjust_contributor <- function(con, timeseries_id, data) {
   index <- 1
   original_exist_rows <- nrow(exist)
   current <- if (original_exist_rows > 0) exist$owner_contributor_id[1] else data$contributor[1]
+  
+  if (original_exist_rows == 0) {
+    exist <- data.frame(contributor_id = NA,
+                        timeseries_id = timeseries_id,
+                        owner_contributor_id = data$contributor[1],
+                        start_dt = data$datetime[1],
+                        end_dt = data$datetime[1])
+  }
   
   # Now loop through the data to find where the contributor changes
   for (i in 1:nrow(data)) {
