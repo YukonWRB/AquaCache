@@ -20,3 +20,5 @@ This version holds significant changes, all implemented by patch 3. The short su
 -   Improved the patch template for clarity and to include a 'rollback' function that can be used to undo the changes made by the patch.
 -   Simplified connection to 'dev' database by adding parameter to AquaConnect
 -   Improved how connections are passed (or not) to functions that require a connection to better ensure that all connections are properly closed.
+-   Minor bug fix in calculate_stats affecting a minor subset of WSC locations.
+-   Modifications to downloadAquarius to properly map grades, approvals, qualifiers to the WRB's version.

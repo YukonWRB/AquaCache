@@ -25,7 +25,7 @@ AquaConnect(
 
 \item{password}{Password. By default searches the .Renviron file for parameter:value pair of form AquaCacheAdminPass:"password".}
 
-\item{silent}{TRUE suppresses messages except for errors.}
+\item{silent}{TRUE suppresses messages except for errors and login messages.}
 
 \item{dev}{TRUE appends "_dev" to the database name.}
 }

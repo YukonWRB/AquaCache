@@ -185,6 +185,7 @@ calculate_stats <- function(con = AquaConnect(silent = TRUE), timeseries_id, sta
                 names(backfill) <- c("date", "value")
                 backfill <- backfill[!is.na(backfill$value) , ]
                 backfill$imputed  <- FALSE
+                backfill$share_with <- unique(gap_measurements$share_with)[1]  # This will normally default to {1} unless changes were made to the DB default. It's WSC, so it's all public.
                 
                 #Remove any entries with values that are already in backfill and not NA, even if they've been imputed
                 backfill_imputed <- backfill_imputed[!backfill_imputed$date %in% backfill[!is.na(backfill$value), "date"], ] 

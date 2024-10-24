@@ -352,6 +352,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
             }, error = function(e) {
               DBI::dbRollback(con)
               attr(con, "active_transaction") <<- FALSE
+              warning("synchronize failed to make database changes for ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message:", e$message, ".")
             })
           } else { # we're already in a transaction
             commit_fx(con, category, imputed.remains, tsid, inRemote, inDB)
@@ -379,7 +380,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
     }, error = function(e) {
       warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message:", e$message, ".")
     }
-    )
+    ) # End of tryCatch
   }
 
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_sync';"))

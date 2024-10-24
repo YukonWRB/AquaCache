@@ -38,10 +38,11 @@ tryCatch({
 );")
   
   qualifiers <- data.frame(
-    qualifier_type_code = c("ICE", "DRY", "SUS", "EST", "DD", "BW", "UNS", "UNK"),
-    qualifier_type_description = c("Ice affected", "Sensor out of water or intermitendly out of water", "Suspect measurements", "Estimated", "Draw-down after pumping", "Backwater affecting measurements", "Unspecified", "Unknown"),
-    qualifier_type_description_fr = c("Affecté par la glace", "Capteur hors de l'eau (constament ou parfois)", "Mesures suspectes", "Estimé", "Abaissement après pompage", "Refoulement affectant les mesures", "Non spécifié", "Inconnu")
+    qualifier_type_code = c("ICE", "ICE-EST", "DRY", "OOW", "SUS", "EST", "DD", "BW", "INT", "HW-MISS", "LW-MISS", "PMMAX", "PMMIN", "PYMAX", "PYMIN", "REL", "UNS", "UNK"),
+    qualifier_type_description = c("Ice present", "Ice interpollation/estimation", "Dry well/stream/lake (not only sensor out of water)", "Sensor out of water", "Suspect measurements", "Estimated", "Draw-down after pumping", "Backwater affecting measurements", "Interpolated data", "High water missed (peak not recorded)", "Low water missed (trough not recorded)", "Peak montly maximum", "Peak monthly minimum", "Peak yearly maximum", "Peak yearly minimum", "Release of water, ex. beaver dam breaking", "Unspecified", "Unknown"),
+    qualifier_type_description_fr = c("Glace présente", "Interpolation/estimation due à la glace", "Asséché (non seulement capteur hors de l'eau)", "Capteur hors de l'eau", "Mesures suspectes", "Estimé", "Abaissement après pompage", "Refoulement affectant les mesures", "Données interpolées", "Hautes eaux manquées (creux non enregistré)", "Basses eaux manquées (pic non enregistré)", "Pic mensuel maximum", "Pic mensuel minimum", "Pic annuel maximum", "Pic annuel minimum", "Libération d'eau, ex. rupture d'un barrage de castor", "Non spécifié", "Inconnu")
   )
+  
   DBI::dbAppendTable(con, "qualifier_types", qualifiers)
   
   # Check if the table now exists with correct columns and entries
@@ -65,7 +66,7 @@ tryCatch({
                  "CREATE TABLE public.qualifiers (
                qualifier_id SERIAL PRIMARY KEY,
                timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
-               qualifier_type_id INTEGER NOT NULL REFERENCES qualifier_types(qualifier_type_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               qualifier_type_id INTEGER NOT NULL REFERENCES qualifier_types(qualifier_type_id) ON DELETE CASCADE ON UPDATE CASCADE,
                start_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                end_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -93,7 +94,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                             (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
                         )
                     ) THEN
-                        RAISE EXCEPTION 'Qualifiers cannot overlap in time for the same timeseries_id.';
+                        RAISE EXCEPTION 'Qualifiers cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
                     END IF;
                     RETURN NEW;
                 END;
@@ -103,7 +104,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con,
                  "CREATE CONSTRAINT TRIGGER check_qualifiers_overlap
                 AFTER INSERT OR UPDATE ON qualifiers
-                DEFERRABLE INITIALLY IMMEDIATE
+                DEFERRABLE INITIALLY DEFERRED
                 FOR EACH ROW
                 EXECUTE FUNCTION public.check_qualifiers_overlap();
                 ")
@@ -167,6 +168,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   exist_table_grades <- exist_table_grades[exist_table_grades$grade_type_code %in% c("A", "B", "C", "D", "N", "Z", "U"), ]
   exist_table_grades[exist_table_grades$grade_type_code == "Z" , "grade_type_code"] <- "UNK"
   exist_table_grades[exist_table_grades$grade_type_code == "U" , "grade_type_code"] <- "UNS"
+  exist_table <- rbind(exist_table_grades, data.frame(grade_type_code = c("E", "MISS"), grade_type_description = c("Estimated", "Missing data"), grade_type_description_fr = c("Estimé", "Données manquantes")))
   
   DBI::dbExecute(con,
                  "CREATE TABLE public.grade_types (
@@ -195,7 +197,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                  "CREATE TABLE public.approvals (
                approval_id SERIAL PRIMARY KEY,
                timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
-               approval_type_id INTEGER NOT NULL REFERENCES approval_types(approval_type_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               approval_type_id INTEGER NOT NULL REFERENCES approval_types(approval_type_id) ON DELETE CASCADE ON UPDATE CASCADE,
                start_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                end_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -231,7 +233,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                             (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
                         )
                     ) THEN
-                        RAISE EXCEPTION 'Approvals cannot overlap in time for the same timeseries_id.';
+                        RAISE EXCEPTION 'Approvals cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
                     END IF;
                     RETURN NEW;
                 END;
@@ -241,7 +243,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con,
                  "CREATE CONSTRAINT TRIGGER check_approvals_overlap
                 AFTER INSERT OR UPDATE ON approvals
-                DEFERRABLE INITIALLY IMMEDIATE
+                DEFERRABLE INITIALLY DEFERRED
                 FOR EACH ROW
                 EXECUTE FUNCTION public.check_approvals_overlap();
               ")
@@ -282,7 +284,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   }
   # change type of column 'approval' to integer and add foreign key constraint
   DBI::dbExecute(con, "ALTER TABLE rating_curves ALTER COLUMN approval TYPE INTEGER USING approval::INTEGER;")
-  DBI::dbExecute(con, "ALTER TABLE rating_curves ADD CONSTRAINT rating_curves_approval_fkey FOREIGN KEY (approval) REFERENCES approval_types(approval_type_id) ON DELETE SET NULL ON UPDATE CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE rating_curves ADD CONSTRAINT rating_curves_approval_fkey FOREIGN KEY (approval) REFERENCES approval_types(approval_type_id) ON DELETE CASCADE ON UPDATE CASCADE;")
   
   
   message("Working on grades tables")
@@ -298,7 +300,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   # add new foreign key to locations_metadata_xsections linking measurement_grade to table grade_types
   # Change column type to integer
   DBI::dbExecute(con, "ALTER TABLE locations_metadata_xsections ALTER COLUMN measurement_grade TYPE INTEGER USING measurement_grade::INTEGER;")
-  DBI::dbExecute(con, "ALTER TABLE locations_metadata_xsections ADD CONSTRAINT locations_metadata_xsections_grade_fkey FOREIGN KEY (measurement_grade) REFERENCES grade_types(grade_type_id) ON DELETE SET NULL ON UPDATE CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE locations_metadata_xsections ADD CONSTRAINT locations_metadata_xsections_grade_fkey FOREIGN KEY (measurement_grade) REFERENCES grade_types(grade_type_id) ON DELETE CASCADE ON UPDATE CASCADE;")
   
   
   # Drop the existing table 'grades'
@@ -309,7 +311,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                  "CREATE TABLE public.grades (
                grade_id SERIAL PRIMARY KEY,
                timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
-               grade_type_id INTEGER NOT NULL REFERENCES grade_types(grade_type_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               grade_type_id INTEGER NOT NULL REFERENCES grade_types(grade_type_id) ON DELETE CASCADE ON UPDATE CASCADE,
                start_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                end_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -345,7 +347,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                           (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
                       )
                   ) THEN
-                      RAISE EXCEPTION 'grades cannot overlap in time for the same timeseries_id.';
+                      RAISE EXCEPTION 'Grades cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
                   END IF;
                   RETURN NEW;
               END;
@@ -354,7 +356,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con,
                  "CREATE CONSTRAINT TRIGGER check_grades_overlap
                 AFTER INSERT OR UPDATE ON grades
-                DEFERRABLE INITIALLY IMMEDIATE
+                DEFERRABLE INITIALLY DEFERRED
                 FOR EACH ROW
                 EXECUTE FUNCTION public.check_grades_overlap();
               ")
@@ -413,7 +415,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                  "CREATE TABLE public.owners (
                owner_id SERIAL PRIMARY KEY,
                timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
-               owner_contributor_id INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               owner_contributor_id INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE CASCADE ON UPDATE CASCADE,
                start_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                end_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -449,7 +451,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                           (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
                       )
                   ) THEN
-                      RAISE EXCEPTION 'Owners cannot overlap in time for the same timeseries_id.';
+                      RAISE EXCEPTION 'Owners cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
                   END IF;
                   RETURN NEW;
               END;
@@ -458,7 +460,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con,
                  "CREATE CONSTRAINT TRIGGER check_owners_overlap
                 AFTER INSERT OR UPDATE ON owners
-                DEFERRABLE INITIALLY IMMEDIATE
+                DEFERRABLE INITIALLY DEFERRED
                 FOR EACH ROW
                 EXECUTE FUNCTION public.check_owners_overlap();
               ")
@@ -527,7 +529,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                  "CREATE TABLE public.contributors (
                contributor_id SERIAL PRIMARY KEY,
                timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
-               owner_contributor_id INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE,
+               owner_contributor_id INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE CASCADE ON UPDATE CASCADE,
                start_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                end_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -563,7 +565,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                           (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
                       )
                   ) THEN
-                      RAISE EXCEPTION 'Contributors cannot overlap in time for the same timeseries_id.';
+                      RAISE EXCEPTION 'Contributors cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
                   END IF;
                   RETURN NEW;
               END;
@@ -572,7 +574,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
   DBI::dbExecute(con,
                  "CREATE CONSTRAINT TRIGGER check_contributors_overlap
                 AFTER INSERT OR UPDATE ON contributors
-                DEFERRABLE INITIALLY IMMEDIATE
+                DEFERRABLE INITIALLY DEFERRED
                 FOR EACH ROW
                 EXECUTE FUNCTION public.check_contributors_overlap();
               ")

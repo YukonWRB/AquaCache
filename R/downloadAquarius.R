@@ -4,10 +4,10 @@
 #' `r lifecycle::badge("stable")`
 #'
 #' Pared-down and modified version of YGWater::aq_download.
-#'
-#' ##Passwords:
+#' ## Passwords and server credentials:
 #' To store login credentials in your .renviron file call [usethis::edit_r_environ()] and enter your username and password as value pairs, as AQUSER="your username" and AQPASS="your password". The server should be entered at server="your_server_url". You can also store credentials in the timeseries table in the column source_fx_args, but beware that these credentials are then sitting in the database un-encrypted.
-
+#' ## Grades, approvals, qualifiers:
+#' This function will attempt to map Aquarius grades, approvals, and qualifiers to the database defaults. The function was designed around the Yukon Water Resources Branch Aquarius schemes, but 'forks' can be implemented for each based on the server URL. If you need to implement a fork, see the commented-out example in the function at line 116.
 #'
 #' @param location The location ID, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `29EA001` or `YOWN-0804`.
 #' @param parameter_id The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `Wlevel_bgs.Calculated`.
@@ -112,13 +112,20 @@ downloadAquarius <- function(location,
       approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime) - 6), endoffset)
       approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
       
+      # Here we can fork depending on the server being accessed. For example:
+      # if (server == "https://yukon.aquaticinformatics.net/AQUARIUS") {
+      #   
+      # }
+      
+      
       colnames(approvals) <- c("level", "start_time", "end_time")
-      approval_mapping <- c("800" = approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"],
+      approval_mapping <- c("800" = approvals_DB[approvals_DB$approval_type_code == "N", "approval_type_id"],
                             "900" = approvals_DB[approvals_DB$approval_type_code == "C", "approval_type_id"],
                             "950" = approvals_DB[approvals_DB$approval_type_code == "C", "approval_type_id"],
-                            "975" = approvals_DB[approvals_DB$approval_type_code == "R", "approval_type_id"],
+                            "975" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"],
                             "1200" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"],
                             "1300" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"])
+      
       approvals$level <- ifelse(as.character(approvals$level) %in% names(approval_mapping),
                                 approval_mapping[as.character(approvals$level)],
                                 approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"])
@@ -140,11 +147,20 @@ downloadAquarius <- function(location,
       
       colnames(grades) <- c("level", "start_time", "end_time")
       grade_mapping <- c("0" = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"],
+                         "-5" = grades_DB[grades_DB$grade_type_code == "MISS", "grade_type_id"],
+                         "-3" = grades_DB[grades_DB$grade_type_code == "E", "grade_type_id"],
+                         "-2" = grades_DB[grades_DB$grade_type_code == "N", "grade_type_id"],
                          "-1" = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"],
                          "5" = grades_DB[grades_DB$grade_type_code == "A", "grade_type_id"],
                          "4" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"],
                          "3" = grades_DB[grades_DB$grade_type_code == "C", "grade_type_id"],
-                         "2" = grades_DB[grades_DB$grade_type_code == "D", "grade_type_id"])
+                         "2" = grades_DB[grades_DB$grade_type_code == "D", "grade_type_id"],
+                         "12" = grades_DB[grades_DB$grade_type_code == "E", "grade_type_id"],
+                         "14" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"],
+                         "15" = grades_DB[grades_DB$grade_type_code == "A", "grade_type_id"],
+                         "21" = grades_DB[grades_DB$grade_type_code == "C", "grade_type_id"],
+                         "30" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"],
+                         "31" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"])
       grades$level <- ifelse(as.character(grades$level) %in% names(grade_mapping),
                              grade_mapping[as.character(grades$level)],
                              grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"])
@@ -165,14 +181,22 @@ downloadAquarius <- function(location,
       qualifiers$EndTime <- as.POSIXct(qualifiers$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
       
       colnames(qualifiers) <- c("level", "start_time", "end_time")
-      qualifier_mapping <- c("-1" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"],
-                             "10" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "ICE", "qualifier_type_id"],
-                             "20" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "EST", "qualifier_type_id"],
-                             "30" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"],
-                             "40" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "DRY", "qualifier_type_id"],
-                             "50" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"],
-                             "-2" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"],
-                             "0" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
+      qualifier_mapping <- c("BKW" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "BW", "qualifier_type_id"],
+                             "DD" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "DD", "qualifier_type_id"],
+                             "DRY" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "DRY", "qualifier_type_id"],
+                             "E" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "EST", "qualifier_type_id"],
+                             "ES" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "SUS", "qualifier_type_id"],
+                             "FI" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "INT", "qualifier_type_id"],
+                             "HW-MISS" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "HW-MISS", "qualifier_type_id"],
+                             "ICE" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "ICE", "qualifier_type_id"],
+                             "ICE-EST" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "ICE-EST", "qualifier_type_id"],
+                             "LW-MISS" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "LW-MISS", "qualifier_type_id"],
+                             "OOW" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "OOW", "qualifier_type_id"],
+                             "PMMAX" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "PMMAX", "qualifier_type_id"],
+                             "PMMIN" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "PMMIN", "qualifier_type_id"],
+                             "PYMAX" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "PYMAX", "qualifier_type_id"],
+                             "PYMIN" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "PYMIN", "qualifier_type_id"],
+                             "REL" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "REL", "qualifier_type_id"])
       qualifiers$level <- ifelse(as.character(qualifiers$level) %in% names(qualifier_mapping),
                                  qualifier_mapping[as.character(qualifiers$level)],
                                  qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])

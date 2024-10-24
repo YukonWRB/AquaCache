@@ -16,7 +16,7 @@
 #' @param port Connection port. By default searches the .Renviron file for parameter:value pair of form AquaCachePort:"1234".
 #' @param username Username. By default searches the .Renviron file for parameter:value pair of form AquaCacheAdminUser:"username".
 #' @param password Password. By default searches the .Renviron file for parameter:value pair of form AquaCacheAdminPass:"password".
-#' @param silent TRUE suppresses messages except for errors.
+#' @param silent TRUE suppresses messages except for errors and login messages.
 #' @param dev TRUE appends "_dev" to the database name.
 #'
 #' @return A connection to the database.
@@ -116,6 +116,14 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
     
     # Add a new attribute to the connection object to track if a transaction is active
     attr(con, "active_transaction") <- FALSE
+    
+    # Explicitly set the timezone to UTC as all functions in this package work with UTC timezones
+    DBI::dbExecute(con, "SET timezone = 'UTC'")
+    
+    if (!silent) {
+      message("Connected to the AquaCache database with the timezone set to UTC.")
+      message("Remember to disconnect using DBI::dbDisconnect when finished!")
+    }
     
     return(con)
 

@@ -32,6 +32,12 @@ adjust_grade <- function(con, timeseries_id, data) {
   
   data$grade[is.na(data$grade)] <- unknown_grade
   
+  
+  # Get the data where at least one of the following is true:
+  # has an end datetime within the range of the data
+  # has a start datetime within the range of the data
+  # has a start datetime before the range of the data and an end datetime after the range of the data
+  # This leaves out entries that are entirely before or after the range of the data.
   exist <- DBI::dbGetQuery(con, paste0(
     "SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt 
     FROM grades 
@@ -44,6 +50,10 @@ adjust_grade <- function(con, timeseries_id, data) {
          OR (
               start_dt >= '", min(data$datetime), "'
               AND start_dt <= '", max(data$datetime), "'
+             )
+         OR (
+              start_dt <= '", min(data$datetime), "'
+              AND end_dt >= '", max(data$datetime), "'
              )
           )
     ORDER BY start_dt ASC;
@@ -129,12 +139,13 @@ adjust_grade <- function(con, timeseries_id, data) {
   
   # Now commit the changes to the database
   commit_fx <- function(con, exist) {
+    remove <- exist[exist$timeseries_id == -1, "grade_id"]
+    exist <- exist[exist$timeseries_id != -1, ]
+    if (length(remove) > 0) {
+      DBI::dbExecute(con, paste0("DELETE FROM grades WHERE grade_id IN (", paste(remove, collapse = ", "), ");"))
+    }
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$grade_id[i])) {  # Means that we need to update rows
-        if (exist$timeseries_id[i] == -1) { # These need to be removed from the DB based on their grade_id
-          DBI::dbExecute(con, paste0("DELETE FROM grades WHERE grade_id = ", exist$grade_id[i], ";"))
-          next
-        }
         DBI::dbExecute(con, paste0("UPDATE grades SET grade_type_id = ", exist$grade_type_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE grade_id = ", exist$grade_id[i], ";"))
       } else { # Means that we need to insert new rows
         DBI::dbAppendTable(con, "grades", exist[i, -which(names(exist) == "grade_id")])
@@ -191,7 +202,11 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   
   data$qualifier[is.na(data$qualifier)] <- unknown_qualifier
   
-  # Pull the qualifiers table entries for this timeseries_id where the datetime is within the range of the data
+  # Get the data where at least one of the following is true:
+  # has an end datetime within the range of the data
+  # has a start datetime within the range of the data
+  # has a start datetime before the range of the data and an end datetime after the range of the data
+  # This leaves out entries that are entirely before or after the range of the data.
   exist <- DBI::dbGetQuery(con, paste0(
     "SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt 
     FROM qualifiers 
@@ -205,6 +220,10 @@ adjust_qualifier <- function(con, timeseries_id, data) {
               start_dt >= '", min(data$datetime), "'
               AND start_dt <= '", max(data$datetime), "'
              )
+         OR (
+             start_dt <= '", min(data$datetime), "'
+             AND end_dt >= '", max(data$datetime), "'
+            )
           )
           ORDER BY start_dt ASC;
     "))
@@ -288,12 +307,13 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   
   # Now commit the changes to the database
   commit_fx <- function(con, exist) {
+    remove <- exist[exist$timeseries_id == -1, "qualifier_id"]
+    exist <- exist[exist$timeseries_id != -1, ]
+    if (length(remove) > 0) {
+      DBI::dbExecute(con, paste0("DELETE FROM qualifiers WHERE qualifier_id IN (", paste(remove, collapse = ", "), ");"))
+    }
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$qualifier_id[i])) {  # Means that we need to update rows
-        if (exist$timeseries_id[i] == -1) { # These need to be removed from the DB based on their qualifier_id
-          DBI::dbExecute(con, paste0("DELETE FROM qualifiers WHERE qualifier_id = ", exist$qualifier_id[i], ";"))
-          next
-        }
         DBI::dbExecute(con, paste0("UPDATE qualifiers SET qualifier_type_id = ", exist$qualifier_type_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE qualifier_id = ", exist$qualifier_id[i], ";"))
       } else { # Means that we need to insert new rows
         DBI::dbAppendTable(con, "qualifiers", exist[i, -which(names(exist) == "qualifier_id")])
@@ -352,7 +372,11 @@ adjust_approval <- function(con, timeseries_id, data) {
   
   data$approval[is.na(data$approval)]  <- unknown_approval
   
-  # Pull the approvals table entries for this timeseries_id where the datetime is within the range of the data
+  # Get the data where at least one of the following is true:
+  # has an end datetime within the range of the data
+  # has a start datetime within the range of the data
+  # has a start datetime before the range of the data and an end datetime after the range of the data
+  # This leaves out entries that are entirely before or after the range of the data.
   exist <- DBI::dbGetQuery(con, paste0(
     "SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt 
     FROM approvals 
@@ -366,6 +390,10 @@ adjust_approval <- function(con, timeseries_id, data) {
               start_dt >= '", min(data$datetime), "'
               AND start_dt <= '", max(data$datetime), "'
              )
+         OR (
+              start_dt <= '", min(data$datetime), "'
+              AND end_dt >= '", max(data$datetime), "'
+            )
           )
           ORDER BY start_dt ASC;
     "))
@@ -449,12 +477,13 @@ adjust_approval <- function(con, timeseries_id, data) {
   
   # Now commit the changes to the database
   commit_fx <- function(con, exist) {
+    remove <- exist[exist$timeseries_id == -1, "approval_id"]
+    exist <- exist[exist$timeseries_id != -1, ]
+    if (length(remove) > 0) {
+      DBI::dbExecute(con, paste0("DELETE FROM approvals WHERE approval_id IN (", paste(remove, collapse = ", "), ");"))
+    }
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$approval_id[i])) {  # Means that we need to update rows
-        if (exist$timeseries_id[i] == -1) { # These need to be removed from the DB based on their approval_id
-          DBI::dbExecute(con, paste0("DELETE FROM approvals WHERE approval_id = ", exist$approval_id[i], ";"))
-          next
-        }
         DBI::dbExecute(con, paste0("UPDATE approvals SET approval_type_id = ", exist$approval_type_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE approval_id = ", exist$approval_id[i], ";"))
       } else { # Means that we need to insert new rows
         DBI::dbAppendTable(con, "approvals", exist[i, -which(names(exist) == "approval_id")])
@@ -509,7 +538,11 @@ adjust_owner <- function(con, timeseries_id, data) {
     stop("Column'datetime' must be of class POSIXct.")
   }
   
-  # Pull the owners table entries for this timeseries_id where the datetime is within the range of the data
+  # Get the data where at least one of the following is true:
+  # has an end datetime within the range of the data
+  # has a start datetime within the range of the data
+  # has a start datetime before the range of the data and an end datetime after the range of the data
+  # This leaves out entries that are entirely before or after the range of the data.
   exist <- DBI::dbGetQuery(con, paste0(
     "SELECT owner_id, timeseries_id, owner_contributor_id, start_dt, end_dt 
     FROM owners 
@@ -522,6 +555,10 @@ adjust_owner <- function(con, timeseries_id, data) {
          OR (
               start_dt >= '", min(data$datetime), "'
               AND start_dt <= '", max(data$datetime), "'
+             )
+         OR (
+              start_dt <= '", min(data$datetime), "'
+              AND end_dt >= '", max(data$datetime), "'
              )
           )
           ORDER BY start_dt ASC;
@@ -606,12 +643,13 @@ adjust_owner <- function(con, timeseries_id, data) {
   
   # Now commit the changes to the database
   commit_fx <- function(con, exist) {
+    remove <- exist[exist$timeseries_id == -1, "owner_id"]
+    exist <- exist[exist$timeseries_id != -1, ]
+    if (length(remove) > 0) {
+      DBI::dbExecute(con, paste0("DELETE FROM owners WHERE owner_id IN (", paste(remove, collapse = ", "), ");"))
+    }
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$owner_id[i])) {  # Means that we need to update rows
-        if (exist$timeseries_id[i] == -1) { # These need to be removed from the DB based on their owner_id
-          DBI::dbExecute(con, paste0("DELETE FROM owners WHERE owner_id = ", exist$owner_id[i], ";"))
-          next
-        }
         DBI::dbExecute(con, paste0("UPDATE owners SET owner_contributor_id = ", exist$owner_contributor_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE owner_id = ", exist$owner_id[i], ";"))
       } else { # Means that we need to insert new rows
         DBI::dbAppendTable(con, "owners", exist[i, -which(names(exist) == "owner_id")])
@@ -665,7 +703,11 @@ adjust_contributor <- function(con, timeseries_id, data) {
     stop("Column'datetime' must be of class POSIXct.")
   }
   
-  # Pull the contributors table entries for this timeseries_id where the datetime is within the range of the data
+  # Get the data where at least one of the following is true:
+  # has an end datetime within the range of the data
+  # has a start datetime within the range of the data
+  # has a start datetime before the range of the data and an end datetime after the range of the data
+  # This leaves out entries that are entirely before or after the range of the data.
   exist <- DBI::dbGetQuery(con, paste0(
     "SELECT contributor_id, timeseries_id, owner_contributor_id, start_dt, end_dt 
     FROM contributors 
@@ -678,6 +720,10 @@ adjust_contributor <- function(con, timeseries_id, data) {
          OR (
               start_dt >= '", min(data$datetime), "'
               AND start_dt <= '", max(data$datetime), "'
+             )
+         OR (
+              start_dt <= '", min(data$datetime), "'
+              AND end_dt >= '", max(data$datetime), "'
              )
           )
           ORDER BY start_dt ASC;
@@ -762,12 +808,13 @@ adjust_contributor <- function(con, timeseries_id, data) {
   
   # Now commit the changes to the database
   commit_fx <- function(con, exist) {
+    remove <- exist[exist$timeseries_id == -1, "contributor_id"]
+    exist <- exist[exist$timeseries_id != -1, ]
+    if (length(remove) > 0) {
+      DBI::dbExecute(con, paste0("DELETE FROM contributors WHERE contributor_id IN (", paste(remove, collapse = ", "), ");"))
+    }
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$contributor_id[i])) {  # Means that we need to update rows
-        if (exist$timeseries_id[i] == -1) { # These need to be removed from the DB based on their contributor_id
-          DBI::dbExecute(con, paste0("DELETE FROM contributors WHERE contributor_id = ", exist$contributor_id[i], ";"))
-          next
-        }
         DBI::dbExecute(con, paste0("UPDATE contributors SET owner_contributor_id = ", exist$owner_contributor_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE contributor_id = ", exist$contributor_id[i], ";"))
       } else { # Means that we need to insert new rows
         DBI::dbAppendTable(con, "contributors", exist[i, -which(names(exist) == "contributor_id")])
