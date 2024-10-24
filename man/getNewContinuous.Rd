@@ -4,14 +4,10 @@
 \alias{getNewContinuous}
 \title{Get new continuous-category data}
 \usage{
-getNewContinuous(
-  con = AquaConnect(silent = TRUE),
-  timeseries_id = "all",
-  active = "default"
-)
+getNewContinuous(con = NULL, timeseries_id = "all", active = "default")
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.}
 

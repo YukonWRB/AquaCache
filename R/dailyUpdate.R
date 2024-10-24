@@ -12,14 +12,14 @@
 #'
 #' Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #'
 #' @return The database is updated in-place, and diagnostic messages are printed to the console.
 #' @export
 
-dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", active = 'default')
+dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default')
 {
   
   if (!active %in% c('default', 'all')) {
@@ -29,7 +29,11 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
   function_start <- Sys.time()
   message(" ")
   message("dailyUpdate start at ", Sys.time())
-  on.exit(DBI::dbDisconnect(con))
+
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
 
   if (timeseries_id[1] == "all") {
     continuous_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL")
@@ -48,8 +52,8 @@ dailyUpdate <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all",
   }
   
   if (active == 'default') {
-    continuous_ts <- continuous_ts[continuous_ts$active == TRUE, ]
-    discrete_ts <- discrete_ts[discrete_ts$active == TRUE, ]
+    continuous_ts <- continuous_ts[continuous_ts$active, ]
+    discrete_ts <- discrete_ts[discrete_ts$active, ]
   }
 
   #Get new data ################

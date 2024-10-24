@@ -9,7 +9,8 @@ downloadNWIS(
   parameter_id,
   start_datetime,
   end_datetime = Sys.time(),
-  modifiedSince = NULL
+  modifiedSince = NULL,
+  con = NULL
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ downloadNWIS(
 \item{end_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
 
 \item{modifiedSince}{Optional. A number of hours to narrow the request down to only data points modified within the last x hours. Default NULL fetches all data with the \code{start_datetime} and \code{end_datetime} range.}
+
+\item{con}{A connection to the AquaCache database, necessary to allow for the mapping of NWIS approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
 }
 \value{
 A data.frame object of hydrometric data, with datetimes in UTC-0.

@@ -10,13 +10,19 @@
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param modifiedSince Optional. A number of hours to narrow the request down to only data points modified within the last x hours. Default NULL fetches all data with the `start_datetime` and `end_datetime` range.
+#' @param con A connection to the AquaCache database, necessary to allow for the mapping of NWIS approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.
 #'
 #' @return A data.frame object of hydrometric data, with datetimes in UTC-0.
 #' @export
 
-downloadNWIS <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), modifiedSince = NULL)
+downloadNWIS <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), modifiedSince = NULL, con = NULL)
 {
 
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
   if (!inherits(parameter_id, "numeric")) {
     as.numeric(parameter_id)
   } else {
@@ -90,25 +96,27 @@ downloadNWIS <- function(location, parameter_id, start_datetime, end_datetime = 
       }
 
       #Extract first capital letter, which is the approval
+      approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
       data$approval <- gsub("^([APR]).*", "\\1", data$combined)
-      approval_mapping <- c("A" = "A",
-                            "P" = "N",
-                            "R" = "A")
+      approval_mapping <- c("A" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"],
+                            "P" = approvals_DB[approvals_DB$approval_type_code == "N", "approval_type_id"],
+                            "R" = approvals_DB[approvals_DB$approval_type_code == "A", "approval_type_id"])
       data$approval <- ifelse(data$approval %in% names(approval_mapping),
                               approval_mapping[data$approval],
-                              "Z")
+                              approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"])
       
-      #After that it's the grade, maybe.Anything that's not clearly a grade gets Z, unknown
-      data$grade <- trimws(gsub("^[APR](.*)", "\\1", data$combined))
-      data$grade[data$grade == ""] <- "U"
-      grade_mapping <- c("e" = "E",
-                         "ice" = "I",
-                         "Ice i" = "I",
-                         "<" = "E",
-                         ">" = "E")
-      data$grade <- ifelse(data$grade %in% names(grade_mapping),
-                           grade_mapping[data$grade],
-                           "Z")
+      #After that it's the qualifier, maybe. Anything that's not clearly a qualifier gets Z, unknown
+      qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+      data$qualifier <- trimws(gsub("^[APR](.*)", "\\1", data$combined))
+      data$qualifier[data$qualifier == ""] <- "U"
+      qualifier_mapping <- c("e" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "EST", "qualifier_type_id"],
+                         "ice" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "ICE", "qualifier_type_id"],
+                         "Ice i" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "ICE", "qualifier_type_id"],
+                         "<" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "EST", "qualifier_type_id"],
+                         ">" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "EST", "qualifier_type_id"])
+      data$qualifier <- ifelse(data$qualifier %in% names(qualifier_mapping),
+                           qualifier_mapping[data$qualifier],
+                           qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
 
       data <- data[, -which(names(data) == "combined")]
       return(data)

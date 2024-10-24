@@ -7,7 +7,7 @@ if (!check$can_create) {
   stop("You do not have the necessary privileges to create a new schema in this database.")
 }
 
-# create new schema call 'information'
+# create new schema called 'information'
 DBI::dbExecute(con, "CREATE SCHEMA IF NOT EXISTS information")
 
 # Alter the default schema search path

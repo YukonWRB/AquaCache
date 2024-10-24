@@ -15,7 +15,7 @@ AquaCacheInit(con = AquaConnect(), overwrite = FALSE)
 New tables in the target postgres database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
 
 NOTE: there is no guarantee that the code in this function will work as expected. It is intended to be a starting point for creating a database schema and populating it with initial values. The user should review the code and make any necessary changes to suit their needs. It may be necessary to run the code line by line rather than as a function if failure occurs, as it is possible that SQL errors exist in this script.
 

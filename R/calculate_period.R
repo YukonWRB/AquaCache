@@ -4,12 +4,12 @@
 #'
 #' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`. This CAN be NA for the edge use case of creating a new timeseries.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #'
 #' @return A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
 #' @export
 
-calculate_period <- function(data, timeseries_id, con = AquaConnect())
+calculate_period <- function(data, timeseries_id, con = NULL)
 {
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
   names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input
