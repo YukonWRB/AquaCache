@@ -36,7 +36,7 @@ insertACVector(
 
 \item{overwrite}{If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?}
 
-\item{con}{A connection to the database. Default NULL will use the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database. Default NULL will use the utility function \code{\link[=AquaConnect]{AquaConnect()}} and disconnect afterwards.}
 }
 \value{
 A boolean vector, one element per feature.Messages will also be printed to the console.

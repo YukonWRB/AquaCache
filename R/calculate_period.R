@@ -11,6 +11,17 @@
 
 calculate_period <- function(data, timeseries_id, con = NULL)
 {
+  if (!inherits(data, "data.frame")) { # Then it might be a vector
+    if (!inherits(data, "POSIXct")) {
+      stop("The 'data' parameter must be a data.frame with a column named 'datetime' in POSIXct format OR a POSIXct vector.")
+    } else {
+      data <- data.frame(datetime = data)
+    }
+  }
+  
+  if ("period" %in% names(data)) {
+    data <- data[, !names(data) == "period"]
+  }
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
   names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input
   names <- names[!names == "period"] # period is being calculated anyways so don't include it
@@ -20,7 +31,7 @@ calculate_period <- function(data, timeseries_id, con = NULL)
       data <- rbind(data, no_period)
     }
   }
-  data <- data[order(data$datetime) ,] #Sort ascending
+  data <- data[order(data$datetime) , , drop = FALSE] #Sort ascending
   diffs <- as.numeric(diff(data$datetime), units = "hours")
   smoothed_diffs <- zoo::rollmedian(diffs, k = 3, fill = NA, align = "center")
   # Initialize variables to track changes
@@ -43,7 +54,7 @@ calculate_period <- function(data, timeseries_id, con = NULL)
       }
     }
   }
-
+  
   # Calculate the duration in days, hours, minutes, and seconds and assign to the right location in data
   if (nrow(changes) > 0) {
     for (j in 1:nrow(changes)) {
@@ -55,14 +66,14 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     }
     #carry non-na's forward and backwards, if applicable
     data$period <- zoo::na.locf(zoo::na.locf(data$period, na.rm = FALSE), fromLast = TRUE)
-
+    
   } else { #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
     if (is.na(timeseries_id)) {
       stop("There were too few measurements to calculate a period and no timeseries_id was provided to fetch additional data.")
     }
     no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
     data <- rbind(data, no_period)
-    data <- data[order(data$datetime), ]
+    data <- data[order(data$datetime), , drop = FALSE]
     diffs <- as.numeric(diff(data$datetime), units = "hours")
     smoothed_diffs <- zoo::rollmedian(diffs, k = 3, fill = NA, align = "center")
     consecutive_count <- 0

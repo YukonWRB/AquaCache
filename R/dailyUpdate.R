@@ -35,6 +35,8 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default')
     on.exit(DBI::dbDisconnect(con))
   }
 
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
   if (timeseries_id[1] == "all") {
     continuous_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL")
     discrete_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL")

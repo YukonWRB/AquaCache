@@ -10,14 +10,14 @@
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snowDB. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
-#' @param ACCon A connection to the AquaCache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
+#' @param con A connection to the AquaCache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
 #' @param snowCon A connection to the snow database.
 #'
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
 
 
-downloadSnowCourse <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), old_loc = NULL, ACCon = NULL, snowCon = snowConnect())
+downloadSnowCourse <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), old_loc = NULL, con = NULL, snowCon = snowConnect())
   {
 
   # Checking start_datetime parameter
@@ -87,13 +87,13 @@ downloadSnowCourse <- function(location, parameter_id, start_datetime, end_datet
     
     try({
       # Update the timeseries table of AquaCache DB with the offset values
-      if (is.null(ACCon)) {
-        ACCon <- AquaConnect()
-        on.exit(DBI::dbDisconnect(ACCon), add = TRUE)
+      if (is.null(con)) {
+        con <- AquaConnect(silent = TRUE)
+        on.exit(DBI::dbDisconnect(con), add = TRUE)
       }
-      hydro_param <- DBI::dbGetQuery(ACCon, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", if (parameter_id == "swe") "snow water equivalent" else if (parameter_id == "depth") "snow depth", "';"))[1,1]
-      media_id <- DBI::dbGetQuery(ACCon, "SELECT media_id FROM media_type WHERE media_type = 'atmospheric'")[1,1]
-      DBI::dbExecute(ACCon, paste0("UPDATE timeseries SET note = 'Compound timeseries incorporating measurements from ", old_loc, ". Measurements at the old location adjusted using a multiplier of ", round(offset, 4), ", calculated from ", length(common_datetimes), " data points. New location measurements take precedence over old for overlap period.' WHERE location = '", location, "' AND category = 'discrete' AND media_id = ", media_id, " AND parameter_id = ", hydro_param, ";"))
+      hydro_param <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE param_name = '", if (parameter_id == "swe") "snow water equivalent" else if (parameter_id == "depth") "snow depth", "';"))[1,1]
+      media_id <- DBI::dbGetQuery(con, "SELECT media_id FROM media_types WHERE media_type = 'atmospheric'")[1,1]
+      DBI::dbExecute(con, paste0("UPDATE timeseries SET note = 'Compound timeseries incorporating measurements from ", old_loc, ". Measurements at the old location adjusted using a multiplier of ", round(offset, 4), ", calculated from ", length(common_datetimes), " data points. New location measurements take precedence over old for overlap period.' WHERE location = '", location, "' AND category = 'discrete' AND media_id = ", media_id, " AND parameter_id = ", hydro_param, ";"))
     })
   } else {
     #Get measurements for that location beginning after the start_datetime

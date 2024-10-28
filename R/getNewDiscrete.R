@@ -56,6 +56,8 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
     on.exit(DBI::dbDisconnect(con))
   }
   
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
@@ -74,8 +76,13 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
   success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
 
   # Run for loop over timeseries rows
+  message("Fetching new discrete data with getNewDiscrete...")
+  
   EQcon <- NULL #This prevents multiple connections to EQcon...
   snowCon <- NULL
+  if (interactive()) {
+    pb <- utils::txtProgressBar(min = 0, max = nrow(all_timeseries), style = 3)
+  }
   for (i in 1:nrow(all_timeseries)) {
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter_id[i]
@@ -196,11 +203,11 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
         
         # Check if the source function returned the owner and share_with columns. If not, use the ones from the timeseries table if they are not NA. If yes, use the ones from the source function, replacing NAs in these columns with the timeseries table values if they are not NA.
         if ("owner" %in% names(ts)) {
-          if (!is.na(owner)) {
+          if (!is.null(owner)) {
             ts$owner[is.na(ts$owner)] <- owner
           }
         } else {
-          if (!is.na(owner)) {
+          if (!is.null(owner)) {
             ts$owner <- owner
           }
         }
@@ -272,7 +279,16 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
     }, error = function(e) {
       warning("getNewDiscrete: Failed to get new data or to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Error message: ", e$message)
     }) #End of tryCatch
-  } #End of iteration over each location + param
+    
+    if (interactive()) {
+      utils::setTxtProgressBar(pb, i)
+    }
+    
+  } # End of for loop
+  
+  if (interactive()) {
+    close(pb)
+  }
 
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_discrete'"))

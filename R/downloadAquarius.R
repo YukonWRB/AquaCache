@@ -102,7 +102,7 @@ downloadAquarius <- function(location,
     if (is.null(nrow(RawDL$Approvals)) || nrow(RawDL$Approvals) == 0) {  # Then it's probably an empty list or data.frame because there are no approvals
       approvals <- data.frame(level = approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
-      approvals <- RawDL$Approvals[, -which(names(RawDL$Approvals) %in% c("DateAppliedUtc", "User", "Comment", "LevelDescription"))]
+      approvals <- RawDL$Approvals[, c("ApprovalLevel", "StartTime", "EndTime")]
       stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1]) - 5, nchar(approvals$StartTime[1]))
       stoffset <- gsub(":", "", stoffset)
       approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime) - 6), stoffset)
@@ -135,7 +135,7 @@ downloadAquarius <- function(location,
     if (is.null(nrow(RawDL$Grades)) || nrow(RawDL$Grades) == 0) {  # Then it's probably an empty list or data.frame because there are no grades
       grades <- data.frame(level = grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
-      grades <- RawDL$Grades
+      grades <- RawDL$Grades[, c("GradeCode", "StartTime", "EndTime")]
       stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1]) - 5, nchar(grades$StartTime[1]))
       stoffset <- gsub(":", "", stoffset)
       grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime) - 6), stoffset)
@@ -170,7 +170,7 @@ downloadAquarius <- function(location,
     if (is.null(nrow(RawDL$Qualifiers)) || nrow(RawDL$Qualifiers) == 0) {  # Then it's probably an empty list or data.frame because there are no qualifiers
       qualifiers <- data.frame(level = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
-      qualifiers <- RawDL$Qualifiers
+      qualifiers <- RawDL$Qualifiers[, c("Identifier", "StartTime", "EndTime")]
       stoffset <- substr(qualifiers$StartTime[1], nchar(qualifiers$StartTime[1]) - 5, nchar(qualifiers$StartTime[1]))
       stoffset <- gsub(":", "", stoffset)
       qualifiers$StartTime <- paste0(substr(qualifiers$StartTime, 1, nchar(qualifiers$StartTime) - 6), stoffset)
@@ -202,8 +202,6 @@ downloadAquarius <- function(location,
                                  qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
     }
     
-    
-
     #Add in grades, approval, and qualifier columns
     ts <- ts[!duplicated(ts) , ] #In unknown circumstances, Aquarius spits out duplicate points.
     ts$grade <- NA

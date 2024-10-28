@@ -9,16 +9,23 @@
 #' This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
 #'
 #' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database. Leaving NULL will create a connection and close it automatically.
 #' @param active Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the images_index table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 #' @export
 #'
 
-getNewImages <- function(image_meta_ids = "all", con = AquaConnect(silent = TRUE), active = 'default') {
+getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default') {
 
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
+
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
   
   # Create table of meta_ids
   if (image_meta_ids[1] == "all") {
@@ -34,10 +41,14 @@ getNewImages <- function(image_meta_ids = "all", con = AquaConnect(silent = TRUE
     meta_ids <- meta_ids[meta_ids$active, ]
   }
 
+  message("Fetching new images with getNewImages...")
+  
   count <- 0 #counter for number of successful new pulls
   image_count <- 0
   success <- character(0)
-
+  if (interactive()) {
+    pb <- utils::txtProgressBar(min = 0, max = nrow(meta_ids), style = 3)
+  }
   for (i in 1:nrow(meta_ids)) {
     id <- meta_ids[i, "img_meta_id"]
     location <- meta_ids[i, "location"]
@@ -91,8 +102,18 @@ getNewImages <- function(image_meta_ids = "all", con = AquaConnect(silent = TRUE
       success <- c(success, id)
     }, error = function(e) {
       warning("getNewImages: Failed to get new images or to append new images for img_meta_id ", id, ".")
-    })
+    })    
+    
+    if (interactive()) {
+      utils::setTxtProgressBar(pb, i)
+    }
+    
+  } # End of for loop
+  
+  if (interactive()) {
+    close(pb)
   }
+  
   message(count, " out of ", nrow(meta_ids), " img_meta_ids were updated.")
   message(image_count, " images were added in total.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_images'"))

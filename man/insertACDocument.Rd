@@ -14,7 +14,7 @@ insertACDocument(
   url = NULL,
   share_with = 1,
   geoms = NULL,
-  con = AquaConnect()
+  con = NULL
 )
 }
 \arguments{
@@ -36,7 +36,7 @@ insertACDocument(
 
 \item{geoms}{The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database. Leave NULL to create a new connection using AquaConnect() and have it closed automatically.}
 }
 \value{
 TRUE if a document was properly added to the database.

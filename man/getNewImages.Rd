@@ -4,16 +4,12 @@
 \alias{getNewImages}
 \title{Get new images}
 \usage{
-getNewImages(
-  image_meta_ids = "all",
-  con = AquaConnect(silent = TRUE),
-  active = "default"
-)
+getNewImages(image_meta_ids = "all", con = NULL, active = "default")
 }
 \arguments{
 \item{image_meta_ids}{A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database. Leaving NULL will create a connection and close it automatically.}
 
 \item{active}{Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the images_index table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.}
 }

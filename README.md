@@ -69,17 +69,18 @@ In general we ask that contributors follow this process:
 
 1.  Check with other contributors/developers to see if your suggested modification is
 
-    a) necessary;
+    a)  necessary;
 
-    b) already being worked on;
+    b)  already being worked on;
 
-    c) the best way to go
+    c)  the best way to go
 
 2.  Identify collaborators, if any.
 
 3.  Make changes in a new branch (you can't push to *main*!)
 
-4.  Thoroughly test your changes. We recommend doing this on a development version of your database that identically mirrors the production version's schema.
+4.  Thoroughly test your changes.
+    We recommend doing this on a development version of your database that identically mirrors the production version's schema.
 
 5.  Once everything is good, increment the version number (major/minor/patch is up to your judgement).
 
@@ -93,7 +94,7 @@ In general we ask that contributors follow this process:
 
 For changes that require modifications to the database schema please read on.
 
-###      Database schema changes
+### Database schema changes
 
 As this R package is designed to work directly with a postgres database, any additions or modifications to the package code that require modifications to the database schema should be accompanied by the necessary SQL code to create or modify the database.
 This is to ensure that the package and database remain in sync.
@@ -113,3 +114,45 @@ If the user does not have write privileges to the required tables then an error 
 7.  COMMUNICATE with other collaborators to ensure that they are aware of the changes you have made.
 8.  ENSURE that other packages that depend on the database aren't adversely affected, and if they are, suggest or make changes to these packages for compatibility. At present this is limited to the *YGwater* and *WRBcalibrates* packages.
 9.  Write down what you did in the NEWS.md file.
+
+# Package usage information
+
+This functions in this package are mostly intended to be run automatically (i.e. not interactively) to bring in new data from remote data stores, to check for updates to data on remotes, and to calculate daily statistics.
+The main functions can be thought of as being in four groups: 'get', 'daily', 'download', 'insert', 'add' functions.
+Other functions are for the most part called by these functions to perform some discrete tasks.
+
+## 'get' functions
+
+Functions 'getNewContinuous' and 'getNewDiscrete' work on all timeseries present in the 'timeseries' table to bring in new data.
+To do so, they call the 'download' function specified in the 'timeseries' table's 'source_fx' column, process the data if necessary, and append this new information to the database.
+Ancilliary functions are also called that adjust records in the owners, contributors, grades, approvals, and qualifiers tables based on that provided by the 'download' functions.
+
+'getNewImages', 'getNewRasters' work image and raster series specified in the 'images_index' and 'raster_series_index' tables.
+In a similar process to other 'get' functions, new data is fetched with the 'download' function specified in the xxx_index tables, some pre-processing is done if necessary, and insertion to the database is made.
+In contrast however, the insertion of rasters and images to the database is then done using either functions 'insertACImage' or 'insertACModelRaster' as this functionality can also be used to insert data outside of the 'get' functions.
+
+## 'daily' function
+
+There is only one function in this group, dailyUpdate.
+This function first checks if the Water Survey of Canada has published a new version of the HYDAT database and incorporates that if necessary, then calls the 'get' functions with cascading effects.
+For each new continuous-type timeseries, new daily means and statistics are calculated for the table 'measurements_calculated_daily'.
+In the event of new hydat daily means, recalculation takes place from the time of first discrepancy between HYDAT means and existing means in the database.
+
+## 'download' functions
+
+All 'downloadXXXX' functions fetch data from remote stores based on their parameters.
+They are primarily designed to be called form the 'get' functions but can also be used independently; we advise against bypassing the 'get' functions for database entry, but many use cases exist for using these for fetching data alone.
+In particular, the 'downloadWSC' function is dramatically faster than the data fetch functions in the 'tidyhydat' package, at the expense of decreased convenience.
+
+## 'insert' functions
+
+These functions create new records in the database for slightly esoteric formats, such as rasters, vectors, images, and documents.
+Adding these to a postgres database is not as simple as adding new rows or appending a data table; conversion to formatsnative to postgres or postGIS is necessary first.
+
+## 'add' functions
+
+These functions are designed to simplify the process of adding new locations or timeseries to the database.
+Adding a timeseries is not a straightforward affair and requires creation and modification of records in the 'location', 'timeseries', and other associated tables.
+For the Water Survey of Canada it is also necessary to merge data from the HYDAT daily means database with up-to-date 5-minute data points.
+
+In all cases these functions ensure that all relevant entries are populated, that database conflicts will not arise, and that future data fetching operations can be performed.

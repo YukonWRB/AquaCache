@@ -500,14 +500,30 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
     if (is.na(source_fx)) {
       next
     }
+    owner <- DBI::dbGetQuery(con, paste0("SELECT owner FROM timeseries WHERE timeseries_id = ", i, ";"))[1,1]
+    if (is.na(source_fx)) {
+      next
+    }
     if (source_fx == "downloadWSC") {
-      exist$owner <- wsc_owner
+      exist$contributor <- wsc_owner
+      if (is.na(owner)) {
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET owner = ", wsc_owner, " WHERE timeseries_id = ", i, ";"))
+      }
     } else if (source_fx == "downloadAquarius") {
-      exist$owner <- wrb_owner
+      exist$contributor <- wrb_owner
+      if (is.na(owner)) {
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET owner = ", wrb_owner, " WHERE timeseries_id = ", i, ";"))
+      }
     } else if (source_fx == "downloadECCCwx") {
-      exist$owner <- eccc_owner
+      exist$contributor <- eccc_owner
+      if (is.na(owner)) {
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET owner = ", eccc_owner, " WHERE timeseries_id = ", i, ";"))
+      }
     } else if (source_fx == "downloadNWIS") {
-      exist$owner <- usgs_owner
+      exist$contributor <- usgs_owner
+      if (is.na(owner)) {
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET owner = ", usgs_owner, " WHERE timeseries_id = ", i, ";"))
+      }
     }
     
     adjust_owner(con, i, exist[, c("datetime", "owner")])

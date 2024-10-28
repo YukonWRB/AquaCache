@@ -15,7 +15,7 @@ insertACImage(
   share_with = 1,
   location = NULL,
   image_type = NULL,
-  con = AquaConnect()
+  con = NULL
 )
 }
 \arguments{
@@ -39,7 +39,7 @@ insertACImage(
 
 \item{image_type}{If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database. Default NULL uses AquaConnect() and close the connection afterwards.}
 }
 \value{
 TRUE if an image was properly added to the database.

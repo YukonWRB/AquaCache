@@ -17,13 +17,20 @@
 #' @param url An optional url (could also be a DOI) for the document.
 #' @param share_with User groups with which to share the document. Default '1' is the public group. See the table 'user_groups' for more information.
 #' @param geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database. Leave NULL to create a new connection using AquaConnect() and have it closed automatically.
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-insertACDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, share_with = 1, geoms = NULL, con = AquaConnect()) {
+insertACDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, share_with = 1, geoms = NULL, con = NULL) {
 
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
   #Checks
   if (length(path) > 1) {
     stop("You can only specify one path at a time.")

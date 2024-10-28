@@ -17,15 +17,21 @@
 #' @param daily Should the imputation be done on the daily table? Even if set to TRUE this will only apply if there are no entries in table measurements_continuous to modify.
 #' @param min_gap An optional integer specifying the minimum number of missing points to interpolate. This can be useful when you want to use a certain method to impute only short gaps, and use another method for longer gaps.
 #' @param max_gap An optional integer specifying the maximum number of missing points to interpolate. This can be useful when you want to use a certain method to impute only short gaps, and use another method for longer gaps.
-#' @param con A connection to the database.
+#' @param con A connection to the database. If left NULL, a connection will be made and closed automatically.
 #'
 #' @return Imputed values added to the database.
 #' @export
 
 
-imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed = TRUE, daily = FALSE, min_gap = 1, max_gap = Inf, con = AquaConnect(silent = TRUE)) {
+imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed = TRUE, daily = FALSE, min_gap = 1, max_gap = Inf, con = NULL) {
 
-  on.exit(DBI::dbDisconnect(con))
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
   
   rlang::check_installed("plotly", reason = "to make an interactive plot of imputed data.")
 
