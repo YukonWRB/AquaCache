@@ -5,7 +5,7 @@
 \title{Add a model-output raster file to the database}
 \usage{
 insertACModelRaster(
-  con,
+  con = NULL,
   raster,
   raster_series_id,
   valid_from,
@@ -21,7 +21,7 @@ insertACModelRaster(
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database. Leave NULL to use the package default connection settings and have the connection automatically closed afterwards.}
 
 \item{raster}{The raster object to add to the database, as a \code{\link[terra:rast]{terra::rast()}} object, as a file path, or as a valid URL. Can be multi-band. Band names will be taken directly from this raster.}
 

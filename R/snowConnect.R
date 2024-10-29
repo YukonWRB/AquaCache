@@ -31,6 +31,9 @@ snowConnect <- function(name = "snowDB", host = Sys.getenv("snowHost"), port = S
     if (!silent){
       message("Remember to disconnect using DBI::dbDisconnect() when finished.")
     }
+    
+    DBI::dbExecute(snow, "SET timezone = 'UTC'")
+    
     return(snow)
   }, error = function(e){
     stop("Connection failed.")

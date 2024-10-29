@@ -14,7 +14,7 @@ imputeMissing(
   daily = FALSE,
   min_gap = 1,
   max_gap = Inf,
-  con = AquaConnect(silent = TRUE)
+  con = NULL
 )
 }
 \arguments{
@@ -36,7 +36,7 @@ imputeMissing(
 
 \item{max_gap}{An optional integer specifying the maximum number of missing points to interpolate. This can be useful when you want to use a certain method to impute only short gaps, and use another method for longer gaps.}
 
-\item{con}{A connection to the database.}
+\item{con}{A connection to the database. If left NULL, a connection will be made and closed automatically.}
 }
 \value{
 Imputed values added to the database.

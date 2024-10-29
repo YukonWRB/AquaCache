@@ -6,7 +6,7 @@
 \usage{
 getNewRasters(
   raster_series_ids = "all",
-  con = AquaConnect(silent = TRUE),
+  con = NULL,
   keep_forecasts = "selective",
   active = "default"
 )
@@ -14,7 +14,7 @@ getNewRasters(
 \arguments{
 \item{raster_series_ids}{A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database. Default is NULL, which will use the package default connection settings and close the connection afterwards.}
 
 \item{keep_forecasts}{Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'}
 

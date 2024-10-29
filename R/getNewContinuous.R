@@ -35,6 +35,8 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     on.exit(DBI::dbDisconnect(con))
   }
   
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
@@ -70,6 +72,9 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   }
   
   message("Fetching new continuous data with getNewContinuous...")
+  if (interactive()) {
+    pb <- utils::txtProgressBar(min = 0, max = nrow(all_timeseries), style = 3)
+  }
   # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)) {
     loc <- all_timeseries$location[i]
@@ -124,8 +129,12 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
         ts$timeseries_id <- tsid
         ts$imputed <- FALSE
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
-        if (!is.na(owner)) {  # There may not be an owner assigned in table timeseries
-          if (!("owner" %in% names(ts))) {
+        if ("owner" %in% names(ts)) {
+          if (!is.null(owner)) {
+            ts$owner[is.na(ts$owner)] <- owner
+          }
+        } else {
+          if (!is.null(owner)) {
             ts$owner <- owner
           }
         }
@@ -204,7 +213,16 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     }, error = function(e) {
       warning("getNewContinuous: Failed to get new data or to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Returned error '", e$message, "'.")
     }) #End of tryCatch
-  } #End of iteration over each location + param
+    
+    if (interactive()) {
+      utils::setTxtProgressBar(pb, i)
+    }
+    
+  } # End of for loop
+  
+  if (interactive()) {
+    close(pb)
+  }
 
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_continuous'"))

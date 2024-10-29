@@ -17,13 +17,20 @@
 #' @param share_with Which user groups should the image be shared with. Default is '1', the public group. Pass as a numeric vector.
 #' @param location If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.
 #' @param image_type If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database. Default NULL uses AquaConnect() and close the connection afterwards.
 #'
 #' @return TRUE if an image was properly added to the database.
 #' @export
 
-insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, description = NULL, owner = NULL, contributor = NULL, share_with = 1, location = NULL, image_type = NULL, con = AquaConnect()) {
+insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, description = NULL, owner = NULL, contributor = NULL, share_with = 1, location = NULL, image_type = NULL, con = NULL) {
 
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
   #Checks
   if (length(location) > 1) {
     stop("You can only specify one location at a time.")

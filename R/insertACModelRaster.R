@@ -5,7 +5,7 @@
 #'
 #' Depending on size, rasters might be broken up into many tiles. Because of this and the database's spatial capabilities, it's possible to only fetch the tiles you need using [rpostgis::pgGetRast()]. You'll have to specify which reference_id to use as a clause; find the right one in the 'rasters_reference' table. Look at the parameter `boundary` to specify a limited spatial extent, and at `bands` to only fetch certain bands. The rasters themselves live in the 'rasters' table, but the reference id in in the 'rasters_reference' table.
 #'
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
+#' @param con A connection to the database. Leave NULL to use the package default connection settings and have the connection automatically closed afterwards.
 #' @param raster The raster object to add to the database, as a [terra::rast()] object, as a file path, or as a valid URL. Can be multi-band. Band names will be taken directly from this raster.
 #' @param raster_series_id The raster_series_id for the model, matching an entry in the raster_series_index table.
 #' @param valid_from Must be a .POSIXct object or character vector that can be coerced to one. Character vectors will be converted assuming a UTC offset of 0.
@@ -22,7 +22,7 @@
 #' @return The reference_id of the newly appended raster.
 #' @export
 
-insertACModelRaster <- function(con, raster, raster_series_id, valid_from, valid_to, description = NA, flag = NA, issued = NA, units = NULL, model = NA, source = NA, bit.depth = NULL, blocks = NULL)
+insertACModelRaster <- function(con = NULL, raster, raster_series_id, valid_from, valid_to, description = NA, flag = NA, issued = NA, units = NULL, model = NA, source = NA, bit.depth = NULL, blocks = NULL)
 {
   
   # Parameter check in case they're passed as NULL by other functions
@@ -91,6 +91,13 @@ insertACModelRaster <- function(con, raster, raster_series_id, valid_from, valid
     })
   }
 
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
   if (!("rasters_reference" %in% DBI::dbListTables(con))) {
     message("table rasters_reference does not already exist. Creating it.")
     version <- DBI::dbGetQuery(con, "SELECT version()")
