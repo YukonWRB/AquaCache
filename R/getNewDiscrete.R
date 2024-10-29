@@ -110,7 +110,7 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
 
     tryCatch({
-      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = last_data_point)
+      args_list <- list(con = con, location = loc, parameter_id = parameter_id, start_datetime = last_data_point)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
       if (source_fx == "downloadEQWin") {
         args_list[["EQcon"]] <- EQcon
