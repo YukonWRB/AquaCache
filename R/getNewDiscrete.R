@@ -117,7 +117,6 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
       }
       if (source_fx == "downloadSnowCourse") {
         args_list[["snowCon"]] <- snowCon
-        args_list[["ACCon"]] <- con
       }
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
