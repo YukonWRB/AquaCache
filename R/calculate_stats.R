@@ -58,22 +58,27 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     start_recalc_i <- start_recalc
     skip <- FALSE
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
-      last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
-      earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
+      last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND max IS NOT NULL;"))[1,]
+      if (is.na(last_day_historic)) {
+        last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))[1,]
+      }
+      earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND max IS NOT NULL;"))[1,])
+      if (is.na(earliest_day_historic)) {
+        earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
+      }
       earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
       
       # Below lines deal with timeseries that don't have daily values but should, or don't have them far enough in the past. We check if it's necessary to calculate further back in time than start_recalc_i.
       if (is.na(earliest_day_historic)) { # This means that no daily values have been calculated yet, or that they've been completely deleted from the database. In that case we start recalculation straight from the earliest measurement date.
         earliest_day_historic <- earliest_day_measurements
         last_day_historic <- earliest_day_measurements
-        start_recalc_i <- earliest_day_measurements
+        start_recalc_i <- min(earliest_day_measurements, start_recalc_i)
       } else if (is.na(earliest_day_measurements)) { # In this case there are no realtime measurements but there are calculated daily values
         if (last_day_historic < Sys.Date() - 30) { # If this is the case there should be no data to recalculate anymore unless it's been a long time since the last calc or they've been deleted for some reason.
-          start_recalc_i <- last_day_historic
-        } else { 
-          start_recalc_i <- Sys.Date() - 2
+          start_recalc_i <- min(last_day_historic, start_recalc_i)
+        } else {
+          start_recalc_i <- min(Sys.Date() - 2, start_recalc_i) # recalculate the last two days of historic data in case new data has come in
         }
-        start_recalc_i <- last_day_historic
       } else if (earliest_day_measurements < earliest_day_historic) { # If we got to here there are measurements and daily values. Check if measurements start earlier than daily values.
         start_recalc_i <- earliest_day_measurements
       }
@@ -90,11 +95,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             last_day_historic <- if (length(last_day_historic) > 0) max(earliest_day_measurements, start_recalc_i) else earliest_day_measurements #in case the user asked for a start prior to the actual record start, or if there is no record in measurements_calculated_daily yet
           }
         } else { # There are no measurements, so we can only calculate from the earliest day in the measurements_calculated_daily table
-          if (start_recalc_i < earliest_day_historic) {
-            last_day_historic <- earliest_day_historic
-          } else {
-            last_day_historic <- NA
-          }
+          last_day_historic <- earliest_day_historic
         }
       } else { #start_recalc_i is NULL so let's find out when to start recalculating
         if (!is.na(last_day_historic) & !is.na(earliest_day_measurements)) {
@@ -111,10 +112,9 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
       }
       
       if (!skip) {
-        
-        # Check if any corrections have been made to the timeseries since the last calculation. If not, save time and computations by getting values straight from measurements_continuous instead of the corrected tables.
-        corrections_apply <- DBI::dbGetQuery(con, paste0("SELECT correction_id FROM corrections WHERE timeseries_id = ", i, " AND end_dt > '", last_day_historic, "';"))
-        if (nrow(corrections_apply) > 1) {
+        # Check if any corrections have been made to the timeseries during the computation time. If not, save time and computations by getting values straight from measurements_continuous instead of the corrected tables.
+        corrections_apply <- DBI::dbGetQuery(con, paste0("SELECT correction_id FROM corrections WHERE timeseries_id = ", i, " AND end_dt > '", last_day_historic, "' LIMIT 1;"))
+        if (nrow(corrections_apply) == 1) {
           corrections_apply <- TRUE
         } else {
           corrections_apply <- FALSE
@@ -122,6 +122,9 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         
         missing_stats <- data.frame()
         flag <- FALSE  #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
+        if (is.na(source_fx)) {
+          source_fx <- "NA"
+        }
         if ((source_fx == "downloadWSC") & (last_day_historic < Sys.Date() - 30)) { #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
           # Check to make sure HYDAT is installed and up to date
           if (!hydat_checked) {

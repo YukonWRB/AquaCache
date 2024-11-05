@@ -128,7 +128,9 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
         
         ts$timeseries_id <- tsid
         ts$imputed <- FALSE
+        
         # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
+        
         if ("owner" %in% names(ts)) {
           if (!is.null(owner)) {
             ts$owner[is.na(ts$owner)] <- owner

@@ -686,6 +686,23 @@ ORDER BY
     datetime;
 ")
   
+  # measurements_continuous_hourly table (not corrected)
+  DBI::dbExecute(con, "
+  CREATE OR REPLACE VIEW measurements_continuous_hourly AS
+SELECT
+    mc.timeseries_id,
+    date_trunc('hour', mc.datetime) AS datetime,
+    AVG(mc.value) AS value,
+    BOOL_OR(mc.imputed) AS imputed
+FROM
+    measurements_continuous mc
+GROUP BY
+    mc.timeseries_id,
+    date_trunc('hour', mc.datetime)
+ORDER BY
+    datetime;
+")
+  
   
   # Wrap up #################
   message("Wrapping up with a few tweaks...")
@@ -734,7 +751,18 @@ ORDER BY
               EXECUTE FUNCTION fill_locations_metadata_acquisition_missing();
 ")
   
+  # Add a few helpful table comments
+  DBI::dbExecute(con, "COMMENT ON COLUMN images.img_meta_id IS 'Keyed to table images_index to associate an image with other images taken at this location. May be NULL for images not part of a series.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN images.latitude IS 'If the image is not part of an image series (and doesnt have an entry in column img_meta_id) this column must be populated. Enforced via trigger+function.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN images.longitude IS 'If the image is not part of an image series (and doesnt have an entry in column img_meta_id) this column must be populated. Enforced via trigger+function.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN images.azimuth_true IS 'Direction of the camera in degrees from true north.';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN images.altitude_agl_m IS 'Altitude of the camera above ground level, in meters';")
+  DBI::dbExecute(con, "COMMENT ON COLUMN images.altitude_asl_m IS 'Altitude of the camera above sea level, in meters';")
+
   
+  # Add a column for 'owner' in the 'locations' table, referencing table owners_contributors
+  DBI::dbExecute(con, "ALTER TABLE locations ADD COLUMN owner INTEGER REFERENCES owners_contributors(owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE;")
+    
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '3' WHERE item = 'Last patch number';")
   DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))

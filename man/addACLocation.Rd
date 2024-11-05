@@ -12,7 +12,7 @@ addACLocation(
   latitude = NA,
   longitude = NA,
   visibility_public = NA,
-  share_with = 1,
+  share_with = NA,
   owner = NA,
   data_sharing_agreement_id = NA,
   location_type = NA,
@@ -36,27 +36,27 @@ addACLocation(
 
 \item{name_fr}{A character vector of the location name(s) in French.}
 
-\item{latitude}{A numeric vector of the latitude(s).}
+\item{latitude}{A numeric vector of the latitude(s) as decimal degrees.}
 
-\item{longitude}{A numeric vector of the longitude(s).}
+\item{longitude}{A numeric vector of the longitude(s) as decimal degrees.}
 
-\item{visibility_public}{A character vector of the visibility of the location(s). Default is 'exact'.}
+\item{visibility_public}{A character vector of the visibility of the location(s). One of 'exact', 'region', 'jitter'. Default is 'exact'.}
 
 \item{share_with}{A numeric vector of the user group(s) with which to share the location(s). Default is 1.}
 
 \item{owner}{A numeric vector of the owner(s) of the location(s).}
 
-\item{data_sharing_agreement_id}{A numeric vector of the data sharing agreement(s) for the location(s).}
+\item{data_sharing_agreement_id}{A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.}
 
-\item{location_type}{A numeric vector of the location type(s).}
+\item{location_type}{A numeric vector of the location type(s) id(s) from table 'location_types'.}
 
-\item{note}{A character vector of notes for the location(s).}
+\item{note}{A character vector of notes for the location(s) (optional).}
 
-\item{contact}{A character vector of the contact(s) for the location(s).}
+\item{contact}{A character vector of the contact(s) for the location(s) (optional).}
 
-\item{datum_id_from}{A numeric vector of the datum ID(s) from which the location(s) are measured.}
+\item{datum_id_from}{A numeric vector of the datum ID(s) from which the location(s) are measured, from table 'datum_list'.}
 
-\item{datum_id_to}{A numeric vector of the datum ID(s) to which the location(s) are measured.}
+\item{datum_id_to}{A numeric vector of the datum ID(s) to which the location(s) are measured, from table 'datum_list'.}
 
 \item{conversion_m}{A numeric vector of the conversion factor(s) from the datum_id_from to the datum_id_to.}
 

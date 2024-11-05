@@ -12,6 +12,12 @@
 
 adjust_grade <- function(con, timeseries_id, data) {
   
+  # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
+  if ("date" %in% names(data) & !"datetime" %in% names(data)) {
+    data$datetime <- as.POSIXct(data$date, tz = "UTC")
+    data <- data[, !names(data) == "date"]
+  }
+  
   # Make sure that column 'grade' is not all NA
   if (all(is.na(data$grade))) {
     return(message("adjust_grade: column 'grade' was all NA, skipped."))
@@ -23,9 +29,10 @@ adjust_grade <- function(con, timeseries_id, data) {
     data$grade <- grade_table$grade_type_id[match(data$grade, grade_table$grade_type_code)]
   }
   
+  
   # Ensure that 'datetime' is POSIXct
   if (!inherits(data$datetime[1], "POSIXct")) {
-    stop("Column'datetime' must be of class POSIXct.")
+    stop("Column 'datetime' must be of class POSIXct.")
   }
 
   unknown_grade <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK'")[1,1]
@@ -182,6 +189,12 @@ adjust_grade <- function(con, timeseries_id, data) {
 
 adjust_qualifier <- function(con, timeseries_id, data) {
   
+  # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
+  if ("date" %in% names(data) & !"datetime" %in% names(data)) {
+    data$datetime <- as.POSIXct(data$date, tz = "UTC")
+    data <- data[, !names(data) == "date"]
+  }
+  
   # Make sure that column 'qualifier' is not all NA
   if (all(is.na(data$qualifier))) {
     return(message("adjust_qualifier: column 'qualifier' was all NA, skipped."))
@@ -195,7 +208,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   
   # Ensure that 'datetime' is POSIXct
   if (!inherits(data$datetime[1], "POSIXct")) {
-    stop("Column'datetime' must be of class POSIXct.")
+    stop("Column 'datetime' must be of class POSIXct.")
   }
   
   unknown_qualifier <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK'")[1,1]
@@ -352,6 +365,12 @@ adjust_qualifier <- function(con, timeseries_id, data) {
 
 adjust_approval <- function(con, timeseries_id, data) {
   
+  # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
+  if ("date" %in% names(data) & !"datetime" %in% names(data)) {
+    data$datetime <- as.POSIXct(data$date, tz = "UTC")
+    data <- data[, !names(data) == "date"]
+  }
+  
   # Make sure that column 'approval' is not all NA
   if (all(is.na(data$approval))) {
     return(message("adjust_owner: column 'approval' was all NA, skipped."))
@@ -365,7 +384,7 @@ adjust_approval <- function(con, timeseries_id, data) {
   
   # Ensure that 'datetime' is POSIXct
   if (!inherits(data$datetime[1], "POSIXct")) {
-    stop("Column'datetime' must be of class POSIXct.")
+    stop("Column 'datetime' must be of class POSIXct.")
   }
   
   unknown_approval <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK'")[1,1]
@@ -521,6 +540,11 @@ adjust_approval <- function(con, timeseries_id, data) {
 
 adjust_owner <- function(con, timeseries_id, data) {
   
+  # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
+  if ("date" %in% names(data) & !"datetime" %in% names(data)) {
+    data$datetime <- as.POSIXct(data$date, tz = "UTC")
+    data <- data[, !names(data) == "date"]
+  }
   
   # Make sure that column 'owner' is not all NA
   if (all(is.na(data$owner))) {
@@ -535,7 +559,7 @@ adjust_owner <- function(con, timeseries_id, data) {
   
   # Ensure that 'datetime' is POSIXct
   if (!inherits(data$datetime[1], "POSIXct")) {
-    stop("Column'datetime' must be of class POSIXct.")
+    stop("Column 'datetime' must be of class POSIXct.")
   }
   
   # Get the data where at least one of the following is true:
@@ -687,6 +711,12 @@ adjust_owner <- function(con, timeseries_id, data) {
 
 adjust_contributor <- function(con, timeseries_id, data) {
   
+  # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
+  if ("date" %in% names(data) & !"datetime" %in% names(data)) {
+    data$datetime <- as.POSIXct(data$date, tz = "UTC")
+    data <- data[, !names(data) == "date"]
+  }
+  
   # Make sure that column 'contributor' is not all NA
   if (all(is.na(data$contributor))) {
     return(message("adjust_contributor: column 'contributor' was all NA, skipped."))
@@ -700,7 +730,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
   
   # Ensure that 'datetime' is POSIXct
   if (!inherits(data$datetime[1], "POSIXct")) {
-    stop("Column'datetime' must be of class POSIXct.")
+    stop("Column 'datetime' must be of class POSIXct.")
   }
   
   # Get the data where at least one of the following is true:

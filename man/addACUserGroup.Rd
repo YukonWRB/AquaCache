@@ -4,14 +4,14 @@
 \alias{addACUserGroup}
 \title{Add a new user group to the AquaCache}
 \usage{
-addACUserGroup(name, description, con = AquaConnect(silent = TRUE))
+addACUserGroup(name, description, con = NULL)
 }
 \arguments{
 \item{name}{The name of the new user group}
 
 \item{description}{A description of the new user group}
 
-\item{con}{A connection to the AquaCache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
 }
 \value{
 The group_id of the new user group, plus a new entry to the database.
