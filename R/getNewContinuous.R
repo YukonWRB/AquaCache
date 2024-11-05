@@ -69,7 +69,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   qualifier_unknown <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';")[1,1]
   if (is.na(qualifier_unknown)) {
     stop("getNewContinuous: Could not find qualifier type 'Unknown' in the database.")
-  # }
+  }
   
   message("Fetching new continuous data with getNewContinuous...")
   if (interactive()) {
