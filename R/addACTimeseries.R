@@ -9,11 +9,18 @@
 #' 
 #' @details
 #' You can add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries. For Water Survey of Canada data, this function will also seek out level and flow data from the HYDAT database, downloading or checking for updates to it before use.
+#' 
+#' If specifying a data.frame for argument 'data', different criteria applies depending on if the timeseries is categorized as continuous or discrete.
+#' For continuous data:
+#' The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered directly to the 'measurements_calculated_daily' table with no entry to measurements_continuous. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function [addNewContinuous()] will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
+#' For discrete data:
+#' This is not supported yet.
 #'
-#' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
+#' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets. Do not deviate from this format!
 #'
-#' @param df A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters must be NA or left as their default values.
-#' @param start_datetime A character or posixct vector of datetimes from which to look for new data.
+#' @param df A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
+#' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. This parameter depends on the `category` of the timeseries being created; see details. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
+#' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified.
 #' @param location A numeric vector corresponding to column 'location' of table 'locations'.
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
@@ -55,23 +62,23 @@
 #' addACTimeseries(df)
 #' }
 
-addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "1", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
+addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "1", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
   
   # Testing parameters
-  # df <- data.frame(start_datetime = "2015-01-01 00:00",
-  #                  location = "09AA-M3",
-  #                  z = c(NA, 3),
-  #                  parameter = c(34, 1154),
-  #                  media = 7,
+  # df <- data.frame(start_datetime = NA,
+  #                  location = c("YEC-ML", "YEC-MRM", "YEC-MRW", "YEC-WL"),
+  #                  z = NA,
+  #                  parameter = c(1165, 1150, 1150, 1165),
+  #                  media = 1,
   #                  sensor_priority = 1,
   #                  category = "continuous",
-  #                  period_type = c("sum", "mean"),
+  #                  period_type = c("instantaneous"),
   #                  record_rate = "< 1 day",
-  #                  share_with = "1",
-  #                  owner = 2,
-  #                  source_fx = "downloadAquarius",
+  #                  share_with = "2",
+  #                  owner = 5,
+  #                  source_fx = NA,
   #                  source_fx_args = NA,
-  #                  note = c("Total precipitation from standpipe, reset every year in the fall.", "Hourly average of wind speeds recorded every minute")
+  #                  note = NA
   #                  )
   # start_datetime <- NA
   # location <- NA
@@ -91,6 +98,12 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
+  }
+  
+  if (!is.null(data)) {
+    if (!inherits(data, "list")) {
+      stop("The 'data' parameter must be a list of data.frames if it is provided.")
+    }
   }
   
   if (!is.null(df)) {
@@ -131,22 +144,12 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
   # Find the longest argument, then make sure all are either NA, length 1, or the same length.
   length <- max(length(start_datetime), length(location), length(z), length(parameter), length(media), length(sensor_priority), length(category), length(period_type), length(record_rate), length(owner), length(source_fx), length(source_fx_args), length(note))
   
-  if (length(share_with) != 1 && length(share_with) != length) {
-    stop("share_with must be a single value or a vector of the same length as the other parameters. Please check the function documentation.")
+  if (!is.null(data) & length(data) != length) {
+    stop("The 'data' parameter must be a list of data.frames of the same length as the other parameters.")
   }
   
-  if (any(is.na(start_datetime))) {
-    stop("start_datetime cannot contain NA values")
-  } else {
-    if (length(start_datetime) == 1 && length > 1) {
-      start_datetime <- rep(start_datetime, length)
-    }
-    if (!inherits(start_datetime, "POSIXct")) {
-      start_datetime <- as.POSIXct(start_datetime)
-      if (any(is.na(start_datetime))) {
-        stop("Could not coerce your start_datetime vector to a POSIXct object.")
-      }
-    }
+  if (length(share_with) != 1 && length(share_with) != length) {
+    stop("share_with must be a single value or a vector of the same length as the other parameters. Please check the function documentation.")
   }
 
   if (any(is.na(location))) {
@@ -299,7 +302,7 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
   }
   
   if (any(is.na(source_fx))) {
-    warning("At least one of the source_fx you entered is NA. This will not allow for automatic fetching of new data. The timeseries will be added to the database, but you will need to manually add data.")
+    warning("At least one of the source_fx you entered is NA. This will not allow for automatic fetching of new data. The timeseries will be added to the database, but you will need to manually add data unless you also specified a data.frame with this.")
   } 
   source_fx_check <- source_fx[!is.na(source_fx)]
   if (length(source_fx_check) > 0) {
@@ -329,6 +332,9 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
   # Check that the proper entries exist in the settings database table. Make entry to DB if necessary/possible ################
   for (i in 1:length(location)) {
     sfx <- source_fx[i]
+    if (is.na(sfx)) {
+      next
+    }
     rec_rate <- record_rate[i]
     param <- parameter[i]
     p_type <- period_type[i]
@@ -345,6 +351,7 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
   
   
   #Add the timeseries #######################################################################################################
+
   for (i in 1:length(location)) {
     loc_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", location[i], "';"))
     tryCatch({
@@ -362,7 +369,8 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
                         source_fx = source_fx[i],
                         source_fx_args = source_fx_args[i],
                         note = note[i],
-                        end_datetime = start_datetime[i] - 1)
+                        end_datetime = if (is.na(source_fx[i])) NA else start_datetime[i] - 1)
+      
       tryCatch({
         DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
         message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", add$parameter_id, ", category ", add$category, ", media_type ", add$media_id, ", and period_type ", add$period_type, ".")
@@ -374,6 +382,18 @@ addACTimeseries <- function(df = NULL, start_datetime = NA, location = NA, z = N
         DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", add$end_datetime, "' WHERE timeseries_id = ", new_tsid, ";"))
       }
       )
+      
+      if (!is.na(data[i])) {
+        if ('date' %in% colnames(data[[i]])) {
+          addNewContinuous(tsid = new_tsid, df = data[[i]], target = 'daily', con = con)
+          calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = min(data[[i]]$date))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = (SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", new_tsid, ") WHERE timeseries_id = ", new_tsid, ";"))
+        } else {
+          addNewContinuous(tsid = new_tsid, df = data[[i]], target = 'continuous', con = con)
+          calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = min(data[[i]]$datetime))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = (SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", new_tsid, ") WHERE timeseries_id = ", new_tsid, ";"))
+        }
+      }
       
       if (!is.na(source_fx[i])) {
         param_name <- DBI::dbGetQuery(con, paste0("SELECT param_name FROM parameters WHERE parameter_id = ", add$parameter_id, ";"))[1,1]

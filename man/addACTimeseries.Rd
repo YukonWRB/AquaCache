@@ -6,6 +6,7 @@
 \usage{
 addACTimeseries(
   df = NULL,
+  data = NULL,
   start_datetime = NA,
   location = NA,
   z = NA,
@@ -24,9 +25,11 @@ addACTimeseries(
 )
 }
 \arguments{
-\item{df}{A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters must be NA or left as their default values.}
+\item{df}{A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for \code{data} must be NA or left as their default values. See notes for the other parameters for more information on each column of df.}
 
-\item{start_datetime}{A character or posixct vector of datetimes from which to look for new data.}
+\item{data}{An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. This parameter depends on the \code{category} of the timeseries being created; see details. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.}
+
+\item{start_datetime}{A character or posixct vector of datetimes from which to look for new data, if source_fx is specified.}
 
 \item{location}{A numeric vector corresponding to column 'location' of table 'locations'.}
 
@@ -69,7 +72,13 @@ You will be prompted to add locations that don't exist yet if any fall into this
 \details{
 You can add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries. For Water Survey of Canada data, this function will also seek out level and flow data from the HYDAT database, downloading or checking for updates to it before use.
 
-Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets.
+If specifying a data.frame for argument 'data', different criteria applies depending on if the timeseries is categorized as continuous or discrete.
+For continuous data:
+The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered directly to the 'measurements_calculated_daily' table with no entry to measurements_continuous. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function \code{\link[=addNewContinuous]{addNewContinuous()}} will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
+For discrete data:
+This is not supported yet.
+
+Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets. Do not deviate from this format!
 }
 \examples{
 \dontrun{
