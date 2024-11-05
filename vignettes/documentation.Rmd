@@ -1,0 +1,47 @@
+---
+title: "documentation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{documentation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(AquaCache)
+```
+
+This document acts as a comprehensive reference for the AquaCache database and the functions that interact with it. 
+
+# AquaCache origins
+
+# General philosophy
+
+# Data structure
+
+# Data flows
+
+# Security and visibility
+## Row-level security
+
+# Interacting with the database
+## YGwater R package
+### Main functions
+### Shiny applications
+
+# Package function overview
+## Connection and validation functions
+## 'add' functions
+## 'insert' functions and friends
+## 'get' functions and friends
+## 'download' functions
+## Synchronization process
+## Patch application process
+

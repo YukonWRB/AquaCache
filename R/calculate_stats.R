@@ -112,9 +112,9 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
       
       if (!skip) {
         
-        # Check if any corrections have been made to the timeseries since the last calculation. If not, save time and computations by getting values straight from measurements_continuous instead of the corrected tables.
-        corrections_apply <- DBI::dbGetQuery(con, paste0("SELECT correction_id FROM corrections WHERE timeseries_id = ", i, " AND end_dt > '", last_day_historic, "';"))
-        if (nrow(corrections_apply) > 1) {
+        # Check if any corrections have been made to the timeseries during the computation time. If not, save time and computations by getting values straight from measurements_continuous instead of the corrected tables.
+        corrections_apply <- DBI::dbGetQuery(con, paste0("SELECT correction_id FROM corrections WHERE timeseries_id = ", i, " AND end_dt > '", last_day_historic, "' LIMIT 1;"))
+        if (nrow(corrections_apply) == 1) {
           corrections_apply <- TRUE
         } else {
           corrections_apply <- FALSE
