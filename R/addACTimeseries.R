@@ -99,8 +99,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # df = NULL
   # data = NULL
   # start_datetime = "1940-01-01"
-  # location = "09AA006"
-  # parameter = 1150
+  # location = "10ED001"
+  # parameter = c(1150, 1165)
   # z = NA
   # media = 1
   # sensor_priority = 1
@@ -164,6 +164,9 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   
   if (!inherits(start_datetime, "POSIXct")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  }
+  if (length(start_datetime) == 1 && length > 1) {
+    start_datetime <- rep(start_datetime, length)
   }
   if (!is.null(data) & length(data) != length) {
     stop("The 'data' parameter must be a list of data.frames of the same length as the other parameters.")
@@ -331,25 +334,33 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       stop("At least one of the source_fx strings you entered does not exist in the AquaCache package.")
     }
   }
+  if (length(source_fx) == 1 && length > 1) {
+    source_fx <- rep(source_fx, length)
+  }
   
   if (!any(is.na(source_fx_args))) {
     if (!all(grepl("\\{.*?\\}", source_fx_args))) {
       stop("source_fx_args must be in the form of '{param1 = arg1}, {param2 = arg2}', with each parameter:argument pair enclosed in curly brackets.")
     }
   }
-  if (length(source_fx_args) == 1 && length > 1) {
-    stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
+  if (!is.na(source_fx_args)) {
+    if (length(source_fx_args) == 1 && length > 1) {
+      stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
+    }
   }
+  
   
   if (!any(is.na(note))) {
     if (!inherits(note, "character")) {
       stop("note must be a character vector or left NA.")
     }
   }
-  if (length(note) == 1 && length > 1) {
-    stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
+  if (!is.na(note)) {
+    if (length(note) == 1 && length > 1) {
+      stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
+    }
   }
-  
+
   # Check that the proper entries exist in the settings database table. Make entry to DB if necessary/possible ################
   for (i in 1:length(location)) {
     sfx <- source_fx[i]

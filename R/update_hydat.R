@@ -242,6 +242,9 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 adjust_owner(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "owner")])
                 adjust_grade(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "grade")])
                 adjust_contributor(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "contributor")])
+              } else {
+                # Check that star_datetime is correct in timeseries table
+                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
               }
             } else { #There is an entry in timeseries table, but no daily data
               new_flow$timeseries_id <- tsid_flow
@@ -409,6 +412,9 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 adjust_owner(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "owner")])
                 adjust_grade(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "grade")])
                 adjust_contributor(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "contributor")])
+              } else {
+                # Check that star_datetime is correct in timeseries table
+                DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_level, ";"))
               }
             } else { #There is an entry in timeseries table, but no daily data
               new_level$timeseries_id <- tsid_level
