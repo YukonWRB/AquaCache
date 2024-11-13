@@ -71,14 +71,10 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
 
     #Now update historical HYDAT timeseries.
     
-    qualifier_mapping <- c("-1" = qualifiers[qualifiers$qualifier_type_code == "UNS", "qualifier_id"],
-                           "10" = qualifiers[qualifiers$qualifier_type_code == "ICE", "qualifier_id"],
-                           "20" = qualifiers[qualifiers$qualifier_type_code == "EST", "qualifier_id"],
-                           "30" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"],
-                           "40" = qualifiers[qualifiers$qualifier_type_code == "DRY", "qualifier_id"],
-                           "50" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"],
-                           "-2" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"],
-                           "0" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
+    qualifier_mapping <- c("B" = qualifiers[qualifiers$qualifier_type_code == "ICE", "qualifier_id"],
+                           "E" = qualifiers[qualifiers$qualifier_type_code == "EST", "qualifier_id"],
+                           "D" = qualifiers[qualifiers$qualifier_type_code == "DRY", "qualifier_id"],
+                           "A" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
     
     
     message("Updating database with information in HYDAT due to new HYDAT version or request to force update...")
@@ -91,7 +87,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
         
         new_flow$qualifier <- ifelse(new_flow$qualifier %in% names(qualifier_mapping),
                                  qualifier_mapping[new_flow$qualifier],
-                                 qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
+                                 qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
         new_flow$qualifier <- as.integer(new_flow$qualifier)
         
         new_flow$owner <- owner_contributor_id
@@ -111,7 +107,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
         
         new_level$qualifier <- ifelse(new_level$qualifier %in% names(qualifier_mapping),
                                      qualifier_mapping[new_level$qualifier],
-                                     qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
+                                     qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
         new_level$qualifier <- as.integer(new_level$qualifier)
         
         new_level$owner <- owner_contributor_id
@@ -276,7 +272,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                               start_recalc = min(new_flow$date))
               
               # Now adjust the other tables
-              names(new_flow[names(new_flow) == "date"]) <- "datetime"
+              names(new_flow)[names(new_flow) == "date"] <- "datetime"
               new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
               
               adjust_approval(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "approval")])
@@ -323,7 +319,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                             start_recalc = min(new_level$date))
             
             # Now adjust the other tables
-            names(new_level[names(new_level) == "date"]) <- "datetime"
+            names(new_level)[names(new_level) == "date"] <- "datetime"
             new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
             
             adjust_approval(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "approval")])
