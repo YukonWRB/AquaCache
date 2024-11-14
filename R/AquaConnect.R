@@ -95,7 +95,7 @@ AquaConnect <- function(name = "AquaCache", host = Sys.getenv("AquaCacheHost"), 
       if (nrow(privileges) == 0) {
         warning("You do not have write permissions to the database tables. Please contact your database administrator to apply patches. Queries may not work as expected until patches are applied.")
       } else {
-        message("There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recomment doing so before running any functions from this package. \n 1 = apply patches now \n 2 = exit without applying patches  \n")
+        message("There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recomment doing so before running any functions from this package. \n 1 = apply patches now \n 2 = continue without applying patches  \n")
         choice <- readline(prompt = "Enter 1 or 2: ")
         
         if (choice == 1) {
