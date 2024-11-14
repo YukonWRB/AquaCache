@@ -25,11 +25,11 @@ addACTimeseries(
 )
 }
 \arguments{
-\item{df}{A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for \code{data} must be NA or left as their default values. See notes for the other parameters for more information on each column of df.}
+\item{df}{A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for \code{data} must be NA or left as their default values. See notes for the other parameters for more information on each column of df.}
 
 \item{data}{An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. This parameter depends on the \code{category} of the timeseries being created; see details. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.}
 
-\item{start_datetime}{A character or posixct vector of datetimes from which to look for new data, if source_fx is specified.}
+\item{start_datetime}{A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.}
 
 \item{location}{A numeric vector corresponding to column 'location' of table 'locations'.}
 

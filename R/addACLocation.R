@@ -66,7 +66,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   # current <- NA
   # network <- NA
   # project <- NA
-  # 
+
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -175,7 +175,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   for (i in length(latitude)) {
     exists <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE latitude = ", latitude[i], " AND longitude = ", longitude[i], ";"))[1,1]
     if (!is.na(exists)) {
-      stop("There is already a location with that latitude ", latitude[i], " and longitude ", longitude[i], ".")
+      stop("There is already a location with that latitude ", latitude[i], " and longitude ", longitude[i], " in the locations table.")
     }
   }
 

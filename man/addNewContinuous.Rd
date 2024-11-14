@@ -16,7 +16,7 @@ addNewContinuous(tsid, df, target = "continuous", con = NULL)
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
 }
 \value{
-Nothin; data is added to the database silently.
+Nothing; data is added to the database silently.
 }
 \description{
 Add new data to the measurements_continuous or measurements_calculated_daily tables

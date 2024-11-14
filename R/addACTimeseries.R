@@ -18,9 +18,9 @@
 #'
 #' Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets. Do not deviate from this format!
 #'
-#' @param df A data.frame containing one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
+#' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, category, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. This parameter depends on the `category` of the timeseries being created; see details. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
-#' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified.
+#' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
 #' @param location A numeric vector corresponding to column 'location' of table 'locations'.
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
@@ -95,6 +95,24 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # source_fx_args <- NA
   # note <- NA
   
+  
+  # df = NULL
+  # data = NULL
+  # start_datetime = "1940-01-01"
+  # location = "10ED001"
+  # parameter = c(1150, 1165)
+  # z = NA
+  # media = 1
+  # sensor_priority = 1
+  # category = 'continuous'
+  # period_type = 'instantaneous'
+  # record_rate = '< 1 day'
+  # share_with = "1"
+  # owner = 1
+  # source_fx = "downloadWSC"
+  # source_fx_args = NA
+  # note = NA
+  
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
@@ -144,6 +162,12 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # Find the longest argument, then make sure all are either NA, length 1, or the same length.
   length <- max(length(start_datetime), length(location), length(z), length(parameter), length(media), length(sensor_priority), length(category), length(period_type), length(record_rate), length(owner), length(source_fx), length(source_fx_args), length(note))
   
+  if (!inherits(start_datetime, "POSIXct")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  }
+  if (length(start_datetime) == 1 && length > 1) {
+    start_datetime <- rep(start_datetime, length)
+  }
   if (!is.null(data) & length(data) != length) {
     stop("The 'data' parameter must be a list of data.frames of the same length as the other parameters.")
   }
@@ -310,25 +334,33 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       stop("At least one of the source_fx strings you entered does not exist in the AquaCache package.")
     }
   }
+  if (length(source_fx) == 1 && length > 1) {
+    source_fx <- rep(source_fx, length)
+  }
   
   if (!any(is.na(source_fx_args))) {
     if (!all(grepl("\\{.*?\\}", source_fx_args))) {
       stop("source_fx_args must be in the form of '{param1 = arg1}, {param2 = arg2}', with each parameter:argument pair enclosed in curly brackets.")
     }
   }
-  if (length(source_fx_args) == 1 && length > 1) {
-    stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
+  if (!is.na(source_fx_args)) {
+    if (length(source_fx_args) == 1 && length > 1) {
+      stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
+    }
   }
+  
   
   if (!any(is.na(note))) {
     if (!inherits(note, "character")) {
       stop("note must be a character vector or left NA.")
     }
   }
-  if (length(note) == 1 && length > 1) {
-    stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
+  if (!is.na(note)) {
+    if (length(note) == 1 && length > 1) {
+      stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
+    }
   }
-  
+
   # Check that the proper entries exist in the settings database table. Make entry to DB if necessary/possible ################
   for (i in 1:length(location)) {
     sfx <- source_fx[i]
@@ -383,17 +415,20 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       }
       )
       
-      if (!is.na(data[i])) {
-        if ('date' %in% colnames(data[[i]])) {
-          addNewContinuous(tsid = new_tsid, df = data[[i]], target = 'daily', con = con)
-          calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = min(data[[i]]$date))
-          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = (SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", new_tsid, ") WHERE timeseries_id = ", new_tsid, ";"))
-        } else {
-          addNewContinuous(tsid = new_tsid, df = data[[i]], target = 'continuous', con = con)
-          calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = min(data[[i]]$datetime))
-          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = (SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", new_tsid, ") WHERE timeseries_id = ", new_tsid, ";"))
+      if (!is.null(data)) {
+        if (!is.na(data[i])) {
+          if ('date' %in% colnames(data[[i]])) {
+            addNewContinuous(tsid = new_tsid, df = data[[i]], target = 'daily', con = con)
+            calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = min(data[[i]]$date))
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = (SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", new_tsid, ") WHERE timeseries_id = ", new_tsid, ";"))
+          } else {
+            addNewContinuous(tsid = new_tsid, df = data[[i]], target = 'continuous', con = con)
+            calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = min(data[[i]]$datetime))
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = (SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", new_tsid, ") WHERE timeseries_id = ", new_tsid, ";"))
+          }
         }
       }
+
       
       if (!is.na(source_fx[i])) {
         param_name <- DBI::dbGetQuery(con, paste0("SELECT param_name FROM parameters WHERE parameter_id = ", add$parameter_id, ";"))[1,1]
