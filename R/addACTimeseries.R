@@ -338,26 +338,21 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     source_fx <- rep(source_fx, length)
   }
   
+  if (length(source_fx_args) == 1 && length > 1) {
+    stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
+  }
   if (!any(is.na(source_fx_args))) {
     if (!all(grepl("\\{.*?\\}", source_fx_args))) {
       stop("source_fx_args must be in the form of '{param1 = arg1}, {param2 = arg2}', with each parameter:argument pair enclosed in curly brackets.")
     }
   }
-  if (!is.na(source_fx_args)) {
-    if (length(source_fx_args) == 1 && length > 1) {
-      stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
-    }
+  
+  if (length(note) == 1 && length > 1) {
+    stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
   }
-  
-  
   if (!any(is.na(note))) {
     if (!inherits(note, "character")) {
       stop("note must be a character vector or left NA.")
-    }
-  }
-  if (!is.na(note)) {
-    if (length(note) == 1 && length > 1) {
-      stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
     }
   }
 
