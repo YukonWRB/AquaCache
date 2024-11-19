@@ -79,7 +79,7 @@ AS SELECT md.timeseries_id,
   DBI::dbExecute(con, "ALTER TABLE rasters_reference SET SCHEMA spatial;")
   DBI::dbExecute(con, "ALTER TABLE raster_series_index SET SCHEMA spatial;")
   DBI::dbExecute(con, "ALTER TABLE vectors SET SCHEMA spatial;")
-  # And the views 'geograpy_columns', 'geometry_columns', 'raster_columns', 'raster_overviews'
+  # And the views 'geography_columns', 'geometry_columns', 'raster_columns', 'raster_overviews'
   DBI::dbExecute(con, "ALTER TABLE geography_columns SET SCHEMA spatial;")
   DBI::dbExecute(con, "ALTER TABLE geometry_columns SET SCHEMA spatial;")
   DBI::dbExecute(con, "ALTER TABLE raster_columns SET SCHEMA spatial;")
