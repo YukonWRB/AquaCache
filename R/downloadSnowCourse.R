@@ -106,11 +106,16 @@ downloadSnowCourse <- function(location, parameter_id, start_datetime, end_datet
     meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
     meas$datetime <- as.POSIXct(meas$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
     
-    meas$result_value_type[meas$result_value_type] <- 5 # estimated
-    meas$result_value_type[!meas$result_value_type] <- 1 # actual
-    meas$sample_type <- 1  # 1 = field msr/obs
-    meas$collection_method <- 1 # observation
-    meas$protocol <- 1 # BC Snow Survey Sampling Guide
+    # Change estimated or actual values to the database values
+    meas$result_value_type[meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'estimated'")[1,1]
+    meas$result_value_type[!meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'actual'")[1,1]
+    meas$sample_type <- DBI::dbGetQuery(con, "SELECT sample_type_id FROM sample_types WHERE LOWER(sample_type) = 'field msr/obs'")[1,1]
+    meas$collection_method <- DBI::dbGetQuery(con, "SELECT collection_method_id FROM collection_methods WHERE LOWER(collection_method) = 'observation'")[1,1]
+    meas$protocol <- DBI::dbGetQuery(con, "SELECT protocol_id FROM analysis_protocols WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'")[1,1]
+    meas$owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
+    meas$contributor <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
+    
+    meas <- meas[!is.na(meas$value), ]  # Some measurements in table 'measurements_discrete' can have NA values, but this is used to represent values that are below/above detection limits. Not applicable for snow survey measurements.
   } else {
     meas <- data.frame()
   }

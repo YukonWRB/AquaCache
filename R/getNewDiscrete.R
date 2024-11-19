@@ -26,6 +26,9 @@
 #' - 'note': a character string with a note about the data point(s).
 #' - 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'owners_contributors' table and an error will be thrown if it does not.
 #' - 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'owners_contributors' table and an error will be thrown if it does not.
+#' - 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
+#' - 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
+#' - 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 #' - 'share_with': the user groups with which the data should be shared, as a character string. If not specified, the data will be shared with the same groups as the timeseries.
 #' 
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty data.frame.
@@ -244,8 +247,25 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
         
         ts$timeseries_id <- tsid
         
+        # Adjust owner, contributor, approval information
+        adjust_owner(con = con, timeseries_id = tsid, data = ts[, c("datetime", "owner")])  # Owner is always present, defaulting to the timeseries table value if not in the ts
+        if ("contributor" %in% names(ts)) {
+          adjust_contributor(con = con, timeseries_id = tsid, data = ts[, c("datetime", "contributor")])
+        }
+        if ("approval" %in% names(ts)) {
+          adjust_approval(con = con, timeseries_id = tsid, data = ts[, c("datetime", "approval")])
+        }
+        if ("grade" %in% names(ts)) {
+          adjust_grade(con = con, timeseries_id = tsid, data = ts[, c("datetime", "grade")])
+        }
+        if ("qualifier" %in% names(ts)) {
+          adjust_qualifier(con = con, timeseries_id = tsid, data = ts[, c("datetime", "qualifier")])
+        }
+        ts <- ts[ , -which(names(ts) %in% c("owner", "contributor", "approval", "grade", "qualifier"))]
+        
         # Now commit the changes to the database
         commit_fx <- function(con, ts, last_data_point, tsid) {
+          
           if (min(ts$datetime) < last_data_point - 1) { #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
             DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
           }

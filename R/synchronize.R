@@ -196,13 +196,8 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
           if (!("qualifier" %in% names(inRemote))) {
             inRemote$qualifier <- qualifier_unknown
           }
-          
-          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
-          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
-          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
-          
         } else if (category == "discrete") {
-          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, target_datetime, datetime, value, note, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
           # Set aside any rows where no_update == TRUE
           no_update <- inDB[inDB$no_update, ]
           inDB <- inDB[!inDB$no_update, ]
@@ -211,7 +206,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
           no_update$no_update <- NULL
         }
         
-        # Prepare for checking for changes in attributes common to continuous and discrete data
+        # Check changes in attributes
         if (!is.null(owner)) {  # There may not be an owner assigned in table timeseries
           if (!("owner" %in% names(inRemote))) {
             inRemote$owner <- owner
@@ -227,6 +222,22 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
         if ("contributor" %in% names(inRemote)) {
           adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
         }
+        if ("grade" %in% names(inRemote)) {
+          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
+        }
+        if ("approval" %in% names(inRemote)) {
+          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
+        }
+        if ("qualifier" %in% names(inRemote)) {
+          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
+        }
+        
+        # Drop columns owner, contributor, grade, approval, qualifier as these are already taken care of
+        inRemote$owner <- NULL
+        inRemote$contributor <- NULL
+        inRemote$grade <- NULL
+        inRemote$approval <- NULL
+        inRemote$qualifier <- NULL
         
         if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch so this is skipped
           if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
@@ -253,7 +264,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
               inRemote$key <- paste(substr(as.character(inRemote$datetime), 1, 22), inRemote$value, sep = "|")
               inDB$key <- paste(substr(as.character(inDB$datetime), 1, 22), inDB$value, sep = "|")
             } else if (category == "discrete") {
-              # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote. In this case though, entries are unique on datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type so things are slower
+              # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote. In this case though, entries are unique on datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type so things are slower than with continuous data
               if (nrow(no_update) > 0) {
                 for (j in 1:nrow(no_update)) {
                   inRemote <- inRemote[!(inRemote$datetime == no_update[j, "datetime"] & inRemote$sample_type == no_update[j, "sample_type"] & inRemote$collection_method == no_update[j, "collection_method"] & inRemote$sample_fraction == no_update[j, "sample_fraction"] & inRemote$result_speciation == no_update[j, "result_speciation"] & inRemote$result_value_type == no_update[j, "result_value_type"]), ]
@@ -265,8 +276,9 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
               inDB <- inDB[, colnames(inDB) %in% colnames(inRemote)]
               
               # Make keys
-              # These column names can all be present in either data.frame: target_datetime, datetime, value, note, owner, contributor, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab. 
+              # These column names can all be present in either data.frame: target_datetime, datetime, value, note, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab. 
               # Some will not be present in one and/or the other. Build a key with all columns present in one or the other data.frame. 
+              
               # target_datetime and datetime need to be rounded to be truncated to 22 characters to prevent rounding errors.
               inRemote$datetime <- substr(as.character(inRemote$datetime), 1, 22)
               inDB$datetime <- substr(as.character(inDB$datetime), 1, 22)
@@ -284,8 +296,9 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
               inDB$key <- do.call(paste, c(inDB, sep = "|"))
             }
             
-            # Check for mismatches using set operations
+            # Check for mismatches using set operations. 
             mismatch_keys <- inRemote$key[!(inRemote$key %in% inDB$key)]
+            # This DOES NOT catch if there are points inDB at dates past what is inRemote, unless a mismatch happens before. Check for that later.
             
             # Check where the discrepancy is in both data frames
             if (length(mismatch_keys) > 0) {
@@ -293,7 +306,12 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
               # Find the most recent datetime in the remote data that is not in the DB. This will be the datetime to start replacing from in the local.
               datetime <- min(inRemote[inRemote$key %in% mismatch_keys, "datetime"])
             } else {
-              mismatch <- FALSE
+              if (max(inDB$datetime) > max(inRemote$datetime)) { # Check if the remote misses data that should be deleted from the DB
+                mismatch <- TRUE
+                datetime <- max(inRemote$datetime)
+              } else {
+                mismatch <- FALSE
+              }
             }
             inRemote$key <- NULL
           }
@@ -356,7 +374,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
             DBI::dbBegin(con)
             attr(con, "active_transaction") <- TRUE
             tryCatch({
-              commit_fx(con, category, imputed.remains, tsid, inRemote, inDB)
+              commit_fx(con, category, no_update, tsid, inRemote, inDB)
               DBI::dbCommit(con)
               attr(con, "active_transaction") <- FALSE
               updated <- updated + 1
