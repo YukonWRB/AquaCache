@@ -90,6 +90,16 @@ AS SELECT md.timeseries_id,
   # Alter the default search path to include the new schema 'measurements_discrete' and 'spatial'
   DBI::dbExecute(con, 'ALTER DATABASE "AquaCache" SET search_path TO public, measurements_discrete, instruments, spatial, information;')
   
+  # Grand select privileges on the new schema to the ac_editor and hydromet_read roles
+  try({
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA measurements_discrete TO ac_editor, hydromet_read;")
+      DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA measurements_discrete TO ac_editor, hydromet_read;")
+  })
+  try({
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA spatial TO ac_editor, hydromet_read;")
+      DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA spatial TO ac_editor, hydromet_read;")
+  })
+  
   
   # modify existing column 'timeseries.owner': make a NOT NULL field, with FK to owners_contributors.owner_contributor_id
   DBI::dbExecute(con, "ALTER TABLE timeseries ALTER COLUMN owner SET NOT NULL")
