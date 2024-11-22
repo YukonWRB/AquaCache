@@ -4,7 +4,16 @@
 \alias{dailyUpdate}
 \title{Daily update of hydro database}
 \usage{
-dailyUpdate(con = NULL, timeseries_id = "all", active = "default")
+dailyUpdate(
+  con = NULL,
+  timeseries_id = "all",
+  active = "default",
+  continuous = TRUE,
+  discrete = TRUE,
+  hydat = TRUE,
+  images = TRUE,
+  rasters = TRUE
+)
 }
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
@@ -12,6 +21,16 @@ dailyUpdate(con = NULL, timeseries_id = "all", active = "default")
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
 \item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
+
+\item{continuous}{If TRUE, will update continuous data. Default is TRUE.}
+
+\item{discrete}{If TRUE, will update discrete data. Default is TRUE.}
+
+\item{hydat}{If TRUE, will check for new HYDAT data and update timeseries in the database if needed. Default is TRUE.}
+
+\item{images}{If TRUE, will fetch new images. Default is TRUE.}
+
+\item{rasters}{If TRUE, will fetch new rasters. Default is TRUE.}
 }
 \value{
 The database is updated in-place, and diagnostic messages are printed to the console.

@@ -15,11 +15,16 @@
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
+#' @param continuous If TRUE, will update continuous data. Default is TRUE.
+#' @param discrete If TRUE, will update discrete data. Default is TRUE.
+#' @param hydat If TRUE, will check for new HYDAT data and update timeseries in the database if needed. Default is TRUE.
+#' @param images If TRUE, will fetch new images. Default is TRUE.
+#' @param rasters If TRUE, will fetch new rasters. Default is TRUE.
 #'
 #' @return The database is updated in-place, and diagnostic messages are printed to the console.
 #' @export
 
-dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default')
+dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default', continuous = TRUE, discrete = TRUE, hydat = TRUE, images = TRUE, rasters = TRUE)
 {
   
   if (!active %in% c('default', 'all')) {
@@ -59,59 +64,80 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default')
   }
 
   #Get new data ################
-  if (nrow(continuous_ts) > 0) {
-    message("Getting continuous information up to date with getNewContinuous...")
-    tryCatch({
-      rt_start <- Sys.time()
-      getNewContinuous(con = con, timeseries_id = continuous_ts$timeseries_id)
-      rt_duration <- Sys.time() - rt_start
-      message("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), ".")
-    }, error = function(e) {
-      warning("dailyUpdate: error fetching new continuous data. Returned message: ", e$message)
-    })
+  if (continuous) {
+    if (nrow(continuous_ts) > 0) {
+      message("Getting continuous information up to date with getNewContinuous...")
+      tryCatch({
+        rt_start <- Sys.time()
+        getNewContinuous(con = con, timeseries_id = continuous_ts$timeseries_id)
+        rt_duration <- Sys.time() - rt_start
+        message("getNewContinuous executed in ", round(rt_duration[[1]], 2), " ", units(rt_duration), ".")
+      }, error = function(e) {
+        warning("dailyUpdate: error fetching new continuous data. Returned message: ", e$message)
+      })
+    }
   }
 
-  if (nrow(discrete_ts) > 0) {
-    message("Getting discrete information up to date with getNewDiscrete...")
+  if (discrete) {
+    if (nrow(discrete_ts) > 0) {
+      message("Getting discrete information up to date with getNewDiscrete...")
+      tryCatch({
+        disc_start <- Sys.time()
+        getNewDiscrete(con = con, timeseries_id = discrete_ts$timeseries_id)
+        disc_duration <- Sys.time() - disc_start
+        message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
+      }, error = function(e) {
+        warning("dailyUpdate: error fetching new discrete data. Returned message: ", e$message)
+      })
+    }
+  }
+  
+  if (images) {
+    message("Getting new images with getNewImages...")
     tryCatch({
-      disc_start <- Sys.time()
-      getNewDiscrete(con = con, timeseries_id = discrete_ts$timeseries_id)
-      disc_duration <- Sys.time() - disc_start
-      message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
+      img_start <- Sys.time()
+      getNewImages(con = con, active = active)
+      img_duration <- Sys.time() - img_start
+      message("getNewImages executed in ", round(img_duration[[1]], 2), " ", units(img_duration), ".")
     }, error = function(e) {
-      warning("dailyUpdate: error fetching new discrete data. Returned message: ", e$message)
+      warning("dailyUpdate: error fetching new images. Returned message: ", e$message)
     })
   }
-
-  message("Getting new images with getNewImages...")
-  tryCatch({
-    img_start <- Sys.time()
-    getNewImages(con = con, active = active)
-    img_duration <- Sys.time() - img_start
-    message("getNewImages executed in ", round(img_duration[[1]], 2), " ", units(img_duration), ".")
-  }, error = function(e) {
-    warning("dailyUpdate: error fetching new images. Returned message: ", e$message)
-  })
-
+  
+  if (rasters) {
+    message("Getting new rasters with getNewRasters...")
+    tryCatch({
+      ras_start <- Sys.time()
+      getNewRasters(con = con, active = active)
+      ras_duration <- Sys.time() - ras_start
+      message("getNewRasters executed in ", round(ras_duration[[1]], 2), " ", units(ras_duration), ".")
+    }, error = function(e) {
+      warning("dailyUpdate: error fetching new rasters. Returned message: ", e$message)
+    })
+  }
+  
   ### Check for a new version of HYDAT, update timeseries in the database if needed. #####
-  message("Checking for new HYDAT database on this computer and determining the version last used for updating timeseries with update_hydat...")
-  tryCatch({
-    hy_start <- Sys.time()
-    suppressMessages({new_hydat <- update_hydat(con = con)}) #This function will run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
-    if (new_hydat) {
-      hy_duration <- Sys.time() - hy_start
-      message("A new version of HYDAT was detected. Timeseries were updated in ", round(hy_duration[[1]], 2), " ", units(hy_duration), ".")
-    } else {
-      message("HYDAT database is already up to date")
-    }
-    # if new HYDAT, check WSC stations for new datums and check datums table for new entries
-    if (new_hydat) {
-      message("Checking if latest version of HYDAT has new datums...")
-      update_hydat_datums(con = con)
-    }
-  }, error = function(e) {
-    warning("dailyUpdate: error when checking for new HYDAT database or when updating datums. Returned message: ", e$message)
-  })
+  if (hydat) {
+    message("Checking for new HYDAT database on this computer and determining the version last used for updating timeseries with update_hydat...")
+    tryCatch({
+      hy_start <- Sys.time()
+      suppressMessages({new_hydat <- update_hydat(con = con)}) #This function will run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
+      if (new_hydat) {
+        hy_duration <- Sys.time() - hy_start
+        message("A new version of HYDAT was detected. Timeseries were updated in ", round(hy_duration[[1]], 2), " ", units(hy_duration), ".")
+      } else {
+        message("HYDAT database is already up to date")
+      }
+      # if new HYDAT, check WSC stations for new datums and check datums table for new entries
+      if (new_hydat) {
+        message("Checking if latest version of HYDAT has new datums...")
+        update_hydat_datums(con = con)
+      }
+    }, error = function(e) {
+      warning("dailyUpdate: error when checking for new HYDAT database or when updating datums. Returned message: ", e$message)
+    })
+  }
+
 
 
   ### Calculate new daily means and stats from realtime data where necessary #######
