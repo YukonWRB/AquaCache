@@ -31,9 +31,9 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
   
   # Create table of meta_ids
   if (raster_series_ids[1] == "all") {
-    meta_ids <- DBI::dbGetQuery(con, "SELECT raster_series_id, end_datetime, last_issue, type, source_fx, source_fx_args, parameter FROM raster_series_index WHERE source_fx IS NOT NULL AND active = TRUE;")
+    meta_ids <- DBI::dbGetQuery(con, "SELECT raster_series_id, end_datetime, last_issue, type, source_fx, source_fx_args, parameter, active FROM raster_series_index WHERE source_fx IS NOT NULL;")
   } else {
-    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT raster_series_id, end_datetime, last_issue, type, source_fx, source_fx_args, parameter FROM raster_series_index WHERE raster_series_id IN ('", paste(raster_series_ids, collapse = "', '"), "') AND source_fx IS NOT NULL AND active = TRUE;"))
+    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT raster_series_id, end_datetime, last_issue, type, source_fx, source_fx_args, parameter, active FROM raster_series_index WHERE raster_series_id IN ('", paste(raster_series_ids, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     if (length(raster_series_ids) != nrow(meta_ids)) {
       warning("At least one of the raster_series_ids you called for cannot be found in the database or has no function specified in column source_fx of table raster_series_index")
     }
@@ -43,6 +43,11 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
     meta_ids <- meta_ids[meta_ids$active, ]
   }
 
+  if (nrow(meta_ids) == 0) {
+    message("No raster_series_id's found to update base on input parameters.")
+    return(NULL)
+  }
+  
   message("Fetching new rasters with getNewRasters")
   
   count <- 0 #counter for number of successful new pulls
