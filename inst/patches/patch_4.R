@@ -88,7 +88,8 @@ AS SELECT md.timeseries_id,
   
 
   # Alter the default search path to include the new schema 'measurements_discrete' and 'spatial'
-  DBI::dbExecute(con, 'ALTER DATABASE "AquaCache" SET search_path TO public, measurements_discrete, instruments, spatial, information;')
+  curr_db_name <- DBI::dbGetQuery(con, "SELECT current_database() AS db_name")[1,1]
+  DBI::dbExecute(con, paste0('ALTER DATABASE "', curr_db_name, '" SET search_path TO public, measurements_discrete, instruments, spatial, information;'))
   
   # Grand select privileges on the new schema to the ac_editor and hydromet_read roles
   try({
