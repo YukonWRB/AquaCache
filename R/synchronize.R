@@ -362,12 +362,13 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
               }
               DBI::dbAppendTable(con, "measurements_discrete", inRemote)
             }
-            #make the new entry into table timeseries
+            # adjust entries in table 'timeseries' to reflect the new data
             end <- max(inRemote$datetime)
             DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-            if (min(inRemote$datetime) < min(inDB$datetime)) { #If the remote data starts before the local data, update the start_datetime in the timeseries table
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(inRemote$datetime), "' WHERE timeseries_id = ", tsid, ";"))
-            }
+            earliest <- min(inRemote$datetime, 
+                            DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]], 
+                            DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]])
+            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
           }
           
           if (!attr(con, "active_transaction")) {
@@ -398,10 +399,11 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
           DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
           # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
           start_dt <- DBI::dbGetQuery(con, paste0("SELECT start_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))[[1]]
-          if (start_dt > min(inRemote$datetime)) {
-            DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(inRemote$datetime), "' WHERE timeseries_id = ", tsid, ";"))
-            message("The start_datetime in table timeseries was found to be incorrect for timeseries ", tsid, "; it has been updated to the earliest data I could find in the remote. Depending on what you set for parameter start_datetime this may not be the whole picture but this will be checked when this function is run again with an earlier start_datetime.")
-          }
+          # double check the earliest time in DB in case there's an error in the timeseries table
+          earliest <- min(inRemote$datetime, 
+                          DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]], 
+                          DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]])
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
         }
       } else { # There was no data in remote for the date range specified
         DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
