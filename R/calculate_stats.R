@@ -252,7 +252,6 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, share_with, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
           } else {
             gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, share_with, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
-            
           }
           
           if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
@@ -370,18 +369,19 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             # Calculate statistics for each day
             missing_stats <- data.table::setDT(missing_stats)
             for (k in 1:nrow(missing_stats)) {
-              date <- missing_stats$date[k]
-              doy <- missing_stats$dayofyear[k]
+              int <- as.integer(k)
+              date <- missing_stats$date[int]
+              doy <- missing_stats$dayofyear[int]
               past <- all_stats[all_stats$dayofyear == doy & all_stats$date < date, "value"] #Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
               past <- past[!is.na(past)]
               if (length(past) >= 1) {
-                current <- missing_stats$value[k]
+                current <- missing_stats$value[int]
                 min <- min(past)
                 max <- max(past)
                 values <- c(list("max" = max, "min" = min, "mean" = mean(past)), as.list(stats::quantile(past, c(0.90, 0.75, 0.50, 0.25, 0.10), names = FALSE)), "doy_count" = if (!is.na(current)) length(past) + 1 else length(past))
-                data.table::set(missing_stats, i = k, j = c("max", "min", "mean", "q90", "q75", "q50", "q25", "q10", "doy_count"), value = values)
+                data.table::set(missing_stats, i = int, j = c("max", "min", "mean", "q90", "q75", "q50", "q25", "q10", "doy_count"), value = values)
                 if (length(past) > 1 & !is.na(current)) { #need at least 2 measurements to calculate a percent historic, plus a current measurement!
-                  data.table::set(missing_stats, i = k, j = "percent_historic_range", value = (((current - min) / (max - min)) * 100))
+                  data.table::set(missing_stats, i = int, j = "percent_historic_range", value = ((current - min) / (max - min)) * 100)
                 }
               }
             }
