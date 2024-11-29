@@ -7,10 +7,10 @@ library(AquaCache)
 if (!exists("pool")) {
   pool <- pool::dbPool(
     drv = RPostgres::Postgres(),
-    dbname = "AquaCache",
-    host = Sys.getenv("AquaCacheHost"),
-    port = Sys.getenv("AquaCachePort"),
-    user = Sys.getenv("AquaCacheAdminUser"),
-    password = Sys.getenv("AquaCacheAdminPass")
+    dbname = "aquacache",
+    host = Sys.getenv("aquacacheHost"),
+    port = Sys.getenv("aquacachePort"),
+    user = Sys.getenv("aquacacheAdminUser"),
+    password = Sys.getenv("aquacachedminPass")
   )
 }

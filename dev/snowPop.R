@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Populates the snowDB PostgreSQL database. Pulls existing data from Access database.
+#' Populates the snow PostgreSQL database. Pulls existing data from Access database.
 #'
 #' @param old_snow_db_path the path to where the old Access snow database exists
 #'
@@ -12,7 +12,7 @@
 #' @param overwrite If TRUE, content of tables will be deleted before re-populating. All data in db will be lost!
 #' @param basins_shp_path Path and file name of sub basins shapefile.
 #'
-#' @return A populated snowDB database.
+#' @return A populated snow database.
 #' @export
 #'
 

@@ -1,13 +1,13 @@
-#' Create a new user in the AquaCache database
+#' Create a new user in the aquacache database
 #' 
-#' The AquaCache database uses row-level security to restrict record access to users based on their group_id.
-#' Users are stored in the 'users' table in the AquaCache database. The password is hashed using the specified algorithm and a random salt.
+#' The aquacache database uses row-level security to restrict record access to users based on their group_id.
+#' Users are stored in the 'users' table in the aquacache database. The password is hashed using the specified algorithm and a random salt.
 #'
 #' @param username The username for the new user.
 #' @param password The password for the new user.
 #' @param email The email address for the new user.
 #' @param group_ids The group_ids for the new user. Default 1 is the 'public' group. To add a group, use [addACUserGroup()].
-#' @param con A connection to the AquaCache database. Default uses [AquaConnect()].
+#' @param con A connection to the aquacache database. Default uses [AquaConnect()].
 #' @param algorithm The hashing algorithm to use. Default is "sha256". Refer to [digest::digest()] for available algorithms.
 #'
 #' @return The new user is added to the database.

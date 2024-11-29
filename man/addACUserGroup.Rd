@@ -2,7 +2,7 @@
 % Please edit documentation in R/addACUserGroup.R
 \name{addACUserGroup}
 \alias{addACUserGroup}
-\title{Add a new user group to the AquaCache}
+\title{Add a new user group to the aquacache}
 \usage{
 addACUserGroup(name, description, con = NULL)
 }
@@ -17,5 +17,5 @@ addACUserGroup(name, description, con = NULL)
 The group_id of the new user group, plus a new entry to the database.
 }
 \description{
-Add a new user group to the AquaCache
+Add a new user group to the aquacache
 }

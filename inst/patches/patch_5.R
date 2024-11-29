@@ -2,12 +2,7 @@
 # Creates new table 'network_types' ....
 
 # Initial checks #################
-# Ensure the user has CREATE privileges on the database and can therefore create a new schema
-check <- DBI::dbGetQuery(con, "SELECT has_database_privilege(current_user, 'CREATE') AS can_create")
-
-if (!check$can_create) {
-  stop("You do not have the necessary privileges to create a new schema in this database.")
-}
+# No special checks needed as this patch can work with either 'admin' or 'postgres' user
 
 message("Working on Patch 5. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?).")
 

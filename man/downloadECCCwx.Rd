@@ -24,7 +24,7 @@ downloadECCCwx(
 
 \item{interval}{The interval to pass to \code{\link[weathercan:weather_dl]{weathercan::weather_dl()}}, one of "hour", "day", "month".}
 
-\item{con}{A connection to the AquaCache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
+\item{con}{A connection to the aquacache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
 }
 \value{
 A data.frame of hydrometric data, with datetimes in UTC-0.

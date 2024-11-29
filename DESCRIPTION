@@ -9,7 +9,7 @@ Authors@R: c(
   )
 Description: Set of functions for the creation and ongoing maintenance of
     the Yukon Government's hydrometeorological databases in postgreSQL
-    format. Contains functions to create two databases, the 'snow' and 'AquaCache' 
+    format. Contains functions to create two databases, the 'snow' and 'aquacache' 
     databases. The former is designed to hold discrete snowpack measurements and 
     detailled snow survey data, while the later is designed to hold hydrometric, 
     meteorological and water quality data along with images, spatial files and documents.

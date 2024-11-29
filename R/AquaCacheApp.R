@@ -1,4 +1,4 @@
-#' Shiny Interface to AquaCache DB
+#' Shiny Interface to aquacache DB
 #'
 #'@description
 #'`r lifecycle::badge("experimental")`

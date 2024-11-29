@@ -17,25 +17,31 @@
 #' @export
 #'
 
-snowConnect <- function(name = "snowDB", host = Sys.getenv("snowHost"), port = Sys.getenv("snowPort"), username = Sys.getenv("snowAdminUser"), password = Sys.getenv("snowAdminPass"), silent = FALSE){
-
-
-
+snowConnect <- function(name = "snow", host = Sys.getenv("snowHost"), port = Sys.getenv("snowPort"), username = Sys.getenv("snowAdminUser"), password = Sys.getenv("snowAdminPass"), silent = FALSE) {
+  
+  
+  
   tryCatch({
     snow <- DBI::dbConnect(drv = RPostgres::Postgres(),
-                            dbname = name,
-                            host = host,
-                            port = port,
-                            user = username,
-                            password = password)
-    if (!silent){
+                           dbname = name,
+                           host = host,
+                           port = port,
+                           user = username,
+                           password = password)
+    
+    # Add a new attribute to the connection object to track if a transaction is active
+    attr(snow, "active_transaction") <- FALSE
+    
+    # Explicitly set the timezone to UTC as all functions in this package work with UTC timezones
+    DBI::dbExecute(snow, "SET timezone = 'UTC'")
+    
+    if (!silent) {
+      message("Connected to the snow database with the timezone set to UTC.")
       message("Remember to disconnect using DBI::dbDisconnect() when finished.")
     }
     
-    DBI::dbExecute(snow, "SET timezone = 'UTC'")
-    
     return(snow)
-  }, error = function(e){
+  }, error = function(e) {
     stop("Connection failed.")
   })
 }

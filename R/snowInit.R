@@ -208,7 +208,7 @@ snowInit <- function(con = snowConnect(), overwrite = FALSE) {
   #### Create a read-only account
   tryCatch({
     DBI::dbExecute(con, "CREATE ROLE snow_read WITH LOGIN PASSWORD 'snow';")
-    DBI::dbExecute(con, "GRANT CONNECT ON DATABASE snowDB TO snow_read;")
+    DBI::dbExecute(con, "GRANT CONNECT ON DATABASE snow TO snow_read;")
     DBI::dbExecute(con, "GRANT USAGE ON SCHEMA public TO snow_read;")
     DBI::dbExecute(con, "GRANT SELECT ON means to snow_read;")
     DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA public TO snow_read;")

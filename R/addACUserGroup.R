@@ -1,4 +1,4 @@
-#' Add a new user group to the AquaCache
+#' Add a new user group to the aquacache
 #' 
 #' @param name The name of the new user group
 #' @param description A description of the new user group

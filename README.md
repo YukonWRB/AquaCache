@@ -12,7 +12,7 @@ editor_options:
 
 # What's the AquaCache package about?
 
-The AquaCache R package is a collection of functions that facilitate the creation of a postgres database (the AquaCache), loads data to this database, retrieves it, and performs checks on the data.
+The AquaCache R package is a collection of functions that facilitate the creation of a postgres database (the aquacache), loads data to this database, retrieves it, and performs checks on the data.
 It integrates the Water Survey of Canada's realtime (5 minute) hydrometric data with published historical daily means, and facilitates the automated import of data from a variety of sources.
 
 In addition, the package provides functions for the creation and administration of a snow survey database as well as a database intended for instrument maintenance/calibration records.
@@ -22,10 +22,10 @@ The later works with the Shiny application packaged with the WRBcalibrates packa
 
 The AquaCache package is not available on CRAN and likely never will be, but you can install it from GitHub with: `devtools::install_github("YukonWRB/AquaCache")`
 
-Once the package is installed you attempt to initialize the AquaCache database on a running postgres server using the AquaCacheInit function, which creates tables, relationships, functions, triggers, and pre-populates some tables with standard information.
+Once the package is installed you attempt to initialize the aquacache database on a running postgres server using the AquaCacheInit function, which creates tables, relationships, functions, triggers, and pre-populates some tables with standard information.
 Note that we state "attempt to initialize" here: it's been a long while since anyone's created the database from scratch, so there's a really good chance that this function will not run cleanly because of some SQL syntax errors.
 
-An alternative to initializing the database is to restore a backup of the AquaCache database.
+An alternative to initializing the database is to restore a backup of the aquacache database.
 This is the preferred method, as it will ensure that the database is in a known state.
 The backup file is available by contacting the Water Resources Branch data scientist, Ghislain de Laplante, who can also help you out with the installation process in general.
 
@@ -36,7 +36,7 @@ If so, you may find the AquaCache package useful and the alternatives lacking.
 We designed this R package and associated database to meet the needs of the Yukon Department of Environment Water Resources Branch, but we believe that it could be useful to other organizations as well.
 
 We welcome contributions to the package, and encourage you to contact the project creator and coordinator, Ghislain de Laplante if you wish to collaborate on the development of the package.
-We are particularly interested in collaborating with organizations that have a need for a database like AquaCache, and that are willing to contribute to the development of the package.
+We are particularly interested in collaborating with organizations that have a need for a database like aquacache, and that are willing to contribute to the development of the package.
 
 ## Contribution guidelines
 

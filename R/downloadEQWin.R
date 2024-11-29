@@ -1,4 +1,4 @@
-#' Bring EQWin water quality data into the AquaCache database
+#' Bring EQWin water quality data into the aquacache database
 #'
 #' @description
 #' `r lifecycle::badge("stable")`

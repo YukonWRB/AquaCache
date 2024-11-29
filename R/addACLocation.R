@@ -1,6 +1,6 @@
-#' Add location to AquaCache
+#' Add location to aquacache
 #' 
-#' Adds a new location to the AquaCache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
+#' Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
 #' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.
 #' @param location A character vector of the location code(s).
@@ -21,7 +21,7 @@
 #' @param current A logical vector of whether the conversion factor(s) are current.
 #' @param network A numeric vector of the network(s) to which the location(s) belong.
 #' @param project A numeric vector of the project(s) to which the location(s) belong.
-#' @param con A connection to the AquaCache database. Default uses [AquaConnect()]. If left NULL the function will attempt to connect to the database and automatically disconnect afterwards.
+#' @param con A connection to the aquacache database. Default uses [AquaConnect()]. If left NULL the function will attempt to connect to the database and automatically disconnect afterwards.
 #'
 #' @return Success/error messages and new entries added to the database.
 #' @export

@@ -24,7 +24,7 @@ downloadNWIS(
 
 \item{modifiedSince}{Optional. A number of hours to narrow the request down to only data points modified within the last x hours. Default NULL fetches all data with the \code{start_datetime} and \code{end_datetime} range.}
 
-\item{con}{A connection to the AquaCache database, necessary to allow for the mapping of NWIS approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
+\item{con}{A connection to the aquacache database, necessary to allow for the mapping of NWIS approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
 }
 \value{
 A data.frame object of hydrometric data, with datetimes in UTC-0.

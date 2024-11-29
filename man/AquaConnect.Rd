@@ -2,14 +2,14 @@
 % Please edit documentation in R/AquaConnect.R
 \name{AquaConnect}
 \alias{AquaConnect}
-\title{Connect to the AquaCache database}
+\title{Connect to the aquacache database}
 \usage{
 AquaConnect(
-  name = "AquaCache",
-  host = Sys.getenv("AquaCacheHost"),
-  port = Sys.getenv("AquaCachePort"),
-  username = Sys.getenv("AquaCacheAdminUser"),
-  password = Sys.getenv("AquaCacheAdminPass"),
+  name = "aquacache",
+  host = Sys.getenv("aquacacheHost"),
+  port = Sys.getenv("aquacachePort"),
+  username = Sys.getenv("aquacacheAdminUser"),
+  password = Sys.getenv("aquacacheAdminPass"),
   silent = FALSE,
   dev = FALSE
 )
@@ -17,13 +17,13 @@ AquaConnect(
 \arguments{
 \item{name}{Database name.}
 
-\item{host}{Database host address. By default searches the .Renviron file for parameter:value pair of form AquaCacheHost:"hostname".}
+\item{host}{Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost:"hostname".}
 
-\item{port}{Connection port. By default searches the .Renviron file for parameter:value pair of form AquaCachePort:"1234".}
+\item{port}{Connection port. By default searches the .Renviron file for parameter:value pair of form aquacachePort:"1234".}
 
-\item{username}{Username. By default searches the .Renviron file for parameter:value pair of form AquaCacheAdminUser:"username".}
+\item{username}{Username. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminUser:"username".}
 
-\item{password}{Password. By default searches the .Renviron file for parameter:value pair of form AquaCacheAdminPass:"password".}
+\item{password}{Password. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminPass:"password".}
 
 \item{silent}{TRUE suppresses messages except for errors and login messages.}
 

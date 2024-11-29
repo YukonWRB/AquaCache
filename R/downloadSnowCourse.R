@@ -1,4 +1,4 @@
-#' Bring snow course data into the AquaCache database
+#' Bring snow course data into the aquacache database
 #'
 #' @description
 #' `r lifecycle::badge("stable")`
@@ -9,8 +9,8 @@
 #' @param parameter_id For snow courses, one of "SWE" or "depth" corresponding to the desired parameter.
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
-#' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snowDB. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
-#' @param con A connection to the AquaCache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
+#' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
+#' @param con A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
 #' @param snowCon A connection to the snow database.
 #'
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
@@ -86,7 +86,7 @@ downloadSnowCourse <- function(location, parameter_id, start_datetime, end_datet
     meas <- meas[meas$datetime >= start_datetime & meas$datetime <= end_datetime, ]
     
     try({
-      # Update the timeseries table of AquaCache DB with the offset values
+      # Update the timeseries table of aquacache DB with the offset values
       if (is.null(con)) {
         con <- AquaConnect(silent = TRUE)
         on.exit(DBI::dbDisconnect(con), add = TRUE)
