@@ -17,34 +17,57 @@ DBI::dbExecute(con, "BEGIN;")
 attr(con, "active_transaction") <- TRUE
 tryCatch({
   
-  # Create the network_types table and populate it
- DBI::dbExecute(con, "CREATE TABLE network_types (
-  network_type_id SERIAL PRIMARY KEY,
-  network_type_name TEXT NOT NULL,
-  network_type_name_fr TEXT,
-  network_type_description TEXT,
-  network_type_description_fr TEXT)
+  # Create the network_project_types table and populate it
+  DBI::dbExecute(con, "CREATE TABLE network_project_types (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  name_fr TEXT,
+  description TEXT,
+  description_fr TEXT)
   ;")
   
-  tbl <- data.frame(network_type_name = c("monitoring", "research"),
-                    network_type_name_fr = c("surveillance", "recherche"),
-                    network_type_description = c("A network for monitoring purposes of background or human-influenced conditions.", "A network for research purposes, including experimental or observational studies."),
-                    network_type_description_fr = c("Un réseau à des fins de surveillance des conditions de fond ou influencées par l'humain", "Un réseau à des fins de recherche, y compris des études expérimentales ou observationnelles."))
+  tbl <- data.frame(name = c("monitoring", "research"),
+                    name_fr = c("surveillance", "recherche"),
+                    description = c("A network/project for monitoring purposes of background or human-influenced conditions.", "A network/project for research purposes, including experimental or observational studies."),
+                    description_fr = c("Un r\u00E9seau/projet \u00E0 des fins de surveillance des conditions de fond ou influenc\u00E9es par l'humain", "Un r\u00E9seau/projet \u00E0 des fins de recherche, y compris des \u00E9tudes exp\u00E9rimentales ou observationnelles."))
   
-  DBI::dbAppendTable(con, "network_types", tbl)
+  DBI::dbAppendTable(con, "network_project_types", tbl)
   
   # modify 'networks' table. Column 'type' needs to become numeric and reference the new table. All fields in there right now are 'monitoring' so that should be easy.
   DBI::dbExecute(con, "ALTER TABLE networks DROP COLUMN type;")
-  DBI::dbExecute(con, "ALTER TABLE networks ADD COLUMN type INTEGER REFERENCES network_types(network_type_id);")
+  DBI::dbExecute(con, "ALTER TABLE networks ADD COLUMN type INTEGER REFERENCES network_project_types(id);")
   DBI::dbExecute(con, "UPDATE networks SET type = 1;")
   # Make not null
   DBI::dbExecute(con, "ALTER TABLE networks ALTER COLUMN type SET NOT NULL;")
-
   
+  # Do the same for 'projects' table.
+  DBI::dbExecute(con, "ALTER TABLE projects DROP COLUMN type;")
+  DBI::dbExecute(con, "ALTER TABLE projects ADD COLUMN type INTEGER REFERENCES network_project_types(id);")
+  DBI::dbExecute(con, "UPDATE projects SET type = 1;")
+  # Make not null
+  DBI::dbExecute(con, "ALTER TABLE projects ALTER COLUMN type SET NOT NULL;")
+  
+  
+  # Grant privileges: SELECT, INSERT, UPDATE, DELETE to ac_editor, SELECT to hydromet_read
+  DBI::dbExecute(con, "GRANT SELECT, INSERT, UPDATE, DELETE ON network_project_types TO ac_editor;")
+  DBI::dbExecute(con, "GRANT SELECT ON network_project_types TO hydromet_read;")
   
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '5' WHERE item = 'Last patch number';")
   DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))
+  
+  
+  # Create new users so that postgres stops being used for everything. Read-only user is hydromet_read, change that to ac_reader.
+  # Admin user (can do everything except for creating new databases)
+  
+  # Give the user a prompt to enter the password using readline
+  message("Creating new users so that postgres stops being used. ENTER YOUR DESIRED PASSWORD BELOW.")
+  password <- readline("Password for the admin user: ")
+  
+  
+  DBI::dbExecute(con, paste0("CREATE ROLE admin WITH LOGIN PASSWORD '", password, "';"))
+  DBI::dbExecute(con, "GRANT CONNECT ON DATABASE aquacache TO admin;")
+  
 
   
   # Commit the transaction
@@ -52,7 +75,7 @@ tryCatch({
   attr(con, "active_transaction") <- FALSE
   
   
-  message("Patch 5 applied successfully: created new table for network types and added foreign keys from 'networks' to this new table.")
+  message("Patch 5 applied successfully: created new table for network types and added foreign keys from 'networks' and 'projects' to this new table.")
   
 }, error = function(e) {
   
