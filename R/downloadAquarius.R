@@ -15,7 +15,7 @@
 #' @param end_datetime The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.
 #' @param login Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.
 #' @param server The URL for your organization's Aquarius web server. Default pulls from your .renviron file; see details.
-#' @param con A connection to the AquaCache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.
+#' @param con A connection to the aquacache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.
 #'
 #' @return A data.frame of timeseries data with columns for datetime, value, grade, approval.
 #'

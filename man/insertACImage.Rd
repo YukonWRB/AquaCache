@@ -2,7 +2,7 @@
 % Please edit documentation in R/insertACImage.R
 \name{insertACImage}
 \alias{insertACImage}
-\title{Add images to AquaCache database}
+\title{Add images to aquacache database}
 \usage{
 insertACImage(
   object,

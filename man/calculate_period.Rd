@@ -17,5 +17,5 @@ calculate_period(data, timeseries_id, con = NULL)
 A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
 }
 \description{
-Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the AquaCache DB to fetch missing data points or to pull additional data in case of ambiguity.
+Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the aquacache DB to fetch missing data points or to pull additional data in case of ambiguity.
 }

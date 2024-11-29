@@ -11,7 +11,7 @@ validateACUser(username, password, con = AquaConnect())
 
 \item{password}{The password for the user to validate.}
 
-\item{con}{A connection to the AquaCache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the aquacache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
 TRUE if the user's credentials are valid, FALSE otherwise.

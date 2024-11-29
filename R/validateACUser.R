@@ -2,7 +2,7 @@
 #'
 #' @param username The username for the user to validate.
 #' @param password The password for the user to validate.
-#' @param con A connection to the AquaCache database. Default uses [AquaConnect()].
+#' @param con A connection to the aquacache database. Default uses [AquaConnect()].
 #'
 #' @return TRUE if the user's credentials are valid, FALSE otherwise.
 #' @export

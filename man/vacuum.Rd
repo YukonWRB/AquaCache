@@ -2,7 +2,7 @@
 % Please edit documentation in R/vacuum.R
 \name{vacuum}
 \alias{vacuum}
-\title{Maintenance (vacuum) function for AquaCache database.}
+\title{Maintenance (vacuum) function for aquacache database.}
 \usage{
 vacuum(con = NULL, full = FALSE)
 }

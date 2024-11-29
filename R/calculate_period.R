@@ -1,6 +1,6 @@
 #' Calculate periodicity of data and add a column
 #'
-#' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the AquaCache DB to fetch missing data points or to pull additional data in case of ambiguity.
+#' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the aquacache DB to fetch missing data points or to pull additional data in case of ambiguity.
 #'
 #' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`. This CAN be NA for the edge use case of creating a new timeseries.

@@ -1,4 +1,4 @@
-#' Maintenance (vacuum) function for AquaCache database.
+#' Maintenance (vacuum) function for aquacache database.
 #'
 #' @description
 #' `r lifecycle::badge("stable")`

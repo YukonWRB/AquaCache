@@ -27,7 +27,7 @@ downloadAquarius(
 
 \item{server}{The URL for your organization's Aquarius web server. Default pulls from your .renviron file; see details.}
 
-\item{con}{A connection to the AquaCache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
+\item{con}{A connection to the aquacache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.}
 }
 \value{
 A data.frame of timeseries data with columns for datetime, value, grade, approval.

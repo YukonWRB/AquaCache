@@ -1,4 +1,4 @@
-#' Add document to AquaCache database
+#' Add document to aquacache database
 #'
 #'@description
 #'`r lifecycle::badge("stable")`

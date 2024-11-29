@@ -5,7 +5,7 @@ ui <- fluidPage(
   
   shinyjs::useShinyjs(),
   
-  titlePanel("AquaCache Data Entry App"),
+  titlePanel("aquacache Data Entry App"),
   tabsetPanel(id = "tabsetPanel1",
               # Add Document tab ############################################################################################################
               tabPanel("Add Document", value = "addDocument",

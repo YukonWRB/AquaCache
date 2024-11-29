@@ -2,7 +2,7 @@
 % Please edit documentation in R/downloadEQWin.R
 \name{downloadEQWin}
 \alias{downloadEQWin}
-\title{Bring EQWin water quality data into the AquaCache database}
+\title{Bring EQWin water quality data into the aquacache database}
 \usage{
 downloadEQWin(
   location,

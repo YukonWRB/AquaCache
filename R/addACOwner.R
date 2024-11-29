@@ -1,4 +1,4 @@
-#' Add a new owner or contributor to the AquaCache
+#' Add a new owner or contributor to the aquacache
 #' 
 #' @param name The name of the new owner/contributor or organization
 #' @param name_fr The French name of the new owner/contributor or organization (optional).

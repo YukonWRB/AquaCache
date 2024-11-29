@@ -2,7 +2,7 @@
 % Please edit documentation in R/updateACDocument.R
 \name{updateHydrometDocument}
 \alias{updateHydrometDocument}
-\title{Update existing document in AquaCache database}
+\title{Update existing document in aquacache database}
 \usage{
 updateHydrometDocument(
   id,

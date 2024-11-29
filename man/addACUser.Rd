@@ -2,7 +2,7 @@
 % Please edit documentation in R/addACUser.R
 \name{addACUser}
 \alias{addACUser}
-\title{Create a new user in the AquaCache database}
+\title{Create a new user in the aquacache database}
 \usage{
 addACUser(
   username,
@@ -22,7 +22,7 @@ addACUser(
 
 \item{group_ids}{The group_ids for the new user. Default 1 is the 'public' group. To add a group, use \code{\link[=addACUserGroup]{addACUserGroup()}}.}
 
-\item{con}{A connection to the AquaCache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}.}
+\item{con}{A connection to the aquacache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{algorithm}{The hashing algorithm to use. Default is "sha256". Refer to \code{\link[digest:digest]{digest::digest()}} for available algorithms.}
 }
@@ -30,6 +30,6 @@ addACUser(
 The new user is added to the database.
 }
 \description{
-The AquaCache database uses row-level security to restrict record access to users based on their group_id.
-Users are stored in the 'users' table in the AquaCache database. The password is hashed using the specified algorithm and a random salt.
+The aquacache database uses row-level security to restrict record access to users based on their group_id.
+Users are stored in the 'users' table in the aquacache database. The password is hashed using the specified algorithm and a random salt.
 }

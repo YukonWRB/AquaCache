@@ -2,7 +2,7 @@
 % Please edit documentation in R/addACTimeseries.R
 \name{addACTimeseries}
 \alias{addACTimeseries}
-\title{Add timeseries to AquaCache database}
+\title{Add timeseries to aquacache database}
 \usage{
 addACTimeseries(
   df = NULL,

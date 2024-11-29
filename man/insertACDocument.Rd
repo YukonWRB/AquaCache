@@ -2,7 +2,7 @@
 % Please edit documentation in R/insertACDocument.R
 \name{insertACDocument}
 \alias{insertACDocument}
-\title{Add document to AquaCache database}
+\title{Add document to aquacache database}
 \usage{
 insertACDocument(
   path,

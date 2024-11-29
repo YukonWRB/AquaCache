@@ -2,7 +2,7 @@
 % Please edit documentation in R/addACOwner.R
 \name{addACOwner}
 \alias{addACOwner}
-\title{Add a new owner or contributor to the AquaCache}
+\title{Add a new owner or contributor to the aquacache}
 \usage{
 addACOwner(
   name,
@@ -33,5 +33,5 @@ addACOwner(
 The owner_contributor_id of the new user group, plus a new entry to the database.
 }
 \description{
-Add a new owner or contributor to the AquaCache
+Add a new owner or contributor to the aquacache
 }

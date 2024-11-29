@@ -139,7 +139,7 @@ for (i in 1:nrow(locs_level)) {
   }
   
   data$qualifier <- as.character(data$qualifier)
-  # Map qualifiers to AquaCache codes
+  # Map qualifiers to aquacache codes
   data$qualifier[data$qualifier == "-1"] <- "7"
   data$qualifier[data$qualifier == "10"] <- "1"
   data$qualifier[data$qualifier == "20"] <- "4"
@@ -219,7 +219,7 @@ for (i in 1:nrow(locs_flow)) {
   }
   
   data$qualifier <- as.character(data$qualifier)
-  # Map qualifiers to AquaCache codes
+  # Map qualifiers to aquacache codes
   data$qualifier[data$qualifier == "-1"] <- "7"
   data$qualifier[data$qualifier == "10"] <- "1"
   data$qualifier[data$qualifier == "20"] <- "4"

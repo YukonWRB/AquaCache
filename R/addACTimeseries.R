@@ -1,4 +1,4 @@
-#' Add timeseries to AquaCache database
+#' Add timeseries to aquacache database
 #'
 #'@description
 #'`r lifecycle::badge("stable")`

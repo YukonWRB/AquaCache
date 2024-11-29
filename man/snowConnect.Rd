@@ -5,7 +5,7 @@
 \title{Connect to the snow postgres database}
 \usage{
 snowConnect(
-  name = "snowDB",
+  name = "snow",
   host = Sys.getenv("snowHost"),
   port = Sys.getenv("snowPort"),
   username = Sys.getenv("snowAdminUser"),
