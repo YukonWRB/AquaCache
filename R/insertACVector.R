@@ -17,7 +17,8 @@
 #' @param description Optional but highly recommended long-form description of the geometry feature. Leave NULL is specifying a `description_col` instead.
 #' @param feature_name_col The name of the column with names to give to the geom features. Each feature (row in the attribute table) will be entered to the database using the string in this column. Leave NULL if specified with parameter `feature_name`.
 #' @param description_col The name of the column containing descriptions associated with each feature. Each feature (row in the attribute table) will be entered to the database using the string in this column. Leave NULL if specified with parameter `description` instead.
-#' @param table The target table in the database (as character string). If not under the public schema, use format c("schema", "table").
+#' @param table The target table in the database (as character string). See 'schema' if not under the 'spatial' schema.
+#' @param schema The schema in which the target 'table' is located. Default is 'spatial'. Note that this is NOT the default for rpostgis::pgWriteGeom().
 #' @param geom_col The name of the database table column in which to insert the geometry object.
 #' @param overwrite If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?
 #' @param con A connection to the database. Default NULL will use the utility function [AquaConnect()] and disconnect afterwards.
@@ -25,7 +26,7 @@
 #' @return A boolean vector, one element per feature.Messages will also be printed to the console.
 #' @export
 
-insertACVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", geom_col = "geom", overwrite = FALSE, con = NULL) {
+insertACVector <- function(geom, layer_name, feature_name = NULL, description = NULL, feature_name_col = NULL, description_col = NULL, table = "vectors", schema = "spatial", geom_col = "geom", overwrite = FALSE, con = NULL) {
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -35,10 +36,10 @@ insertACVector <- function(geom, layer_name, feature_name = NULL, description = 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
   
   if (inherits(con, "Pool")) {
-    con <- pool::localCheckout(con)
+    con <- pool::localCheckout(con)  # Automatically returned when the function exits
   }
   
-  exist_layer_names <- DBI::dbGetQuery(con, "SELECT DISTINCT layer_name FROM vectors")
+  exist_layer_names <- DBI::dbGetQuery(con, "SELECT DISTINCT layer_name FROM spatial.vectors")
   
   if (!layer_name %in% exist_layer_names$layer_name) {
     message("The layer_name you specified does not exist yet. Are you sure you want to create it? The current entries are:\n", paste(exist_layer_names$layer_name, collapse = "\n"))
@@ -109,19 +110,19 @@ insertACVector <- function(geom, layer_name, feature_name = NULL, description = 
         }
 
         if (overwrite) {
-          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
+          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM spatial.vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
           if (nrow(exist) == 1) {
             message("Updating entry for layer_name = ", layer_name, ", feature_name = ", feat_name, ".")
             sub.geom$geom_id <- exist[1, "geom_id"]
-            success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
+            success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = c(schema, table) , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
             DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           } else if (nrow(exist) == 0) {
             message("There is no existing database entry for this mix of layer_name = ", layer_name, ", feature_name = ", feat_name, ". Writing it without overwrite.")
-            success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
+            success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = c(schema, table) , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
             DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           }
         } else { #overwrite if FALSE
-          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
+          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM spatial.vectors WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
           if (nrow(exist) != 0) {
             message("There is already an entry for layer_name = ", layer_name, " and feature_name = ", feat_name, " but you didn't ask to overwrite it. Would you like to aggregate the database feature with the new one?")
             agg <- readline(prompt = writeLines(paste("\n1: Yes",
@@ -135,12 +136,12 @@ insertACVector <- function(geom, layer_name, feature_name = NULL, description = 
               message("Seeing if I can aggregate the layers together and update the existing vector entry...")
               sub.geom <- terra::aggregate(rbind(exist, sub.geom), by = "feature_name")
               sub.geom$geom_id <- exist[1, "geom_id"]
-              success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
+              success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = c(schema, table) , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
               DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
               message("Succeeded in adding to the existing vector!")
             }
           } else {
-            success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = table , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
+            success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = c(schema, table) , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
             DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           }
         }

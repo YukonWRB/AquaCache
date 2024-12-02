@@ -29,20 +29,20 @@
 addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = NA, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = NULL) {
   
    
-  # df <- data.frame(location = c("YEC-ML", "YEC-MRM", "YEC-MRW", "YEC-WL"),
-  #                  name = c("Mayo Lake", "Mayo River at the outlet of Mayo Lake", "Mayo River at the outlet of Wareham Lake", "Wareham Lake"),
-  #                  name_fr = c("Lac Mayo", "Rivière Mayo à la sortie du lac Mayo", "Rivière Mayo à la sortie du lac Wareham", "Lac Wareham"),
-  #                  latitude = c(63.773056, 63.773056, 63.656389, 63.656389),
-  #                  longitude = c(-135.394444, -135.394444, -135.918333, -135.918333),
+  # df <- data.frame(location = "02AA001",
+  #                  name = c("test"),
+  #                  name_fr = "test",
+  #                  latitude = c(48.01222),
+  #                  longitude = c(-89.6161),
   #                  visibility_public = "exact",
-  #                  share_with = 2,
-  #                  owner = 5,
+  #                  share_with = 1,
+  #                  owner = 1,
   #                  data_sharing_agreement_id = NA,
-  #                  location_type = c(2,1, 1,2),
-  #                  note = NA,
+  #                  location_type = c(1),
+  #                  note = "Station metadata from HYDAT version 2024-10-22",
   #                  contact = NA,
-  #                  datum_id_from = 110,
-  #                  datum_id_to = 110,
+  #                  datum_id_from = 10,
+  #                  datum_id_to = 10,
   #                  conversion_m = 0,
   #                  current = TRUE,
   #                  network = NA,
@@ -213,7 +213,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   # Check that datum_id_from and datum_id_to exist in the 'datum_list' table
   unique_datums <- unique(c(datum_id_from, datum_id_to))
   if (length(unique_datums) > 1) {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT datum_id FROM datum_list WHERE datum_id IN (", paste(unique_datums, collapse = ", "), ");"))
+    exists <- DBI::dbGetQuery(con, paste0("SELECT datum_id FROM datum_list WHERE datum_id IN (", paste(unique_datums, collapse = ", "), ");"))
   } else {
     exists <- DBI::dbGetQuery(con, paste0("SELECT datum_id FROM datum_list WHERE datum_id = ", unique_datums, ";"))
   }
@@ -261,7 +261,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
     for (i in 1:length(location)) {
       # Add the location to the 'vectors' table ############################
       # Check if there's already a point withe the exact same name
-      exists <- DBI::dbGetQuery(con, paste0("SELECT geom_id, ST_Y(geom) AS latitude, ST_X(geom) AS longitude FROM vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = '", tolower(location[i]), "';"))
+      exists <- DBI::dbGetQuery(con, paste0("SELECT geom_id, ST_Y(geom) AS latitude, ST_X(geom) AS longitude FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = '", tolower(location[i]), "';"))
       
       if (nrow(exists) == 0) { # Add the point to the table
         point <- data.frame("feature_name" = location[i],
@@ -269,8 +269,8 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
                             "latitude" = latitude[i],
                             "longitude" = longitude[i])
         point <- terra::vect(point, geom = c("longitude", "latitude"), crs = "epsg:4269")
-        insertACVector(point, "Locations", feature_name_col = "feature_name", description_col = "description")
-        geom_id <- DBI::dbGetQuery(con, paste0("SELECT geom_id FROM vectors WHERE layer_name = 'Locations' AND feature_name = '", location[i], "';"))[1,1]
+        insertACVector(geom = point, layer_name = "Locations", feature_name_col = "feature_name", description_col = "description")
+        geom_id <- DBI::dbGetQuery(con, paste0("SELECT geom_id FROM spatial.vectors WHERE layer_name = 'Locations' AND feature_name = '", location[i], "';"))[1,1]
         
       } else {
         geom_id <- exists$geom_id
