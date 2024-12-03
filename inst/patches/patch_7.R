@@ -48,7 +48,7 @@ $function$
   attr(con, "active_transaction") <- FALSE
   
   
-  message("Patch 7 applied successfully: functions referencing old table calculated_daily have been removed.")
+  message("Patch 7 applied successfully: functions referencing old table calculated_daily have been replaced with correct references.")
   
 }, error = function(e) {
   
