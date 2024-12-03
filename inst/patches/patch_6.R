@@ -94,6 +94,8 @@ tryCatch({
   # Modify the user 'hydromet_read' to 'ac_reader'
   message("Modifying 'hydromet_read' user to 'ac_reader'...")
   DBI::dbExecute(con, "ALTER ROLE hydromet_read RENAME TO ac_reader;")
+  # Change ac_reader's password to 'aquacache'
+  DBI::dbExecute(con, "ALTER USER ac_reader WITH PASSWORD 'aquacache';")
   
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '6' WHERE item = 'Last patch number';")

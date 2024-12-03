@@ -12,6 +12,7 @@ insertACVector(
   feature_name_col = NULL,
   description_col = NULL,
   table = "vectors",
+  schema = "spatial",
   geom_col = "geom",
   overwrite = FALSE,
   con = NULL
@@ -30,7 +31,9 @@ insertACVector(
 
 \item{description_col}{The name of the column containing descriptions associated with each feature. Each feature (row in the attribute table) will be entered to the database using the string in this column. Leave NULL if specified with parameter \code{description} instead.}
 
-\item{table}{The target table in the database (as character string). If not under the public schema, use format c("schema", "table").}
+\item{table}{The target table in the database (as character string). See 'schema' if not under the 'spatial' schema.}
+
+\item{schema}{The schema in which the target 'table' is located. Default is 'spatial'. Note that this is NOT the default for rpostgis::pgWriteGeom().}
 
 \item{geom_col}{The name of the database table column in which to insert the geometry object.}
 
