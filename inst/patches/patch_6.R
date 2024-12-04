@@ -50,7 +50,6 @@ tryCatch({
   DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT USAGE, CREATE ON SCHEMAS TO admin;")
   
   # 4. Grant privileges for tables, sequences, and functions
-  
   # Existing objects
   tables <- DBI::dbGetQuery(con, "
       SELECT schemaname, tablename
