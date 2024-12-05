@@ -88,23 +88,23 @@ AquaConnect <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), 
             for (patch in (last_patch + 1):last_patch_file) {
               source(system.file("patches", paste0("patch_", patch, ".R"), package = "AquaCache"), local = TRUE)
             }
-            message("Patches applied successfully.")
+            message("Patches applied successfully.\n")
           }, error = function(e) {
-            stop("Patches not applied. An error occurred in patch ", patch, " : ", e$message)
+            stop("Patches not applied. An error occurred in patch ", patch, " : ", e$message, "\n")
           })
         } else if (choice == 2) {
-          warning("Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().")
+          warning("Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().\n")
         } else {
-          warning("Invalid choice. Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().")
+          warning("Invalid choice. Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().\n")
         }
       }
     }
   } else {
-    warning("You are not connecting as 'admin' or 'postgres' user so no checks for applicable patches could be done. ")
+    warning("You are not connecting as 'admin' or 'postgres' user so no checks for applicable patches could be done.\n")
   }
   
   if (!silent) {
-    message("Connected to the aquacache database with the timezone set to UTC.")
+    message("Connected to the aquacache database with the timezone set to UTC.\n")
     message("Remember to disconnect using DBI::dbDisconnect when finished!")
   }
   
