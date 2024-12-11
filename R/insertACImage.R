@@ -14,7 +14,7 @@
 #' @param description A description of the image. Pass as text.
 #' @param owner The owner of the image. Pass as text.
 #' @param contributor The contributor of the image. Pass as text.
-#' @param share_with Which user groups should the image be shared with. Default is '1', the public group. Pass as a numeric vector.
+#' @param share_with Which user groups should the image be shared with. Default is 'public_reader', the public group. Pass as a numeric vector.
 #' @param location If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.
 #' @param image_type If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.
 #' @param con A connection to the database. Default NULL uses AquaConnect() and close the connection afterwards.
@@ -22,7 +22,7 @@
 #' @return TRUE if an image was properly added to the database.
 #' @export
 
-insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, description = NULL, owner = NULL, contributor = NULL, share_with = 1, location = NULL, image_type = NULL, con = NULL) {
+insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, description = NULL, owner = NULL, contributor = NULL, share_with = "public_reader", location = NULL, image_type = NULL, con = NULL) {
 
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -67,8 +67,8 @@ insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, 
     } else {
       stop("Parameter 'location' must be either a character or numeric vector of length 1.")
     }
-    if (!inherits(share_with, "numeric")) {
-      stop("The 'share_with' parameter must be a numeric vector.")
+    if (!inherits(share_with, "character")) {
+      stop("The 'share_with' parameter must be a character vector.")
     }
     if (!inherits(owner, "character")) {
       stop("The 'owner' parameter must be a character vector.")
@@ -80,7 +80,7 @@ insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, 
     #See if the id exists first
     img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = '", location_id, "' AND img_type = '", image_type, "'"))[1,1]
     if (is.na(img_meta_id)) { #Create the img_meta_id
-      message("It looks like this is the first image of type ", image_type, " entered for location_id ", location_id, ". Creating an entry in table images_index. This series of images will be set to share_with = 'public' and visibility_public = 'exact'")
+      message("It looks like this is the first image of type ", image_type, " entered for location_id ", location_id, ". Creating an entry in table images_index. This series of images will be set to share_with = 'public_reader' and visibility_public = 'exact'")
       DBI::dbExecute(con, paste0("INSERT INTO images_index (location_id, img_type, first_img) VALUES ('", location_id, "', '", image_type, "', '", Sys.time(), "');"))
       img_meta_id <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = '", location_id, "' AND img_type = '", image_type, "'"))[1,1]
     } else {
@@ -94,7 +94,7 @@ insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, 
   if (!inherits(datetime, "POSIXct")) {
     stop("Datetime must be a POSIXct object or something that can be coerced to one.")
   }
-  datetime <- lubridate::floor_date(datetime, "minute")
+  datetime <- lubridate::floor_date(datetime, "second")
   
   if (!is.null(fetch_datetime)) {
     if (inherits(fetch_datetime, "character")) {
@@ -123,7 +123,7 @@ insertACImage <- function(object, img_meta_id, datetime, fetch_datetime = NULL, 
   }
   
   if (update) {
-    DBI::dbExecute(con, paste0("UPDATE images SET ", if (!is.null(fetch_datetime)) paste0("fetch_datetime = '", fetch_datetime, "', "), if (!is.null(description)) paste0("description = '", description, "', "), if (!is.null(owner)) paste0("owner = '", owner, "', "), if (!is.null(contributor)) paste0("contributor = '", contributor, "', "), "share_with = {", paste(share_with, collapse = ","), "}, format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE img_meta_id = ", img_meta_id, " AND datetime = '", datetime, "';"))
+    DBI::dbExecute(con, paste0("UPDATE images SET ", if (!is.null(fetch_datetime)) paste0("fetch_datetime = '", fetch_datetime, "', "), if (!is.null(description)) paste0("description = '", description, "', "), if (!is.null(owner)) paste0("owner = '", owner, "', "), if (!is.null(contributor)) paste0("contributor = '", contributor, "', "), "share_with = '{", paste(share_with, collapse = ","), "}', format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE img_meta_id = ", img_meta_id, " AND datetime = '", datetime, "';"))
   } else {
     DBI::dbExecute(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, share_with, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '{",  paste(share_with, collapse = ","), "}', '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
     if (!is.null(owner)) {

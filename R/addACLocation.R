@@ -9,7 +9,7 @@
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
 #' @param visibility_public A character vector of the visibility of the location(s). One of 'exact', 'region', 'jitter'. Default is 'exact'.
-#' @param share_with A numeric vector of the user group(s) with which to share the location(s). Default is 1.
+#' @param share_with A character vector of the user group(s) with which to share the location(s). Default is "public_reader".
 #' @param owner A numeric vector of the owner(s) of the location(s).
 #' @param data_sharing_agreement_id A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
@@ -35,7 +35,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   #                  latitude = c(48.01222),
   #                  longitude = c(-89.6161),
   #                  visibility_public = "exact",
-  #                  share_with = 1,
+  #                  share_with = "public_reader",
   #                  owner = 1,
   #                  data_sharing_agreement_id = NA,
   #                  location_type = c(1),
@@ -122,7 +122,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   
   # Some parameters can be NA, in which case they get default values
   if (any(is.na(share_with))) {
-    share_with[is.na(share_with)] <- 1
+    share_with[is.na(share_with)] <- "public_reader"
   }
   if (any(is.na(visibility_public))) {
     visibility_public[is.na(visibility_public)] <- "exact"

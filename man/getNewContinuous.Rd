@@ -34,6 +34,6 @@ If a period supplied by any data fetch function cannot be coerced to an period o
 
 \subsection{Sharing privileges and ownership}{
 
-The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data.
+This is dictated by the timeseries table, and checked prior to passing data through view tables to public users.
 }
 }

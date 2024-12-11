@@ -14,7 +14,7 @@
 #' If a period supplied by any data fetch function cannot be coerced to an period object acceptable to "duration" data type, NULL values will be entered to differentiate from instantaneous periods of "00:00:00".
 #'
 #' ## Sharing privileges and ownership
-#' The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data.
+#' This is dictated by the timeseries table, and checked prior to passing data through view tables to public users.
 #' 
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.
@@ -39,9 +39,9 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, owner, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)) {
       warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'continuous', or has no function specified in column source_fx.")
     }
@@ -84,7 +84,6 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
-    share_with <- all_timeseries$share_with[i]
     owner <- all_timeseries$owner[i]
     if (is.na(record_rate)) {
       remote_parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
@@ -140,9 +139,6 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
             ts$owner <- owner
           }
         }
-        if (!("share_with" %in% names(ts))) {
-          ts$share_with <- share_with
-        }
         
         if (!("approval" %in% names(ts))) {
           ts$approval <- approval_unknown
@@ -169,7 +165,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
           }
           
           # Drop columns no longer necessary
-          ts <- ts[, c("datetime", "value", "timeseries_id", "imputed", "share_with")]
+          ts <- ts[, c("datetime", "value", "timeseries_id", "imputed")]
           
           #assign a period to the data
           if (period_type == "instantaneous") { #Period is always 0 for instantaneous data

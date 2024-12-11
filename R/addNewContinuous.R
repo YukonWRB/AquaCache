@@ -1,7 +1,7 @@
 #' Add new data to the measurements_continuous or measurements_calculated_daily tables
 #'
 #' @param tsid The timeseries_id to which the data will be appended. This is a required parameter.
-#' @param df A data.frame containing the data. Must have columns named 'datetime' OR 'date', and 'value' at minimum. If 'datetime' is present data will be appended to measurements_continuous, otherwise 'date' will be used to append to measurements_calculated_daily. Other optional columns are 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier', 'imputed'; see the `adjust_` series of functions to see how these are used.
+#' @param df A data.frame containing the data. Must have columns named 'datetime' OR 'date', and 'value' at minimum. If 'datetime' is present data will be appended to measurements_continuous, otherwise 'date' will be used to append to measurements_calculated_daily. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the `adjust_` series of functions to see how these are used.
 #' @param target One of 'continuous' or 'daily'. Default is 'continuous'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #'
@@ -44,7 +44,7 @@ addNewContinuous <- function(tsid, df, target = "continuous", con = NULL) {
   }
   
   
-  info <- DBI::dbGetQuery(con, paste0("SELECT period_type, record_rate, share_with, owner, active, end_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))
+  info <- DBI::dbGetQuery(con, paste0("SELECT period_type, record_rate, owner, active, end_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))
   if (is.na(info$end_datetime)) {
     last_data_point <- NA
   } else {
@@ -60,9 +60,6 @@ addNewContinuous <- function(tsid, df, target = "continuous", con = NULL) {
     if (!is.na(info$owner)) {
       df$owner <- info$owner
     }
-  }
-  if (!("share_with" %in% names(df))) {
-    df$share_with <- info$share_with
   }
   
   if (!("approval" %in% names(df))) {
@@ -111,7 +108,7 @@ addNewContinuous <- function(tsid, df, target = "continuous", con = NULL) {
       }
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
-      df <- df[, c("datetime", "value", "timeseries_id", "imputed", "share_with")]
+      df <- df[, c("datetime", "value", "timeseries_id", "imputed")]
       
       #assign a period to the data
       if (info$period_type == "instantaneous") { #Period is always 0 for instantaneous data
@@ -180,7 +177,7 @@ addNewContinuous <- function(tsid, df, target = "continuous", con = NULL) {
       
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
-      df <- df[, c("date", "value", "timeseries_id", "imputed", "share_with")]
+      df <- df[, c("date", "value", "timeseries_id", "imputed")]
       
       if (min(df$date) < last_data_point - 1) {
         DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE date >= '", min(df$date), "' AND timeseries_id = ", tsid, ";"))

@@ -9,7 +9,7 @@ addACImageSeries(
   start_datetime,
   source_fx,
   source_fx_args = NA,
-  share_with = 1,
+  share_with = "public_reader",
   visibility_public = "exact",
   con = NULL
 )
@@ -23,7 +23,7 @@ addACImageSeries(
 
 \item{source_fx_args}{Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!}
 
-\item{share_with}{Which user groups should the image series be shared with? Default is '1', the public group.}
+\item{share_with}{Which user groups should the image series be shared with? Default is 'public_reader', the public group.}
 
 \item{visibility_public}{How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'.}
 

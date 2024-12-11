@@ -15,11 +15,11 @@
 #'
 
 getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default') {
-
+  
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
-
+  
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
@@ -40,7 +40,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   if (active == 'default') {
     meta_ids <- meta_ids[meta_ids$active, ]
   }
-
+  
   message("Fetching new images with getNewImages...")
   
   count <- 0 #counter for number of successful new pulls
@@ -55,7 +55,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
     next_instant <- meta_ids[i, "last_img"] + 1 #one second after the last image
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
-
+    
     tryCatch({
       args_list <- list(location = location, start_datetime = next_instant)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
@@ -83,21 +83,19 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
       }
       
       # Here, the output should be either of class "response", as results from downloadWSCImages, or data.frame, as results from downloadNupointImages.
-      if (inherits(imgs, "response")) {
-        for (j in 1:length(imgs)) {
+      
+      for (j in 1:length(imgs)) {
+        if (inherits(imgs[[j]], "response")) {
           img <- imgs[[j]]
           insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertACImage
           image_count <- image_count + 1
-        }
-      } else if (inherits(imgs, "data.frame")) {
-        for (j in 1:nrow(imgs)) {
+        } else if (inherits(imgs[[j]], "data.frame")) {
           insertACImage(object = imgs[j, "file"], img_meta_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertACImage
           image_count <- image_count + 1
+        } else {
+          next()
         }
-      } else {
-        stop("Can't work with an object of class ", class(img), ". This likely occured because the output of the image fetch function used for img_meta_id ", id, " is not yielding the expected output.")
-      }
-      
+      } 
       count <- count + 1
       success <- c(success, id)
     }, error = function(e) {

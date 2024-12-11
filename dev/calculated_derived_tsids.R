@@ -15,7 +15,7 @@ DBI::dbExecute(con, "
                  start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  end_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
                  notes TEXT,
-                 share_with INTEGER[] NOT NULL DEFAULT '{1}', -- array of user_ids with whom this timeseries is shared
+                 share_with TEXT[] NOT NULL DEFAULT '{public_reader}', -- array of user_ids with whom this timeseries is shared
                  input_tsids INTEGER[] NOT NULL, -- for compound or calculated timeseries. A function and trigger will check that the inputs are existing timeseries_ids.
                  input_tsids_start TIMESTAMP WITH TIME ZONE[] NOT NULL, -- for compound or calculated timeseries. A function and trigger will check that each element of 'input_tsids' has a corresponding element in 'inputs_start'.
                  input_tsids_end TIMESTAMP WITH TIME ZONE[] NOT NULL, -- for compound or calculated timeseries. A function and trigger will check that each element of 'input_tsids' has a corresponding element in 'inputs_end'

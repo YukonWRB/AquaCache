@@ -12,7 +12,7 @@ insertACImage(
   description = NULL,
   owner = NULL,
   contributor = NULL,
-  share_with = 1,
+  share_with = "public_reader",
   location = NULL,
   image_type = NULL,
   con = NULL
@@ -33,7 +33,7 @@ insertACImage(
 
 \item{contributor}{The contributor of the image. Pass as text.}
 
-\item{share_with}{Which user groups should the image be shared with. Default is '1', the public group. Pass as a numeric vector.}
+\item{share_with}{Which user groups should the image be shared with. Default is 'public_reader', the public group. Pass as a numeric vector.}
 
 \item{location}{If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.}
 
