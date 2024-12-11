@@ -3,10 +3,10 @@
 #'@description
 #'`r lifecycle::badge("stable")`
 #'
-#' A function used to fetch USGS data from their REST API. See details [here](https://waterservices.usgs.gov/rest/IV-Service.html). Unit conversions are performed to metric for common parameters like level, flow, temperature.
+#' A function used to fetch NWIS data from their REST API. See details [here](https://waterservices.usgs.gov/rest/IV-Service.html). Unit conversions are performed to metric for common parameters like level, flow, temperature.
 #'
-#' @param location One ore more USGS station codes.
-#' @param parameter_id One or more USGS parameter codes. 65 for instantaneous gauge level, 60 for mean daily flow, 61 for instantaneous flow (though beware, these two might be flipped), 10 for water temperature, for example; see more [here](https://help.waterdata.usgs.gov/codes-and-parameters/parameters).
+#' @param location One ore more NWIS/USGS station codes.
+#' @param parameter_id One or more NWIS/USGS parameter codes. 65 for instantaneous gauge level, 60 for mean daily flow, 61 for instantaneous flow (though beware, these two might be flipped), 10 for water temperature, for example; see more [here](https://help.waterdata.usgs.gov/codes-and-parameters/parameters).
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param modifiedSince Optional. A number of hours to narrow the request down to only data points modified within the last x hours. Default NULL fetches all data with the `start_datetime` and `end_datetime` range.
@@ -62,27 +62,31 @@ downloadNWIS <- function(location, parameter_id, start_datetime, end_datetime = 
   }, error = function(e) {
     stop("Failed to convert parameter end_datetime to POSIXct.")
   })
-
-  tryCatch({ # readNWISdata returns throws an error if there are no rows returned (if run in absence of new data).
+  
+  tryCatch({ # readNWISdata throws an error if there are no rows returned (if run in absence of new data).
     if (!is.null(modifiedSince)) {
-      data <- dataRetrieval::readNWISdata(sites = location,
-                                          service = "iv",
-                                          parameterCd = parameter_id,
-                                          startDate =  paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
-                                          endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
-                                          modifiedSince = modifiedSince,
-                                          asDateTime = TRUE,
-                                          tz = "UTC",
-                                          convertType = TRUE)[, c(3:5)]
+      data <- suppressMessages(
+        dataRetrieval::readNWISdata(sites = location,
+                                    service = "iv",
+                                    parameterCd = parameter_id,
+                                    startDate =  paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
+                                    endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
+                                    modifiedSince = modifiedSince,
+                                    asDateTime = TRUE,
+                                    tz = "UTC",
+                                    convertType = TRUE)[, c(3:5)]
+      )
     } else {
-      data <-  dataRetrieval::readNWISdata(sites = location,
-                                           service = "iv",
-                                           parameterCd = parameter_id,
-                                           startDate = paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
-                                           endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
-                                           asDateTime = TRUE,
-                                           tz = "UTC",
-                                           convertType = TRUE)[, c(3:5)]
+      data <-  suppressMessages(
+        dataRetrieval::readNWISdata(sites = location,
+                                    service = "iv",
+                                    parameterCd = parameter_id,
+                                    startDate = paste0(substr(start_datetime, 1, 10), "T", substr(start_datetime, 12,16), "z"),
+                                    endDate = paste0(substr(end_datetime, 1, 10), "T", substr(end_datetime, 12,16), "z"),
+                                    asDateTime = TRUE,
+                                    tz = "UTC",
+                                    convertType = TRUE)[, c(3:5)]
+      )
     }
     if (nrow(data) > 0) {
       colnames(data) <- c("datetime", "value", "combined")
@@ -94,7 +98,7 @@ downloadNWIS <- function(location, parameter_id, start_datetime, end_datetime = 
       } else if (parameter_id %in% c("00065", "62610", "62611", "72150")) { #levels in ft into meters
         data$value <- data$value * 0.3048
       }
-
+      
       #Extract first capital letter, which is the approval
       approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
       data$approval <- gsub("^([APR]).*", "\\1", data$combined)

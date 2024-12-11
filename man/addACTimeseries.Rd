@@ -16,7 +16,7 @@ addACTimeseries(
   category = NA,
   period_type = "instantaneous",
   record_rate = NA,
-  share_with = "1",
+  share_with = "public_reader",
   owner = NA,
   source_fx = NA,
   source_fx_args = NA,
@@ -47,7 +47,7 @@ addACTimeseries(
 
 \item{record_rate}{A broad categorization of the rate at which recording takes place, only used for 'continuous' category data.. Select from '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'; set to NA for discrete timeseries.}
 
-\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, selected from column 'group_id' of table 'user_groups'. Default is 1. Pass multiple groups as a single string, e.g. "1, 2, 3" or strings, e.g. c("1, 2, 3", "2, 4").}
+\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or strings.}
 
 \item{owner}{A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!}
 
@@ -92,7 +92,7 @@ sensor_priority = 1,
 category = "continuous",
 period_type = c("sum", "mean"),
 record_rate = "< 1 day",
-share_with = "1",
+share_with = "public_reader",
 owner = 2,
 source_fx = "downloadAquarius",
 source_fx_args = NA,

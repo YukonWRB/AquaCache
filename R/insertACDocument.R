@@ -15,14 +15,14 @@
 #' @param authors Document author(s) if known. Specify multiple authors as individual elements of a character vector, such as c("author 1", "author 2").
 #' @param publish_date The date of publication, as a Date object.
 #' @param url An optional url (could also be a DOI) for the document.
-#' @param share_with User groups with which to share the document. Default '1' is the public group. See the table 'user_groups' for more information.
+#' @param share_with User groups with which to share the document. Default 'public_reader' is the public group. See the table 'user_groups' for more information.
 #' @param geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.
 #' @param con A connection to the database. Leave NULL to create a new connection using AquaConnect() and have it closed automatically.
 #'
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-insertACDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, share_with = 1, geoms = NULL, con = NULL) {
+insertACDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, share_with = "public_reader", geoms = NULL, con = NULL) {
 
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -75,7 +75,7 @@ insertACDocument <- function(path, name, type, description, authors = NULL, publ
   file <- hexView::readRaw(path)$fileRaw
 
   assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
-  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, share_with) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "', ARRAY[", paste0(share_with, collapse = ","), "]);"))
+  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, share_with) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "', ARRAY[", paste(sprintf("'%s'", share_with), collapse = ","), "]);"))
   id <- DBI::dbGetQuery(con, paste0("SELECT document_id FROM documents WHERE name = '", name, "';"))
 
   if (!is.null(authors)) {

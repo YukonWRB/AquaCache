@@ -42,7 +42,7 @@ addACLocation(
 
 \item{visibility_public}{A character vector of the visibility of the location(s). One of 'exact', 'region', 'jitter'. Default is 'exact'.}
 
-\item{share_with}{A numeric vector of the user group(s) with which to share the location(s). Default is 1.}
+\item{share_with}{A character vector of the user group(s) with which to share the location(s). Default is "public_reader".}
 
 \item{owner}{A numeric vector of the owner(s) of the location(s).}
 

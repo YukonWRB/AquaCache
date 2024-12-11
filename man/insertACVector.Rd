@@ -33,7 +33,7 @@ insertACVector(
 
 \item{table}{The target table in the database (as character string). See 'schema' if not under the 'spatial' schema.}
 
-\item{schema}{The schema in which the target 'table' is located. Default is 'spatial'. Note that this is NOT the default for rpostgis::pgWriteGeom().}
+\item{schema}{The schema in which the target 'table' is located. Default is 'spatial'. Note that this is NOT the default for \code{\link[rpostgis:pgWriteGeom]{rpostgis::pgWriteGeom()}}.}
 
 \item{geom_col}{The name of the database table column in which to insert the geometry object.}
 

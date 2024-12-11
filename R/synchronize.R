@@ -59,15 +59,15 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
   
   if (timeseries_id[1] == "all") {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE source_fx IS NOT NULL")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, owner, active FROM timeseries WHERE source_fx IS NOT NULL")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, owner, active FROM timeseries WHERE source_fx IS NOT NULL AND category = 'continuous'")
     }
   } else {
     if (discrete) {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL AND category = 'continuous';"))
     }
     if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
       fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]
@@ -109,7 +109,6 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
     record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
-    share_with <- all_timeseries$share_with[i]
     owner <- all_timeseries$owner[i]
     
     # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
@@ -211,9 +210,6 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
           if (!("owner" %in% names(inRemote))) {
             inRemote$owner <- owner
           }
-        }
-        if (!("share_with" %in% names(inRemote))) {
-          inRemote$share_with <- share_with
         }
 
         if ("owner" %in% names(inRemote)) {
@@ -352,7 +348,7 @@ synchronize <- function(con = NULL, timeseries_id = "all", start_datetime, discr
                 DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", min(inRemote$datetime), "';"))
               }
               
-              DBI::dbAppendTable(con, "measurements_continuous", inRemote[, c("datetime", "value", "period", "timeseries_id", "imputed", "share_with")])
+              DBI::dbAppendTable(con, "measurements_continuous", inRemote[, c("datetime", "value", "period", "timeseries_id", "imputed")])
             } else if (category == "discrete") {
               # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
               if (nrow(no_update) > 0) {

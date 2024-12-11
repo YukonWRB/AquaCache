@@ -29,7 +29,7 @@
 #' @param category A character vector comprised of either 'discrete' or 'continuous'; classifies the data as either category.
 #' @param period_type A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.
 #' @param record_rate A broad categorization of the rate at which recording takes place, only used for 'continuous' category data.. Select from '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'; set to NA for discrete timeseries.
-#' @param share_with A *character* vector of the user group(s) with which to share the timeseries, selected from column 'group_id' of table 'user_groups'. Default is 1. Pass multiple groups as a single string, e.g. "1, 2, 3" or strings, e.g. c("1, 2, 3", "2, 4").
+#' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or strings.
 #' @param owner A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!
 #' @param source_fx The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.
 #' @param source_fx_args Additional arguments to pass to the function(s) specified in parameter 'source_fx'.
@@ -51,7 +51,7 @@
 #' category = "continuous",
 #' period_type = c("sum", "mean"),
 #' record_rate = "< 1 day",
-#' share_with = "1",
+#' share_with = "public_reader",
 #' owner = 2,
 #' source_fx = "downloadAquarius",
 #' source_fx_args = NA,
@@ -62,7 +62,7 @@
 #' addACTimeseries(df)
 #' }
 
-addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "1", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
+addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1, category = NA, period_type = 'instantaneous', record_rate = NA, share_with = "public_reader", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
   
   # Testing parameters
   # df <- data.frame(start_datetime = NA,
@@ -74,7 +74,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   #                  category = "continuous",
   #                  period_type = c("instantaneous"),
   #                  record_rate = "< 1 day",
-  #                  share_with = "2",
+  #                  share_with = "YG",
   #                  owner = 5,
   #                  source_fx = NA,
   #                  source_fx_args = NA,
@@ -89,7 +89,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # category <- NA
   # period_type <- 'instantaneous'
   # record_rate <- NA
-  # share_with <- "1"
+  # share_with <- "public_reader"
   # owner <- NA
   # source_fx <- NA
   # source_fx_args <- NA
@@ -107,7 +107,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # category = 'continuous'
   # period_type = 'instantaneous'
   # record_rate = '< 1 day'
-  # share_with = "1"
+  # share_with = "public_reader"
   # owner = 1
   # source_fx = "downloadWSC"
   # source_fx_args = NA
@@ -298,18 +298,14 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   
   if (any(is.na(share_with))) {
     if (!inherits(share_with, "character")) {
-      stop("share_with must be a character vector (yes, even though it's numbers. Check the function documentation.).")
+      stop("share_with must be a character vector.")
     }
-    share_with[is.na(share_with)] <- 1
+    share_with[is.na(share_with)] <- "public_reader"
   } else if (!inherits(share_with, "character")) {
-    stop("share_with must be a character vector (yes, even though it's numbers. Check the function documentation.).")
+    stop("share_with must be a character vector.")
   }
   if (length(share_with) == 1 && length > 1) {
     share_with <- rep(share_with, length)
-  }
-  db_share <- DBI::dbGetQuery(con, paste0("SELECT group_id FROM user_groups WHERE group_id IN (", paste(unique(share_with), collapse = ", "), ");"))
-  if (nrow(db_share) < length(unique(share_with))) {
-    stop("At least one of the share_with groups ids you specified does not exist in the database.")
   }
   
   if (any(is.na(owner))) {

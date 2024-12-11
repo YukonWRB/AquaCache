@@ -63,7 +63,6 @@ tryCatch({
   }
   
   
-  
   # Query all tables
   tables <- DBI::dbGetQuery(con, "
     SELECT schemaname, tablename

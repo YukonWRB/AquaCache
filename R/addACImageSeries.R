@@ -6,7 +6,7 @@
 #' @param start_datetime The datetime (as POSIXct) from which to look for images
 #' @param source_fx The function to use for fetching new images. Must be an existing function in this package.
 #' @param source_fx_args Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!
-#' @param share_with Which user groups should the image series be shared with? Default is '1', the public group.
+#' @param share_with Which user groups should the image series be shared with? Default is 'public_reader', the public group.
 #' @param visibility_public How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'. 
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #'
@@ -14,7 +14,7 @@
 #' @export
 #'
 
-addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = 1, visibility_public = 'exact', con = NULL) {
+addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = "public_reader", visibility_public = 'exact', con = NULL) {
   #function will add entry to images_index, then trigger getNewImages from the user-specified start_datetime
 
   if (is.null(con)) {
@@ -40,8 +40,8 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
   if (!visibility_public %in% c('exact', 'region', 'jitter')) {
     stop("The 'visibility_public' parameter must be either 'exact', 'region', or 'jitter'.")
   }
-  if (!inherits(share_with, "numeric")) {
-    stop("The 'share_with' parameter must be a numeric vector.")
+  if (!inherits(share_with, "character")) {
+    stop("The 'share_with' parameter must be a character vector.")
   }
   
   exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]

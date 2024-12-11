@@ -137,7 +137,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "start_datetime" = min(new_flow$date),
                                     "end_datetime" = max(new_flow$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                                    "share_with" = "{1}",
+                                    "share_with" = "{pulic_reader}",
                                     "owner" = 1,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)
@@ -243,7 +243,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 adjust_grade(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "grade")])
                 adjust_contributor(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "contributor")])
               } else {
-                # Check that star_datetime is correct in timeseries table
+                # Check that start_datetime is correct in timeseries table
                 DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
               }
             } else { #There is an entry in timeseries table, but no daily data
@@ -309,7 +309,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "start_datetime" = min(new_level$date),
                                     "end_datetime" = max(new_level$date),
                                     "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                                    "share_with" = "{1}",
+                                    "share_with" = "{public_reader}",
                                     "owner" = 1,
                                     "source_fx" = "downloadWSC")
             DBI::dbAppendTable(con, "timeseries", new_entry)

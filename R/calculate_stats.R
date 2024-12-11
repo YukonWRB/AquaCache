@@ -164,9 +164,9 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           
           if (!flag) {
             if (corrections_apply) {
-              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed, share_with FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
             } else {
-              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed, share_with FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
             }
             
             
@@ -176,27 +176,24 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
                                  value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
                                  imputed = sort(.data$imputed, decreasing = TRUE)[1],
-                                 share_with = sort(.data$share_with)[1],
                                  .groups = "drop")
-              gap_measurements <- gap_measurements[,c(3:6)]
-              names(gap_measurements) <- c("date", "value", "imputed", "share_with")
+              gap_measurements <- gap_measurements[,c(3:5)]
+              names(gap_measurements) <- c("date", "value", "imputed")
               
               if (!((last_hydat + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
-                share <- if (nrow(gap_measurements[gap_measurements$date == last_day_historic, "share_with"]) > 0) gap_measurements[gap_measurements$date == last_day_historic, "share_with"] else unique(gap_measurements$share_with)[1]
-                gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "imputed" = FALSE, "share_with" = share))
+                gap_measurements <- rbind(gap_measurements, data.frame("date" = last_hydat + 1, "value" = NA, "imputed" = FALSE))
               }
               
               if (last_day_historic < min(gap_measurements$date)) { #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the measurements_calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with HYDAT values where they exist, taking from the database first for any imputed values and then directly from HYDAT.
                 
-                backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed, share_with FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
+                backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
                 
                 backfill <- if (tmp[, "param_name"] == "discharge, river/stream") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1)) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1))
                 backfill <- backfill[ , c("Date", "Value")]
                 names(backfill) <- c("date", "value")
                 backfill <- backfill[!is.na(backfill$value) , ]
                 backfill$imputed  <- FALSE
-                backfill$share_with <- unique(gap_measurements$share_with)[1]  # This will normally default to {1} unless changes were made to the DB default. It's WSC, so it's all public.
-                
+
                 #Remove any entries with values that are already in backfill and not NA, even if they've been imputed
                 backfill_imputed <- backfill_imputed[!backfill_imputed$date %in% backfill[!is.na(backfill$value), "date"], ] 
                 # Remove any entries in backfill_imputed that are already in backfill but are NA
@@ -210,9 +207,6 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               full_dates <- data.frame("date" = seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day"))
               gap_measurements <- merge(gap_measurements, full_dates, by = "date", all = TRUE)
               
-              # Fill in share_with with the last known value
-              gap_measurements["share_with"] <- lapply(gap_measurements["share_with"], function(x) zoo::na.locf(x, na.rm = FALSE))
-              
               gap_measurements[is.na(gap_measurements$imputed) , "imputed"] <- FALSE
               
               all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", last_hydat, "';"))
@@ -221,7 +215,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               missing_stats <- gap_measurements
             } else { #There is no new measurement data, but stats may still need to be calculated because of new HYDAT data
               
-              all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed, share_with FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
+              all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
               
               all_hydat <- if (tmp[, "param_name"] == "discharge, river/stream") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"])) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"]))
               all_hydat <- all_hydat[ , c("Date", "Value")]
@@ -249,9 +243,9 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         
         if (!(source_fx == "downloadWSC") || flag) { #All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
           if (corrections_apply) {
-            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, share_with, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
           } else {
-            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, share_with, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
           }
           
           if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
@@ -260,21 +254,16 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
                                value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
                                imputed = sort(.data$imputed, decreasing = TRUE)[1], # Ensures that if there is even 1 imputed point in a day, the whole day is marked as imputed
-                               share_with = sort(.data$share_with)[1],
                                .groups = "drop")
-            gap_measurements <- gap_measurements[,c(3:6)]
-            names(gap_measurements) <- c("date", "value", "imputed", "share_with")
+            gap_measurements <- gap_measurements[,c(3:5)]
+            names(gap_measurements) <- c("date", "value", "imputed")
             
             if (!((last_day_historic + 1) %in% gap_measurements$date)) { #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
-              share <- if (nrow(gap_measurements[gap_measurements$date == last_day_historic, "share_with"]) > 0) gap_measurements[gap_measurements$date == last_day_historic, "share_with"] else unique(gap_measurements$share_with)[1]
-              gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic + 1, "value" = NA, "imputed" = FALSE, share_with = share))
+              gap_measurements <- rbind(gap_measurements, data.frame("date" = last_day_historic + 1, "value" = NA, "imputed" = FALSE))
             }
             #Fill in any missing dates so that they get calculated values where possible
             full_dates <- data.frame("date" = seq.Date(min(gap_measurements$date), max(gap_measurements$date), by = "1 day"))
             gap_measurements <- merge(gap_measurements, full_dates, by = "date", all = TRUE)
-            
-            # Fill in share_with with the last known value
-            gap_measurements["share_with"] <- lapply(gap_measurements["share_with"], function(x) zoo::na.locf(x, na.rm = FALSE))
             
             gap_measurements[is.na(gap_measurements$imputed) , "imputed"] <- FALSE
             
@@ -282,7 +271,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             all_stats <- rbind(all_stats, gap_measurements[, c("date", "value")])
             missing_stats <- gap_measurements
           } else { #There is no new measurement data, but stats may still need to be calculated
-            missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, share_with, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
+            missing_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date >= '", last_day_historic, "';"))
             if (nrow(missing_stats) > 0) {
               all_stats <- DBI::dbGetQuery(con, paste0("SELECT date, value FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))
             }
@@ -327,7 +316,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             if (!all(c((first_feb_29$date  - 1), (first_feb_29$date  + 1)) %in% missing_stats$date) & !is.na(first_feb_29$value)) { #if statement is FALSE, feb 29 will be dealt with later by getting the mean of the surrounding samples so don't add it to first_instance_no_stats so it isn't dealt with here
               feb_29 <- feb_29[!feb_29$date == first_feb_29$date , ]
               first_feb_29$dayofyear <- NA
-              first_instance_no_stats <- rbind(first_instance_no_stats, first_feb_29[, c("date", "value", "dayofyear", "imputed", "share_with")])
+              first_instance_no_stats <- rbind(first_instance_no_stats, first_feb_29[, c("date", "value", "dayofyear", "imputed")])
             }
           }
           
