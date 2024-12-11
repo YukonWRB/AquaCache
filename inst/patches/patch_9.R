@@ -63,13 +63,14 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 tbl_names <- c("locations", "timeseries", "measurements_discrete", "documents", "images", "images_index")
 
-# Drop columns 'share_with' from tables that won't keep them, and drop triggers that check share_with
-DBI::dbExecute(con, "ALTER TABLE measurements_continuous DROP COLUMN share_with CASCADE;")
+# Drop columns 'share_with' from tables that won't keep them, and drop triggers that check share_with, andremove RLS as well
+DBI::dbExecute(con, "ALTER TABLE measurements_continuous DROP COLUMN share_with CASCADE;") # Should cascade to the RLS policy
 DBI::dbExecute(con, "DROP TRIGGER IF EXISTS validate_share_with_trigger_measurements_continuous ON measurements_continuous;")
-DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP COLUMN share_with CASCADE;")
+DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP COLUMN share_with CASCADE;") # Should cascade to the RLS policy
 DBI::dbExecute(con, "DROP TRIGGER IF EXISTS validate_share_with_trigger_measurements_calculated_daily ON measurements_calculated_daily;")
 DBI::dbExecute(con, "DROP TRIGGER IF EXISTS validate_share_with_trigger_calculated_daily ON measurements_calculated_daily;")
-
+DBI::dbExecute(con, "ALTER TABLE measurements_continuous DISABLE ROW LEVEL SECURITY;")
+DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DISABLE ROW LEVEL SECURITY;")
 
 
 # Create a helper function to check if a user is in a group:
@@ -242,31 +243,31 @@ WHERE
 
 
 # Now make a function/trigger to warn future admins that granting privileges on the tables now protected using RLS is discouraged, and state why.
-
-DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION warn_on_public_grant()
-RETURNS event_trigger
-LANGUAGE plpgsql
-AS $$
-  DECLARE
-obj_name text;
-BEGIN
--- Extract the table being granted privileges
-SELECT objid::regclass::text INTO obj_name
-FROM pg_event_trigger_ddl_commands()
-WHERE command_tag = 'GRANT';
-
--- Check if the table is sensitive
-IF obj_name IN ('measurements_continuous', 'measurements_calculated_daily') THEN
-RAISE WARNING 'Direct GRANT SELECT on % is discouraged. RLS is not enabled on these tables so as to enable use of timescaleDB compression feature. Use views to enforce RLS.', obj_name;
-END IF;
-END;
-$$;
-")
-
-DBI::dbExecute(con, "CREATE EVENT TRIGGER warn_on_public_grant
-ON ddl_command_start
-WHEN TAG IN ('GRANT')
-EXECUTE FUNCTION warn_on_public_grant();")
+# This is not working as expected, so it's commented out for now.
+# DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION warn_on_public_grant()
+# RETURNS event_trigger
+# LANGUAGE plpgsql
+# AS $$
+#   DECLARE
+# obj_name text;
+# BEGIN
+# -- Extract the table being granted privileges
+# SELECT objid::regclass::text INTO obj_name
+# FROM pg_event_trigger_ddl_commands()
+# WHERE command_tag = 'GRANT';
+# 
+# -- Check if the table is sensitive
+# IF obj_name IN ('measurements_continuous', 'measurements_calculated_daily') THEN
+# RAISE WARNING 'Direct GRANT SELECT on % is discouraged. RLS is not enabled on these tables so as to enable use of timescaleDB compression feature. Use views to enforce RLS.', obj_name;
+# END IF;
+# END;
+# $$;
+# ")
+# 
+# DBI::dbExecute(con, "CREATE EVENT TRIGGER warn_on_public_grant
+# ON ddl_command_start
+# WHEN TAG IN ('GRANT')
+# EXECUTE FUNCTION warn_on_public_grant();")
 
 # Revoke the 'public_reader' user's ability to view tables measurements_continous and measurements_calculated_daily
 DBI::dbExecute(con, "REVOKE ALL ON measurements_continuous FROM public_reader;")
