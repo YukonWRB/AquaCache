@@ -70,7 +70,9 @@ DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP COLUMN share
 DBI::dbExecute(con, "DROP TRIGGER IF EXISTS validate_share_with_trigger_measurements_calculated_daily ON measurements_calculated_daily;")
 DBI::dbExecute(con, "DROP TRIGGER IF EXISTS validate_share_with_trigger_calculated_daily ON measurements_calculated_daily;")
 DBI::dbExecute(con, "ALTER TABLE measurements_continuous DISABLE ROW LEVEL SECURITY;")
+DBI::dbExecute(con, "ALTER TABLE measurements_continuous NO FORCE ROW LEVEL SECURITY;")
 DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DISABLE ROW LEVEL SECURITY;")
+DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily NO FORCE ROW LEVEL SECURITY;")
 
 
 # Create a helper function to check if a user is in a group:
@@ -143,6 +145,11 @@ END;
 $function$;
 ")
 
+# These tables also have a default of 1 in the share_with column. This default value needs to become 'public_reader' instead.
+for (i in tbl_names) {
+  DBI::dbExecute(con, paste0("ALTER TABLE ", i, " ALTER COLUMN share_with SET DEFAULT '{public_reader}';"))
+}
+
 # Add triggers
 for (i in tbl_names) {
   DBI::dbExecute(con, paste0("CREATE TRIGGER validate_share_with_trigger
@@ -152,45 +159,45 @@ EXECUTE FUNCTION public.validate_share_with();"))
 }
 
 
+# Create an index on corrections to speed things up
+DBI::dbExecute(con, "CREATE INDEX idx_corrections_timeseries_date_range
+ON corrections (timeseries_id, start_dt, end_dt);
+")
 
 
-
-# Prepare DB for use with timescaleDB.
-# Compression will be used to maximize the storage efficiency and speed improvements, but this means that RLS will not work for table measurements_continuous and measurements_calculated_daily (if this later one is to be compressed)
-
+# Prepare DB for use with timescaleDB, if so desired later.
 # Instead of using RLS on these tables, they will be accessible to the 'public' user via views and the RLS columns and policies will be removed completely.
 
 # Create new views
-# View measurements_continuous_corrected with RLS enforcement
+# View measurements_continuous_corrected with RLS enforcement and speed optimization
 DBI::dbExecute(con, "CREATE OR REPLACE VIEW public.measurements_continuous_corrected AS
-SELECT 
-    mc.timeseries_id,
-    mc.datetime,
-    mc.value AS value_raw,
-    ac.value_corrected,
-    mc.period,
-    mc.imputed
-FROM 
-    measurements_continuous mc
-JOIN 
-    timeseries ts 
-    ON mc.timeseries_id = ts.timeseries_id
-CROSS JOIN LATERAL (
-    SELECT apply_corrections(mc.timeseries_id, mc.datetime, mc.value) AS value_corrected
-) ac
-WHERE 
-    (
-        'public_reader' = ANY (ts.share_with) 
-        OR EXISTS (
-            SELECT 1
-            FROM unnest(ts.share_with) role(role)
-            WHERE pg_has_role(CURRENT_USER, role.role::name, 'MEMBER') 
-              AND role.role::name IN (SELECT rolname FROM pg_roles)
-        )
-    )
-    AND ac.value_corrected IS NOT NULL;
-
-")
+                      SELECT mc.timeseries_id,
+                             mc.datetime,
+                             mc.value AS value_raw,
+                             COALESCE(ac.value_corrected, mc.value) AS value_corrected
+                             mc.period,
+                             mc.imputed
+                      FROM measurements_continuous mc
+                      JOIN timeseries ts ON mc.timeseries_id = ts.timeseries_id
+                      LEFT JOIN LATERAL (
+                        SELECT apply_corrections(mc.timeseries_id, mc.datetime, mc.value) AS value_corrected
+                        WHERE EXISTS (
+                            SELECT 1 FROM corrections c
+                            WHERE c.timeseries_id = mc.timeseries_id
+                              AND c.start_dt <= mc.datetime
+                              AND c.end_dt >= mc.datetime
+                        )
+                      ) ac ON TRUE
+                      WHERE (
+                          'public_reader' = ANY (ts.share_with)
+                          OR EXISTS (
+                              SELECT 1
+                              FROM unnest(ts.share_with) role(role)
+                              WHERE pg_has_role(CURRENT_USER, role.role::name, 'MEMBER')
+                                AND role.role::name IN (SELECT rolname FROM pg_roles)
+                          )
+                      )
+;")
 
 # View measurements_hourly_corrected with RLS enforcement
 DBI::dbExecute(con, "CREATE OR REPLACE VIEW public.measurements_hourly_corrected AS
@@ -227,19 +234,18 @@ SELECT
 FROM 
     measurements_calculated_daily mcd
 JOIN 
-    timeseries ts
-    ON mcd.timeseries_id = ts.timeseries_id
+    timeseries ts ON mcd.timeseries_id = ts.timeseries_id
 WHERE 
     (
         'public_reader' = ANY(ts.share_with)
         OR EXISTS (
-            SELECT 1
-            FROM unnest(ts.share_with) AS role
-            WHERE pg_has_role(current_user, role::name, 'MEMBER')
-              AND role::name IN (SELECT rolname FROM pg_roles)
-        )
-    );
-")
+           SELECT 1
+           FROM unnest(ts.share_with) role(role)
+           WHERE pg_has_role(CURRENT_USER, role.role::name, 'MEMBER')
+           AND role.role::name IN (SELECT rolname FROM pg_roles)
+      )
+    )
+;")
 
 
 # Now make a function/trigger to warn future admins that granting privileges on the tables now protected using RLS is discouraged, and state why.
@@ -269,7 +275,7 @@ WHERE
 # WHEN TAG IN ('GRANT')
 # EXECUTE FUNCTION warn_on_public_grant();")
 
-# Revoke the 'public_reader' user's ability to view tables measurements_continous and measurements_calculated_daily
+# Revoke the 'public_reader' user's ability to view tables measurements_continuous and measurements_calculated_daily
 DBI::dbExecute(con, "REVOKE ALL ON measurements_continuous FROM public_reader;")
 DBI::dbExecute(con, "REVOKE ALL ON measurements_calculated_daily FROM public_reader;")
 
@@ -307,7 +313,29 @@ AS $function$
 ;")
 
 
-# Now it should be possible for the admin to install timescaleDB and enable it with compression. Everything should just work as expected after that!!!
+# Now it should be possible for the admin to install timescaleDB and enable it with compression
+
+
+# Create helper function so that all app users can see all roles which can read the 'locations' table, allowing them to set the share_with field when creating new fields
+DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION get_roles_with_select_on_locations()
+RETURNS TABLE(role_name text) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT grantee::text
+  FROM information_schema.role_table_grants
+  WHERE table_name = 'locations'
+    AND privilege_type = 'SELECT'
+    AND grantee::text NOT IN (
+      SELECT rolname
+      FROM pg_roles
+      WHERE rolbypassrls = TRUE
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+")
+
+DBI::dbExecute(con, "GRANT EXECUTE ON FUNCTION get_roles_with_select_on_locations() TO public;")
 
 
 # Update the version_info table
@@ -319,7 +347,7 @@ DBI::dbExecute(con, "COMMIT;")
 attr(con, "active_transaction") <- FALSE
 
 
-message("Patch 9 applied successfully: rejigged users and prepared DB for use with timescaleDB. \n  \n  Now you can set up timescaleDB and enable compression on tables 'measurements_continuous' and 'measurements_calculated_daily'. So long as public-facing users can't SELECT from these tables and only fetch data from from the associated views, RLS will be preserved.")
+message("Patch 9 applied successfully: rejigged users and prepared DB for use with timescaleDB. \n  \n  Now you can set up timescaleDB and enable compression on tables 'measurements_continuous' and 'measurements_calculated_daily' if you wish, and view performance is improved regardless.")
 
 }, error = function(e) {
   
