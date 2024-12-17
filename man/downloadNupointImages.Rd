@@ -12,7 +12,8 @@ downloadNupointImages(
   url = Sys.getenv("nupointServer"),
   port = Sys.getenv("nupointPort"),
   folder = Sys.getenv("nupointFolder"),
-  save_path = NULL
+  save_path = NULL,
+  delete = TRUE
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ downloadNupointImages(
 \item{folder}{The folder in which to look for new images.}
 
 \item{save_path}{Optional; path in which to save the image.}
+
+\item{delete}{Should the files be deleted from the SFTP site once they've been successfully been fetched?}
 }
 \value{
 A list object of type 'response' containing the image (object$content) and metadata regarding the object and how/when it was fetched.
