@@ -20,7 +20,7 @@ adjust_grade <- function(con, timeseries_id, data) {
   
   # Make sure that column 'grade' is not all NA
   if (all(is.na(data$grade))) {
-    return(message("adjust_grade: column 'grade' was all NA, skipped."))
+    return(message("adjust_grade: column 'grade' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
   # Check if 'grade' is character, if so match those characters to 'grade_type_code' in the 'grades' table
@@ -197,7 +197,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   
   # Make sure that column 'qualifier' is not all NA
   if (all(is.na(data$qualifier))) {
-    return(message("adjust_qualifier: column 'qualifier' was all NA, skipped."))
+    return(message("adjust_qualifier: column 'qualifier' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
   # Check if 'qualifier' is character, if so match those characters to 'qualifier_type_code' in the 'qualifiers' table
@@ -373,7 +373,7 @@ adjust_approval <- function(con, timeseries_id, data) {
   
   # Make sure that column 'approval' is not all NA
   if (all(is.na(data$approval))) {
-    return(message("adjust_owner: column 'approval' was all NA, skipped."))
+    return(message("adjust_owner: column 'approval' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
   # Check if 'approval' is character, if so match those characters to 'approval_type_code' in the 'approvals' table
@@ -548,7 +548,7 @@ adjust_owner <- function(con, timeseries_id, data) {
   
   # Make sure that column 'owner' is not all NA
   if (all(is.na(data$owner))) {
-    return(message("adjust_owner: column 'owner' was all NA, skipped."))
+    return(message("adjust_owner: column 'owner' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
   # Check if 'owner' is character, if so match those characters to 'name' in the 'owners_contributors' table
@@ -719,7 +719,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
   
   # Make sure that column 'contributor' is not all NA
   if (all(is.na(data$contributor))) {
-    return(message("adjust_contributor: column 'contributor' was all NA, skipped."))
+    return(message("adjust_contributor: column 'contributor' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
   # Check if 'contributor' is character, if so match those characters to 'name' in the 'owners_contributors' table

@@ -93,9 +93,9 @@ AquaConnect <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), 
             stop("Patches not applied. An error occurred in patch ", patch, " : ", e$message, "\n")
           })
         } else if (choice == 2) {
-          warning("Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().\n")
+          warning("Patches not applied. Please apply patches before running any functions from this package.\n")
         } else {
-          warning("Invalid choice. Patches not applied. Please apply patches before running any functions from this package by running AquaPatchCheck().\n")
+          warning("Invalid choice. Patches not applied. Please apply patches before running any functions from this package.\n")
         }
       }
     }

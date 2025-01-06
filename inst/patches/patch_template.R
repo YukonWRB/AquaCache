@@ -1,6 +1,6 @@
 # TEMPLATE FOR PATCHES
 
-# Reminder: patches are applied sequentially by AquaPatchCheck(). The patch number is stored in the database and is used to determine which patches have already been applied. The patch number should be incremented in the database after a patch is successfully applied. 
+# Reminder: patches are applied sequentially by the connection function, AquaConnect. The patch number is stored in the database and is used to determine which patches have already been applied. The patch number should be incremented in the database after a patch is successfully applied. 
 
 # Step 1: Ensure user has necessary privileges. This usually includes write or update privileges to tables but could also be the ability to create a new schema.
 
@@ -37,7 +37,7 @@
 # Note the use of the 'active_transaction' attribute on the connection; this is important as it ensures that the patch is applied atomically. Normally, other functions which may be called from within the patch use transactions, but transactions within transactions don't work in PostgreSQL. By using this attribute, the functions run without their own transactions, but the patch as a whole is atomic.
 
 
-# Step 4: If not successful, the patch should stop execution, roll back the entire transaction, and give an error message which will get caught by AquaPatchCheck().
+# Step 4: If not successful, the patch should stop execution, roll back the entire transaction, and give an error message which will get caught by AquaConnect().
 
 # Example:
 # stop("Patch 1 failed: could not create new schema 'information' and table 'version_info'.")
