@@ -2,11 +2,11 @@
 
 con <- AquaConnect()
 
-# retrieve the owner ID form the owners_contributors table
-owner_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada'")[1,1]
+# retrieve the owner ID form the owners_contributors_operators table
+owner_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE name = 'Water Survey of Canada'")[1,1]
 if (is.na(owner_id)) {
-  DBI::dbExecute(con, "INSERT INTO owners_contributors (name) VALUES ('Water Survey of Canada')")
-  owner_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada'")[1,1]
+  DBI::dbExecute(con, "INSERT INTO owners_contributors_operators (name) VALUES ('Water Survey of Canada')")
+  owner_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE name = 'Water Survey of Canada'")[1,1]
 }
 
 # 1. Temperature ####

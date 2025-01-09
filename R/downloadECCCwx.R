@@ -93,7 +93,7 @@ downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime 
     if (nrow(data) > 0) {
       
       # Get owner_contributor_id for 'Environment and Climate Change Canada'
-      owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada'")[1,1]
+      owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE name = 'Environment and Climate Change Canada'")[1,1]
       if (is.na(owner_contributor_id)) {
         df <- data.frame(name = 'Environment and Climate Change Canada',
                          name_fr = 'Environnement et Changement Climatique Canada')

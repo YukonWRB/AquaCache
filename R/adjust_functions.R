@@ -533,7 +533,7 @@ adjust_approval <- function(con, timeseries_id, data) {
 #' 
 #' @param con A connection to the database with write privileges to the 'owners' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
-#' @param data A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.
+#' @param data A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors_operators' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.
 #'  
 #' @return Modifies the 'owners' table in the database.
 #' @export
@@ -551,9 +551,9 @@ adjust_owner <- function(con, timeseries_id, data) {
     return(message("adjust_owner: column 'owner' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
-  # Check if 'owner' is character, if so match those characters to 'name' in the 'owners_contributors' table
+  # Check if 'owner' is character, if so match those characters to 'name' in the 'owners_contributors_operators' table
   if (inherits(data$owner[1], "character")) {
-    owner_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors;")
+    owner_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors_operators;")
     data$owner <- owner_table$owner_contributor_id[match(data$owner, owner_table$name)]
   }
   
@@ -704,7 +704,7 @@ adjust_owner <- function(con, timeseries_id, data) {
 #' 
 #' @param con A connection to the database with write privileges to the 'contributors' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
-#' @param data A data.frame with columns for 'datetime' and 'contributor'. 'datetime' should be POSIXct and 'contributor' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.
+#' @param data A data.frame with columns for 'datetime' and 'contributor'. 'datetime' should be POSIXct and 'contributor' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors_operators' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.
 #'  
 #' @return Modifies the 'contributors' table in the database.
 #' @export
@@ -722,9 +722,9 @@ adjust_contributor <- function(con, timeseries_id, data) {
     return(message("adjust_contributor: column 'contributor' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
-  # Check if 'contributor' is character, if so match those characters to 'name' in the 'owners_contributors' table
+  # Check if 'contributor' is character, if so match those characters to 'name' in the 'owners_contributors_operators' table
   if (inherits(data$contributor[1], "character")) {
-    contributor_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors;")
+    contributor_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors_operators;")
     data$contributor <- contributor_table$owner_contributor_id[match(data$contributor, contributor_table$name)]
   }
   

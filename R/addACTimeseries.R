@@ -316,7 +316,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   if (length(owner) == 1 && length > 1) {
     owner <- rep(owner, length)
   }
-  db_owner <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors WHERE owner_contributor_id IN (", paste(unique(owner), collapse = ", "), ");"))
+  db_owner <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors_operators WHERE owner_contributor_id IN (", paste(unique(owner), collapse = ", "), ");"))
   if (nrow(db_owner) < length(unique(owner))) {
     stop("At least one of the owners you specified does not exist in the database.")
   }

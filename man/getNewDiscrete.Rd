@@ -45,8 +45,8 @@ Optional columns are:
 -'lab':
 \item 'protocol':
 \item 'note': a character string with a note about the data point(s).
-\item 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'owners_contributors' table and an error will be thrown if it does not.
-\item 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'owners_contributors' table and an error will be thrown if it does not.
+\item 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'owners_contributors_operators' table and an error will be thrown if it does not.
+\item 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'owners_contributors_operators' table and an error will be thrown if it does not.
 \item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 \item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
 \item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.

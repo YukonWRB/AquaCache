@@ -41,7 +41,7 @@ addACOwner <- function(name, name_fr = NA, contact_name = NA, phone = NA, email 
   }
   
   # Check if the owner/contributor already exists (all lower case)
-  exists <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors WHERE LOWER(name) = '", tolower(name), "';"))[1,1]
+  exists <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors_operators WHERE LOWER(name) = '", tolower(name), "';"))[1,1]
   if (!is.na(exists)) {
     stop("There is already an entry with that name.")
   }
@@ -54,9 +54,9 @@ addACOwner <- function(name, name_fr = NA, contact_name = NA, phone = NA, email 
                        email = email,
                        note = note)
   
-  DBI::dbAppendTable(con, "owners_contributors", insert)
+  DBI::dbAppendTable(con, "owners_contributors_operators", insert)
   
   # Retrieve the new owner_contributor_id and return
-  new_id <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors WHERE name = '", name, "';"))[1,1]
+  new_id <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors_operators WHERE name = '", name, "';"))[1,1]
   message("Added new owner/contributor with name ", name, ". New owner_contributor_id is: ", new_id)
 }

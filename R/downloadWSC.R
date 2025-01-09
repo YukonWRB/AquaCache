@@ -102,7 +102,7 @@ downloadWSC <- function(location, parameter_id, start_datetime, end_datetime = S
     data$grade <- grade_DB
     
     # Get owner_contributor_id for 'Water Survey of Canada'
-    owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada'")[1,1]
+    owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE name = 'Water Survey of Canada'")[1,1]
     if (is.na(owner_contributor_id)) {
       df <- data.frame(name = 'Water Survey of Canada')
       DBI::dbAppendTable(con, "owner_contributors", df)

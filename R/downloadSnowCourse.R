@@ -112,8 +112,8 @@ downloadSnowCourse <- function(location, parameter_id, start_datetime, end_datet
     meas$sample_type <- DBI::dbGetQuery(con, "SELECT sample_type_id FROM sample_types WHERE LOWER(sample_type) = 'field msr/obs'")[1,1]
     meas$collection_method <- DBI::dbGetQuery(con, "SELECT collection_method_id FROM collection_methods WHERE LOWER(collection_method) = 'observation'")[1,1]
     meas$protocol <- DBI::dbGetQuery(con, "SELECT protocol_id FROM analysis_protocols WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'")[1,1]
-    meas$owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
-    meas$contributor <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
+    meas$owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
+    meas$contributor <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
     
     meas <- meas[!is.na(meas$value), ]  # Some measurements in table 'measurements_discrete' can have NA values, but this is used to represent values that are below/above detection limits. Not applicable for snow survey measurements.
   } else {
