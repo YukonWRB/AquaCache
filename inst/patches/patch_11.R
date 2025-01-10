@@ -101,6 +101,8 @@ GRANT EXECUTE ON FUNCTIONS TO continuous_editor;
   
   DBI::dbExecute(con, "ALTER TABLE owners_contributors RENAME TO organizations;")
   DBI::dbExecute(con, "ALTER TABLE organizations RENAME COLUMN owner_contributor_id TO organization_id")
+  DBI::dbExecute(con, "ALTER TABLE owners RENAME COLUMN owner_contributor_id TO organization_id")
+  DBI::dbExecute(con, "ALTER TABLE contributors RENAME COLUMN owner_contributor_id TO organization_id")
   
   
   DBI::dbExecute(con, "CREATE SCHEMA files;")
@@ -1103,6 +1105,87 @@ BEGIN
 END $$;
 ")
   }
+  
+  
+  # Clean up a few old functions...
+  DBI::dbExecute(con, "
+  CREATE OR REPLACE FUNCTION continuous.check_owners_overlap()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  AS $function$
+    BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM owners
+    WHERE timeseries_id = NEW.timeseries_id
+    AND organization_id != NEW.organization_id  -- Exclude the current row in an UPDATE
+    AND (
+      (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
+    )
+  ) THEN
+  RAISE EXCEPTION 'Owners cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
+  END IF;
+  RETURN NEW;
+  END;
+  $function$
+    ;
+    ")
+  
+  DBI::dbExecute(con, "
+  ALTER FUNCTION continuous.check_owners_overlap() OWNER TO postgres;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_owners_overlap() TO public;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_owners_overlap() TO postgres;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_owners_overlap() TO admin;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_owners_overlap() TO yg_reader;
+  ")
+  
+  DBI::dbExecute(con, "
+  CREATE OR REPLACE FUNCTION continuous.check_contributors_overlap()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  AS $function$
+    BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM contributors
+    WHERE timeseries_id = NEW.timeseries_id
+    AND organization_id != NEW.organization_id  -- Exclude the current row in an UPDATE
+    AND (
+      (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
+    )
+  ) THEN
+  RAISE EXCEPTION 'Contributors cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
+  END IF;
+  RETURN NEW;
+  END;
+  $function$
+    ;
+    ")
+  
+DBI::dbExecute(con, "
+  ALTER FUNCTION continuous.check_contributors_overlap() OWNER TO postgres;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_contributors_overlap() TO public;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_contributors_overlap() TO postgres;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_contributors_overlap() TO admin;
+  ")
+  DBI::dbExecute(con, "
+  GRANT ALL ON FUNCTION continuous.check_contributors_overlap() TO yg_reader;
+  ")
+  
   
   
   #  Wrap up ###########

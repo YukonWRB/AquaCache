@@ -131,10 +131,10 @@ adjust_grade <- function(con, timeseries_id, data) {
     }
   }  # End of for loop
   
-  # if there untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be removed.
+  # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be removed.
   if (index < nrow(exist)) {
     # Pull out the rows that are left over
-    leftovers <- exist[c((index + 1):nrow(exist)), ]
+    leftovers <- exist[c(index + 1):nrow(exist), ]
     exist <- exist[c(1:index), ]
     # Find entries that now have a start_dt and end_dt entirely captured by other rows. Label them with timeseries_id = -1 to remove later
     leftovers[leftovers$start_dt <= exist$end_dt[index] & leftovers$end_dt <= exist$end_dt[index], "timeseries_id"] <- -1

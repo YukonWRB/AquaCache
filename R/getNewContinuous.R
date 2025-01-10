@@ -39,11 +39,11 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, owner, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, owner, active FROM timeseries WHERE source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)) {
-      warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'continuous', or has no function specified in column source_fx.")
+      warning("At least one of the timeseries IDs you called for cannot be found in the database or has no function specified in column source_fx.")
     }
   }
   
