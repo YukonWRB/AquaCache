@@ -5,8 +5,8 @@
 #'
 #' Brings in water quality data from the EQWin database. <DL values are transformed to the negative of the detection limit, > instrument range is left as the value. A note is added in either case to the 'note' column.
 #'
-#' @param location The location code associated with the snow course.
-#' @param parameter_id The parameter code as specified in the EQWin table eqparams.
+#' @param location The location code (project code, i.e. the portion in parentheses) associated with the EQWin station.
+#' @param sub_location The sub-location code (station code, i.e. the portion after the parentheses) associated with the EQWin station.
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param EQcon connection to the EQWin database. See EQConnect for details.
@@ -14,7 +14,7 @@
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
 
-downloadEQWin <- function(location, parameter_id, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
+downloadEQWin <- function(location, sub_location, start_datetime, end_datetime = Sys.time(), EQcon = EQConnect(silent = TRUE)) {
 
   stop("This function has not yet been updated to work with the new (as of early August 2024) measurements_discrete table schema.")
   

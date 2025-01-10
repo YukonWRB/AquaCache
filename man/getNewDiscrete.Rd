@@ -45,8 +45,8 @@ Optional columns are:
 -'lab':
 \item 'protocol':
 \item 'note': a character string with a note about the data point(s).
-\item 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'owners_contributors_operators' table and an error will be thrown if it does not.
-\item 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'owners_contributors_operators' table and an error will be thrown if it does not.
+\item 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
+\item 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'organizations' table and an error will be thrown if it does not.
 \item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 \item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
 \item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
@@ -58,7 +58,7 @@ Additionally, functions must be able to handle the case where no new data is ava
 
 \subsection{Default arguments passed to 'source_fx' functions:}{
 
-This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'parameter_id' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
+This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'parameter_id' gets the parameter code defined in the 'fetch_settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
 }
 
 \subsection{Sharing privileges and ownership}{

@@ -533,7 +533,7 @@ adjust_approval <- function(con, timeseries_id, data) {
 #' 
 #' @param con A connection to the database with write privileges to the 'owners' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
-#' @param data A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors_operators' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.
+#' @param data A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'organizations' or integer/numeric, in which case it must refer to column 'organization_id' of the same table.
 #'  
 #' @return Modifies the 'owners' table in the database.
 #' @export
@@ -551,10 +551,10 @@ adjust_owner <- function(con, timeseries_id, data) {
     return(message("adjust_owner: column 'owner' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
-  # Check if 'owner' is character, if so match those characters to 'name' in the 'owners_contributors_operators' table
+  # Check if 'owner' is character, if so match those characters to 'name' in the 'organizations' table
   if (inherits(data$owner[1], "character")) {
-    owner_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors_operators;")
-    data$owner <- owner_table$owner_contributor_id[match(data$owner, owner_table$name)]
+    owner_table <- DBI::dbGetQuery(con, "SELECT organization_id, name FROM organizations;")
+    data$owner <- owner_table$organization_id[match(data$owner, owner_table$name)]
   }
   
   # Ensure that 'datetime' is POSIXct
@@ -568,7 +568,7 @@ adjust_owner <- function(con, timeseries_id, data) {
   # has a start datetime before the range of the data and an end datetime after the range of the data
   # This leaves out entries that are entirely before or after the range of the data.
   exist <- DBI::dbGetQuery(con, paste0(
-    "SELECT owner_id, timeseries_id, owner_contributor_id, start_dt, end_dt 
+    "SELECT owner_id, timeseries_id, organization_id, start_dt, end_dt 
     FROM owners 
     WHERE timeseries_id = ", timeseries_id, " 
        AND (
@@ -592,12 +592,12 @@ adjust_owner <- function(con, timeseries_id, data) {
   
   index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$owner_contributor_id[1] else data$owner[1]
+  current <- if (original_exist_rows > 0) exist$organization_id[1] else data$owner[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(owner_id = NA,
                         timeseries_id = timeseries_id,
-                        owner_contributor_id = data$owner[1],
+                        organization_id = data$owner[1],
                         start_dt = data$datetime[1],
                         end_dt = data$datetime[1])
   }
@@ -611,7 +611,7 @@ adjust_owner <- function(con, timeseries_id, data) {
         index <- index + 1
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
           exist$start_dt[index] <- data$datetime[i]
-          exist$owner_contributor_id[index] <- data$owner[i]
+          exist$organization_id[index] <- data$owner[i]
           
           # Check if there are rows left in 'data'
           if ((i == nrow(data)) && ((index) < original_exist_rows)) {
@@ -628,7 +628,7 @@ adjust_owner <- function(con, timeseries_id, data) {
         } else { # Create a new row with no owner_id
           to_append <- data.frame(owner_id = NA,
                                   timeseries_id = timeseries_id,
-                                  owner_contributor_id = data$owner[i],
+                                  organization_id = data$owner[i],
                                   start_dt = data$datetime[i],
                                   end_dt = data$datetime[i])
           exist <- rbind(exist, to_append)
@@ -639,7 +639,7 @@ adjust_owner <- function(con, timeseries_id, data) {
         exist$end_dt[nrow(exist)] <- data$datetime[i]
         to_append <- data.frame(owner_id = NA,
                                 timeseries_id = timeseries_id,
-                                owner_contributor_id = data$owner[i],
+                                organization_id = data$owner[i],
                                 start_dt = data$datetime[i],
                                 end_dt = data$datetime[i])
         exist <- rbind(exist, to_append)
@@ -674,7 +674,7 @@ adjust_owner <- function(con, timeseries_id, data) {
     }
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$owner_id[i])) {  # Means that we need to update rows
-        DBI::dbExecute(con, paste0("UPDATE owners SET owner_contributor_id = ", exist$owner_contributor_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE owner_id = ", exist$owner_id[i], ";"))
+        DBI::dbExecute(con, paste0("UPDATE owners SET organization_id = ", exist$organization_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE owner_id = ", exist$owner_id[i], ";"))
       } else { # Means that we need to insert new rows
         DBI::dbAppendTable(con, "owners", exist[i, -which(names(exist) == "owner_id")])
       }
@@ -704,7 +704,7 @@ adjust_owner <- function(con, timeseries_id, data) {
 #' 
 #' @param con A connection to the database with write privileges to the 'contributors' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
-#' @param data A data.frame with columns for 'datetime' and 'contributor'. 'datetime' should be POSIXct and 'contributor' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors_operators' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.
+#' @param data A data.frame with columns for 'datetime' and 'contributor'. 'datetime' should be POSIXct and 'contributor' should be either character (in which case it must refer to entries in column 'name' of table 'organizations' or integer/numeric, in which case it must refer to column 'organization_id' of the same table.
 #'  
 #' @return Modifies the 'contributors' table in the database.
 #' @export
@@ -722,10 +722,10 @@ adjust_contributor <- function(con, timeseries_id, data) {
     return(message("adjust_contributor: column 'contributor' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
   }
   
-  # Check if 'contributor' is character, if so match those characters to 'name' in the 'owners_contributors_operators' table
+  # Check if 'contributor' is character, if so match those characters to 'name' in the 'organizations' table
   if (inherits(data$contributor[1], "character")) {
-    contributor_table <- DBI::dbGetQuery(con, "SELECT owner_contributor_id, name FROM owners_contributors_operators;")
-    data$contributor <- contributor_table$owner_contributor_id[match(data$contributor, contributor_table$name)]
+    contributor_table <- DBI::dbGetQuery(con, "SELECT organization_id, name FROM organizations;")
+    data$contributor <- contributor_table$organization_id[match(data$contributor, contributor_table$name)]
   }
   
   # Ensure that 'datetime' is POSIXct
@@ -739,7 +739,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
   # has a start datetime before the range of the data and an end datetime after the range of the data
   # This leaves out entries that are entirely before or after the range of the data.
   exist <- DBI::dbGetQuery(con, paste0(
-    "SELECT contributor_id, timeseries_id, owner_contributor_id, start_dt, end_dt 
+    "SELECT contributor_id, timeseries_id, organization_id, start_dt, end_dt 
     FROM contributors 
     WHERE timeseries_id = ", timeseries_id, " 
        AND (
@@ -763,12 +763,12 @@ adjust_contributor <- function(con, timeseries_id, data) {
   
   index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$owner_contributor_id[1] else data$contributor[1]
+  current <- if (original_exist_rows > 0) exist$organization_id[1] else data$contributor[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(contributor_id = NA,
                         timeseries_id = timeseries_id,
-                        owner_contributor_id = data$contributor[1],
+                        organization_id = data$contributor[1],
                         start_dt = data$datetime[1],
                         end_dt = data$datetime[1])
   }
@@ -782,7 +782,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
         index <- index + 1
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
           exist$start_dt[index] <- data$datetime[i]
-          exist$owner_contributor_id[index] <- data$contributor[i]
+          exist$organization_id[index] <- data$contributor[i]
           
           # Check if there are rows left in 'data'
           if ((i == nrow(data)) && ((index) < original_exist_rows)) {
@@ -799,7 +799,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
         } else { # Create a new row with no contributor_id
           to_append <- data.frame(contributor_id = NA,
                                   timeseries_id = timeseries_id,
-                                  owner_contributor_id = data$contributor[i],
+                                  organization_id = data$contributor[i],
                                   start_dt = data$datetime[i],
                                   end_dt = data$datetime[i])
           exist <- rbind(exist, to_append)
@@ -810,7 +810,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
         exist$end_dt[nrow(exist)] <- data$datetime[i]
         to_append <- data.frame(contributor_id = NA,
                                 timeseries_id = timeseries_id,
-                                owner_contributor_id = data$contributor[i],
+                                organization_id = data$contributor[i],
                                 start_dt = data$datetime[i],
                                 end_dt = data$datetime[i])
         exist <- rbind(exist, to_append)
@@ -845,7 +845,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
     }
     for (i in 1:nrow(exist)) {
       if (!is.na(exist$contributor_id[i])) {  # Means that we need to update rows
-        DBI::dbExecute(con, paste0("UPDATE contributors SET owner_contributor_id = ", exist$owner_contributor_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE contributor_id = ", exist$contributor_id[i], ";"))
+        DBI::dbExecute(con, paste0("UPDATE contributors SET organization_id = ", exist$organization_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE contributor_id = ", exist$contributor_id[i], ";"))
       } else { # Means that we need to insert new rows
         DBI::dbAppendTable(con, "contributors", exist[i, -which(names(exist) == "contributor_id")])
       }

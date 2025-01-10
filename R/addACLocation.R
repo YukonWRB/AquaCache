@@ -232,12 +232,12 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
     stop("At least one of the location type IDs you specified does not exist.")
   }
   
-  # Check that owner exists in the 'owners_contributors_operators' table
+  # Check that owner exists in the 'organizations' table
   unique_owners <- unique(owner)
   if (length(unique_owners) > 1) {
-    exists <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors_operators WHERE owner_contributor_id IN (", paste(unique_owners, collapse = ", "), ");"))
+    exists <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id IN (", paste(unique_owners, collapse = ", "), ");"))
   } else {
-    exists <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors_operators WHERE owner_contributor_id = ", unique_owners, ";"))
+    exists <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id = ", unique_owners, ";"))
   }
   if (length(unique_owners) != nrow(exists)) {
     stop("At least one of the owner IDs you specified does not exist. You can add it with function addACOwner().")

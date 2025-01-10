@@ -51,9 +51,9 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
       }
     }
     
-    # Get owner_contributor_id for 'Water Survey of Canada'
-    owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE name = 'Water Survey of Canada'")[1,1]
-    if (is.na(owner_contributor_id)) {
+    # Get organization_id for 'Water Survey of Canada'
+    organization_id <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'")[1,1]
+    if (is.na(organization_id)) {
       df <- data.frame(name = 'Water Survey of Canada')
       DBI::dbAppendTable(con, "owner_contributors", df)
     }
@@ -90,8 +90,8 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                  qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
         new_flow$qualifier <- as.integer(new_flow$qualifier)
         
-        new_flow$owner <- owner_contributor_id
-        new_flow$contributor <- owner_contributor_id
+        new_flow$owner <- organization_id
+        new_flow$contributor <- organization_id
         new_flow$approval <- approval_approved
         new_flow$grade <- grade_unspecified
         new_flow$imputed <- FALSE
@@ -110,8 +110,8 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                      qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
         new_level$qualifier <- as.integer(new_level$qualifier)
         
-        new_level$owner <- owner_contributor_id
-        new_level$contributor <- owner_contributor_id
+        new_level$owner <- organization_id
+        new_level$contributor <- organization_id
         new_level$approval <- approval_approved
         new_level$grade <- grade_unspecified
         new_level$imputed <- FALSE

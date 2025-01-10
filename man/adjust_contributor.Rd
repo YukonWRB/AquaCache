@@ -11,7 +11,7 @@ adjust_contributor(con, timeseries_id, data)
 
 \item{timeseries_id}{The target timeseries_id}
 
-\item{data}{A data.frame with columns for 'datetime' and 'contributor'. 'datetime' should be POSIXct and 'contributor' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors_operators' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.}
+\item{data}{A data.frame with columns for 'datetime' and 'contributor'. 'datetime' should be POSIXct and 'contributor' should be either character (in which case it must refer to entries in column 'name' of table 'organizations' or integer/numeric, in which case it must refer to column 'organization_id' of the same table.}
 }
 \value{
 Modifies the 'contributors' table in the database.

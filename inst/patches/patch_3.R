@@ -415,7 +415,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                  "CREATE TABLE public.owners (
                owner_id SERIAL PRIMARY KEY,
                timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
-               owner_contributor_id INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE CASCADE ON UPDATE CASCADE,
+               organization_id INTEGER NOT NULL REFERENCES owners_contributors(organization_id) ON DELETE CASCADE ON UPDATE CASCADE,
                start_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                end_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -446,7 +446,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                       SELECT 1
                       FROM owners
                       WHERE timeseries_id = NEW.timeseries_id
-                      AND owner_contributor_id != NEW.owner_contributor_id  -- Exclude the current row in an UPDATE
+                      AND organization_id != NEW.organization_id  -- Exclude the current row in an UPDATE
                       AND (
                           (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
                       )
@@ -466,25 +466,25 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
               ")
   
   
-  wsc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
+  wsc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
   if (is.na(wsc_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "Water Survey of Canada"))
-    wsc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
+    wsc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
   }
-  wrb_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
+  wrb_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
   if (is.na(wrb_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "Yukon Department of Environment, Water Resources Branch"))
-    wrb_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
+    wrb_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
   }
-  eccc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
+  eccc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
   if (is.na(eccc_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "Environment and Climate Change Canada"))
-    eccc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
+    eccc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
   }
-  usgs_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
+  usgs_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
   if (is.na(usgs_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "United States Geological Survey"))
-    usgs_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
+    usgs_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
   }
   
   tsids <- DBI::dbGetQuery(con, "SELECT DISTINCT timeseries_id FROM measurements_continuous;")[,1]
@@ -545,7 +545,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                  "CREATE TABLE public.contributors (
                contributor_id SERIAL PRIMARY KEY,
                timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
-               owner_contributor_id INTEGER NOT NULL REFERENCES owners_contributors(owner_contributor_id) ON DELETE CASCADE ON UPDATE CASCADE,
+               organization_id INTEGER NOT NULL REFERENCES owners_contributors(organization_id) ON DELETE CASCADE ON UPDATE CASCADE,
                start_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                end_dt TIMESTAMP WITH TIME ZONE NOT NULL,
                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -576,7 +576,7 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                       SELECT 1
                       FROM contributors
                       WHERE timeseries_id = NEW.timeseries_id
-                      AND owner_contributor_id != NEW.owner_contributor_id  -- Exclude the current row in an UPDATE
+                      AND organization_id != NEW.organization_id  -- Exclude the current row in an UPDATE
                       AND (
                           (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
                       )
@@ -595,25 +595,25 @@ ON public.qualifiers (timeseries_id, start_dt, end_dt);
                 EXECUTE FUNCTION public.check_contributors_overlap();
               ")
   
-  wsc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
+  wsc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
   if (is.na(wsc_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "Water Survey of Canada"))
-    wsc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
+    wsc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Water Survey of Canada';")[1,1]
   }
-  wrb_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
+  wrb_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
   if (is.na(wrb_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "Yukon Department of Environment, Water Resources Branch"))
-    wrb_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
+    wrb_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Yukon Department of Environment, Water Resources Branch';")[1,1]
   }
-  eccc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
+  eccc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
   if (is.na(eccc_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "Environment and Climate Change Canada"))
-    eccc_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
+    eccc_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'Environment and Climate Change Canada';")[1,1]
   }
-  usgs_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
+  usgs_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
   if (is.na(usgs_owner)) {
     DBI::dbAppendTable(con, "owners_contributors", data.frame(name = "United States Geological Survey"))
-    usgs_owner <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
+    usgs_owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM owners_contributors WHERE name = 'United States Geological Survey';")[1,1]
   }
   
   tsids <- DBI::dbGetQuery(con, "SELECT DISTINCT timeseries_id FROM measurements_continuous;")[,1]
@@ -761,7 +761,7 @@ ORDER BY
 
   
   # Add a column for 'owner' in the 'locations' table, referencing table owners_contributors
-  DBI::dbExecute(con, "ALTER TABLE locations ADD COLUMN owner INTEGER REFERENCES owners_contributors(owner_contributor_id) ON DELETE SET NULL ON UPDATE CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE locations ADD COLUMN owner INTEGER REFERENCES owners_contributors(organization_id) ON DELETE SET NULL ON UPDATE CASCADE;")
     
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '3' WHERE item = 'Last patch number';")

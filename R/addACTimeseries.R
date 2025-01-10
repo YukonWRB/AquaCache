@@ -316,7 +316,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   if (length(owner) == 1 && length > 1) {
     owner <- rep(owner, length)
   }
-  db_owner <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors_operators WHERE owner_contributor_id IN (", paste(unique(owner), collapse = ", "), ");"))
+  db_owner <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id IN (", paste(unique(owner), collapse = ", "), ");"))
   if (nrow(db_owner) < length(unique(owner))) {
     stop("At least one of the owners you specified does not exist in the database.")
   }
@@ -352,7 +352,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     }
   }
 
-  # Check that the proper entries exist in the settings database table. Make entry to DB if necessary/possible ################
+  # Check that the proper entries exist in the fetch_settings database table. Make entry to DB if necessary/possible ################
   for (i in 1:length(location)) {
     sfx <- source_fx[i]
     if (is.na(sfx)) {
@@ -363,12 +363,12 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     p_type <- period_type[i]
     
     if (is.na(rec_rate)) {
-      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", sfx, "' AND record_rate IS NULL AND parameter_id = ", param, " AND period_type = '", p_type, "';"))
+      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM fetch_settings WHERE source_fx = '", sfx, "' AND record_rate IS NULL AND parameter_id = ", param, " AND period_type = '", p_type, "';"))
     } else {
-      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM settings WHERE source_fx = '", sfx, "' AND record_rate = '", rec_rate, "' AND parameter_id = ", param, " AND period_type = '", p_type, "';"))
+      setting <- DBI::dbGetQuery(con, paste0("SELECT * FROM fetch_settings WHERE source_fx = '", sfx, "' AND record_rate = '", rec_rate, "' AND parameter_id = ", param, " AND period_type = '", p_type, "';"))
     }
     if (nrow(setting) == 0) {
-      stop("There is no existing entry in the 'settings' table for source_fx ", sfx, ", parameter ", param, ", and period_type ", p_type, ". Please add a corresponding entry to the database table 'settings' to address this and try again. I need to know how to fetch the data for this timeseries!!!")
+      stop("There is no existing entry in the 'fetch_settings' table for source_fx ", sfx, ", parameter ", param, ", and period_type ", p_type, ". Please add a corresponding entry to the database table 'settings' to address this and try again. I need to know how to fetch the data for this timeseries!!!")
     }
   }
   

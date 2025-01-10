@@ -6,7 +6,7 @@
 #' A function used to fetch weather data from ECCC, using the weathercan package for speed and simplicity. Since ECCC weather data comes in as a tibble with ~36 rows (all parameters)and there is no way to tailor the request to a single parameter, this function will save the output of the first download as an .rdata file to the session temporary folder. Subsequent runs of the function will search the temporary folder for a suitable file and attempt to use it, downloading again only if no suitable file is found. Temporary folder contents are deleted when the R session is closed.
 #'
 #' @param location An ECCC Station ID (not to be mistaken for other IDs such as the Nav Canada ID, the WMO ID, or the Climate ID). See [weathercan::stations()] for help finding the right ID.
-#' @param parameter_id The name of the column containing the desired data, as output in the data.frame given by [weathercan::weather_dl()]. Taken from the parameter_id column of the 'settings' table. Note that this column name varies depending on the interval specified (hour, day, month).
+#' @param parameter_id The name of the column containing the desired data, as output in the data.frame given by [weathercan::weather_dl()]. Taken from the parameter_id column of the 'fetch_settings' table. Note that this column name varies depending on the interval specified (hour, day, month).
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param interval The interval to pass to [weathercan::weather_dl()], one of "hour", "day", "month".
@@ -92,9 +92,9 @@ downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime 
     data <- data[data$datetime > start_datetime & data$datetime < end_datetime & !is.na(data$value) , ]
     if (nrow(data) > 0) {
       
-      # Get owner_contributor_id for 'Environment and Climate Change Canada'
-      owner_contributor_id <- DBI::dbGetQuery(con, "SELECT owner_contributor_id FROM owners_contributors_operators WHERE name = 'Environment and Climate Change Canada'")[1,1]
-      if (is.na(owner_contributor_id)) {
+      # Get organization_id for 'Environment and Climate Change Canada'
+      organization_id <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE name = 'Environment and Climate Change Canada'")[1,1]
+      if (is.na(organization_id)) {
         df <- data.frame(name = 'Environment and Climate Change Canada',
                          name_fr = 'Environnement et Changement Climatique Canada')
         DBI::dbAppendTable(con, "owner_contributors", df)
@@ -107,8 +107,8 @@ downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime 
       data$grade <- grade_unspecified
       data$approval <- approval_unspecified
       data$qualifier <- qualifier_unspecified
-      data$owner <- owner_contributor_id
-      data$contributor <- owner_contributor_id
+      data$owner <- organization_id
+      data$contributor <- organization_id
     }
   } else {
     data <- data.frame()

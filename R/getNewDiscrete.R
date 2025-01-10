@@ -3,13 +3,13 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Retrieves new discrete data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the discrete table and that have a proper entry in the timeseries table; refer to [addACTimeseries()] for how to add new stations. Does not work on any timeseries of category "continuous": for that, use [getNewContinuous()]. Timeseries with no specified souce_fx will be ignored.
+#' Retrieves new discrete data starting from the last data point in the local database, using the function specified in the sample_series table column "source_fx".
 #'
 #' ## Making functions called by getNewDiscrete:
 #' Each timeseries in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return a data.frame with the following mandatory columns:
 #' - 'datetime': a POSIXct datetime object in UTC 0 time zone
 #' - 'value': the value of the parameter at that datetime, as a numeric. Negative and positive values are allowed, and NA values are allowed if column result_condition is not NULL/NA. Values such as < DL or > DL should appear as NA with corresponding entries in the result_condition column.
-#' 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 ('field msr/obs'), or 34 ('sample-routine').
+#' 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 ('sample-field msr/obs'), or 34 ('sample-routine').
 #' 'result_value_type':  a numeric specifying the result_value_type_id of the data point from table 'result_value_types', such as 1 ('actual'), 2 ('blank corrected'), or 3 ('calculated').
 #' 
 #' Conditional columns are:
@@ -24,34 +24,42 @@
 #' -'lab': 
 #' - 'protocol': 
 #' - 'note': a character string with a note about the data point(s).
-#' - 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'owners_contributors_operators' table and an error will be thrown if it does not.
-#' - 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'owners_contributors_operators' table and an error will be thrown if it does not.
+#' - 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
+#' - 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'organizations' table and an error will be thrown if it does not.
 #' - 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 #' - 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
 #' - 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
-#' - 'share_with': the user groups with which the data should be shared, as a character string. If not specified, the data will be shared with the same groups as the timeseries.
+#' - 'share_with': the user groups with which the data should be shared, as a character string. If not specified, the data will be shared with the same groups as the sample_series
 #' 
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty data.frame.
 #' 
 #' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'timeseries' table, 'parameter_id' gets the parameter code defined in the 'settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
+#' This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'sample_series' table, 'parameter_id' gets the parameter code defined in the 'fetch_settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "sample_series" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #' 
 #' ## Sharing privileges and ownership
-#' The parameters of column share_with of table timeseries will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data, unless the source function returns populated columns for owner and share_with.
+#' The parameters of column share_with of table sample_series will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data, unless the source function returns populated columns for owner and share_with.
 #'
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
-#' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'discrete'.
-#' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
-
+#' @param location_id The location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch all location_ids in the 'sample_series' table and all corresponding time ranges and associated source functions (if more than one per location)
+#' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. this can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids. Set to 'all' to fetch all sample_series_ids.
+#' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'sample_series' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 #'
 
-getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default') {
+getNewDiscrete <- function(con = NULL, location_id = "all", sample_series_id = NULL, active = 'default') {
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  
+  # Make sure that location_id and sample_series_id are not both NULL or both not NULL
+  if (is.null(location_id) & is.null(sample_series_id)) {
+    stop("location_id and sample_series_id cannot both be NULL")
+  }
+  if (!is.null(location_id) & !is.null(sample_series_id)) {
+    stop("location_id and sample_series_id cannot both specified (not NULL)")
   }
   
   if (is.null(con)) {
@@ -61,21 +69,40 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
   
   DBI::dbExecute(con, "SET timezone = 'UTC'")
   
-  # Create table of timeseries
-  if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL;")
+  if (is.null(location_id)) {
+    if (sample_series_id[1] == "all") {
+      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
+    } else {
+      all_series <- DBI::dbExecute(con, "SELECT * FROM sample_series WHERE sample_series_id IN ('", paste(sample_series_id, collapse = "', '"), "') AND (synch_to IS NULL OR synch_to < now())")
+      if (length(unique(sample_series_id)) != nrow(all_series)) {
+        fail <- sample_series_id[!sample_series_id %in% all_series$sample_series_id]
+        ifelse((length(fail) == 1),
+               warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
+               warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
+        )
+      }
+    }
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, record_rate, share_with, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'discrete' AND source_fx IS NOT NULL;"))
-    if (length(timeseries_id) != nrow(all_timeseries)) {
-      warning("At least one of the timeseries IDs you called for cannot be found in the database, is not of category 'discrete', or has no function specified in column source_fx.")
+    if (location_id[1] == "all") {
+      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
+    } else {
+      all_series <- DBI::dbExecute(con, "SELECT * FROM sample_series WHERE location_id_id IN ('", paste(location_id, collapse = "', '"), "') AND (synch_to IS NULL OR synch_to < now())")
+      if (length(unique(location_id)) != nrow(all_series)) {
+        fail <- location_id[!location_id %in% all_series$location_id]
+        ifelse((length(fail) == 1),
+               warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
+               warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
+        )
+      }
     }
   }
+
   
   if (active == 'default') {
-    all_timeseries <- all_timeseries[all_timeseries$active, ]
+    all_series <- all_series[all_series$active, ]
   }
 
-  count <- 0 #counter for number of successful new pulls
+  count <- 0 #counter for number of successful new pulls (samples - not individual results)
   success <- data.frame("location" = NULL, "parameter" = NULL, "timeseries" = NULL)
 
   # Run for loop over timeseries rows
@@ -84,17 +111,20 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
   EQcon <- NULL #This prevents multiple connections to EQcon...
   snowCon <- NULL
   if (interactive()) {
-    pb <- utils::txtProgressBar(min = 0, max = nrow(all_timeseries), style = 3)
+    pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
   }
-  for (i in 1:nrow(all_timeseries)) {
-    loc <- all_timeseries$location[i]
-    parameter <- all_timeseries$parameter_id[i]
-    period_type <- all_timeseries$period_type[i]
-    record_rate <- all_timeseries$record_rate[i]
-    tsid <- all_timeseries$timeseries_id[i]
-    source_fx <- all_timeseries$source_fx[i]
-    share_with <- all_timeseries$share_with[i]
-    owner <- all_timeseries$owner[i]
+  for (i in 1:nrow(all_series)) {
+    loc <- all_series$location_id[i]
+    sub_loc <- all_series$sub_location_id[i]
+    sid <- all_series$sample_series_id[i]
+    source_fx <- all_series$source_fx[i]
+    source_fx_args <- all_series$source_fx_args[i]
+    share_with <- all_series$share_with[i]
+    owner <- all_series$default_owner[i]
+    contributor <- all_series$default_contributor[i]
+    range_start <- all_series$synch_from[i]
+    range_end <- all_series$synch_to[i]
+    last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc, " AND sub_location_id = ", sub_loc, ";"))[1,1] + 1
     
     if (source_fx == "downloadEQWin" & is.null(EQcon)) {
       EQcon <- EQConnect(silent = TRUE)
@@ -104,16 +134,10 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
       snowCon <- snowConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
-    source_fx_args <- all_timeseries$source_fx_args[i]
-    if (is.na(record_rate)) {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
-    } else {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM settings WHERE parameter_id = '", parameter, "' AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
-    }
-    last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
+    source_fx_args <- all_series$source_fx_args[i]
 
     tryCatch({
-      args_list <- list(con = con, location = loc, parameter_id = parameter_id, start_datetime = last_data_point)
+      args_list <- list(con = con, location = loc, sub_location = sub_loc, start_datetime = last_data_point)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
       if (source_fx == "downloadEQWin") {
         args_list[["EQcon"]] <- EQcon
@@ -141,144 +165,131 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
         }
       }
       
-      ts <- do.call(source_fx, args_list) #Get the data using the args_list
-      if (nrow(ts) > 0) {
+      data <- do.call(source_fx, args_list) #Get the data using the args_list
+      if (nrow(data) > 0) {
         
-        # Make sure that columns called 'sample_type' 'result_value_type' 'datetime' 'value' are present at minimum and that there are no NAs in all columns
-        if (!("sample_type" %in% names(ts))) {
+        # Make sure that columns called 'sample_type' 'result_value_type' 'datetime' 'parameter_id' 'result' are present at minimum and that there are no NAs in all columns except for result (but then result_condition must be present)
+        if (!("sample_type" %in% names(data))) {
           stop("The source function did not return a column 'sample_type'.")
         } else {
-          if (any(is.na(ts$sample_type))) {
+          if (any(is.na(data$sample_type))) {
             stop("The source function returned NA values in the column 'sample_type'.")
           }
         }
-        if (!("result_value_type" %in% names(ts))) {
+        if (!("result_value_type" %in% names(data))) {
           stop("The source function did not return a column 'result_value_type'.")
         } else {
-          if (any(is.na(ts$result_value_type))) {
+          if (any(is.na(data$result_value_type))) {
             stop("The source function returned NA values in the column 'result_value_type'.")
           }
         }
-        if (!("datetime" %in% names(ts))) {
+        if (!("datetime" %in% names(data))) {
           stop("The source function did not return a column 'datetime'.")
         } else {
-          if (any(is.na(ts$datetime))) {
+          if (any(is.na(data$datetime))) {
             stop("The source function returned NA values in the column 'datetime'.")
+          }
+        }
+        if (!("parameter_id" %in% names(data))) {
+          stop("The source function did not return a column 'parameter_id'.")
+        } else {
+          if (any(is.na(data$parameter_id))) {
+            stop("The source function returned NA values in the column 'parameter_id'.")
           }
         }
         
         # More complex check on 'value' column as it can contain NAs if there is a 'result_condition' column
-        if (!("value" %in% names(ts))) {
+        if (!("value" %in% names(data))) {
           stop("The source function did not return a column 'value'.")
         }
         # if there are NAs in the 'value' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
-        if (any(is.na(ts$value))) {
-          if (!("result_condition" %in% names(ts))) {
+        if (any(is.na(data$value))) {
+          if (!("result_condition" %in% names(data))) {
             stop("The source function returned NA values in the column 'value' but did not return a column 'result_condition'.")
           } else { # Check that each NA in 'value' has a corresponding entry in 'result_condition'
-            sub.ts <- ts[is.na(ts$value), ]
+            sub.data <- data[is.na(data$value), ]
             check_result_condition <- FALSE # prevents repeatedly checking for the same thing
             
-            for (j in 1:nrow(sub.ts)) {
-              if (is.na(sub.ts$value[j]) & is.na(sub.ts$result_condition[j])) {
+            for (j in 1:nrow(sub.data)) {
+              if (is.na(sub.data$value[j]) & is.na(sub.data$result_condition[j])) {
                 stop("The source function returned at least one NA value in the column 'value' but did not return a corresponding entry in the column 'result_condition'.")
               } else {
                 if (!check_result_condition) {
-                  if (any(sub.ts$result_condition %in% c(1, 2))) {
-                    if (!("result_condition_value" %in% names(ts))) {
+                  if (any(sub.data$result_condition %in% c(1, 2))) {
+                    if (!("result_condition_value" %in% names(data))) {
                       stop("The source function returned at least one row where 'result_condition' is 1 or 2 (above/below detetion limit) but there is no column for the necessary result_condition_value.")
                     }
                   }
                   check_result_condition <- TRUE
                 }
                 
-                if (sub.ts$result_condition[j] %in% c(1, 2)) {
-                  if (is.na(sub.ts$result_condition_value[j])) {
-                    stop("The source function returned a value of 1 or 2 in the column 'result_condition' but did not return a corresponding entry in the column 'result_condition_value'.")
+                if (sub.data$result_condition[j] %in% c(1, 2)) {
+                  if (is.na(sub.data$result_condition_value[j])) {
+                    stop("The source function returned a value of 1 or 2 in the column 'result_condition' (indicating above or below detection limit) but did not return a corresponding entry in the column 'result_condition_value'.")
                   }
                 }
               }
-            } # End of loop over each row with NA in value column
+            } # End of looping over each row with NA in value column
           }
         } # End of additional checks is any NA values in 'value' column are returned
         
         
-        # Check if the source function returned the owner and share_with columns. If not, use the ones from the timeseries table if they are not NA. If yes, use the ones from the source function, replacing NAs in these columns with the timeseries table values if they are not NA.
-        if ("owner" %in% names(ts)) {
-          if (!is.null(owner)) {
-            ts$owner[is.na(ts$owner)] <- owner
-          }
-        } else {
-          if (!is.null(owner)) {
-            ts$owner <- owner
-          }
-        }
-        if ("share_with" %in% names(ts)) {
-          if (!is.na(share_with)) {
-            ts$share_with[is.na(ts$share_with)] <- share_with
-          }
-        } else {
-          if (!is.na(share_with)) {
-            ts$share_with <- share_with
-          }
-        }
-        
-        # Get the result_speciation and sample_fraction boolean values for the parameter. If TRUE then ts must contain columns result_speciation and sample_fraction.
+        # Get the result_speciation and sample_fraction boolean values for the parameter. If TRUE then data must contain columns result_speciation and sample_fraction.
         result_speciation <- DBI::dbGetQuery(con, paste0("SELECT result_speciation FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
         sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT sample_fraction FROM parameters WHERE parameter_id = '", parameter, "';"))[1,1]
         if (result_speciation) {
-          if (!("result_speciation" %in% names(ts))) {
+          if (!("result_speciation" %in% names(data))) {
             stop("The source function did not return a column 'result_speciation' but the parameter in the database has result_speciation set to TRUE.")
           } else { # Check that all values in the result_speciation column are not NA
-            if (any(is.na(ts$result_speciation))) {
+            if (any(is.na(data$result_speciation))) {
               stop("The source function returned NA values in the column 'result_speciation' when the parameters table specifies that this should be populated.")
             }
           }
         }
         if (sample_fraction) {
-          if (!("sample_fraction" %in% names(ts))) {
+          if (!("sample_fraction" %in% names(data))) {
             stop("The source function did not return a column 'sample_fraction' but the parameter in the database has sample_fraction set to TRUE.")
           } else { # Check that all values in the sample_fraction column are not NA
-            if (any(is.na(ts$sample_fraction))) {
+            if (any(is.na(data$sample_fraction))) {
               stop("The source function returned NA values in the column 'sample_fraction' when the parameters table specifies that this should be populated.")
             }
           }
         }
         
-        ts$timeseries_id <- tsid
+        data$timeseries_id <- sid
         
         # Adjust owner, contributor, approval information
-        adjust_owner(con = con, timeseries_id = tsid, data = ts[, c("datetime", "owner")])  # Owner is always present, defaulting to the timeseries table value if not in the ts
-        if ("contributor" %in% names(ts)) {
-          adjust_contributor(con = con, timeseries_id = tsid, data = ts[, c("datetime", "contributor")])
+        adjust_owner(con = con, timeseries_id = tsid, data = data[, c("datetime", "owner")])  # Owner is always present, defaulting to the timeseries table value if not in the data
+        if ("contributor" %in% names(data)) {
+          adjust_contributor(con = con, timeseries_id = tsid, data = data[, c("datetime", "contributor")])
         }
-        if ("approval" %in% names(ts)) {
-          adjust_approval(con = con, timeseries_id = tsid, data = ts[, c("datetime", "approval")])
+        if ("approval" %in% names(data)) {
+          adjust_approval(con = con, timeseries_id = tsid, data = data[, c("datetime", "approval")])
         }
-        if ("grade" %in% names(ts)) {
-          adjust_grade(con = con, timeseries_id = tsid, data = ts[, c("datetime", "grade")])
+        if ("grade" %in% names(data)) {
+          adjust_grade(con = con, timeseries_id = tsid, data = data[, c("datetime", "grade")])
         }
-        if ("qualifier" %in% names(ts)) {
-          adjust_qualifier(con = con, timeseries_id = tsid, data = ts[, c("datetime", "qualifier")])
+        if ("qualifier" %in% names(data)) {
+          adjust_qualifier(con = con, timeseries_id = tsid, data = data[, c("datetime", "qualifier")])
         }
-        ts <- ts[ , -which(names(ts) %in% c("owner", "contributor", "approval", "grade", "qualifier"))]
+        data <- data[ , -which(names(data) %in% c("owner", "contributor", "approval", "grade", "qualifier"))]
         
         # Now commit the changes to the database
-        commit_fx <- function(con, ts, last_data_point, tsid) {
+        commit_fx <- function(con, data, last_data_point, tsid) {
           
-          if (min(ts$datetime) < last_data_point - 1) { #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
-            DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(ts$datetime), "' AND timeseries_id = ", tsid, ";"))
+          if (min(data$datetime) < last_data_point - 1) { #This might happen because a source_fx is feeding in data before the requested datetime. Example: downloadSnowCourse if a new station is run in parallel with an old station, and the offset between the two used to adjust "old" measurements to the new measurements.
+            DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE datetime >= '", min(data$datetime), "' AND timeseries_id = ", tsid, ";"))
           }
-          DBI::dbAppendTable(con, "measurements_discrete", ts)
+          DBI::dbAppendTable(con, "measurements_discrete", data)
           #make the new entry into table timeseries
-          DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(data$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
         }
         
         if (!attr(con, "active_transaction")) {
           DBI::dbBegin(con)
           attr(con, "active_transaction") <- TRUE
           tryCatch({
-            commit_fx(con, ts, last_data_point, tsid)
+            commit_fx(con, data, last_data_point, tsid)
             DBI::dbCommit(con)
             attr(con, "active_transaction") <- FALSE
             count <- count + 1
@@ -289,7 +300,7 @@ getNewDiscrete <- function(con = NULL, timeseries_id = "all", active = 'default'
             warning("getNewDiscrete: Failed to commit new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Error message: ", e$message)
           })
         } else { # we're already in a transaction
-          commit_fx(con, ts, last_data_point, tsid)
+          commit_fx(con, data, last_data_point, tsid)
           count <- count + 1
           success <- rbind(success, data.frame("location" = loc, "parameter" = parameter, "timeseries_id" = tsid))
         }

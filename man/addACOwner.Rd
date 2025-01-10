@@ -30,7 +30,7 @@ addACOwner(
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
 }
 \value{
-The owner_contributor_id of the new user group, plus a new entry to the database.
+The organization_id of the new user group, plus a new entry to the database.
 }
 \description{
 Add a new owner or contributor to the aquacache
