@@ -2,9 +2,9 @@
 #'
 #' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the aquacache DB to fetch missing data points or to pull additional data in case of ambiguity.
 #'
-#' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value'. Other columns will be ignored.
+#' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value' and 'timeseries'. Other columns will be ignored as these are not found in the database.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`. This CAN be NA for the edge use case of creating a new timeseries.
-#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
+#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. Used to fetch any rows that don't have a period calculated yet, or to fetch additional rows if too few exist to conclusively calculate a period.
 #'
 #' @return A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
 #' @export
@@ -23,8 +23,8 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     stop("The 'data' parameter must contain a column named 'datetime'.")
   }
   
-  # Drop columns not called 'datetime' and 'grade'
-  data <- data[, names(data) %in% c("datetime", "value"), drop = FALSE]
+  # Drop columns not called 'datetime' 'value', 'timeseries_id' as these can't be found in the database
+  data <- data[, names(data) %in% c("datetime", "value", "timeseries_id"), drop = FALSE]
   
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
   names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input

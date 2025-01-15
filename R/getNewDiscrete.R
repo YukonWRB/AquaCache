@@ -116,6 +116,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
   }
   for (i in 1:nrow(all_series)) {
     loc <- all_series$location_id[i]
+    loc_code <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE location_id = ", loc, ";"))[1,1]
     sub_loc <- all_series$sub_location_id[i]
     sid <- all_series$sample_series_id[i]
     source_fx <- all_series$source_fx[i]
@@ -125,8 +126,11 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     contributor <- all_series$default_contributor[i]
     range_start <- all_series$synch_from[i]
     range_end <- all_series$synch_to[i]
-    last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc, " AND sub_location_id = ", sub_loc, ";"))[1,1] + 1
-    
+    if (is.na(sub_loc)) {
+      last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc, ";"))[1,1] + 1
+    } else {
+      last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc, " AND sub_location_id = ", sub_loc, ";"))[1,1] + 1
+    }
     if (source_fx == "downloadEQWin" & is.null(EQcon)) {
       EQcon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
@@ -138,7 +142,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     source_fx_args <- all_series$source_fx_args[i]
 
     tryCatch({
-      args_list <- list(con = con, location = loc, sub_location = sub_loc, start_datetime = last_data_point)
+      args_list <- list(con = con, location = loc_code, sub_location = sub_loc, start_datetime = last_data_point)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
       if (source_fx == "downloadEQWin") {
         args_list[["EQcon"]] <- EQcon
@@ -166,7 +170,30 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
         }
       }
       
+      
+      # TODO: This should return a list. Each sample is a list element, itself with two data.tables: one for the sample metadata, one for the results associated with the sample
       data <- do.call(source_fx, args_list) #Get the data using the args_list
+      
+      if (!inherits(data, "list")) {
+        stop("The source function did not return a list.")
+      } else if (!inherits(data[[1]], "list")) {
+        stop("The source function did not return a list of lists (one element per sample, with two data.frames: one for sample metadata, the other for associated results).")
+      }
+      
+      # Work on each list element to populate the 'samples' and 'results' tables
+      for (j in 1:length(data)) {
+        if (!("sample" %in% names(data[[j]])) | !("results" %in% names(data[[j]]))) {
+          stop("The source function did not return a list with elements named 'sample' and 'results'. Failed on list element ", j, ".")
+        }
+        
+        # Prepare the sample data
+        sample <- data[[j]][["sample"]]
+        
+        
+        # Prepare the results data
+        results <- data[[j]][["results"]]
+      }
+      
       if (nrow(data) > 0) {
         
         # Make sure that columns called 'sample_type' 'result_value_type' 'datetime' 'parameter_id' 'result' are present at minimum and that there are no NAs in all columns except for result (but then result_condition must be present)

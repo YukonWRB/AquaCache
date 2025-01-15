@@ -7,11 +7,11 @@
 calculate_period(data, timeseries_id, con = NULL)
 }
 \arguments{
-\item{data}{The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value'. Other columns will be ignored.}
+\item{data}{The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value' and 'timeseries'. Other columns will be ignored as these are not found in the database.}
 
 \item{timeseries_id}{The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided \code{data}. This CAN be NA for the edge use case of creating a new timeseries.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. Used to fetch any rows that don't have a period calculated yet, or to fetch additional rows if too few exist to conclusively calculate a period.}
 }
 \value{
 A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.

@@ -1,4 +1,4 @@
-#' Add a new owner or contributor to the aquacache
+#' Add a new organization to the aquacache
 #' 
 #' @param name The name of the new owner/contributor or organization
 #' @param name_fr The French name of the new owner/contributor or organization (optional).
@@ -13,7 +13,7 @@
 #' @export
 
 
-addACOwner <- function(name, name_fr = NA, contact_name = NA, phone = NA, email = NA, note = NA, con = NULL) {
+addACOrg <- function(name, name_fr = NA, contact_name = NA, phone = NA, email = NA, note = NA, con = NULL) {
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)

@@ -872,7 +872,7 @@ EXECUTE FUNCTION enforce_sample_fraction();
   # 4. Do the final modifications to 'timeseries' and 'locations' #########
   DBI::dbExecute(con, "DELETE FROM timeseries WHERE category = 'discrete'")
   DBI::dbExecute(con, "ALTER TABLE timeseries DROP COLUMN category CASCADE;")
-  DBI::dbExecute(con, "ALTER TABLE timeseries DROP COLUMN owner CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE timeseries RENAME COLUMN owner TO default_owner;")
   
   # Redo timeseries_metadata_en and fr views because of the cascade
   message("Re-creating views...")
@@ -1071,9 +1071,9 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public, continuous, discrete, spatial, fil
   # Modify role 'yg' to be called 'yg_reader' and give it BYPASSRLS
   try({
     DBI::dbExecute(con, "ALTER ROLE yg RENAME TO yg_reader;")
-    # # Change references to 'yg' in table 'timeseries' and 'locations' to 'yg_reader'
-    DBI::dbExecute(con, "UPDATE timeseries SET share_with = {'yg_reader'} WHERE share_with = {'yg'};")
-    DBI::dbExecute(con, "UPDATE locations SET share_with = {'yg_reader'} WHERE share_with = {'yg'};")
+    # Change references to 'yg' in table 'timeseries' and 'locations' to 'yg_reader'
+    DBI::dbExecute(con, "UPDATE timeseries SET share_with = '{yg_reader}' WHERE share_with = '{yg}';")
+    DBI::dbExecute(con, "UPDATE locations SET share_with = '{yg_reader}' WHERE share_with = '{yg}';")
     
   })
   

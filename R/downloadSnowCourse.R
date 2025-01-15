@@ -62,6 +62,10 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
   start_date <- as.Date(start_datetime)
   end_date <- as.Date(end_datetime)
   
+    swe_paramid <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'snow water equivalent';")[1,1]
+    depth_paramid <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'snow depth';")[1,1]
+    media_id <- DBI::dbGetQuery(con, "SELECT media_id FROM media_types WHERE media_type = 'atmospheric'")[1,1]
+  
   if (!is.null(old_loc)) {
     #Check if there are new measurements at the old station
     old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, swe, depth, estimate_flag FROM means WHERE location = '", old_loc, "' AND survey_date > '", start_date, "';"))
@@ -70,61 +74,71 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
   }
 
   if (nrow(old_meas) > 0) { #There's some new data at the old location, so recalculate an offset and apply backwards.
-    #Get all old and new data
-    old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, swe, depth, estimate_flag FROM means WHERE location = '", old_loc, "';"))
-    names(old_meas) <- c("target_datetime", "datetime", "swe", "depth", "note")
-    # Adjust the plain date to middle of the day MST
-    old_meas$target_datetime <- as.POSIXct(old_meas$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
-    old_meas$datetime <- as.POSIXct(old_meas$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
-    
-    meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, swe, depth, estimate_flag FROM means WHERE location = '", location, "';"))
-    names(meas) <- c("target_datetime", "datetime", "swe", "depth", "note")
-    # Adjust the plain date to middle of the day MST
-    meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
-    meas$datetime <- as.POSIXct(meas$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
-    
-    common_datetimes <- as.POSIXct(intersect(old_meas$target_datetime, meas$target_datetime))
-    # Calculate the offset as a percentage of the new data, apply to the old data
-    offset <- mean(meas$value[meas$target_datetime %in% common_datetimes] / old_meas$value[old_meas$target_datetime %in% common_datetimes])
-    old_meas$value <- old_meas$value * offset #apply offset to old data
-    old_meas <- old_meas[!(old_meas$target_datetime %in% meas$target_datetime),] #discard overlapping old data
-    meas <- rbind(meas, old_meas) #combine
-    
-    #Discard any measurements that are outside the requested time range
-    meas <- meas[meas$datetime >= start_datetime & meas$datetime <= end_datetime, ]
-    
-    try({
-      # Update the timeseries table of aquacache DB with the offset values
-      if (is.null(con)) {
-        con <- AquaConnect(silent = TRUE)
-        on.exit(DBI::dbDisconnect(con), add = TRUE)
-      }
-      hydro_param <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name IN (snow water equivalent, snow depth);")[1,1]
-      media_id <- DBI::dbGetQuery(con, "SELECT media_id FROM media_types WHERE media_type = 'atmospheric'")[1,1]
-      DBI::dbExecute(con, paste0("UPDATE timeseries SET note = 'Compound timeseries incorporating measurements from ", old_loc, ". Measurements at the old location adjusted using a multiplier of ", round(offset, 4), ", calculated from ", length(common_datetimes), " data points. New location measurements take precedence over old for overlap period.' WHERE location = '", location, "' AND category = 'discrete' AND media_id = ", media_id, " AND parameter_id = ", hydro_param, ";"))
-    })
+    # #Get all old and new data
+    # old_meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, swe, depth, estimate_flag FROM means WHERE location = '", old_loc, "';"))
+    # names(old_meas) <- c("target_datetime", "datetime", "swe", "depth", "note")
+    # # Adjust the plain date to middle of the day MST
+    # old_meas$target_datetime <- as.POSIXct(old_meas$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
+    # old_meas$datetime <- as.POSIXct(old_meas$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
+    # 
+    # meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, swe, depth, estimate_flag FROM means WHERE location = '", location, "';"))
+    # names(meas) <- c("target_datetime", "datetime", "swe", "depth", "note")
+    # # Adjust the plain date to middle of the day MST
+    # meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
+    # meas$datetime <- as.POSIXct(meas$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
+    # 
+    # common_datetimes <- as.POSIXct(intersect(old_meas$target_datetime, meas$target_datetime))
+    # # Calculate the offset as a percentage of the new data, apply to the old data
+    # offset <- mean(meas$value[meas$target_datetime %in% common_datetimes] / old_meas$value[old_meas$target_datetime %in% common_datetimes])
+    # old_meas$value <- old_meas$value * offset #apply offset to old data
+    # old_meas <- old_meas[!(old_meas$target_datetime %in% meas$target_datetime),] #discard overlapping old data
+    # meas <- rbind(meas, old_meas) #combine
+    # 
+    # #Discard any measurements that are outside the requested time range
+    # meas <- meas[meas$datetime >= start_datetime & meas$datetime <= end_datetime, ]
+    # 
+    # try({
+    #   # Update the timeseries table of aquacache DB with the offset values
+    #   if (is.null(con)) {
+    #     con <- AquaConnect(silent = TRUE)
+    #     on.exit(DBI::dbDisconnect(con), add = TRUE)
+    #   }
+    #   DBI::dbExecute(con, paste0("UPDATE timeseries SET note = 'Compound timeseries incorporating measurements from ", old_loc, ". Measurements at the old location adjusted using a multiplier of ", round(offset, 4), ", calculated from ", length(common_datetimes), " data points. New location measurements take precedence over old for overlap period.' WHERE location = '", location, "' AND category = 'discrete' AND media_id = ", media_id, " AND parameter_id = ", hydro_param, ";"))
+    # })
   } else {
     #Get measurements for that location beginning after the start_datetime
-    meas <- DBI::dbGetQuery(snowCon, paste0("SELECT target_date, survey_date, swe, depth, estimate_flag FROM means WHERE location = '", location, "' AND survey_date > '", start_date, "' AND survey_date <= '", end_date, "';"))
-    names(meas) <- c("target_datetime", "datetime", "swe", "depth", "result_value_type")
-    # Adjust the plain date to middle of the day MST
-    meas$target_datetime <- as.POSIXct(meas$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
-    meas$datetime <- as.POSIXct(meas$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
-  }
-  
-  if (nrow(meas) > 0) {
-    # Change estimated or actual values to the database values
-    meas$result_value_type[meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'estimated'")[1,1]
-    meas$result_value_type[!meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'actual'")[1,1]
-    meas$sample_type <- DBI::dbGetQuery(con, "SELECT sample_type_id FROM sample_types WHERE LOWER(sample_type) = 'sample-field msr/obs'")[1,1]
-    meas$collection_method <- DBI::dbGetQuery(con, "SELECT collection_method_id FROM collection_methods WHERE LOWER(collection_method) = 'observation'")[1,1]
-    meas$protocol <- DBI::dbGetQuery(con, "SELECT protocol_id FROM analysis_protocols WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'")[1,1]
-    meas$owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
-    meas$contributor <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
+    new_surveys <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, location, target_date AS target_datetime, survey_date AS datetime, notes FROM surveys WHERE location = '", location, "' AND survey_date > '", start_date, "';"))
+    new_surveys$target_datetime <- as.POSIXct(new_surveys$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
+    new_surveys$datetime <- as.POSIXct(new_surveys$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
+    ls <- list()
+    for (i in 1:nrow(new_surveys)) {
+      sample <- new_surveys[i,]
+      #Get the measurements for each survey
+      meas <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, estimate_flag, swe, depth FROM measurements WHERE survey_id = ", new_surveys$survey_id[i], " AND exclude_flag IS FALSE;"))
+      names(meas) <- c("survey_id", "result_value_type", "swe", "depth")
+      meas <- data.frame(parameter_id = c(swe_paramid, depth_paramid),
+                         value = c(meas$swe, meas$depth),
+                         result_value_type = meas$result_value_type,
+                         survey_id = meas$survey_id)
+      
+      if (nrow(meas) > 0) {
+        # Change estimated or actual values to the database values
+        meas$result_value_type[meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'estimated'")[1,1]
+        meas$result_value_type[!meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'actual'")[1,1]
+        
+        meas$protocol <- DBI::dbGetQuery(con, "SELECT protocol_id FROM protocols_methods WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'")[1,1]
+      } else {
+        meas <- data.frame()
+      }
+      sample$sample_type <- DBI::dbGetQuery(con, "SELECT sample_type_id FROM sample_types WHERE LOWER(sample_type) = 'sample-field msr/obs - no lab results expected'")[1,1]
+      sample$owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
+      sample$contributor <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
+      sample$collection_method <- DBI::dbGetQuery(con, "SELECT collection_method_id FROM collection_methods WHERE LOWER(collection_method) = 'observation'")[1,1]
+      # This has a column for each measurement type, we need to make it long
+      ls[[i]] <- list(sample = sample,
+                      results = meas)
+    }
     
-    meas <- meas[!is.na(meas$value), ]  # Some measurements in table 'measurements_discrete' can have NA values, but this is used to represent values that are below/above detection limits. Not applicable for snow survey measurements.
-  } else {
-    meas <- data.frame()
   }
-  return(meas)
+    return(ls)
 }

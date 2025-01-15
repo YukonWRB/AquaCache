@@ -17,9 +17,9 @@ downloadEQWin(
 
 \item{sub_location}{The sub-location code (station code, i.e. the portion after the parentheses) associated with the EQWin station.}
 
-\item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
+\item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, but if POSIXct the object's tzone attribute will be preserved. If date, time will default to 00:00 to capture whole day.}
 
-\item{end_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
+\item{end_datetime}{Same as start_datetime but not quite!}
 
 \item{EQcon}{connection to the EQWin database. See EQConnect for details.}
 }
