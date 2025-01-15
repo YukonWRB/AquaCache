@@ -19,11 +19,14 @@ attr(con, "active_transaction") <- TRUE
 
 tryCatch({
   
+  # Lock the entire database to prevent writes while we make changes
+  DBI::dbExecute(con, "LOCK pg_database IN ACCESS EXCLUSIVE MODE;")
+  
   try({
-      DBI::dbExecute(con, "CREATE ROLE discrete_editor WITH BYPASSRLS;")
+    DBI::dbExecute(con, "CREATE ROLE discrete_editor WITH BYPASSRLS;")
   })
   try({
-      DBI::dbExecute(con, "CREATE ROLE continuous_editor WITH BYPASSRLS;")
+    DBI::dbExecute(con, "CREATE ROLE continuous_editor WITH BYPASSRLS;")
   })
   
   
@@ -101,8 +104,8 @@ GRANT EXECUTE ON FUNCTIONS TO continuous_editor;
   
   DBI::dbExecute(con, "ALTER TABLE owners_contributors RENAME TO organizations;")
   DBI::dbExecute(con, "ALTER TABLE organizations RENAME COLUMN owner_contributor_id TO organization_id")
-  DBI::dbExecute(con, "ALTER TABLE owners RENAME COLUMN owner_contributor_id TO organization_id")
-  DBI::dbExecute(con, "ALTER TABLE contributors RENAME COLUMN owner_contributor_id TO organization_id")
+  DBI::dbExecute(con, "ALTER TABLE continuous.owners RENAME COLUMN owner_contributor_id TO organization_id")
+  DBI::dbExecute(con, "ALTER TABLE continuous.contributors RENAME COLUMN owner_contributor_id TO organization_id")
   
   
   DBI::dbExecute(con, "CREATE SCHEMA files;")
@@ -786,6 +789,8 @@ EXECUTE FUNCTION enforce_sample_fraction();
   field <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name IN ('snow depth', 'snow water equivalent', 'water level', 'discharge, river/stream')")
   
   ## Move the data into sample_series, samples, and results
+  message("Moving discrete data to new table structure. This will take a while (I didn't code it efficiently at all, sorry).")
+  all_sample_series <- data.frame()
   for (i in unique(sample_series$location_id)) {
     if (!is.null(sample_series[sample_series$location_id == i, "source_fx"])) { # Make entry in sample_series
       series <- data.frame(location_id = i,
@@ -796,57 +801,69 @@ EXECUTE FUNCTION enforce_sample_fraction();
                            note = if (all(is.na(sample_series[sample_series$location_id == i, "note"]))) NA else paste(sample_series[sample_series$location_id == i, "note"], collapse = " AND "),
                            default_owner = DBI::dbGetQuery(con, paste0("SELECT DISTINCT owner FROM timeseries WHERE location_id = ", i, ";"))[,1],
                            default_contributor = DBI::dbGetQuery(con, paste0("SELECT DISTINCT owner FROM timeseries WHERE location_id = ", i, ";"))[,1])
-      DBI::dbAppendTable(con, "sample_series", series)
-    } # else no sample_series associated so skip
-    
-    measurements <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements_discrete WHERE timeseries_id IN (", paste(sample_series[sample_series$location_id == i, "timeseries_id"], collapse = ", "), ");"))
-    
-    # Merge columns from 'sample_series' on column 'timeseries': parameter_id, media_id, z
-    measurements <- merge(measurements, sample_series[, c("timeseries_id", "parameter_id", "media_id", "z")], by = "timeseries_id")
+      all_sample_series <- rbind(all_sample_series, series)
+    } # else no source_fx, so no need to make an entry in sample_series
+  }
+  DBI::dbAppendTable(con, "sample_series", all_sample_series)
+  
+  measurements <- DBI::dbGetQuery(con, "SELECT * FROM measurements_discrete;")
+  
+  # Merge columns from 'sample_series' on column 'timeseries': parameter_id, media_id, z
+  measurements <- merge(measurements, sample_series[, c("timeseries_id", "parameter_id", "media_id", "z", "location_id")], by = "timeseries_id", all.x = TRUE)
+  measurements <- measurements[!duplicated(measurements),]
+  measurements <- measurements[order(measurements$datetime),]
     
     # Get the unique datetimes - these are the samples
-    for (j in length(unique(measurements$datetime))) {
-      datetime <- unique(measurements$datetime)[j]
+  all_meas <- data.frame()
+  count <- 1
+  for (i in unique(measurements$location_id)) {  # Create a series of entries to the 'sample' table for each sampling event
+    message("Processing location ", count, " of ", length(unique(measurements$location_id)))
+    count <- count + 1
+    sub <- measurements[measurements$location_id == i,] # Isolate data specific to this location
+    for (j in 1:length(unique(sub$datetime))) { # Make a record per sample datetime
+      datetime <- unique(sub$datetime)[j]
       sample <- data.frame(
         location_id = i,
-        media_id = unique(measurements[measurements$datetime == datetime, "media_id"]),
-        z = unique(measurements[measurements$datetime == datetime, "z"]),
+        media_id = unique(sub[sub$datetime == datetime, "media_id"]),
+        z = unique(sub[sub$datetime == datetime, "z"]),
         datetime = datetime,
-        target_datetime = unique(measurements[measurements$datetime == datetime, "target_datetime"]),
-        collection_method = unique(measurements[measurements$datetime == datetime, "collection_method"]),
-        sample_type = unique(measurements[measurements$datetime == datetime, "sample_type"]),
-        owner = DBI::dbGetQuery(con, paste0("SELECT DISTINCT owner FROM timeseries WHERE location_id = ", i, ";"))[,1],
-        contributor = DBI::dbGetQuery(con, paste0("SELECT DISTINCT owner FROM timeseries WHERE location_id = ", i, ";"))[,1],
-        share_with = if (all(is.na(measurements[measurements$datetime == datetime, "share_with"]))) NA else unique(measurements[measurements$datetime == datetime, "share_with"]),
+        target_datetime = unique(sub[sub$datetime == datetime, "target_datetime"]),
+        collection_method = unique(sub[sub$datetime == datetime, "collection_method"]),
+        sample_type = unique(sub[sub$datetime == datetime, "sample_type"]),
+        owner = DBI::dbGetQuery(con, paste0("SELECT DISTINCT owner FROM timeseries WHERE location_id = ", unique(sub[sub$datetime == datetime, "location_id"]), ";"))[,1],
+        contributor = DBI::dbGetQuery(con, paste0("SELECT DISTINCT owner FROM timeseries WHERE location_id = ", unique(sub[sub$datetime == datetime, "location_id"]), ";"))[,1],
+        share_with = if (all(is.na(sub[sub$datetime == datetime, "share_with"]))) NA else unique(sub[sub$datetime == datetime, "share_with"]),
         import_source = "AquaCache patch 11 - transfer from old measurements_continuous table.",
-        no_update = unique(measurements[measurements$datetime == datetime, "no_update"]),
-        note = if (all(is.na(measurements[measurements$datetime == datetime, "note"]))) NA else paste(measurements[measurements$datetime == datetime, "note"], collapse = " AND ")
+        no_update = unique(sub[sub$datetime == datetime, "no_update"]),
+        note = if (all(is.na(sub[sub$datetime == datetime, "note"]))) NA else paste(sub[sub$datetime == datetime, "note"], collapse = " AND ")
       )
       DBI::dbAppendTable(con, "samples", sample)
       
       # Get the sample_id for this sample
-      new_sample_id <- DBI::dbGetQuery(con, paste0("SELECT sample_id FROM discrete.samples WHERE location_id = ", i, " AND datetime = '", datetime, "';"))[,1]
+      new_sample_id <- DBI::dbGetQuery(con, paste0("SELECT sample_id FROM samples WHERE location_id = ", unique(sub[sub$datetime == datetime, "location_id"]), " AND datetime = '", as.character(datetime), " UTC';"))[1,1]
       
+      # Add in the measurements taken during this sample
       new_meas <- data.frame(sample_id = new_sample_id,
-                             result_type = ifelse(measurements[measurements$datetime == datetime, "parameter_id"] %in% field$parameter_id, 1, 3),
-                             parameter_id = measurements[measurements$datetime == datetime, "parameter_id"],
-                             sample_fraction = measurements[measurements$datetime == datetime, "sample_fraction"],
-                             result = measurements[measurements$datetime == datetime, "value"],
-                             result_condition = measurements[measurements$datetime == datetime, "result_condition"],
-                             result_condition_value = measurements[measurements$datetime == datetime, "result_condition_value"],
-                             result_value_type = measurements[measurements$datetime == datetime, "result_value_type"],
-                             result_speciation = measurements[measurements$datetime == datetime, "result_speciation"],
-                             protocol_method = measurements[measurements$datetime == datetime, "protocol"],
-                             laboratory = measurements[measurements$datetime == datetime, "lab"],
-                             analysis_datetime = measurements[measurements$datetime == datetime, "analysis_datetime"],
-                             share_with = measurements[measurements$datetime == datetime, "share_with"],
-                             no_update = measurements[measurements$datetime == datetime, "no_update"],
-                             created = measurements[measurements$datetime == datetime, "created_modified"]
+                             result_type = ifelse(sub[sub$datetime == datetime, "parameter_id"] %in% field$parameter_id, 1, 3),
+                             parameter_id = sub[sub$datetime == datetime, "parameter_id"],
+                             sample_fraction = sub[sub$datetime == datetime, "sample_fraction"],
+                             result = sub[sub$datetime == datetime, "value"],
+                             result_condition = sub[sub$datetime == datetime, "result_condition"],
+                             result_condition_value = sub[sub$datetime == datetime, "result_condition_value"],
+                             result_value_type = sub[sub$datetime == datetime, "result_value_type"],
+                             result_speciation = sub[sub$datetime == datetime, "result_speciation"],
+                             protocol_method = sub[sub$datetime == datetime, "protocol"],
+                             laboratory = sub[sub$datetime == datetime, "lab"],
+                             analysis_datetime = sub[sub$datetime == datetime, "analysis_datetime"],
+                             share_with = sub[sub$datetime == datetime, "share_with"],
+                             no_update = sub[sub$datetime == datetime, "no_update"],
+                             created = sub[sub$datetime == datetime, "created_modified"]
       )
-      DBI::dbAppendTable(con, "results", new_meas)
-      
+      all_meas <- rbind(all_meas, new_meas)
     }
   }
+  DBI::dbAppendTable(con, "results", all_meas)
+
   
   # Delete measurements_discrete with cascade
   DBI::dbExecute(con, "DROP TABLE measurements_discrete CASCADE;")
@@ -855,8 +872,10 @@ EXECUTE FUNCTION enforce_sample_fraction();
   # 4. Do the final modifications to 'timeseries' and 'locations' #########
   DBI::dbExecute(con, "DELETE FROM timeseries WHERE category = 'discrete'")
   DBI::dbExecute(con, "ALTER TABLE timeseries DROP COLUMN category CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE timeseries DROP COLUMN owner CASCADE;")
   
   # Redo timeseries_metadata_en and fr views because of the cascade
+  message("Re-creating views...")
   DBI::dbExecute(con, '
   CREATE OR REPLACE VIEW continuous.timeseries_metadata_en
   WITH(security_invoker=true)
@@ -920,7 +939,7 @@ WHERE conrelid = 'timeseries'::regclass
   DROP CONSTRAINT ", unique_nm[1,1], ";
   "))
   }
-
+  
   
   DBI::dbExecute(con, "
   ALTER TABLE timeseries
@@ -942,10 +961,9 @@ WHERE conrelid = 'timeseries'::regclass
   DBI::dbExecute(con, "UPDATE internal_status SET event = 'last_sync_continuous' WHERE event = 'last_sync'")
   DBI::dbExecute(con, "INSERT INTO internal_status (event) VALUES ('last_sync_discrete')")
   
-
+  
   
   # 5. Create new roles/groups and modify user/group permissions ########
-  
   
   DBI::dbExecute(con, "
                  REVOKE ALL ON SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;
@@ -1052,7 +1070,11 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public, continuous, discrete, spatial, fil
   
   # Modify role 'yg' to be called 'yg_reader' and give it BYPASSRLS
   try({
-      DBI::dbExecute(con, "ALTER ROLE yg RENAME TO yg_reader;")
+    DBI::dbExecute(con, "ALTER ROLE yg RENAME TO yg_reader;")
+    # # Change references to 'yg' in table 'timeseries' and 'locations' to 'yg_reader'
+    DBI::dbExecute(con, "UPDATE timeseries SET share_with = {'yg_reader'} WHERE share_with = {'yg'};")
+    DBI::dbExecute(con, "UPDATE locations SET share_with = {'yg_reader'} WHERE share_with = {'yg'};")
+    
   })
   
   # Check if 'yg_reader' exists before proceeding:
@@ -1170,7 +1192,7 @@ END $$;
     ;
     ")
   
-DBI::dbExecute(con, "
+  DBI::dbExecute(con, "
   ALTER FUNCTION continuous.check_contributors_overlap() OWNER TO postgres;
   ")
   DBI::dbExecute(con, "
@@ -1185,8 +1207,6 @@ DBI::dbExecute(con, "
   DBI::dbExecute(con, "
   GRANT ALL ON FUNCTION continuous.check_contributors_overlap() TO yg_reader;
   ")
-  
-  
   
   #  Wrap up ###########
   # Update the version_info table

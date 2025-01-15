@@ -7,6 +7,7 @@
 dailyUpdate(
   con = NULL,
   timeseries_id = "all",
+  sample_series_id = "all",
   active = "default",
   continuous = TRUE,
   discrete = TRUE,
@@ -19,6 +20,8 @@ dailyUpdate(
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
+
+\item{sample_series_id}{The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
 \item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
 

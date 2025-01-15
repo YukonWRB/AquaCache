@@ -7,7 +7,7 @@
 calculate_period(data, timeseries_id, con = NULL)
 }
 \arguments{
-\item{data}{The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values.}
+\item{data}{The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value'. Other columns will be ignored.}
 
 \item{timeseries_id}{The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided \code{data}. This CAN be NA for the edge use case of creating a new timeseries.}
 

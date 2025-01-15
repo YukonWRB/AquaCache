@@ -6,7 +6,7 @@
 \usage{
 downloadSnowCourse(
   location,
-  parameter_id,
+  sub_location = NULL,
   start_datetime,
   end_datetime = Sys.time(),
   old_loc = NULL,
@@ -17,13 +17,13 @@ downloadSnowCourse(
 \arguments{
 \item{location}{The location code associated with the snow course.}
 
-\item{parameter_id}{For snow courses, one of "SWE" or "depth" corresponding to the desired parameter.}
+\item{sub_location}{The sub-location code associated with the snow course (leave NULL if not applicable).}
 
-\item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
+\item{start_datetime}{Specify as class Date, POSIXct OR as character stri ng which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 
 \item{end_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
 
-\item{old_loc}{In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.}
+\item{old_loc}{In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.}
 
 \item{con}{A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().}
 

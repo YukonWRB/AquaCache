@@ -40,15 +40,16 @@
 #' The parameters of column share_with of table sample_series will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data, unless the source function returns populated columns for owner and share_with.
 #'
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
-#' @param location_id The location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch all location_ids in the 'sample_series' table and all corresponding time ranges and associated source functions (if more than one per location)
-#' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. this can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids. Set to 'all' to fetch all sample_series_ids.
+#' @param location_id The location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch data from all location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
+#' @param sub_location_id The sub_location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch data from all sub_location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
+#' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. This can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'sample_series' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 #'
 
-getNewDiscrete <- function(con = NULL, location_id = "all", sample_series_id = NULL, active = 'default') {
+getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "all", sample_series_id = NULL, active = 'default') {
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -59,7 +60,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sample_series_id = N
     stop("location_id and sample_series_id cannot both be NULL")
   }
   if (!is.null(location_id) & !is.null(sample_series_id)) {
-    stop("location_id and sample_series_id cannot both specified (not NULL)")
+    stop("location_id and sample_series_id cannot both be specified (not NULL)")
   }
   
   if (is.null(con)) {

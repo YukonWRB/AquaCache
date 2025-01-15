@@ -13,7 +13,7 @@
 #' Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
 #'
 #' @param con A connection to the database. If NULL, a connection will be created and closed by the function.
-#' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'. Specifying 'all' will work on all continuous category timeseries.
+#' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Specifying 'all' will work on all timeseries.
 #' @param start_recalc The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.
 #'
 #' @return Updated entries in the 'measurements_calculated_daily' table.
@@ -37,15 +37,15 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
   }
 
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous' AND record_rate IN ('1 day', '< 1 day');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE record_rate IN ('1 day', '< 1 day');"))
     timeseries_id <- all_timeseries$timeseries_id
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE category = 'continuous' AND timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate IN ('1 day', '< 1 day');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate IN ('1 day', '< 1 day');"))
     if (nrow(all_timeseries) == 0) {
-      stop("Calculations are not possible. Perhaps the timeseries_id you specified are not of category continuous or have a record_rate of greater than 1 day.")
+      stop("Calculations are not possible. Perhaps the timeseries_id you specified are not in table timeseries or have a record_rate of greater than 1 day.")
     }
     if (length(timeseries_id) != length(all_timeseries$timeseries_id)) {
-      warning("At least one of the timeseries_id you specified was not of category 'continuous', had a recording rate greater than 1 day, or could not be found in the database.")
+      warning("At least one of the timeseries_id you specified had a recording rate greater than 1 day or could not be found in the database.")
     }
     timeseries_id <- all_timeseries$timeseries_id
   }

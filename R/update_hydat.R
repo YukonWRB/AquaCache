@@ -38,9 +38,9 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
   if (new_hydat | force_update) {
     #Get the required timeseries_ids
     if (timeseries_id[1] == "all") {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, period_type FROM timeseries WHERE category = 'continuous' AND source_fx = 'downloadWSC';")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, period_type FROM timeseries AND source_fx = 'downloadWSC';")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND source_fx = 'downloadWSC';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx = 'downloadWSC';"))
       if (length(timeseries_id) != nrow(all_timeseries)) {
         fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
         if ((length(fail) == 1)) {
@@ -125,7 +125,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
           parameter_id <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'discharge, river/stream'")[1,1]
           media_id <- DBI::dbGetQuery(con, "SELECT media_id FROM media_types WHERE media_type = 'surface water'")[1,1]
           location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", i, "';"))[1,1]
-          tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter_id = ", parameter_id, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
+          tsid_flow <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter_id = ", parameter_id, " AND location = '", i, "' AND source_fx = 'downloadWSC'"))[1,1]
           if (length(tsid_flow) == 0 | is.na(tsid_flow)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
                                     "location_id" = location_id,
@@ -297,7 +297,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
           parameter_id <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'water level'")[1,1]
           media_id <- DBI::dbGetQuery(con, "SELECT media_id FROM media_types WHERE media_type = 'surface water'")[1,1]
           location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", i, "';"))[1,1]
-          tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter_id = ", parameter_id, " AND location = '", i, "' AND source_fx = 'downloadWSC' AND category = 'continuous'"))[1,1]
+          tsid_level <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE parameter_id = ", parameter_id, " AND location = '", i, "' AND source_fx = 'downloadWSC'"))[1,1]
           if (length(tsid_level) == 0 | is.na(tsid_level)) { #There is no realtime or daily data yet, and no corresponding tsid.
             new_entry <- data.frame("location" = i,
                                     "location_id" = location_id,

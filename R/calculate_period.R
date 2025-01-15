@@ -2,7 +2,7 @@
 #'
 #' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the aquacache DB to fetch missing data points or to pull additional data in case of ambiguity.
 #'
-#' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values.
+#' @param data The data.frame for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value'. Other columns will be ignored.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`. This CAN be NA for the edge use case of creating a new timeseries.
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #'
@@ -19,12 +19,15 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     }
   }
   
-  if ("period" %in% names(data)) {
-    data <- data[, !names(data) == "period"]
+  if (!("datetime" %in% names(data))) {
+    stop("The 'data' parameter must contain a column named 'datetime'.")
   }
+  
+  # Drop columns not called 'datetime' and 'grade'
+  data <- data[, names(data) %in% c("datetime", "value"), drop = FALSE]
+  
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
   names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input
-  names <- names[!names == "period"] # period is being calculated anyways so don't include it
   if (!is.na(timeseries_id)) {
     no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", timeseries_id, ") AND datetime NOT IN ('", paste(data$datetime, collapse = "', '"), "');"))
     if (nrow(no_period) > 0) {

@@ -26,7 +26,7 @@ Updated entries in the hydro database.
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-This synchronize function pulls and replaces data references in table 'timeseries' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables (Water Survey of Canada).
+This synchronize function pulls and replaces data referenced in table 'timeseries' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. New data is also brought in, if any exists on the remote. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables (Water Survey of Canada).
 
 NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote, and any data point labelled as no_update = TRUE is not replaced by the remote data.
 

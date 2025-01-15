@@ -3,7 +3,7 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' This synchronize function pulls and replaces data references in table 'timeseries' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables (Water Survey of Canada).
+#' This synchronize function pulls and replaces data referenced in table 'timeseries' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. New data is also brought in, if any exists on the remote. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables (Water Survey of Canada).
 #'
 #' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote, and any data point labelled as no_update = TRUE is not replaced by the remote data.
 #'
@@ -56,9 +56,9 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
 
   
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, owner, active FROM timeseries WHERE source_fx IS NOT NULL")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, period_type, record_rate, owner, active FROM timeseries WHERE source_fx IS NOT NULL")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, category, period_type, record_rate, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, period_type, record_rate, owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
       fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]
       ifelse((length(fail) == 1),
@@ -295,7 +295,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
               warning("synchronize failed to make database changes for ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
             })
           } else { # we're already in a transaction
-            commit_fx(con, imputed.remains, tsid, inRemote, inDB)
+            commit_fx(con, no_update, tsid, inRemote, inDB)
             updated <- updated + 1
           }
           
@@ -303,7 +303,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
             calculate_stats(timeseries_id = tsid,
                             con = con,
                             start_recalc = as.Date(substr(datetime, 1, 10)))
-        } else { # mismatch is FALSE: there was data in the remote but no mismatch
+        } else { # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
           DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
           # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
           start_dt <- DBI::dbGetQuery(con, paste0("SELECT start_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))[[1]]
