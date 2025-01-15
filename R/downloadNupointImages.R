@@ -10,12 +10,13 @@
 #' @param port The port on which to connect to the SFTP server.
 #' @param folder The folder in which to look for new images.
 #' @param save_path Optional; path in which to save the image.
+#' @param delete Should the files be deleted from the SFTP site once they've been successfully been fetched?
 #'
 #' @return A list object of type 'response' containing the image (object$content) and metadata regarding the object and how/when it was fetched.
 #' @export
 #'
 
-downloadNupointImages <- function(location, start_datetime, username = Sys.getenv("nupointUser"), password = Sys.getenv("nupointPass"), url = Sys.getenv("nupointServer"), port = Sys.getenv("nupointPort"), folder = Sys.getenv("nupointFolder"), save_path = NULL) {
+downloadNupointImages <- function(location, start_datetime, username = Sys.getenv("nupointUser"), password = Sys.getenv("nupointPass"), url = Sys.getenv("nupointServer"), port = Sys.getenv("nupointPort"), folder = Sys.getenv("nupointFolder"), save_path = NULL, delete = TRUE) {
   
   if (!inherits(start_datetime, "POSIXct")) {
     stop("Parameter start_datetime must be a POSIXct.")
@@ -42,8 +43,8 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
     file_exists <- FALSE
   } else {
     saved_files <- data.frame(file = saved_files,
-                              datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"), tz = "UTC")
-    ok <- saved_files[saved_files$datetime > Sys.time() - 2*60 , ]
+                              datetime = as.POSIXct(basename(saved_files), format = "%Y%m%d%H%M", tz = "UTC"))
+    ok <- saved_files[saved_files$datetime > .POSIXct(Sys.time(), tz = "UTC") - 2*60 , ]
     if (nrow(ok) > 0) {
       target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
       tbl <- readRDS(paste0(tempdir(), "/downloadNupointImages/", target_file$file))
@@ -60,7 +61,7 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
                          location = sub("^(.*)_\\d{14}.*$", "\\1", links))
     
     suppressWarnings(dir.create(paste0(tempdir(), "/downloadNupointImages")))
-    name <- gsub(" ", "", Sys.time())
+    name <- gsub(" ", "", .POSIXct(Sys.time(), tz = "UTC"))
     name <- gsub("-", "", name)
     name <- substr(gsub(":", "", name), 1,12)
     saveRDS(tbl, paste0(tempdir(), "/downloadNupointImages/", name, ".rds"))
@@ -72,11 +73,14 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
     files <- data.frame()
     for (i in 1:nrow(tbl)) {
       file <- tbl[i, "link"]
-     sftp::sftp_download(file, tofolder = paste0(tempdir(), "/downloadNupointImages"), sftp_connection = nupoint, verbose = FALSE)
-     files[i, "file"] <- paste0(tempdir(), "/downloadNupointImages/", file)
-     files[i, "datetime"] <- tbl[i, "datetime"]
-     files[i, "location"] <- tbl[i, "location"]
-     sftp::sftp_delete(file, sftp_connection = nupoint, verbose = FALSE)
+      sftp::sftp_download(file, tofolder = paste0(tempdir(), "/downloadNupointImages"), sftp_connection = nupoint, verbose = FALSE)
+      files[i, "file"] <- paste0(tempdir(), "/downloadNupointImages/", file)
+      files[i, "datetime"] <- tbl[i, "datetime"]
+      files[i, "location"] <- tbl[i, "location"]
+      if (delete) {
+        sftp::sftp_delete(file, sftp_connection = nupoint, verbose = FALSE)
+        
+      }
     }
   } else {
     files <- NULL

@@ -7,8 +7,8 @@ This version holds significant changes, all implemented by patch 3. The short su
 ## Major changes (all implemented in the DB by patch 3)
 
 -   Adjusted several 'downloadXXX' functions to report qualifiers, grades, approvals, owners, and contributors where previously they all reported only grades, approvals.
--   Created new tables to hold information about a timeseries' grades, approvals, qualifiers, owners, and contributors as they change through time with a single entry (row) until the attribute changes. These are linked to 'grade_types', 'approval_types', 'qualifier_types', 'owners_contributors' tables.
--   Created new family of functions, 'update_xxxx' which are used to update the 'grade_types', 'approval_types', 'qualifier_types', 'owners_contributors' tables and called from the 'getXXXX' functions.
+-   Created new tables to hold information about a timeseries' grades, approvals, qualifiers, owners, and contributors as they change through time with a single entry (row) until the attribute changes. These are linked to 'grade_types', 'approval_types', 'qualifier_types', 'organizations' tables.
+-   Created new family of functions, 'update_xxxx' which are used to update the 'grade_types', 'approval_types', 'qualifier_types', 'organizations' tables and called from the 'getXXXX' functions.
 -   Modified the 'getXXXX' and 'update_hydat' functions to use the new tables and functions.
 -   Added an attribute to connections made with 'AquaConnect' to record if the connection is in a transaction or not. This is used to prevent starting a transaction within a transaction.
 -   Modified many functions to make use of the new transaction attribute in the connection object. If a transaction is already in progress, the function will not start a new transaction and instead work within the existing transaction.

@@ -100,7 +100,7 @@ As this R package is designed to work directly with a postgres database, any add
 This is to ensure that the package and database remain in sync.
 
 To facilitate this synchronization we have a process to check for and apply patches to the database schema every time this package is updated.
-Upon every connection to the database using function AquaConnect() the function AquaPatchCheck() is run; this function checks the database schema version and applies any necessary patches.
+Upon every connection to the database using function AquaConnect() checks the database schema version and applies any necessary patches.
 If the user does not have write privileges to the required tables then an error is raised and the user is instructed to contact the database administrator.
 
 **If making changes to the database schema, the following steps MUST be taken in addition to the normal contribution process. Lots of things need to be checked and potentially adjusted, and it can be a complicated process.**
@@ -110,7 +110,7 @@ If the user does not have write privileges to the required tables then an error 
 3.  COMMUNICATE the changes you plan to make to ensure that these are compatible with changes by others. Give others the opportunity to provide feedback on your changes.
 4.  WRITE an R script that contains the necessary SQL code to modify the database. This script should be saved in the `inst/patches` directory of the package, and a template file exists in the same directory to help with this.
 5.  CHECK and re-check that your patch works as intended and that ALL of the steps in the template script have been followed.
-6.  ENSURE that your patch can be applied when called from function AquaPatchCheck().
+6.  ENSURE that your patch can be applied when called from function AquaConnect().
 7.  COMMUNICATE with other collaborators to ensure that they are aware of the changes you have made.
 8.  ENSURE that other packages that depend on the database aren't adversely affected, and if they are, suggest or make changes to these packages for compatibility. At present this is limited to the *YGwater* and *WRBcalibrates* packages.
 9.  Write down what you did in the NEWS.md file.

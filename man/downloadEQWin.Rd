@@ -6,16 +6,16 @@
 \usage{
 downloadEQWin(
   location,
-  parameter_id,
+  sub_location,
   start_datetime,
   end_datetime = Sys.time(),
   EQcon = EQConnect(silent = TRUE)
 )
 }
 \arguments{
-\item{location}{The location code associated with the snow course.}
+\item{location}{The location code (project code, i.e. the portion in parentheses) associated with the EQWin station.}
 
-\item{parameter_id}{The parameter code as specified in the EQWin table eqparams.}
+\item{sub_location}{The sub-location code (station code, i.e. the portion after the parentheses) associated with the EQWin station.}
 
 \item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 

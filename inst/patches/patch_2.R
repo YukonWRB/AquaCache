@@ -1,5 +1,5 @@
 # Patch 2.
-# Fixes an improper function reference in a triger that updates the modify_datetime field in the database for tables in the instruments schema.
+# Fixes an improper function reference in a trigger that updates the modify_datetime field in the database for tables in the instruments schema.
 
 # Ensure the user has CREATE privileges on the database and can therefore create a new schema
 check <- DBI::dbGetQuery(con, "SELECT has_database_privilege(current_user, 'CREATE') AS can_create")

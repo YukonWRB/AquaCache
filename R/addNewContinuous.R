@@ -1,15 +1,17 @@
 #' Add new data to the measurements_continuous or measurements_calculated_daily tables
+#' 
+#' This function can be used to append new contiuous type data directly to the database without downloading it from a remote source. Differs from [getNewContinuous()] as the later is used to pull data from a remote before append.
 #'
 #' @param tsid The timeseries_id to which the data will be appended. This is a required parameter.
 #' @param df A data.frame containing the data. Must have columns named 'datetime' OR 'date', and 'value' at minimum. If 'datetime' is present data will be appended to measurements_continuous, otherwise 'date' will be used to append to measurements_calculated_daily. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the `adjust_` series of functions to see how these are used.
-#' @param target One of 'continuous' or 'daily'. Default is 'continuous'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.
+#' @param target One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #'
 #' @return Nothing; data is added to the database silently.
 #' @export
 #'
 
-addNewContinuous <- function(tsid, df, target = "continuous", con = NULL) {
+addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)

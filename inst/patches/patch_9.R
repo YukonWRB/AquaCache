@@ -63,7 +63,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 tbl_names <- c("locations", "timeseries", "measurements_discrete", "documents", "images", "images_index")
 
-# Drop columns 'share_with' from tables that won't keep them, and drop triggers that check share_with, andremove RLS as well
+# Drop columns 'share_with' from tables that won't keep them, and drop triggers that check share_with, and remove RLS as well
 DBI::dbExecute(con, "ALTER TABLE measurements_continuous DROP COLUMN share_with CASCADE;") # Should cascade to the RLS policy
 DBI::dbExecute(con, "DROP TRIGGER IF EXISTS validate_share_with_trigger_measurements_continuous ON measurements_continuous;")
 DBI::dbExecute(con, "ALTER TABLE measurements_calculated_daily DROP COLUMN share_with CASCADE;") # Should cascade to the RLS policy

@@ -102,9 +102,9 @@ AS SELECT md.timeseries_id,
   })
   
   
-  # modify existing column 'timeseries.owner': make a NOT NULL field, with FK to owners_contributors.owner_contributor_id
+  # modify existing column 'timeseries.owner': make a NOT NULL field, with FK to owners_contributors.organization_id
   DBI::dbExecute(con, "ALTER TABLE timeseries ALTER COLUMN owner SET NOT NULL")
-  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_owner FOREIGN KEY (owner) REFERENCES owners_contributors(owner_contributor_id)")
+  DBI::dbExecute(con, "ALTER TABLE timeseries ADD CONSTRAINT fk_owner FOREIGN KEY (owner) REFERENCES owners_contributors(organization_id)")
 
   
   

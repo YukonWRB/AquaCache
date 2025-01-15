@@ -11,7 +11,7 @@ adjust_owner(con, timeseries_id, data)
 
 \item{timeseries_id}{The target timeseries_id}
 
-\item{data}{A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'owners_contributors' or integer/numeric, in which case it must refer to column 'owner_contributor_id' of the same table.}
+\item{data}{A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'organizations' or integer/numeric, in which case it must refer to column 'organization_id' of the same table.}
 }
 \value{
 Modifies the 'owners' table in the database.

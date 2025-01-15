@@ -14,6 +14,7 @@
 #'
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
+#' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #' @param continuous If TRUE, will update continuous data. Default is TRUE.
 #' @param discrete If TRUE, will update discrete data. Default is TRUE.
@@ -24,7 +25,7 @@
 #' @return The database is updated in-place, and diagnostic messages are printed to the console.
 #' @export
 
-dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default', continuous = TRUE, discrete = TRUE, hydat = TRUE, images = TRUE, rasters = TRUE)
+dailyUpdate <- function(con = NULL, timeseries_id = "all", sample_series_id = "all", active = 'default', continuous = TRUE, discrete = TRUE, hydat = TRUE, images = TRUE, rasters = TRUE)
 {
   
   if (!active %in% c('default', 'all')) {
@@ -43,12 +44,9 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default', c
   DBI::dbExecute(con, "SET timezone = 'UTC'")
   
   if (timeseries_id[1] == "all") {
-    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE category = 'continuous' AND source_fx IS NOT NULL")
-    discrete_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, active FROM timeseries WHERE category = 'discrete' AND source_fx IS NOT NULL")
+    continuous_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE source_fx IS NOT NULL")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, last_daily_calculation, category, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
-    continuous_ts <- all_timeseries[all_timeseries$category == "continuous" , ]
-    discrete_ts <- all_timeseries[all_timeseries$category == "discrete" , ]
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
     if (length(timeseries_id) != nrow(all_timeseries)) {
       fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
       ifelse((length(fail) == 1),
@@ -60,7 +58,6 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default', c
   
   if (active == 'default') {
     continuous_ts <- continuous_ts[continuous_ts$active, ]
-    discrete_ts <- discrete_ts[discrete_ts$active, ]
   }
 
   #Get new data ################
@@ -79,11 +76,23 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default', c
   }
 
   if (discrete) {
-    if (nrow(discrete_ts) > 0) {
+    if (sample_series_id[1] == "all") {
+      discrete_ids <- DBI::dbGetQuery(con, "SELECT sample_series_id FROM sample_series WHERE source_fx IS NOT NULL")
+    } else {
+      all_sample_series <- DBI::dbGetQuery(con, paste0("SELECT sample_series_id FROM sample_series WHERE sample_series_id IN ('", paste(sample_series_id, collapse = "', '"), "')"))
+      if (length(sample_series_id) != nrow(all_sample_series)) {
+        fail <- sample_series_id[!(sample_series_id %in% all_sample_series$sample_series_id)]
+        ifelse((length(fail) == 1),
+               warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
+               warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
+        )
+      }
+    }
+    if (nrow(discrete_ids) > 0) {
       message("Getting discrete information up to date with getNewDiscrete...")
       tryCatch({
         disc_start <- Sys.time()
-        getNewDiscrete(con = con, timeseries_id = discrete_ts$timeseries_id)
+        getNewDiscrete(con = con, sample_series_id = discrete_ids$sample_series_id)
         disc_duration <- Sys.time() - disc_start
         message("getNewDiscrete executed in ", round(disc_duration[[1]], 2), " ", units(disc_duration), ".")
       }, error = function(e) {
@@ -145,7 +154,7 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", active = 'default', c
     message("Calculating daily means and statistics where necessary...")
     tryCatch({
       stat_start <- Sys.time()
-      calc_ts <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id, last_daily_calculation, last_new_data FROM timeseries WHERE timeseries_id IN ('", paste(continuous_ts$timeseries_id, collapse = "', '"), "') AND category = 'continuous' AND record_rate IN ('1 day', '< 1 day');"))
+      calc_ts <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id, last_daily_calculation, last_new_data FROM timeseries WHERE timeseries_id IN ('", paste(continuous_ts$timeseries_id, collapse = "', '"), "') AND record_rate IN ('1 day', '< 1 day');"))
       needs_calc <- calc_ts[is.na(calc_ts$last_daily_calculation) , ] #All of these need a new calculation.
       has_last_new_data <- calc_ts[!is.na(calc_ts$last_new_data) & !is.na(calc_ts$last_daily_calculation) , ] #only a subset of these need new calculation. Those that have a calculation and don't have an entry for new data don't need calculations.
       if (nrow(has_last_new_data) > 0) { #Take subset of has_last_new_data where the last calculation was before new data being added.

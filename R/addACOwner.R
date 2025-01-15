@@ -9,7 +9,7 @@
 #' 
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #'
-#' @return The owner_contributor_id of the new user group, plus a new entry to the database.
+#' @return The organization_id of the new user group, plus a new entry to the database.
 #' @export
 
 
@@ -41,7 +41,7 @@ addACOwner <- function(name, name_fr = NA, contact_name = NA, phone = NA, email 
   }
   
   # Check if the owner/contributor already exists (all lower case)
-  exists <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors WHERE LOWER(name) = '", tolower(name), "';"))[1,1]
+  exists <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE LOWER(name) = '", tolower(name), "';"))[1,1]
   if (!is.na(exists)) {
     stop("There is already an entry with that name.")
   }
@@ -54,9 +54,9 @@ addACOwner <- function(name, name_fr = NA, contact_name = NA, phone = NA, email 
                        email = email,
                        note = note)
   
-  DBI::dbAppendTable(con, "owners_contributors", insert)
+  DBI::dbAppendTable(con, "organizations", insert)
   
-  # Retrieve the new owner_contributor_id and return
-  new_id <- DBI::dbGetQuery(con, paste0("SELECT owner_contributor_id FROM owners_contributors WHERE name = '", name, "';"))[1,1]
-  message("Added new owner/contributor with name ", name, ". New owner_contributor_id is: ", new_id)
+  # Retrieve the new organization_id and return
+  new_id <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE name = '", name, "';"))[1,1]
+  message("Added new owner/contributor with name ", name, ". New organization_id is: ", new_id)
 }

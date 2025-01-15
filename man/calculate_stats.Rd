@@ -9,7 +9,7 @@ calculate_stats(con = NULL, timeseries_id, start_recalc = NULL)
 \arguments{
 \item{con}{A connection to the database. If NULL, a connection will be created and closed by the function.}
 
-\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Only works on data of category 'continuous'. Specifying 'all' will work on all continuous category timeseries.}
+\item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Specifying 'all' will work on all timeseries.}
 
 \item{start_recalc}{The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.}
 }

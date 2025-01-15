@@ -1,0 +1,358 @@
+#' Synchronize hydro DB with remote sources
+#'
+#' @description
+#' `r lifecycle::badge("stable")`
+#'
+#' This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
+#'
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
+#' @param sample_series_id The sample_series_id you wish to have updated, as character or numeric vector. Defaults to "all".
+#' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `sample_series_id`, or one per element of `sample_series_id`
+#' @param active Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id
+#'
+#' @return Updated entries in the hydro database.
+#' @export
+#'
+
+#TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
+
+synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_datetime, active = 'default')
+{
+  
+  if (!active %in% c('default', 'all')) {
+    stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+
+  if (inherits(start_datetime, "Date")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else if (inherits(start_datetime, "character")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else if (!inherits(start_datetime, "POSIXct")) {
+    stop("start_datetime must be a Date, character, or POSIXct object.")
+  }
+  
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
+  
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  
+  start <- Sys.time()
+
+  message("Synchronizing sample series with synchronize_discrete...")
+
+  #Check length of start_datetime is either 1 of same as sample_series_id
+  if (length(start_datetime) != 1) {
+    if (length(start_datetime) != length(sample_series_id)) {
+      stop("There is not exactly one element to start_datetime per valid sample_series_id specified by you in the database. Either you're missing elements to start_datetime or you are looking for sample_series_id that doesn't exist.")
+    }
+  } else {
+    sample_series_id <- unique(sample_series_id)
+  }
+
+  
+  if (sample_series_id[1] == "all") {
+      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series")
+  } else {
+      all_series <- DBI::dbExecute(con, "SELECT * FROM sample_series WHERE sample_series_id IN ('", paste(sample_series_id, collapse = "', '"), "')")
+    if (length(unique(sample_series_id)) != nrow(all_series)) {
+      fail <- sample_series_id[!sample_series_id %in% all_series$sample_series_id]
+      ifelse((length(fail) == 1),
+              warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
+              warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
+      )
+    }
+  }
+  
+  if (active == 'default') {
+    all_series <- all_series[all_series$active, ]
+  }
+  
+  grade_unknown <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';")[1,1]
+  if (is.na(grade_unknown)) {
+    stop("synchronize: Could not find grade type 'Unknown' in the database.")
+  }
+  approval_unknown <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';")[1,1]
+  if (is.na(approval_unknown)) {
+    stop("synchronize: Could not find approval type 'Unknown' in the database.")
+  }
+  qualifier_unknown <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';")[1,1]
+  if (is.na(qualifier_unknown)) {
+    stop("synchronize: Could not find qualifier type 'Unknown' in the database.")
+  }
+
+  updated <- 0 #Counter for number of updated timeseries
+  EQcon <- NULL #This prevents multiple connections to EQcon...
+  snowCon <- NULL # ...and snowCon
+  if (interactive()) {
+    pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
+  }
+  for (i in 1:nrow(all_series)) {
+    loc <- all_timeseries$location[i]
+    parameter <- all_timeseries$parameter_id[i]
+    period_type <- all_timeseries$period_type[i]
+    record_rate <- all_timeseries$record_rate[i]
+    tsid <- all_timeseries$timeseries_id[i]
+    source_fx <- all_timeseries$source_fx[i]
+    owner <- all_timeseries$owner[i]
+    
+    # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
+    if (source_fx == "downloadEQWin" & is.null(EQcon)) {
+      EQcon <- EQConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
+    }
+    if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
+      snowCon <- snowConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
+    }
+    
+    source_fx_args <- all_timeseries$source_fx_args[i]
+    if (is.na(record_rate)) {
+      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
+    } else {
+      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
+    }
+    start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
+
+    tryCatch({
+      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt, con = con)
+      if (!is.na(source_fx_args)) { #add some arguments if they are specified
+        args <- strsplit(source_fx_args, "\\},\\s*\\{")
+        pairs <- lapply(args, function(pair) {
+          gsub("[{}]", "", pair)
+        })
+        pairs <- lapply(pairs, function(pair) {
+          gsub("\"", "", pair)
+        })
+        pairs <- lapply(pairs, function(pair) {
+          gsub("'", "", pair)
+        })
+        pairs <- strsplit(unlist(pairs), "=")
+        pairs <- lapply(pairs, function(pair) {
+          trimws(pair)
+        })
+        for (j in 1:length(pairs)) {
+          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
+        }
+      }
+      
+      if (source_fx == "downloadEQWin") {
+        args_list[["EQcon"]] <- EQcon
+      }
+      if (source_fx == "downloadSnowCourse") {
+        args_list[["snowCon"]] <- snowCon
+      }
+      
+      inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
+
+
+      if (nrow(inRemote) > 0) {
+          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, target_datetime, datetime, value, note, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+          # Set aside any rows where no_update == TRUE
+          no_update <- inDB[inDB$no_update, ]
+          inDB <- inDB[!inDB$no_update, ]
+          # Drop no_update columns
+          inDB$no_update <- NULL
+          no_update$no_update <- NULL
+        
+        # Check changes in attributes
+        if (!is.null(owner)) {  # There may not be an owner assigned in table timeseries
+          if (!("owner" %in% names(inRemote))) {
+            inRemote$owner <- owner
+          }
+        }
+
+        if ("owner" %in% names(inRemote)) {
+          adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
+        }
+        if ("contributor" %in% names(inRemote)) {
+          adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
+        }
+        if ("grade" %in% names(inRemote)) {
+          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
+        }
+        if ("approval" %in% names(inRemote)) {
+          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
+        }
+        if ("qualifier" %in% names(inRemote)) {
+          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
+        }
+        
+        # Drop columns owner, contributor, grade, approval, qualifier as these are already taken care of
+        inRemote$owner <- NULL
+        inRemote$contributor <- NULL
+        inRemote$grade <- NULL
+        inRemote$approval <- NULL
+        inRemote$qualifier <- NULL
+        
+        if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch so this is skipped
+          if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
+            inDB <- inDB[inDB$datetime >= min(inRemote$datetime) , ]
+          }
+          
+          if (min(inRemote$datetime) < min(inDB$datetime)) { #if TRUE means that the remote has older data than the DB, so immediately declare mismatch = TRUE.
+            mismatch <- TRUE
+            datetime <- min(inRemote$datetime)
+          } else {
+            #order both timeseries to compare them
+            inDB <- inDB[order(inDB$datetime) , ]
+            inRemote <- inRemote[order(inRemote$datetime) , ]
+            
+            # Create a unique datetime key for both data frames
+              # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote. In this case though, entries are unique on datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type so things are slower than with continuous data
+              if (nrow(no_update) > 0) {
+                # Remove any rows in inRemote that are in no_update (labelled in the DB as no_update)
+                for (j in 1:nrow(no_update)) {
+                  inRemote <- inRemote[!(inRemote$datetime == no_update[j, "datetime"] & inRemote$sample_type == no_update[j, "sample_type"] & inRemote$collection_method == no_update[j, "collection_method"] & inRemote$sample_fraction == no_update[j, "sample_fraction"] & inRemote$result_speciation == no_update[j, "result_speciation"] & inRemote$result_value_type == no_update[j, "result_value_type"]), ]
+                }
+              }
+              
+              # Drop columns that are not present in both data.frames
+              inRemote <- inRemote[, colnames(inRemote) %in% colnames(inDB)]
+              inDB <- inDB[, colnames(inDB) %in% colnames(inRemote)]
+              
+              # Order the columns to make sure they are in the same order in both data.frames
+              inRemote <- inRemote[, names(inDB)]
+              
+              # Make keys
+              # These column names can all be present in either data.frame: target_datetime, datetime, value, note, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab. 
+              # Some will not be present in one and/or the other. Build a key with all columns present in one or the other data.frame. 
+              
+              # target_datetime and datetime need to be rounded to be truncated to 22 characters to prevent rounding errors. Stash the two columns, reintegrate them after making the key
+              inRemote_stash <- inRemote[, "datetime", drop = FALSE]
+              inDB_stash <- inDB[, "datetime", drop = FALSE]
+              
+              inRemote$datetime <- substr(as.character(inRemote$datetime), 1, 22)
+              inDB$datetime <- substr(as.character(inDB$datetime), 1, 22)
+              
+              # Drop a few decimal places from target_datetime if it's present to prevent rounding mismatches
+              if ("target_datetime" %in% names(inRemote)) {
+                inRemote_stash$target_datetime <- inRemote$target_datetime
+                inRemote$target_datetime <- substr(as.character(inRemote$target_datetime), 1, 22)
+              }
+              if ("target_datetime" %in% names(inDB)) {
+                inDB_stash$target_datetime <- inDB$target_datetime
+                inDB$target_datetime <- substr(as.character(inDB$target_datetime), 1, 22)
+              }
+              
+              
+              # Create the key on inRemote and inDB using all columns present in each data.frame (valid columns might vary, depending on the data)
+              inRemote$key <- do.call(paste, c(inRemote, sep = "|"))
+              inDB$key <- do.call(paste, c(inDB, sep = "|"))
+              
+              # Reintegrate the datetime columns
+              inRemote$datetime <- inRemote_stash$datetime
+              inDB$datetime <- inDB_stash$datetime
+              if ("target_datetime" %in% names(inRemote)) {
+                inRemote$target_datetime <- inRemote_stash$target_datetime
+                
+              }
+              if ("target_datetime" %in% names(inDB)) {
+                inDB$target_datetime <- inDB_stash$target_datetime
+              }
+            
+            # Check for mismatches using set operations. 
+            mismatch_keys <- inRemote$key[!(inRemote$key %in% inDB$key)]
+            # This DOES NOT catch if there are points inDB at dates in the future from what is inRemote, unless a mismatch happens before. Check for that later.
+            
+            # Check where the discrepancy is in both data frames
+            if (length(mismatch_keys) > 0) {
+              mismatch <- TRUE
+              # Find the most recent datetime in the remote data that is not in the DB. This will be the datetime to start replacing from in the local.
+              datetime <- min(inRemote[inRemote$key %in% mismatch_keys, "datetime"])
+            } else {
+              if (max(inDB$datetime) > max(inRemote$datetime)) { # Check if the remote misses data that should be deleted from the DB
+                mismatch <- TRUE
+                datetime <- max(inRemote$datetime)
+              } else {
+                mismatch <- FALSE
+              }
+            }
+            inRemote$key <- NULL
+          }
+        } else { # There's no data in the DB but there is some in the remote. Automatic mismatch.
+          mismatch <- TRUE
+          datetime <- min(inRemote$datetime)
+        }
+
+        if (mismatch) {
+          inRemote <- inRemote[inRemote$datetime >= datetime , ]
+
+          inRemote$timeseries_id <- tsid
+          
+          
+          # Now commit the changes to the database
+          commit_fx <- function(con, no_update, tsid, inRemote, inDB) {
+              # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
+              if (nrow(no_update) > 0) {
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(no_update$datetime, collapse = "', '"), "');"))
+              } else {
+                DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
+              }
+              
+              DBI::dbAppendTable(con, "measurements_discrete", inRemote)
+              
+              # adjust entries in table 'timeseries' to reflect the new data
+              end <- max(inRemote$datetime)
+              DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+              earliest <- min(inRemote$datetime, 
+                              DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_discrete WHERE timeseries_id = ", tsid, ";"))[[1]])
+              DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
+
+          }
+          
+          if (!attr(con, "active_transaction")) {
+            DBI::dbBegin(con)
+            attr(con, "active_transaction") <- TRUE
+            tryCatch({
+              commit_fx(con, no_update, tsid, inRemote, inDB)
+              DBI::dbCommit(con)
+              attr(con, "active_transaction") <- FALSE
+              updated <- updated + 1
+            }, error = function(e) {
+              DBI::dbRollback(con)
+              attr(con, "active_transaction") <<- FALSE
+              warning("synchronize failed to make database changes for ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
+            })
+          } else { # we're already in a transaction
+            commit_fx(con, no_update, tsid, inRemote, inDB)
+            updated <- updated + 1
+          }
+          
+        } else { # mismatch is FALSE: there was data in the remote but no mismatch
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+          # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
+          start_dt <- DBI::dbGetQuery(con, paste0("SELECT start_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))[[1]]
+          
+          # double check the earliest time in DB in case there's an error in the timeseries table
+
+            earliest <- min(inRemote$datetime, 
+                            DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_discrete WHERE timeseries_id = ", tsid, ";"))[[1]])
+          
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
+        }
+      } else { # There was no data in remote for the date range specified
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+      }
+    }, error = function(e) {
+      warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
+    }
+    ) # End of tryCatch
+    
+    if (interactive()) {
+      utils::setTxtProgressBar(pb, i)
+    }
+    
+  } # End of for loop
+  
+  if (interactive()) {
+    close(pb)
+  }
+
+  DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_sync';"))
+  message("Found ", updated, " timeseries to refresh out of the ", nrow(all_timeseries), " unique numbers provided.")
+  diff <- Sys.time() - start
+  message("Total elapsed time for synchronize: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
+
+} #End of function

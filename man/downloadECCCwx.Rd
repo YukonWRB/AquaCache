@@ -16,7 +16,7 @@ downloadECCCwx(
 \arguments{
 \item{location}{An ECCC Station ID (not to be mistaken for other IDs such as the Nav Canada ID, the WMO ID, or the Climate ID). See \code{\link[weathercan:stations]{weathercan::stations()}} for help finding the right ID.}
 
-\item{parameter_id}{The name of the column containing the desired data, as output in the data.frame given by \code{\link[weathercan:weather_dl]{weathercan::weather_dl()}}. Taken from the parameter_id column of the 'settings' table. Note that this column name varies depending on the interval specified (hour, day, month).}
+\item{parameter_id}{The name of the column containing the desired data, as output in the data.frame given by \code{\link[weathercan:weather_dl]{weathercan::weather_dl()}}. Taken from the parameter_id column of the 'fetch_settings' table. Note that this column name varies depending on the interval specified (hour, day, month).}
 
 \item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 
