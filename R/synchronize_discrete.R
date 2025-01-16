@@ -14,8 +14,6 @@
 #' @export
 #'
 
-#TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
-
 synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_datetime, active = 'default')
 {
   
