@@ -134,19 +134,16 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", sample_series_id = "a
       if (new_hydat) {
         hy_duration <- Sys.time() - hy_start
         message("A new version of HYDAT was detected. Timeseries were updated in ", round(hy_duration[[1]], 2), " ", units(hy_duration), ".")
-      } else {
-        message("HYDAT database is already up to date")
-      }
-      # if new HYDAT, check WSC stations for new datums and check datums table for new entries
-      if (new_hydat) {
+        # check WSC stations for new datums and check datums table for new entries
         message("Checking if latest version of HYDAT has new datums...")
         update_hydat_datums(con = con)
+      } else {
+        message("HYDAT database is already up to date")
       }
     }, error = function(e) {
       warning("dailyUpdate: error when checking for new HYDAT database or when updating datums. Returned message: ", e$message)
     })
   }
-
 
 
   ### Calculate new daily means and stats from realtime data where necessary #######

@@ -16,7 +16,6 @@ message("Working on Patch 11. Changes are being made within a transaction, so if
 message("Starting transaction...")
 DBI::dbExecute(con, "BEGIN;")
 attr(con, "active_transaction") <- TRUE
-
 tryCatch({
   
   # Lock the entire database to prevent writes while we make changes
@@ -872,7 +871,7 @@ EXECUTE FUNCTION enforce_sample_fraction();
   # 4. Do the final modifications to 'timeseries' and 'locations' #########
   DBI::dbExecute(con, "DELETE FROM timeseries WHERE category = 'discrete'")
   DBI::dbExecute(con, "ALTER TABLE timeseries DROP COLUMN category CASCADE;")
-  DBI::dbExecute(con, "ALTER TABLE timeseries DROP COLUMN owner CASCADE;")
+  DBI::dbExecute(con, "ALTER TABLE timeseries RENAME COLUMN owner TO default_owner;")
   
   # Redo timeseries_metadata_en and fr views because of the cascade
   message("Re-creating views...")
@@ -965,37 +964,47 @@ WHERE conrelid = 'timeseries'::regclass
   
   # 5. Create new roles/groups and modify user/group permissions ########
   
-  DBI::dbExecute(con, "
-                 REVOKE ALL ON SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;
-                 ")
-  DBI::dbExecute(con, "
-REVOKE ALL ON ALL TABLES IN SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;
+  try({
+    DBI::dbExecute(con, "REVOKE ALL ON SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;")
+    DBI::dbExecute(con, "REVOKE ALL ON ALL TABLES IN SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;")
+    DBI::dbExecute(con, "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;")
+    DBI::dbExecute(con, "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;")
+    
+    # Revoke default privileges for ac_editor
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA continuous REVOKE ALL ON TABLES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA discrete REVOKE ALL ON TABLES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA spatial REVOKE ALL ON TABLES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA files REVOKE ALL ON TABLES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA instruments REVOKE ALL ON TABLES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA information REVOKE ALL ON TABLES FROM ac_editor;")
+    
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA continuous REVOKE ALL ON SEQUENCES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA discrete REVOKE ALL ON SEQUENCES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA spatial REVOKE ALL ON SEQUENCES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA files REVOKE ALL ON SEQUENCES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA instruments REVOKE ALL ON SEQUENCES FROM ac_editor;")
+    DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA information REVOKE ALL ON SEQUENCES FROM ac_editor;")
+    
+    # Reassign ownership
+    DBI::dbExecute(con, "REASSIGN OWNED BY ac_editor TO postgres;")
+    
+    # Drop all privileges
+    DBI::dbExecute(con, "DROP OWNED BY ac_editor;")
+    
+    # Terminate active connections (if necessary)
+    DBI::dbExecute(con, "
+SELECT pg_terminate_backend(pg_stat_activity.pid)
+FROM pg_stat_activity
+WHERE pg_stat_activity.usename = 'ac_editor'
+  AND pid <> pg_backend_pid();
 ")
-  DBI::dbExecute(con, "
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;
-")
-  DBI::dbExecute(con, "
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public, continuous, discrete, spatial, files, instruments, information FROM ac_editor;
-")
+    
+    # Drop the role
+    DBI::dbExecute(con, "DROP ROLE ac_editor;")
+  })
   
-  # Revoke default privileges for ac_editor
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA continuous REVOKE ALL ON TABLES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA discrete REVOKE ALL ON TABLES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA spatial REVOKE ALL ON TABLES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA files REVOKE ALL ON TABLES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA instruments REVOKE ALL ON TABLES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA information REVOKE ALL ON TABLES FROM ac_editor;")
-  
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA continuous REVOKE ALL ON SEQUENCES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA discrete REVOKE ALL ON SEQUENCES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA spatial REVOKE ALL ON SEQUENCES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA files REVOKE ALL ON SEQUENCES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA instruments REVOKE ALL ON SEQUENCES FROM ac_editor;")
-  DBI::dbExecute(con, "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA information REVOKE ALL ON SEQUENCES FROM ac_editor;")
-  
-  DBI::dbExecute(con, "DROP ROLE ac_editor;")
   
   
   # Add extra privileges for discrete_editor
@@ -1071,9 +1080,9 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public, continuous, discrete, spatial, fil
   # Modify role 'yg' to be called 'yg_reader' and give it BYPASSRLS
   try({
     DBI::dbExecute(con, "ALTER ROLE yg RENAME TO yg_reader;")
-    # # Change references to 'yg' in table 'timeseries' and 'locations' to 'yg_reader'
-    DBI::dbExecute(con, "UPDATE timeseries SET share_with = {'yg_reader'} WHERE share_with = {'yg'};")
-    DBI::dbExecute(con, "UPDATE locations SET share_with = {'yg_reader'} WHERE share_with = {'yg'};")
+    # Change references to 'yg' in table 'timeseries' and 'locations' to 'yg_reader'
+    DBI::dbExecute(con, "UPDATE timeseries SET share_with = '{yg_reader}' WHERE share_with = '{yg}';")
+    DBI::dbExecute(con, "UPDATE locations SET share_with = '{yg_reader}' WHERE share_with = '{yg}';")
     
   })
   
