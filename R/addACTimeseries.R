@@ -329,7 +329,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
                         period_type = period_type[i],
                         record_rate = record_rate[i],
                         share_with = paste0("{", paste(share_with[i], collapse = ", "), "}"),
-                        owner = owner[i],
+                        default_owner = owner[i],
                         source_fx = source_fx[i],
                         source_fx_args = source_fx_args[i],
                         note = note[i],
