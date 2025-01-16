@@ -516,30 +516,31 @@ EXECUTE FUNCTION discrete.check_sample_series_overlap();
   DBI::dbExecute(con, "
                  CREATE TABLE discrete.samples (
                  sample_id SERIAL PRIMARY KEY,
-                 location_id INTEGER NOT NULL REFERENCES locations(location_id),
-                 sub_location_id INTEGER REFERENCES sub_locations(sub_location_id),
-                 media_id INTEGER NOT NULL REFERENCES media_types(media_id),
+                 location_id INTEGER NOT NULL REFERENCES locations(location_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                 sub_location_id INTEGER REFERENCES sub_locations(sub_location_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                 media_id INTEGER NOT NULL REFERENCES media_types(media_id) ON UPDATE CASCADE ON DELETE CASCADE,
                  z NUMERIC,
                  datetime TIMESTAMPTZ NOT NULL,
                  target_datetime TIMESTAMPTZ,
-                 collection_method INTEGER NOT NULL REFERENCES collection_methods(collection_method_id),
-                 sample_type INTEGER NOT NULL REFERENCES sample_types(sample_type_id),
-                 linked_with INTEGER REFERENCES samples(sample_id), -- (to associate samples with each other)
+                 collection_method INTEGER NOT NULL REFERENCES collection_methods(collection_method_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                 sample_type INTEGER NOT NULL REFERENCES sample_types(sample_type_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                 linked_with INTEGER REFERENCES samples(sample_id) ON UPDATE CASCADE ON DELETE SET NULL, -- (to associate samples with each other)
                  sample_volume_ml NUMERIC,
                  purge_volume_l NUMERIC,
                  purge_time_min NUMERIC,
                  flow_rate_l_min NUMERIC,
                  wave_hgt_m NUMERIC,
-                 sample_grade INTEGER REFERENCES grade_types(grade_type_id),
-                 sample_approval INTEGER REFERENCES approval_types(approval_type_id),
-                 sample_qualifier INTEGER REFERENCES qualifier_types(qualifier_type_id),
-                 owner INTEGER NOT NULL REFERENCES organizations(organization_id),
-                 contributor INTEGER REFERENCES organizations(organization_id),
-                 comissioning_org INTEGER REFERENCES organizations(organization_id),
-                 sampling_org INTEGER REFERENCES organizations(organization_id),
+                 sample_grade INTEGER REFERENCES grade_types(grade_type_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                 sample_approval INTEGER REFERENCES approval_types(approval_type_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                 sample_qualifier INTEGER REFERENCES qualifier_types(qualifier_type_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                 owner INTEGER NOT NULL REFERENCES organizations(organization_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                 contributor INTEGER REFERENCES organizations(organization_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                 comissioning_org INTEGER REFERENCES organizations(organization_id) ON UPDATE CASCADE ON DELETE SET NULL,
+                 sampling_org INTEGER REFERENCES organizations(organization_id) ON UPDATE CASCADE ON DELETE SET NULL,
                  documents INTEGER[], -- array of document_ids, existence of documents enforced via function/trigger
                  share_with TEXT[] DEFAULT '{public_reader}', -- referential integrity to database users enforced via function/trigger
                  import_source TEXT,
+                 import_source_id TEXT,
                  no_update BOOLEAN DEFAULT FALSE,
                  note TEXT,
                  created TIMESTAMPTZ DEFAULT now() NOT NULL,
@@ -651,17 +652,17 @@ EXECUTE FUNCTION discrete.check_sample_series_overlap();
   DBI::dbExecute(con, "
                  CREATE TABLE discrete.results (
                  result_id SERIAL PRIMARY KEY,
-                 sample_id INTEGER NOT NULL REFERENCES samples(sample_id),
-                 result_type INTEGER NOT NULL REFERENCES discrete.result_types(result_type_id),  -- lab, field, unknown
-                 parameter_id INTEGER NOT NULL REFERENCES parameters(parameter_id), -- also dictates the units to use
-                 sample_fraction INTEGER REFERENCES sample_fractions(sample_fraction_id),  -- WAD, SAD, total, dissolved, etc
+                 sample_id INTEGER NOT NULL REFERENCES samples(sample_id) ON UPDATE CASCADE ON DELETE CASCADE,
+                 result_type INTEGER NOT NULL REFERENCES discrete.result_types(result_type_id) ON UPDATE CASCADE ON DELETE CASCADE,  -- lab, field, unknown
+                 parameter_id INTEGER NOT NULL REFERENCES parameters(parameter_id) ON UPDATE CASCADE ON DELETE CASCADE, -- also dictates the units to use
+                 sample_fraction INTEGER REFERENCES sample_fractions(sample_fraction_id) ON UPDATE CASCADE ON DELETE SET NULL,  -- WAD, SAD, total, dissolved, etc
                  result NUMERIC,  -- if null then a function/trigger will ensure that result_condition is also populated
-                 result_condition INTEGER REFERENCES result_conditions(result_condition_id), -- below, above, etc. Mandatory if result is null
+                 result_condition INTEGER REFERENCES result_conditions(result_condition_id) ON UPDATE CASCADE ON DELETE CASCADE, -- below, above, etc. Mandatory if result is null
                  result_condition_value NUMERIC,
-                 result_value_type INTEGER REFERENCES result_value_types(result_value_type_id), -- actual, estimated, blank corrected, calculated, etc
-                 result_speciation INTEGER REFERENCES result_speciations(result_speciation_id), -- as CaCO3, as N, etc. Mandatory in some cases, based on parameter
-                 protocol_method INTEGER REFERENCES protocols_methods(protocol_id), -- the method used to obtain the result
-                 laboratory INTEGER REFERENCES laboratories(lab_id), -- the lab that did the analysis
+                 result_value_type INTEGER REFERENCES result_value_types(result_value_type_id) ON UPDATE CASCADE ON DELETE SET NULL, -- actual, estimated, blank corrected, calculated, etc
+                 result_speciation INTEGER REFERENCES result_speciations(result_speciation_id) ON UPDATE CASCADE ON DELETE SET NULL, -- as CaCO3, as N, etc. Mandatory in some cases, based on parameter
+                 protocol_method INTEGER REFERENCES protocols_methods(protocol_id) ON UPDATE CASCADE ON DELETE SET NULL, -- the method used to obtain the result
+                 laboratory INTEGER REFERENCES laboratories(lab_id) ON UPDATE CASCADE ON DELETE SET NULL, -- the lab that did the analysis
                  analysis_datetime TIMESTAMPTZ, -- when the analysis was done
                  share_with TEXT[] DEFAULT '{public_reader}', -- referential integrity to database users enforced via function/trigger
                  no_update BOOLEAN DEFAULT FALSE,

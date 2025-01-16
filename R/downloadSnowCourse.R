@@ -107,26 +107,30 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
     # })
   } else {
     #Get measurements for that location beginning after the start_datetime
-    new_surveys <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, location, target_date AS target_datetime, survey_date AS datetime, notes FROM surveys WHERE location = '", location, "' AND survey_date > '", start_date, "';"))
+    new_surveys <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id AS import_source_id, location, target_date AS target_datetime, survey_date AS datetime, notes AS note FROM surveys WHERE location = '", location, "' AND survey_date > '", start_date, "';"))
+    
+    if (nrow(new_surveys) == 0) {
+      return(list())
+    }
     new_surveys$target_datetime <- as.POSIXct(new_surveys$target_datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
     new_surveys$datetime <- as.POSIXct(new_surveys$datetime, tz = "UTC") + 68400 # Add 19 hours to get to noon MST (but still in UTC as that's easier to pass to the DB)
+    
     ls <- list()
     for (i in 1:nrow(new_surveys)) {
       sample <- new_surveys[i,]
       #Get the measurements for each survey
-      meas <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, estimate_flag, swe, depth FROM measurements WHERE survey_id = ", new_surveys$survey_id[i], " AND exclude_flag IS FALSE;"))
-      names(meas) <- c("survey_id", "result_value_type", "swe", "depth")
+      meas <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, estimate_flag, swe, depth FROM measurements WHERE survey_id = ", new_surveys$import_source_id[i], " AND exclude_flag IS FALSE;"))
       meas <- data.frame(parameter_id = c(swe_paramid, depth_paramid),
-                         value = c(meas$swe, meas$depth),
-                         result_value_type = meas$result_value_type,
-                         survey_id = meas$survey_id)
+                         result = c(meas$swe, meas$depth),
+                         result_value_type = meas$estimate_flag,
+                         result_type = 1) # 1 = field observation
       
       if (nrow(meas) > 0) {
         # Change estimated or actual values to the database values
         meas$result_value_type[meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'estimated'")[1,1]
         meas$result_value_type[!meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'actual'")[1,1]
         
-        meas$protocol <- DBI::dbGetQuery(con, "SELECT protocol_id FROM protocols_methods WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'")[1,1]
+        meas$protocol_method <- DBI::dbGetQuery(con, "SELECT protocol_id FROM protocols_methods WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'")[1,1]
       } else {
         meas <- data.frame()
       }
@@ -134,7 +138,8 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
       sample$owner <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
       sample$contributor <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';")[1,1]
       sample$collection_method <- DBI::dbGetQuery(con, "SELECT collection_method_id FROM collection_methods WHERE LOWER(collection_method) = 'observation'")[1,1]
-      # This has a column for each measurement type, we need to make it long
+      sample$media_id <- media_id
+      
       ls[[i]] <- list(sample = sample,
                       results = meas)
     }
