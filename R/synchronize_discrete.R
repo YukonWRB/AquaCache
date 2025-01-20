@@ -81,40 +81,61 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   }
 
   updated <- 0 #Counter for number of updated timeseries
-  EQcon <- NULL #This prevents multiple connections to EQcon...
+  EQCon <- NULL #This prevents multiple connections to EQCon...
   snowCon <- NULL # ...and snowCon
+  valid_sample_names <- DBI::dbGetQuery(con, "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'samples';")[,1]
+  valid_result_names <- DBI::dbGetQuery(con, "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'results';")[,1]
+  
+  # Define a function to commit the data to the database, used later for each sample
+  commit_fx <- function(con, sample, results) {
+    
+    # Insert the sample data
+    DBI::dbAppendTable(con, "samples", sample)
+    
+    # Get the sample_id
+    sample_id <- DBI::dbGetQuery(con, paste0("SELECT sample_id FROM samples WHERE location_id = ", sample$location_id, " AND datetime = '", sample$datetime, " UTC';"))[1,1]
+    
+    # Insert the results data
+    results$sample_id <- sample_id
+    DBI::dbAppendTable(con, "results", results)
+    
+    return(sample_id)
+  }
+  
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
   }
   for (i in 1:nrow(all_series)) {
-    loc <- all_timeseries$location[i]
-    parameter <- all_timeseries$parameter_id[i]
-    period_type <- all_timeseries$period_type[i]
-    record_rate <- all_timeseries$record_rate[i]
-    tsid <- all_timeseries$timeseries_id[i]
-    source_fx <- all_timeseries$source_fx[i]
-    owner <- all_timeseries$owner[i]
+    sid <- all_series$sample_series_id[i]
+    loc_id <- all_series$location_id[i]
+    sub_loc_id <- all_series$sub_location_id[i]
+    synch_from <- all_series$synch_from[i]
+    synch_to <- all_series$synch_to[i]
+    source_fx <- all_series$source_fx[i]
+    source_fx_args <- all_series$source_fx_args[i]
+    default_owner <- all_series$default_owner[i]
+    default_contributor <- all_series$default_contributor[i]
+    
+    # Location codes (not numeric IDs) are needed for the source functions
+    loc_code <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE location_id = ", loc_id, ";"))[1,1]
+    sub_loc_code <- if (!is.na(sub_loc_id)) {DBI::dbGetQuery(con, paste0("SELECT sub_location_name FROM sub_locations WHERE sub_location_id = ", sub_loc_id, ";"))}[1,1]
+    
+    # start/end datetime for the sample series
+    start_i <- if (!is.na(synch_from)) min(start_datetime, synch_from) else start_datetime
+    end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
     
     # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
-    if (source_fx == "downloadEQWin" & is.null(EQcon)) {
-      EQcon <- EQConnect(silent = TRUE)
-      on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
+    if (source_fx == "downloadEQWin" & is.null(EQCon)) {
+      EQCon <- EQConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
     }
     if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
       snowCon <- snowConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
-    
-    source_fx_args <- all_timeseries$source_fx_args[i]
-    if (is.na(record_rate)) {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
-    } else {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
-    }
-    start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
 
     tryCatch({
-      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt, con = con)
+      args_list <- list(location = loc_code, sub_location = sub_loc_code, start_datetime = start_i, end_datetime = end_i, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair) {
@@ -136,7 +157,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
       }
       
       if (source_fx == "downloadEQWin") {
-        args_list[["EQcon"]] <- EQcon
+        args_list[["EQCon"]] <- EQCon
       }
       if (source_fx == "downloadSnowCourse") {
         args_list[["snowCon"]] <- snowCon
@@ -144,197 +165,279 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
       
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
 
+      if (!inherits(data, "list")) {
+        stop("For sample_series_id ", sid, " the source function did not return a list.")
+      } else if (!inherits(data[[1]], "list")) {
+        stop("For sample_series_id ", sid, " the source function did not return a list of lists (one element per sample, with two data.frames: one for sample metadata, the other for associated results).")
+      }
 
-      if (nrow(inRemote) > 0) {
-          inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, target_datetime, datetime, value, note, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
-          # Set aside any rows where no_update == TRUE
-          no_update <- inDB[inDB$no_update, ]
-          inDB <- inDB[!inDB$no_update, ]
-          # Drop no_update columns
-          inDB$no_update <- NULL
-          no_update$no_update <- NULL
-        
-        # Check changes in attributes
-        if (!is.null(owner)) {  # There may not be an owner assigned in table timeseries
-          if (!("owner" %in% names(inRemote))) {
-            inRemote$owner <- owner
-          }
-        }
-
-        if ("owner" %in% names(inRemote)) {
-          adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
-        }
-        if ("contributor" %in% names(inRemote)) {
-          adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
-        }
-        if ("grade" %in% names(inRemote)) {
-          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
-        }
-        if ("approval" %in% names(inRemote)) {
-          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
-        }
-        if ("qualifier" %in% names(inRemote)) {
-          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
-        }
-        
-        # Drop columns owner, contributor, grade, approval, qualifier as these are already taken care of
-        inRemote$owner <- NULL
-        inRemote$contributor <- NULL
-        inRemote$grade <- NULL
-        inRemote$approval <- NULL
-        inRemote$qualifier <- NULL
-        
-        if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch so this is skipped
-          if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
-            inDB <- inDB[inDB$datetime >= min(inRemote$datetime) , ]
+      if (length(inRemote) > 0) {
+        for (j in 1:length(inRemote)) {
+          
+          if (!("sample" %in% names(data[[j]])) | !("results" %in% names(data[[j]]))) {
+            stop("For sample_series_id ", sid, " the source function did not return a list with elements named 'sample' and 'results'. Failed on list element ", j, ".")
           }
           
-          if (min(inRemote$datetime) < min(inDB$datetime)) { #if TRUE means that the remote has older data than the DB, so immediately declare mismatch = TRUE.
-            mismatch <- TRUE
-            datetime <- min(inRemote$datetime)
-          } else {
-            #order both timeseries to compare them
-            inDB <- inDB[order(inDB$datetime) , ]
-            inRemote <- inRemote[order(inRemote$datetime) , ]
-            
-            # Create a unique datetime key for both data frames
-              # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote. In this case though, entries are unique on datetime, sample_type, collection_method, sample_fraction, result_speciation, result_value_type so things are slower than with continuous data
-              if (nrow(no_update) > 0) {
-                # Remove any rows in inRemote that are in no_update (labelled in the DB as no_update)
-                for (j in 1:nrow(no_update)) {
-                  inRemote <- inRemote[!(inRemote$datetime == no_update[j, "datetime"] & inRemote$sample_type == no_update[j, "sample_type"] & inRemote$collection_method == no_update[j, "collection_method"] & inRemote$sample_fraction == no_update[j, "sample_fraction"] & inRemote$result_speciation == no_update[j, "result_speciation"] & inRemote$result_value_type == no_update[j, "result_value_type"]), ]
+          inRemote_sample <- inRemote[[j]][["sample"]]
+          inRemote_results <- inRemote[[j]][["results"]]
+          names_inRemote_samp <- names(inRemote_sample)
+          names_inRemote_res <- names(inRemote_results)
+        
+          inDB_sample <- DBI::dbGetQuery(con, paste0("SELECT * FROM samples WHERE datetime = '", sample$datetime, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, ";"))
+          
+          if (inDB_sample$no_update) { # If no_update is TRUE, skip to the next sample
+            next
+          }
+          
+          # Check for any changes/additions/subtractions to the sample metadata
+          # If changes are detected, update the sample metadata
+          if (nrow(inDB_sample) > 0) { # Check existing DB sample and results. If no sample is found, add the sample and corresponding results in else section
+            # Check existing DB sample and results ##################
+            ## Check sample metadata ##############
+            for (k in names_inRemote_samp) {
+              # Ensure the name is a valid DB one
+              if (k %in% valid_sample_names) { # If TRUE, check for differences
+                if (!identical(as.numeric(inDB_sample[[k]]), as.numeric(inRemote_sample[[k]]))) { # If TRUE, update the DB
+                  # message("discrepancy found in ", k)
+                  to_insert <- if (!is.na(inRemote_sample[[k]])) inRemote_sample[[k]] else "NULL"
+                  DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = '", inRemote_sample[[k]], "' WHERE sample_id = ", inDB_sample$sample_id, ";"))
                 }
               }
+            }
+            
+            # Get the results for the sample
+            inDB_results <- DBI::dbGetQuery(con, paste0("SELECT * FROM results WHERE sample_id = ", inDB_sample$sample_id, ";"))
+            
+            inDB_results$checked <- FALSE # This will be used to track which rows have been checked
+            
+            for (k in 1:nrow(inRemote_results)) {
+              sub <- inRemote_results[k, ]
+              names_inRemote_sub <- names(sub)
+              # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, sample_fraction, result_value_type, result_speciation, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
               
-              # Drop columns that are not present in both data.frames
-              inRemote <- inRemote[, colnames(inRemote) %in% colnames(inDB)]
-              inDB <- inDB[, colnames(inDB) %in% colnames(inRemote)]
+              inDB_sub <- inDB_results[
+                inDB_results$result_type == sub$result_type & 
+                  inDB_results$parameter_id == sub$parameter_id & 
+                  inDB_results$result_value_type == if (!is.null(sub$result_value_type)) sub$result_value_type else NA & 
+                  inDB_results$result_speciation == if (!is.null(sub$result_speciation)) sub$result_speciation else NA & 
+                  inDB_results$protocol_method == if (!is.null(sub$protocol_method)) sub$protocol_method else NA & 
+                  inDB_results$laboratory == if (!is.null(sub$laboratory)) sub$laboratory else NA & 
+                  inDB_results$analysis_datetime == if (!is.null(sub$analysis_datetime)) sub$analysis_datetime else NA &
+                  inDB_results$sample_fraction == if (!is.null(sub$sample_fraction)) sub$sample_fraction else NA
+                , ]
               
-              # Order the columns to make sure they are in the same order in both data.frames
-              inRemote <- inRemote[, names(inDB)]
-              
-              # Make keys
-              # These column names can all be present in either data.frame: target_datetime, datetime, value, note, result_condition, result_condition_value, sample_type, collection_method, sample_fraction, result_speciation, result_value_type, protocol, lab. 
-              # Some will not be present in one and/or the other. Build a key with all columns present in one or the other data.frame. 
-              
-              # target_datetime and datetime need to be rounded to be truncated to 22 characters to prevent rounding errors. Stash the two columns, reintegrate them after making the key
-              inRemote_stash <- inRemote[, "datetime", drop = FALSE]
-              inDB_stash <- inDB[, "datetime", drop = FALSE]
-              
-              inRemote$datetime <- substr(as.character(inRemote$datetime), 1, 22)
-              inDB$datetime <- substr(as.character(inDB$datetime), 1, 22)
-              
-              # Drop a few decimal places from target_datetime if it's present to prevent rounding mismatches
-              if ("target_datetime" %in% names(inRemote)) {
-                inRemote_stash$target_datetime <- inRemote$target_datetime
-                inRemote$target_datetime <- substr(as.character(inRemote$target_datetime), 1, 22)
-              }
-              if ("target_datetime" %in% names(inDB)) {
-                inDB_stash$target_datetime <- inDB$target_datetime
-                inDB$target_datetime <- substr(as.character(inDB$target_datetime), 1, 22)
-              }
-              
-              
-              # Create the key on inRemote and inDB using all columns present in each data.frame (valid columns might vary, depending on the data)
-              inRemote$key <- do.call(paste, c(inRemote, sep = "|"))
-              inDB$key <- do.call(paste, c(inDB, sep = "|"))
-              
-              # Reintegrate the datetime columns
-              inRemote$datetime <- inRemote_stash$datetime
-              inDB$datetime <- inDB_stash$datetime
-              if ("target_datetime" %in% names(inRemote)) {
-                inRemote$target_datetime <- inRemote_stash$target_datetime
+              if (nrow(inDB_sub) == 0) { # looks like a new sample, add it (actually it might match an existing one but there's no way to know because some of the unique key columns were changed. If that's the case the 'old' one will be removed later)
+                ## Checks on results ###########
+                # Check that the results have the mandatory columns
+                mandatory_res <- c("result", "result_type", "parameter_id")
+                if (!all(c(mandatory_res) %in% names_inRemote_sub)) {
+                  # Make an error message stating which column is missing
+                  missing <- c(mandatory_res)[!c(mandatory_res) %in% names_inRemote_sub]
+                  stop("For sample_series_id ", sid, " the source function did not return one or more mandatory column(s) for the sample metadata: '", paste(missing, collapse = "', '"), "'.")
+                }
                 
-              }
-              if ("target_datetime" %in% names(inDB)) {
-                inDB$target_datetime <- inDB_stash$target_datetime
-              }
-            
-            # Check for mismatches using set operations. 
-            mismatch_keys <- inRemote$key[!(inRemote$key %in% inDB$key)]
-            # This DOES NOT catch if there are points inDB at dates in the future from what is inRemote, unless a mismatch happens before. Check for that later.
-            
-            # Check where the discrepancy is in both data frames
-            if (length(mismatch_keys) > 0) {
-              mismatch <- TRUE
-              # Find the most recent datetime in the remote data that is not in the DB. This will be the datetime to start replacing from in the local.
-              datetime <- min(inRemote[inRemote$key %in% mismatch_keys, "datetime"])
-            } else {
-              if (max(inDB$datetime) > max(inRemote$datetime)) { # Check if the remote misses data that should be deleted from the DB
-                mismatch <- TRUE
-                datetime <- max(inRemote$datetime)
+                # More complex checks if 'result' is NA
+                # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
+                if (is.na(sub$result)) {
+                  if (!("result_condition" %in% names_inRemote_sub)) {
+                    warning("For sample_series_id ", sid, " the source function returned at least one NA result in the column 'result' but did not return a corresponding entry in the column 'result_condition'.")
+                  } else { # check that 'result_condition' is not NA.
+                    if (is.na(sub$result_condition)) {
+                      warning("For sample_series_id ", sid, " the source function returned a value of NA in the column 'result' but did not return a corresponding entry in the column 'result_condition'.")
+                    } else { # check that 'result_condition' is not NA.
+                      
+                      if (sub$result_condition %in% c(1, 2)) {
+                        if (!("result_condition_value" %in% names_inRemote_sub)) {
+                          warning("For sample_series_id ", sid, " the source function returned at least one row where 'result_condition' is 1 or 2 (above/below detetion limit) but there is no column for the necessary result_condition_value.")
+                        }
+                      }
+                    }
+                    
+                    if (sub$result_condition %in% c(1, 2)) {
+                      if (is.na(sub$result_condition_value)) {
+                        stop("For sample_series_id ", sid, " the source function returned a value of 1 or 2 in the column 'result_condition' (indicating above or below detection limit) but did not return a corresponding entry in the column 'result_condition_value'.")
+                      }
+                    }
+                  }
+              } # End of additional checks if any NA values in 'result' column are returned
+              
+              # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction.
+                result_speciation <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (", paste(unique(sub$parameter_id), collapse = ", "), ");"))
+                sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (", paste(unique(sub$parameter_id), collapse = ", "), ");"))
+                if (any(result_speciation$result_speciation_bool)) {
+                  if (!("result_speciation" %in% names_inRemote_sub)) {
+                    warning("For sample_series_id ", sid, " the source function did not return a column 'result_speciation' but the database mandates this for at least one of the parameters.")
+                  } else { # Check that values in the result_speciation column are not NA where necessary
+                    merge <- merge(sub, result_speciation, by = "parameter_id")
+                    # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation column is not NA
+                    chk <- with(merge, result_speciation_bool & is.na(result_speciation))
+                    if (any(chk)) {
+                      warning("For sample_series_id ", sid, " the source function returned NA values in the column 'result_speciation' for at least one parameter where the database mandates this value.")
+                    }
+                  }
+                }
+                if (any(sample_fraction$sample_fraction_bool)) {
+                  if (!("sample_fraction" %in% names_inRemote_sub)) {
+                    stop("The source function did not return a column 'sample_fraction' but the database mandates this for at least one of the parameters.")
+                  } else { # Check that all values in the sample_fraction column are not NA where necessary
+                    merge <- merge(names_inRemote_sub, sample_fraction, by = "parameter_id")
+                    # For rows where sample_fraction_bool is TRUE, check that the corresponding sample_fraction column is not NA
+                    chk <- with(merge, sample_fraction_bool & is.na(sample_fraction))
+                    if (any(chk)) {
+                      stop("For sample_series_id ", sid, " the source function returned NA values in the column 'sample_fraction' for at least one parameter where the database mandates this value.")
+                    }
+                  }
+                }
+                
+                # Append new values
+                sub$sample_id <- inDB_sample$sample_id
+                DBI::dbAppendTable(con, "results", sub)
+                
+              } else if (nrow(inDB_sub) == 1) { # matching sample found, check and adjust if necessary
+                # Check for differences in the results
+                for (l in names_inRemote_sub) {
+                  if (l %in% valid_result_names) {
+                    if (!identical(as.numeric(inDB_sub[[l]]), as.numeric(sub[[l]]))) {
+                      to_insert <- if (!is.na(sub[[l]])) sub[[l]] else "NULL"
+                      # message("Found discrepancy in ", l, " for sample_series_id ", sid, ". Updating the database.")
+                      DBI::dbExecute(con, paste0("UPDATE results SET ", l, " = '", to_insert, "' WHERE result_id = ", inDB_sub$result_id, ";"))
+                    }
+                  }
+                }
+                inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE
+                
               } else {
-                mismatch <- FALSE
+                warning("For sample_series_id ", sid, " the source function returned a result that matched more than one result in the database. This should not happen.")
+                inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE
+              }
+              
+            }
+            # Remove any results that were not checked
+            to_delete <- inDB_results[!inDB_results$checked, "result_id"]
+            if (length(to_delete) > 0) {
+              DBI::dbExecute(con, paste0("DELETE FROM results WHERE result_id IN (", paste(to_delete, collapse = ", "), ");"))
+            }
+            
+          } else { # No database sample was found, add the sample and corresponding results (follow same process as getNewDiscrete)
+            # Add a new sample and results to the DB  ########
+            ## Checks on sample metadata ###########
+            # Functions may pass the location code instead of location_id, change it
+            if ("location" %in% names_inRemote_samp) {
+              inRemote_sample$location_id <- loc_id
+              inRemote_sample$location <- NULL
+              names_inRemote_samp <- names(inRemote_sample)
+            }
+            if ("sub_location" %in% names_inRemote_samp) {
+              inRemote_sample$sub_location_id <- sub_loc_id
+              inRemote_sample$sub_location <- NULL
+              names_inRemote_samp <- names(inRemote_sample)
+            }
+            
+            # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "owner", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
+            mandatory_samp <- c("location_id", "media_id", "datetime", "collection_method", "sample_type", "owner", "import_source_id")
+            if (!all(c(mandatory_samp) %in% names_inRemote_samp)) {
+              # Make an error message stating which column is missing
+              missing <- c(mandatory_samp)[!c(mandatory_samp) %in% names_inRemote_samp]
+              stop("For sample_series_id ", sid, " the source function did not return one or more mandatory column(s) for the sample metadata to enable the addition of new samples found in the remote: '", paste(missing, collapse = "', '"), "'.")
+            }
+            
+            sample$import_source <- source_fx
+            
+            
+            ## Checks on results ###########
+            # Check that the results have the mandatory columns
+            mandatory_res <- c("result", "result_type", "parameter_id")
+            if (!all(c(mandatory_res) %in% names_inRemote_res)) {
+              # Make an error message stating which column is missing
+              missing <- c(mandatory_res)[!c(mandatory_res) %in% names_inRemote_res]
+              stop("For sample_series_id ", sid, " the source function did not return one or more mandatory column(s) for the sample metadata: '", paste(missing, collapse = "', '"), "'.")
+            }
+            
+            # More complex checks if 'result' is NA
+            # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
+            if (any(is.na(inRemote_results$result))) {
+              if (!("result_condition" %in% names_inRemote_res)) {
+                stop("For sample_series_id ", sid, " the source function returned NA values in the column 'result' but did not return a column called 'result_condition'.")
+              } else { # Check that each NA in 'result' has a corresponding entry in 'result_condition'
+                sub.results <- inRemote_results[is.na(inRemote_results$result), ]
+                check_result_condition <- FALSE # prevents repeatedly checking for the same thing
+                
+                for (l in 1:nrow(sub.results)) {
+                  if (is.na(sub.results$result[l]) & is.na(sub.results$result_condition[l])) {
+                    stop("For sample_series_id ", sid, " the source function returned at least one NA result in the column 'result' but did not return a corresponding entry in the column 'result_condition'.")
+                  } else {
+                    if (!check_result_condition) {
+                      if (any(sub.results$result_condition %in% c(1, 2))) {
+                        if (!("result_condition_value" %in% names(inRemote_results))) {
+                          stop("For sample_series_id ", sid, " the source function returned at least one row where 'result_condition' is 1 or 2 (above/below detetion limit) but there is no column for the necessary result_condition_value.")
+                        }
+                      }
+                      check_result_condition <- TRUE
+                    }
+                    
+                    if (sub.results$result_condition[l] %in% c(1, 2)) {
+                      if (is.na(sub.results$result_condition_value[l])) {
+                        stop("For sample_series_id ", sid, " the source function returned a value of 1 or 2 in the column 'result_condition' (indicating above or below detection limit) but did not return a corresponding entry in the column 'result_condition_value'.")
+                      }
+                    }
+                  }
+                } # End of looping over each row with NA in result column
+              }
+            } # End of additional checks fs any NA values in 'result' column are returned
+            
+            # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction.
+            result_speciation <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (", paste(unique(inRemote_results$parameter_id), collapse = ", "), ");"))
+            sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (", paste(unique(inRemote_results$parameter_id), collapse = ", "), ");"))
+            if (any(result_speciation$result_speciation_bool)) {
+              if (!("result_speciation" %in% names(data))) {
+                stop("For sample_series_id ", sid, " the source function did not return a column 'result_speciation' but the database mandates this for at least one of the parameters.")
+              } else { # Check that values in the result_speciation column are not NA where necessary
+                merge <- merge(inRemote_results, result_speciation, by = "parameter_id")
+                # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation column is not NA
+                chk <- with(merge, result_speciation_bool & is.na(result_speciation))
+                if (any(chk)) {
+                  stop("For sample_series_id ", sid, " the source function returned NA values in the column 'result_speciation' for at least one parameter where the database mandates this value.")
+                }
               }
             }
-            inRemote$key <- NULL
-          }
-        } else { # There's no data in the DB but there is some in the remote. Automatic mismatch.
-          mismatch <- TRUE
-          datetime <- min(inRemote$datetime)
-        }
-
-        if (mismatch) {
-          inRemote <- inRemote[inRemote$datetime >= datetime , ]
-
-          inRemote$timeseries_id <- tsid
-          
-          
-          # Now commit the changes to the database
-          commit_fx <- function(con, no_update, tsid, inRemote, inDB) {
-              # Now delete entries in measurements_discrete that are no longer in the remote data and/or that need to be replaced
-              if (nrow(no_update) > 0) {
-                DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "' AND datetime NOT IN ('", paste(no_update$datetime, collapse = "', '"), "');"))
-              } else {
-                DBI::dbExecute(con, paste0("DELETE FROM measurements_discrete WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime), "';"))
+            if (any(sample_fraction$sample_fraction_bool)) {
+              if (!("sample_fraction" %in% names(data))) {
+                stop("The source function did not return a column 'sample_fraction' but the database mandates this for at least one of the parameters.")
+              } else { # Check that all values in the sample_fraction column are not NA where necessary
+                merge <- merge(inRemote_results, sample_fraction, by = "parameter_id")
+                # For rows where sample_fraction_bool is TRUE, check that the corresponding sample_fraction column is not NA
+                chk <- with(merge, sample_fraction_bool & is.na(sample_fraction))
+                if (any(chk)) {
+                  stop("For sample_series_id ", sid, " the source function returned NA values in the column 'sample_fraction' for at least one parameter where the database mandates this value.")
+                }
               }
-              
-              DBI::dbAppendTable(con, "measurements_discrete", inRemote)
-              
-              # adjust entries in table 'timeseries' to reflect the new data
-              end <- max(inRemote$datetime)
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-              earliest <- min(inRemote$datetime, 
-                              DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_discrete WHERE timeseries_id = ", tsid, ";"))[[1]])
-              DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
+            }
+            
+            # Append values in a transaction block ##########
+            if (!attr(con, "active_transaction")) {
+              DBI::dbBegin(con)
+              attr(con, "active_transaction") <- TRUE
+              tryCatch({
+                commit_fx(con, sample, inRemote_results)
+                DBI::dbCommit(con)
+                attr(con, "active_transaction") <- FALSE
+              }, error = function(e) {
+                DBI::dbRollback(con)
+                attr(con, "active_transaction") <<- FALSE
+                warning("getNewDiscrete: Failed to commit new data for sample_series_id, ", sid, ". Error message: ", e$message)
+              })
+            } else { # we're already in a transaction
+              commit_fx(con, sample, inRemote_results)
+            }
+          } # End of if no sample is found (making a new one)
+        } # End of loop over inRemote
 
-          }
-          
-          if (!attr(con, "active_transaction")) {
-            DBI::dbBegin(con)
-            attr(con, "active_transaction") <- TRUE
-            tryCatch({
-              commit_fx(con, no_update, tsid, inRemote, inDB)
-              DBI::dbCommit(con)
-              attr(con, "active_transaction") <- FALSE
-              updated <- updated + 1
-            }, error = function(e) {
-              DBI::dbRollback(con)
-              attr(con, "active_transaction") <<- FALSE
-              warning("synchronize failed to make database changes for ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
-            })
-          } else { # we're already in a transaction
-            commit_fx(con, no_update, tsid, inRemote, inDB)
-            updated <- updated + 1
-          }
-          
-        } else { # mismatch is FALSE: there was data in the remote but no mismatch
-          DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-          # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
-          start_dt <- DBI::dbGetQuery(con, paste0("SELECT start_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))[[1]]
-          
-          # double check the earliest time in DB in case there's an error in the timeseries table
 
-            earliest <- min(inRemote$datetime, 
-                            DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_discrete WHERE timeseries_id = ", tsid, ";"))[[1]])
-          
-          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
-        }
       } else { # There was no data in remote for the date range specified
-        DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        DBI::dbExecute(con, paste0("UPDATE sample_series SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE sample_series_id = ", sid, ";"))
       }
     }, error = function(e) {
-      warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
+      warning("synchronize failed on sample_series_id ", sid, "  with message: ", e$message, ".")
     }
     ) # End of tryCatch
     

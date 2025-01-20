@@ -128,7 +128,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
   for (i in 1:nrow(all_series)) {
     loc_id <- all_series$location_id[i]
     loc_code <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE location_id = ", loc_id, ";"))[1,1]
-    sub_loc <- all_series$sub_location_id[i]
+    sub_loc_id <- all_series$sub_location_id[i]
     sid <- all_series$sample_series_id[i]
     source_fx <- all_series$source_fx[i]
     source_fx_args <- all_series$source_fx_args[i]
@@ -138,7 +138,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     range_start <- all_series$synch_from[i]
     range_end <- all_series$synch_to[i]
     
-    if (is.na(sub_loc)) {
+    if (is.na(sub_loc_id)) {
       if (is.na(range_start)) {
         last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, ";"))[1,1] + 1
       } else {
@@ -146,9 +146,9 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
       }
     } else {
       if (is.na(range_start)) {      
-        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND sub_location_id = ", sub_loc, ";"))[1,1] + 1
+        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND sub_location_id = ", sub_loc_id, ";"))[1,1] + 1
       } else {
-        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND sub_location_id = ", sub_loc, " AND datetime > '", as.character(range_start), " UTC';"))[1,1] + 1
+        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND sub_location_id = ", sub_loc_id, " AND datetime > '", as.character(range_start), " UTC';"))[1,1] + 1
       }
     }
     
@@ -163,7 +163,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     source_fx_args <- all_series$source_fx_args[i]
 
     tryCatch({
-      args_list <- list(con = con, location = loc_code, sub_location = sub_loc, start_datetime = last_data_point, end_datetime = if (is.na(range_end)) Sys.time() else range_end)
+      args_list <- list(con = con, location = loc_code, sub_location = sub_loc_id, start_datetime = last_data_point, end_datetime = if (is.na(range_end)) Sys.time() else range_end)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
       if (source_fx == "downloadEQWin") {
         args_list[["EQcon"]] <- EQcon
@@ -216,6 +216,11 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
           if ("location" %in% names_samp) {
             sample$location_id <- loc_id
             sample$location <- NULL
+            names_samp <- names(sample)
+          }
+          if ("sub_location" %in% names_samp) {
+            sample$sub_location_id <- sub_loc_id
+            sample$sub_location <- NULL
             names_samp <- names(sample)
           }
           # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "owner", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
@@ -303,7 +308,6 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
           
           
           # Append values in a transaction block ##########
-          
           if (!attr(con, "active_transaction")) {
             DBI::dbBegin(con)
             attr(con, "active_transaction") <- TRUE
