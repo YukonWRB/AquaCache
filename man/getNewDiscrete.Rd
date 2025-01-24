@@ -29,50 +29,37 @@ The database is updated in-place, and a data.frame is generated with one row per
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Retrieves new discrete data starting from the last data point in the local database, using the function specified in the sample_series table column "source_fx".
+Retrieves new discrete data starting from the last data point in the local database, using the function specified in the sample_series table column "source_fx". Each sample series can also have a specified time range, allowing a certain location/sub-location to have multiple sample_series with different source functions and time ranges. The function will update the database in-place with the new data.
 \subsection{Making functions called by getNewDiscrete:}{
 
-Each timeseries in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return a data.frame with the following mandatory columns:
+Each sample_series_id in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return list of lists, with each list element containing two data.frames: one for sample metadata and one for associated results. The sample metadata data.frame must contain the following columns:
 \itemize{
-\item 'datetime': a POSIXct datetime object in UTC 0 time zone
-\item 'value': the value of the parameter at that datetime, as a numeric. Negative and positive values are allowed, and NA values are allowed if column result_condition is not NULL/NA. Values such as < DL or > DL should appear as NA with corresponding entries in the result_condition column.
-'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 ('sample-field msr/obs'), or 34 ('sample-routine').
-'result_value_type':  a numeric specifying the result_value_type_id of the data point from table 'result_value_types', such as 1 ('actual'), 2 ('blank corrected'), or 3 ('calculated').
+\item 'location_id': a numeric specifying the location_id of the data point from table 'locations'.
+\item 'media_id': a numeric specifying the media_id of the data point from table 'medias'.
+\item 'datetime': a POSIXct datetime object in UTC 0 time zone, specifying the datetime of the data point.
+\item 'collection_method': a numeric specifying the collection_method_id of the data point from table 'collection_methods', such as 1 (observation), 27 (water bottle), or 14 (pump).
+\item 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
+\item 'owner': the owner of the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
+\item 'import_source_id': a numeric specifying the import_source_id of the data point from table 'import_sources' (use for tracking purposes).
+Optional columns are:
+\item 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
+\item 'note': a character string with a note about the data point(s).
+\item 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
+\item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
+\item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
+\item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 }
 
-Conditional columns are:
+The results data.frame must contain the following columns:
 \itemize{
-\item 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'value' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
+\item 'parameter_id': a numeric specifying the parameter_id of the data point from table 'parameters'.
+\item 'result': a numeric specifying the sample's results, matched to the parameters
+\item 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
 \item 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 \item 'sample_fraction': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 \item 'result_speciation': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 }
 
-Optional columns are:
-\itemize{
-\item 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
-'collection_method': a numeric specifying the collection_method_id of the data point from table 'collection_methods', such as 1 (observation), 27 (water bottle), or 14 (pump).
--'lab':
-\item 'protocol':
-\item 'note': a character string with a note about the data point(s).
-\item 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
-\item 'owner': the owner of the data, as a character string. If not specified, the owner will be the owner of the timeseries. This should match entries in the 'organizations' table and an error will be thrown if it does not.
-\item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
-\item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
-\item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
-\item 'share_with': the user groups with which the data should be shared, as a character string. If not specified, the data will be shared with the same groups as the sample_series
-}
-
-Additionally, functions must be able to handle the case where no new data is available and return an empty data.frame.
-}
-
-\subsection{Default arguments passed to 'source_fx' functions:}{
-
-This function passes default arguments to the "source_fx" function: 'location' gets the location as entered in the 'sample_series' table, 'parameter_id' gets the parameter code defined in the 'fetch_settings' table, and start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "sample_series" table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
-}
-
-\subsection{Sharing privileges and ownership}{
-
-The parameters of column share_with of table sample_series will be used to determine which users will have access to the new data and the owner column will be used to determine the owner of the new data, unless the source function returns populated columns for owner and share_with.
+Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 }
 }

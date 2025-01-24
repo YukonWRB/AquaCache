@@ -8,7 +8,8 @@ synchronize_discrete(
   con = NULL,
   sample_series_id = "all",
   start_datetime,
-  active = "default"
+  active = "default",
+  delete = FALSE
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ synchronize_discrete(
 \item{start_datetime}{The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{sample_series_id}, or one per element of \code{sample_series_id}}
 
 \item{active}{Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id}
+
+\item{delete}{If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.}
 }
 \value{
 Updated entries in the hydro database.
@@ -27,4 +30,7 @@ Updated entries in the hydro database.
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
 This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
+}
+\details{
+Delete sample data found in AquaCache but not in the remote sources is done with the following logic: each sample_series_id is checked for any data found on the remote using the source_fx and the synch_from and synch_to datetimes assigned in table 'sample_series'. Any samples not found in the remote are deleted from the local database if the 'import_source' of the new and existing samples match. If the 'import_source' of the new and existing samples do not match, the sample is not deleted.
 }
