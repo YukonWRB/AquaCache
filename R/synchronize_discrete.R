@@ -4,17 +4,21 @@
 #' `r lifecycle::badge("stable")`
 #'
 #' This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
+#' 
+#' @details
+#' Delete sample data found in AquaCache but not in the remote sources is done with the following logic: each sample_series_id is checked for any data found on the remote using the source_fx and the synch_from and synch_to datetimes assigned in table 'sample_series'. Any samples not found in the remote are deleted from the local database if the 'import_source' of the new and existing samples match. If the 'import_source' of the new and existing samples do not match, the sample is not deleted.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param sample_series_id The sample_series_id you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `sample_series_id`, or one per element of `sample_series_id`
 #' @param active Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id
+#' @param delete If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.
 #'
 #' @return Updated entries in the hydro database.
 #' @export
 #'
 
-synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_datetime, active = 'default')
+synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_datetime, active = 'default', delete = FALSE)
 {
   
   if (!active %in% c('default', 'all')) {
@@ -165,42 +169,72 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
       
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
 
-      if (!inherits(data, "list")) {
+      if (!inherits(inRemote, "list")) {
         stop("For sample_series_id ", sid, " the source function did not return a list.")
-      } else if (!inherits(data[[1]], "list")) {
+      } else if (!inherits(inRemote[[1]], "list")) {
         stop("For sample_series_id ", sid, " the source function did not return a list of lists (one element per sample, with two data.frames: one for sample metadata, the other for associated results).")
+      }
+      
+      if (delete) {
+        # Extract the 'datetime' of each sample in the list (make a blank element if it's not found)
+        inRemote_datetimes <- lapply(inRemote, function(x) if ("sample" %in% names(x)) x$sample$datetime else NA)
       }
 
       if (length(inRemote) > 0) {
         for (j in 1:length(inRemote)) {
           
-          if (!("sample" %in% names(data[[j]])) | !("results" %in% names(data[[j]]))) {
-            stop("For sample_series_id ", sid, " the source function did not return a list with elements named 'sample' and 'results'. Failed on list element ", j, ".")
+          if (!("sample" %in% names(inRemote[[j]])) | !("results" %in% names(inRemote[[j]]))) {
+            warning("For sample_series_id ", sid, " the source function did not return a list with elements named 'sample' and 'results'. Failed on list element ", j, ", moving on to next element.")
+            next
           }
           
           inRemote_sample <- inRemote[[j]][["sample"]]
           inRemote_results <- inRemote[[j]][["results"]]
           names_inRemote_samp <- names(inRemote_sample)
           names_inRemote_res <- names(inRemote_results)
-        
-          inDB_sample <- DBI::dbGetQuery(con, paste0("SELECT * FROM samples WHERE datetime = '", sample$datetime, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, ";"))
           
-          if (inDB_sample$no_update) { # If no_update is TRUE, skip to the next sample
-            next
+          if (delete) {
+            if (j == 1) {
+              # Delete any samples between the start of the series and the first sample in the remote data, if any. Cascades to results.
+              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime > '", start_i, "' AND datetime < '", inRemote_datetimes[[j]], "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "';"))
+            } else if (j == length(inRemote)) {
+              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime < '", end_i, "' AND datetime > '", inRemote_datetimes[[j]], "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "';"))
+            } else {
+              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime BETWEEN '", inRemote_datetimes[[j - 1]] + 1, "' AND '", inRemote_datetimes[[j]] - 1, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "';"))
+            }
           }
+        
+          inDB_sample <- DBI::dbGetQuery(con, paste0("SELECT * FROM samples WHERE datetime = '", inRemote_sample$datetime, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, ";"))
+        
           
           # Check for any changes/additions/subtractions to the sample metadata
           # If changes are detected, update the sample metadata
           if (nrow(inDB_sample) > 0) { # Check existing DB sample and results. If no sample is found, add the sample and corresponding results in else section
+            if (inDB_sample$no_update) { # If no_update is TRUE, skip to the next sample
+              next
+            }
             # Check existing DB sample and results ##################
             ## Check sample metadata ##############
             for (k in names_inRemote_samp) {
               # Ensure the name is a valid DB one
               if (k %in% valid_sample_names) { # If TRUE, check for differences
-                if (!identical(as.numeric(inDB_sample[[k]]), as.numeric(inRemote_sample[[k]]))) { # If TRUE, update the DB
+                inDB_k <- inDB_sample[[k]]
+                inRemote_k <- inRemote_sample[[k]]
+                # If the relevant columns in the two data.frames are all numbers, convert to numeric
+                if (!inherits(inDB_k, "numeric")) {
+                  if (grepl("^[-+]?[0-9]*\\.?[0-9]+$", inDB_k)) {
+                    inDB_k <- as.numeric(inDB_k)
+                  }
+                }
+                if (!inherits(inRemote_k, "numeric")) {
+                  if (grepl("^[-+]?[0-9]*\\.?[0-9]+$", inRemote_k)) {
+                    inRemote_k <- as.numeric(inRemote_k)
+                  }
+                }
+                if (!identical(inDB_k, inRemote_k)) { # If TRUE, update the DB
                   # message("discrepancy found in ", k)
-                  to_insert <- if (!is.na(inRemote_sample[[k]])) inRemote_sample[[k]] else "NULL"
-                  DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = '", inRemote_sample[[k]], "' WHERE sample_id = ", inDB_sample$sample_id, ";"))
+                  to_insert <- if (!is.na(inRemote_k)) inRemote_k else "NULL"
+                  DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = '", to_insert, "' WHERE sample_id = ", inDB_sample$sample_id, ";"))
                 }
               }
             }
@@ -226,7 +260,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
                   inDB_results$sample_fraction == if (!is.null(sub$sample_fraction)) sub$sample_fraction else NA
                 , ]
               
-              if (nrow(inDB_sub) == 0) { # looks like a new sample, add it (actually it might match an existing one but there's no way to know because some of the unique key columns were changed. If that's the case the 'old' one will be removed later)
+              if (nrow(inDB_sub) == 0) { # looks like a new result, add it (actually it might match an existing one but there's no way to know because some of the unique key columns were changed. If that's the case the 'old' one will be removed later)
                 ## Checks on results ###########
                 # Check that the results have the mandatory columns
                 mandatory_res <- c("result", "result_type", "parameter_id")
@@ -293,22 +327,35 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
                 sub$sample_id <- inDB_sample$sample_id
                 DBI::dbAppendTable(con, "results", sub)
                 
-              } else if (nrow(inDB_sub) == 1) { # matching sample found, check and adjust if necessary
+              } else if (nrow(inDB_sub) == 1) { # matching result found, check and adjust if necessary
                 # Check for differences in the results
                 for (l in names_inRemote_sub) {
                   if (l %in% valid_result_names) {
-                    if (!identical(as.numeric(inDB_sub[[l]]), as.numeric(sub[[l]]))) {
-                      to_insert <- if (!is.na(sub[[l]])) sub[[l]] else "NULL"
+                    inDB_l <- inDB_sub[[l]]
+                    sub_l <- sub[[l]]
+                    # If the relevant columns in the two data.frames are all numbers, convert to numeric
+                    if (!inherits(inDB_l, "numeric")) {
+                      if (grepl("^[-+]?[0-9]*\\.?[0-9]+$", inDB_l)) {
+                        inDB_l <- as.numeric(inDB_l)
+                      }
+                    }
+                    if (!inherits(sub_l, "numeric")) {
+                      if (grepl("^[-+]?[0-9]*\\.?[0-9]+$", sub_l)) {
+                        sub_l <- as.numeric(sub_l)
+                      }
+                    }
+                    if (!identical(inDB_l, sub_l)) {
+                      to_insert <- if (!is.na(sub_l)) sub_l else "NULL"
                       # message("Found discrepancy in ", l, " for sample_series_id ", sid, ". Updating the database.")
                       DBI::dbExecute(con, paste0("UPDATE results SET ", l, " = '", to_insert, "' WHERE result_id = ", inDB_sub$result_id, ";"))
                     }
                   }
                 }
-                inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE
+                inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE # result entry will not be deleted
                 
               } else {
                 warning("For sample_series_id ", sid, " the source function returned a result that matched more than one result in the database. This should not happen.")
-                inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE
+                inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE # result entry will not be deleted
               }
               
             }
@@ -341,7 +388,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
               stop("For sample_series_id ", sid, " the source function did not return one or more mandatory column(s) for the sample metadata to enable the addition of new samples found in the remote: '", paste(missing, collapse = "', '"), "'.")
             }
             
-            sample$import_source <- source_fx
+            inRemote_sample$import_source <- source_fx
             
             
             ## Checks on results ###########
@@ -418,16 +465,16 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
               DBI::dbBegin(con)
               attr(con, "active_transaction") <- TRUE
               tryCatch({
-                commit_fx(con, sample, inRemote_results)
+                commit_fx(con, inRemote_sample, inRemote_results)
                 DBI::dbCommit(con)
                 attr(con, "active_transaction") <- FALSE
               }, error = function(e) {
                 DBI::dbRollback(con)
                 attr(con, "active_transaction") <<- FALSE
-                warning("getNewDiscrete: Failed to commit new data for sample_series_id, ", sid, ". Error message: ", e$message)
+                warning("getNewDiscrete: Failed to commit new data for sample_series_id, ", sid, " and iter ", j, " . Error message: ", e$message)
               })
             } else { # we're already in a transaction
-              commit_fx(con, sample, inRemote_results)
+              commit_fx(con, inRemote_sample, inRemote_results)
             }
           } # End of if no sample is found (making a new one)
         } # End of loop over inRemote
@@ -452,7 +499,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   }
 
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_synchronize_discrete';"))
-  message("Found ", updated, " timeseries to refresh out of the ", nrow(all_timeseries), " unique numbers provided.")
+  message("Found ", updated, " timeseries to refresh out of the ", nrow(all_series), " unique numbers provided.")
   diff <- Sys.time() - start
   message("Total elapsed time for synchronize: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
 

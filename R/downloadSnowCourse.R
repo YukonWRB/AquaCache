@@ -7,7 +7,7 @@
 #'
 #' @param location The location code associated with the snow course.
 #' @param sub_location The sub-location code associated with the snow course (leave NULL if not applicable).
-#' @param start_datetime Specify as class Date, POSIXct OR as character stri ng which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
+#' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
 #' @param con A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
@@ -58,13 +58,13 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
   }, error = function(e) {
     stop("Failed to convert parameter end_datetime to POSIXct.")
   })
-
+  
   start_date <- as.Date(start_datetime)
   end_date <- as.Date(end_datetime)
   
-    swe_paramid <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'snow water equivalent';")[1,1]
-    depth_paramid <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'snow depth';")[1,1]
-    media_id <- DBI::dbGetQuery(con, "SELECT media_id FROM media_types WHERE media_type = 'atmospheric'")[1,1]
+  swe_paramid <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'snow water equivalent';")[1,1]
+  depth_paramid <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'snow depth';")[1,1]
+  media_id <- DBI::dbGetQuery(con, "SELECT media_id FROM media_types WHERE media_type = 'atmospheric'")[1,1]
   
   if (!is.null(old_loc)) {
     #Check if there are new measurements at the old station
@@ -119,7 +119,8 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
     for (i in 1:nrow(new_surveys)) {
       sample <- new_surveys[i,]
       #Get the measurements for each survey
-      meas <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, estimate_flag, swe, depth FROM measurements WHERE survey_id = ", new_surveys$import_source_id[i], " AND exclude_flag IS FALSE;"))
+      meas <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, estimate_flag, swe, depth FROM measurements WHERE survey_id = ", new_surveys$import_source_id[i], " AND exclude_flag IS FALSE AND (swe IS NOT NULL OR depth IS NOT NULL);"))
+      if (nrow(meas) == 0) next
       meas <- data.frame(parameter_id = c(swe_paramid, depth_paramid),
                          result = c(meas$swe, meas$depth),
                          result_value_type = meas$estimate_flag,
