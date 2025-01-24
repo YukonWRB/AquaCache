@@ -436,7 +436,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             result_speciation <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (", paste(unique(inRemote_results$parameter_id), collapse = ", "), ");"))
             sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (", paste(unique(inRemote_results$parameter_id), collapse = ", "), ");"))
             if (any(result_speciation$result_speciation_bool)) {
-              if (!("result_speciation" %in% names(data))) {
+              if (!("result_speciation" %in% names(inRemote_results))) {
                 stop("For sample_series_id ", sid, " the source function did not return a column 'result_speciation' but the database mandates this for at least one of the parameters.")
               } else { # Check that values in the result_speciation column are not NA where necessary
                 merge <- merge(inRemote_results, result_speciation, by = "parameter_id")
@@ -448,7 +448,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
               }
             }
             if (any(sample_fraction$sample_fraction_bool)) {
-              if (!("sample_fraction" %in% names(data))) {
+              if (!("sample_fraction" %in% names(inRemote_results))) {
                 stop("The source function did not return a column 'sample_fraction' but the database mandates this for at least one of the parameters.")
               } else { # Check that all values in the sample_fraction column are not NA where necessary
                 merge <- merge(inRemote_results, sample_fraction, by = "parameter_id")
