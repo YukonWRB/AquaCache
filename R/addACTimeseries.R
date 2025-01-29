@@ -268,7 +268,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   } 
   source_fx_check <- source_fx[!is.na(source_fx)]
   if (length(source_fx_check) > 0) {
-    if (!all(source_fx_check %in% ls("package:AquaCache"))) {
+    if (!all(source_fx_check %in% ls(getNamespace("AquaCache")))) {
       stop("At least one of the source_fx strings you entered does not exist in the AquaCache package.")
     }
   }
