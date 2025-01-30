@@ -1148,7 +1148,7 @@ Zinc,No,Yes,"Inorganics, Minor, Metals",7440-66-6,inorganics,metals,mg/l,mg/kg
 Zirconium,No,Yes,"Inorganics, Minor, Metals",7440-67-7,inorganics,metals,mg/l,mg/kg
 Sum of anions,No,No,Physical, ,physical,,meq/L,
 Sum of cations,No,No,Physical, ,physical,,meq/L,
-"Discharge, River/Stream",No,No,Physical, ,physical,,m3/s,
+"flow",No,No,Physical, ,physical,,m3/s,
 Surface area,No,No,Physical, ,physical,,m2,
 "Light, underwater extinction coefficient (K)",No,No,Physical, ,physical,,m⁻¹,
 Velocity - water,No,No,Physical, ,physical,,m/s,

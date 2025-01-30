@@ -786,7 +786,7 @@ EXECUTE FUNCTION enforce_sample_fraction();
   sample_series <- DBI::dbGetQuery(con, "SELECT timeseries_id, location, location_id, sub_location_id, parameter_id, media_id, z, last_new_data, last_synchronize, source_fx, source_fx_args, note, active FROM timeseries WHERE category = 'discrete'")
   
   # Find parameter_id for definite field parameters: SWE, snow depth
-  field <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name IN ('snow depth', 'snow water equivalent', 'water level', 'discharge, river/stream')")
+  field <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name IN ('snow depth', 'snow water equivalent', 'water level', 'flow')")
   
   ## Move the data into sample_series, samples, and results
   message("Moving discrete data to new table structure. This will take a while (I didn't code it efficiently at all, sorry).")
