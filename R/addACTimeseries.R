@@ -268,7 +268,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   } 
   source_fx_check <- source_fx[!is.na(source_fx)]
   if (length(source_fx_check) > 0) {
-    if (!all(source_fx_check %in% ls("package:AquaCache"))) {
+    if (!all(source_fx_check %in% ls(getNamespace("AquaCache")))) {
       stop("At least one of the source_fx strings you entered does not exist in the AquaCache package.")
     }
   }
@@ -374,7 +374,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
             DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", new_start$min, "' WHERE timeseries_id = ", new_tsid, ";"))
           }, error = function(e) {
             message("Failed to add new continuous data for location ", add$location, " and parameter ", add$parameter_id, ".")
-            if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "discharge, river/stream")) {
+            if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "flow")) {
               message("Attempting to add historical data from HYDAT database")
               remove_after_hydat <<- TRUE
             } else {
@@ -384,7 +384,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
           })
           
           # Now conditionally check for HYDAT data
-          if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "discharge, river/stream")) {
+          if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "flow")) {
             message("Adding historical data from HYDAT database")
             suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
             if (remove_after_hydat) {

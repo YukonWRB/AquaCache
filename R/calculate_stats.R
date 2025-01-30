@@ -133,7 +133,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           }
           tmp <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter_id, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter_id = p.parameter_id WHERE t.timeseries_id = ", i, ";"))
           hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
-          if (tmp[, "param_name"] == "discharge, river/stream") {
+          if (tmp[, "param_name"] == "flow") {
             last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_FLOWS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
             if (is.na(last_hydat_year)) { # There is no data in hydat yet
               flag <- TRUE
@@ -188,7 +188,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 
                 backfill_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date < '", min(gap_measurements$date), "' AND date >= '", last_day_historic, "' AND imputed IS TRUE AND value IS NOT NULL;"))
                 
-                backfill <- if (tmp[, "param_name"] == "discharge, river/stream") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1)) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1))
+                backfill <- if (tmp[, "param_name"] == "flow") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1)) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"], start_date = last_day_historic, end_date = min(gap_measurements$date) - 1))
                 backfill <- backfill[ , c("Date", "Value")]
                 names(backfill) <- c("date", "value")
                 backfill <- backfill[!is.na(backfill$value) , ]
@@ -217,7 +217,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               
               all_imputed  <- DBI::dbGetQuery(con, paste0("SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND imputed IS TRUE AND value IS NOT NULL;"))
               
-              all_hydat <- if (tmp[, "param_name"] == "discharge, river/stream") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"])) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"]))
+              all_hydat <- if (tmp[, "param_name"] == "flow") as.data.frame(tidyhydat::hy_daily_flows(tmp[, "location"])) else as.data.frame(tidyhydat::hy_daily_levels(tmp[, "location"]))
               all_hydat <- all_hydat[ , c("Date", "Value")]
               names(all_hydat) <- c("date", "value")
               all_hydat <- all_hydat[!is.na(all_hydat$value) , ]
