@@ -36,9 +36,10 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
   
   
   workbook_names <- openxlsx::getSheetNames(workbook)
+  workbook_names <- workbook_names[!workbook_names %in% "Summary"]
   
   # For each sheet (survey)
-  for (s in 2:length(workbook_names)) { #first sheet is the summary sheet
+  for (s in workbook_names) { #first sheet is the summary sheet
     
     ##### --------------- Pull in all the data from workbook -------------- ####
     survey <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(5:11), cols = c(2:4), detectDates = TRUE, colNames = FALSE)
@@ -60,6 +61,11 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     # Check for empty sheets and no remarks
     if (all(is.na(survey[c(3,4,6,7), 2])) & nrow(measurement) == 0 & all(is.na(calculated[c(2,3), c(2,3)])) & all(is.na(notes[, c(3,5,7)])) & ncol(maintenance) == 1 & is.null(remarks)) {
       message("Sheet ", s, ", ", survey[1,2], " is empty. Skipping to next sheet.")
+      next
+    }
+    # Check if only maintenance is filled out, as this might just be recording the maintenance required at the time the worksheet was created (everything else will be blank)
+    if (all(is.na(survey[c(3,4,6,7), 2])) & nrow(measurement) == 0 & all(is.na(calculated[c(2,3), c(2,3)])) & all(is.na(notes[, c(3,5,7)])) & ncol(maintenance) == 2 & is.null(remarks)) {
+      message("Sheet ", s, ", ", survey[1,2], " only has maintenance notes and doesn't appear to have had a field visit. Skipping to next sheet.")
       next
     }
     
