@@ -4,18 +4,14 @@
 \alias{readSnowWorkbook}
 \title{Read snow workbook and import into Snow database}
 \usage{
-readSnowWorkbook(
-  workbook = "choose",
-  overwrite = FALSE,
-  con = snowConnect(silent = TRUE)
-)
+readSnowWorkbook(workbook = "choose", overwrite = FALSE, con = NULL)
 }
 \arguments{
 \item{workbook}{The path to the workbook (.xlsx) containing the snow data. Default "choose" lets you pick the file interactively.}
 
 \item{overwrite}{If \code{TRUE}, will overwrite existing data in the snow database if there's already an entry for the same survey date, target date, and location (regardless of parameters).}
 
-\item{con}{A connection to the snow database.}
+\item{con}{A connection to the snow database. Leave NULL to use function snowConnect() with defaults and close the connection after the function is done.}
 }
 \value{
 Does not return any object. The function is designed to import data into the snow database.

@@ -7,15 +7,18 @@
 #'
 #' @param workbook The path to the workbook (.xlsx) containing the snow data. Default "choose" lets you pick the file interactively.
 #' @param overwrite If `TRUE`, will overwrite existing data in the snow database if there's already an entry for the same survey date, target date, and location (regardless of parameters).
-#' @param con A connection to the snow database.
+#' @param con A connection to the snow database. Leave NULL to use function snowConnect() with defaults and close the connection after the function is done.
 #' @return Does not return any object. The function is designed to import data into the snow database.
 #'
 #' @export
 #'
 
-readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowConnect(silent = TRUE)) {
+readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL) {
   
-  on.exit(DBI::dbDisconnect(con))
+  if (is.null(con)) {
+    con <- snowConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
+  }
   
   #initial checks
   rlang::check_installed("openxlsx", reason = "necessary to read workbooks")
@@ -36,9 +39,10 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
   
   
   workbook_names <- openxlsx::getSheetNames(workbook)
+  workbook_names <- workbook_names[!workbook_names %in% "Summary"]
   
   # For each sheet (survey)
-  for (s in 2:length(workbook_names)) { #first sheet is the summary sheet
+  for (s in workbook_names) { #first sheet is the summary sheet
     
     ##### --------------- Pull in all the data from workbook -------------- ####
     survey <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(5:11), cols = c(2:4), detectDates = TRUE, colNames = FALSE)
@@ -59,7 +63,12 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     
     # Check for empty sheets and no remarks
     if (all(is.na(survey[c(3,4,6,7), 2])) & nrow(measurement) == 0 & all(is.na(calculated[c(2,3), c(2,3)])) & all(is.na(notes[, c(3,5,7)])) & ncol(maintenance) == 1 & is.null(remarks)) {
-      message("Sheet ", s, ", ", survey[1,2], " is empty. Skipping to next sheet.")
+      message("Sheet ", s, " is empty. Skipping to next sheet.")
+      next
+    }
+    # Check if only maintenance is filled out, as this might just be recording the maintenance required at the time the worksheet was created (everything else will be blank)
+    if (all(is.na(survey[c(3,4,6,7), 2])) & nrow(measurement) == 0 & all(is.na(calculated[c(2,3), c(2,3)])) & all(is.na(notes[, c(3,5,7)])) & ncol(maintenance) == 2 & is.null(remarks)) {
+      message("Sheet ", s, " only has maintenance notes and doesn't appear to have had a field visit. Skipping to next sheet.")
       next
     }
     
@@ -83,7 +92,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = snowC
     if (next_flag) {
       warning("Failed to retrieve a location for ", survey[1,2], ". Skipping to next sheet. If this is a new location it must be entered into the database. If not, check the location name at the top of the sheet as it must match the database entry.")
       next
-      }
+    }
     
     ##### --------------------- Create surveys table ---------------------- ####
     location <- loc_id

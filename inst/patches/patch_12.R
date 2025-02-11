@@ -49,6 +49,10 @@ tryCatch({
                              );
                       ")
   
+  message("Adding column 'jurisdictional_relevance' to the locations table, useful for filtering data for targeted applications.")
+  DBI::dbExecute(con, "ALTER TABLE locations ADD COLUMN IF NOT EXISTS jurisdictional_relevance BOOLEAN DEFAULT TRUE;")
+  DBI::dbExecute(con, "COMMENT ON COLUMN locations.jurisdictional_relevance IS 'Whether the location is publicly relevant to the jursdiction operating this database. Can be used for filtering results from public-facing applications if desired without labelling the location or associated timeseries as non-public.';")
+  
   #  Wrap up ###########
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '12' WHERE item = 'Last patch number';")
