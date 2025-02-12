@@ -85,7 +85,7 @@ adjust_grade <- function(con, timeseries_id, data) {
   for (i in 1:nrow(data)) {
     if (data$grade[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
+        exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
         
         index <- index + 1
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
@@ -127,7 +127,7 @@ adjust_grade <- function(con, timeseries_id, data) {
       current <- data$grade[i]
     }
     if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+      exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
     }
   }  # End of for loop
   
@@ -259,7 +259,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   for (i in 1:nrow(data)) {
     if (data$qualifier[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
+        exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
         
         index <- index + 1
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
@@ -301,7 +301,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
       current <- data$qualifier[i]
     }
     if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+      exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
     }
   }  # End of for loop
   
@@ -435,7 +435,7 @@ adjust_approval <- function(con, timeseries_id, data) {
   for (i in 1:nrow(data)) {
     if (data$approval[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
+        exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
         
         index <- index + 1
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
@@ -477,7 +477,7 @@ adjust_approval <- function(con, timeseries_id, data) {
       current <- data$approval[i]
     }
     if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+      exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
     }
   }  # End of for loop
   
@@ -606,7 +606,7 @@ adjust_owner <- function(con, timeseries_id, data) {
   for (i in 1:nrow(data)) {
     if (data$owner[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
+        exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
         
         index <- index + 1
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
@@ -648,7 +648,7 @@ adjust_owner <- function(con, timeseries_id, data) {
       current <- data$owner[i]
     }
     if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+      exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
     }
   }  # End of for loop
   
@@ -777,7 +777,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
   for (i in 1:nrow(data)) {
     if (data$contributor[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
+        exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
         
         index <- index + 1
         if (index <= original_exist_rows) { # Modify the next row in 'exist'
@@ -819,7 +819,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
       current <- data$contributor[i]
     }
     if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+      exist$end_dt[index] <- data$datetime[i] # Adjust the end_dt of this qualifier
     }
   }  # End of for loop
   
