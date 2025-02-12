@@ -4,8 +4,10 @@
 #' `r lifecycle::badge("stable")`
 #'
 #' This synchronize function pulls and replaces data referenced in table 'timeseries' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. New data is also brought in, if any exists on the remote. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables (Water Survey of Canada).
+#' 
+#' In addition, grades, qualifiers, and approvals are always updated as it's computationally cheaper to do so than to check if they need updating.
 #'
-#' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote, and any data point labelled as no_update = TRUE is not replaced by the remote data.
+#' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote exactly matching the datetime of the imputed entry, and any data point labelled as no_update = TRUE is not replaced by the remote dat (imputed or not).
 #'
 #'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
 #'
