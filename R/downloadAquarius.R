@@ -95,7 +95,7 @@ downloadAquarius <- function(location,
     offset <- substr(ts$datetime[1], nchar(ts$datetime[1]) - 5, nchar(ts$datetime[1]))
     offset <- gsub(":", "", offset)
     ts$datetime <- paste0(substr(ts$datetime, 1, nchar(ts$datetime) - 6), offset)
-    ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%OS%z")
+    ts$datetime <- as.POSIXct(ts$datetime, format = "%Y-%m-%dT%H:%M:%OS%z", tz = "UTC")
 
     #format approvals, grade, qualifiers times
     approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
@@ -106,17 +106,11 @@ downloadAquarius <- function(location,
       stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1]) - 5, nchar(approvals$StartTime[1]))
       stoffset <- gsub(":", "", stoffset)
       approvals$StartTime <- paste0(substr(approvals$StartTime, 1, nchar(approvals$StartTime) - 6), stoffset)
-      approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      approvals$StartTime <- as.POSIXct(approvals$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z", tz = "UTC")
       endoffset <- substr(approvals$EndTime[1], nchar(approvals$EndTime[1]) - 5, nchar(approvals$EndTime[1]))
       endoffset <- gsub(":", "", endoffset)
       approvals$EndTime <- paste0(substr(approvals$EndTime, 1, nchar(approvals$EndTime) - 6), endoffset)
-      approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
-      
-      # Here we can fork depending on the server being accessed. For example:
-      # if (server == "https://yukon.aquaticinformatics.net/AQUARIUS") {
-      #   
-      # }
-      
+      approvals$EndTime <- as.POSIXct(approvals$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z", tz = "UTC")
       
       colnames(approvals) <- c("level", "start_time", "end_time")
       approval_mapping <- c("800" = approvals_DB[approvals_DB$approval_type_code == "N", "approval_type_id"],
@@ -139,11 +133,11 @@ downloadAquarius <- function(location,
       stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1]) - 5, nchar(grades$StartTime[1]))
       stoffset <- gsub(":", "", stoffset)
       grades$StartTime <- paste0(substr(grades$StartTime, 1, nchar(grades$StartTime) - 6), stoffset)
-      grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      grades$StartTime <- as.POSIXct(grades$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z", tz = "UTC")
       endoffset <- substr(grades$EndTime[1], nchar(grades$EndTime[1]) - 5, nchar(grades$EndTime[1]))
       endoffset <- gsub(":", "", endoffset)
       grades$EndTime <- paste0(substr(grades$EndTime, 1, nchar(grades$EndTime) - 6), endoffset)
-      grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      grades$EndTime <- as.POSIXct(grades$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z", tz = "UTC")
       
       colnames(grades) <- c("level", "start_time", "end_time")
       grade_mapping <- c("0" = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"],
@@ -174,11 +168,11 @@ downloadAquarius <- function(location,
       stoffset <- substr(qualifiers$StartTime[1], nchar(qualifiers$StartTime[1]) - 5, nchar(qualifiers$StartTime[1]))
       stoffset <- gsub(":", "", stoffset)
       qualifiers$StartTime <- paste0(substr(qualifiers$StartTime, 1, nchar(qualifiers$StartTime) - 6), stoffset)
-      qualifiers$StartTime <- as.POSIXct(qualifiers$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      qualifiers$StartTime <- as.POSIXct(qualifiers$StartTime, format = "%Y-%m-%dT%H:%M:%OS%z", tz = "UTC")
       endoffset <- substr(qualifiers$EndTime[1], nchar(qualifiers$EndTime[1]) - 5, nchar(qualifiers$EndTime[1]))
       endoffset <- gsub(":", "", endoffset)
       qualifiers$EndTime <- paste0(substr(qualifiers$EndTime, 1, nchar(qualifiers$EndTime) - 6), endoffset)
-      qualifiers$EndTime <- as.POSIXct(qualifiers$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z")
+      qualifiers$EndTime <- as.POSIXct(qualifiers$EndTime, format = "%Y-%m-%dT%H:%M:%OS%z", tz = "UTC")
       
       colnames(qualifiers) <- c("level", "start_time", "end_time")
       qualifier_mapping <- c("BKW" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "BW", "qualifier_type_id"],
@@ -204,43 +198,61 @@ downloadAquarius <- function(location,
     
     #Add in grades, approval, and qualifier columns
     ts <- ts[!duplicated(ts) , ] #In unknown circumstances, Aquarius spits out duplicate points.
-    ts$grade <- NA
-    for (i in 1:nrow(grades)) {
-      if (min(ts$datetime) > grades$start_time[i]) { #if the grade is prior to the first ts point
-        ts[ts$datetime == min(ts$datetime), "grade"] <- grades$level[i]
-      } else if (nrow(ts[ts$datetime == grades$start_time[i],]) != 0) { #if the times line up properly (are snapped to a point)
-        ts[ts$datetime == grades$start_time[i], "grade"] <- grades$level[i]
-      } else if (which.min(abs(ts$datetime - grades$start_time[i])) != nrow(ts)) { #if the times do not line up with anything in ts (not snapped), but not after the ts end
-        index <- which.min(abs(ts$datetime - grades$start_time[i])) + 1
-        ts[index, "grade"] <- grades$level[i]
-      } # and if the last grade start is after then end of the ts, do nothing with it!
-    }
+    
+    ts <- ts[order(ts$datetime), ]
+    
+    # Get the row indices in ts corresponding to qualifier/approval/grade start and end times.
+    # For each row, if the time is before ts_min, use the first index.
+    # If it exactly matches a ts time, use that index (found via match).
+    # Otherwise, use findInterval (and ensure the index isn’t beyond ts).
+    apply_intervals <- function(df, 
+                                intervals,
+                                new_col,
+                                time_col = "datetime",
+                                start_col = "start_time",
+                                end_col   = "end_time") {
 
-    ts$approval <- NA
-    for (i in 1:nrow(approvals)) {
-      if (min(ts$datetime) > approvals$start_time[i]) { #if the approval is prior to the first ts point
-        ts[ts$datetime == min(ts$datetime),]$approval <- approvals$level[i]
-      } else if (nrow(ts[ts$datetime == approvals$start_time[i],]) != 0) { #if the times line up properly (are snapped to a point)
-        ts[ts$datetime == approvals$start_time[i],]$approval <- approvals$level[i]
-      } else if (which.min(abs(ts$datetime - approvals$start_time[i])) != nrow(ts)) { #if the times do not line up with anything in ts (not snapped), but not after the ts end
-        index <- which.min(abs(ts$datetime - approvals$start_time[i])) + 1
-        ts[index,]$approval <- approvals$level[i]
-      } # and if the last approval start is after then end of the ts, do nothing with it!
+      ts_min <- min(df[[time_col]])
+      n_ts   <- nrow(df)
+      
+      # Calculate start indices
+      start_idx <- ifelse(
+        intervals[[start_col]] < ts_min,
+        1,
+        ifelse(
+          intervals[[start_col]] %in% df[[time_col]],
+          match(intervals[[start_col]], df[[time_col]]),
+          pmin(findInterval(intervals[[start_col]], df[[time_col]]), n_ts)
+        )
+      )
+      
+      # Calculate end indices
+      end_idx <- ifelse(
+        intervals[[end_col]] < ts_min,
+        1,
+        ifelse(
+          intervals[[end_col]] %in% df[[time_col]],
+          match(intervals[[end_col]], df[[time_col]]),
+          pmin(findInterval(intervals[[end_col]], df[[time_col]]), n_ts)
+        )
+      )
+      
+      # Initialize (or reset) the qualifier column
+      df[[new_col]] <- NA
+      
+      # Loop through each interval and assign the qualifier
+      for (i in seq_along(start_idx)) {
+        st <- df[[time_col]][start_idx[i]]
+        ed <- df[[time_col]][end_idx[i]]
+        df[[new_col]][df[[time_col]] >= st & df[[time_col]] <= ed] <- intervals$level[i]
+      }
+      return(df)
     }
     
-    ts$qualifier <- NA
-    for (i in 1:nrow(qualifiers)) {
-      if (min(ts$datetime) > qualifiers$start_time[i]) { #if the qualifier is prior to the first ts point
-        ts[ts$datetime == min(ts$datetime),]$qualifier <- qualifiers$level[i]
-      } else if (nrow(ts[ts$datetime == qualifiers$start_time[i],]) != 0) { #if the times line up properly (are snapped to a point)
-        ts[ts$datetime == qualifiers$start_time[i],]$qualifier <- qualifiers$level[i]
-      } else if (which.min(abs(ts$datetime - qualifiers$start_time[i])) != nrow(ts)) { #if the times do not line up with anything in ts (not snapped), but not after the ts end
-        index <- which.min(abs(ts$datetime - qualifiers$start_time[i])) + 1
-        ts[index,]$qualifier <- qualifiers$level[i]
-      } # and if the last qualifier start is after then end of the ts, do nothing with it!
-    }
-    ts <- tidyr::fill(ts, c("grade", "approval", "qualifier"), .direction = "down")
-    attr(ts$datetime, "tzone") <- "UTC"
+    ts <- apply_intervals(ts, approvals, "approval")
+    ts <- apply_intervals(ts, grades, "grade")
+    ts <- apply_intervals(ts, qualifiers, "qualifier")
+    
     return(ts)
   } else {
     ts <- data.frame()
