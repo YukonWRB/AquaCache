@@ -38,7 +38,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
   if (new_hydat | force_update) {
     #Get the required timeseries_ids
     if (timeseries_id[1] == "all") {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, period_type FROM timeseries AND source_fx = 'downloadWSC';")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, period_type FROM timeseries WHERE source_fx = 'downloadWSC';")
     } else {
       all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx = 'downloadWSC';"))
       if (length(timeseries_id) != nrow(all_timeseries)) {
@@ -71,10 +71,10 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
 
     #Now update historical HYDAT timeseries.
     
-    qualifier_mapping <- c("B" = qualifiers[qualifiers$qualifier_type_code == "ICE", "qualifier_id"],
-                           "E" = qualifiers[qualifiers$qualifier_type_code == "EST", "qualifier_id"],
-                           "D" = qualifiers[qualifiers$qualifier_type_code == "DRY", "qualifier_id"],
-                           "A" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_id"])
+    qualifier_mapping <- c("B" = qualifiers[qualifiers$qualifier_type_code == "ICE", "qualifier_type_id"],
+                           "E" = qualifiers[qualifiers$qualifier_type_code == "EST", "qualifier_type_id"],
+                           "D" = qualifiers[qualifiers$qualifier_type_code == "DRY", "qualifier_type_id"],
+                           "A" = qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
     
     
     message("Updating database with information in HYDAT due to new HYDAT version or request to force update...")
@@ -167,12 +167,23 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               imputed <- existing[existing$imputed, ]
               imputed.remains <- data.frame()
               if (nrow(imputed) > 0) {
-                for (i in 1:nrow(imputed)) {
-                  if (!(imputed[i, "date"] %in% new_flow$date)) {
-                    imputed.remains <- rbind(imputed.remains, imputed[i , ])
+                for (j in 1:nrow(imputed)) {
+                  if (!(imputed[j, "date"] %in% new_flow$date)) {
+                    imputed.remains <- rbind(imputed.remains, imputed[j , ])
                   }
                 }
               }
+              
+              # Adjust the ancillary tables
+              adjust_flow <- new_flow
+              names(adjust_flow)[names(adjust_flow) == "date"] <- "datetime"
+              adjust_flow$datetime <- as.POSIXct(adjust_flow$datetime, tz = "UTC")
+              
+              adjust_approval(con, tsid_flow, adjust_flow[!is.na(adjust_flow$value), c("datetime", "approval")])
+              adjust_qualifier(con, tsid_flow, adjust_flow[!is.na(adjust_flow$value), c("datetime", "qualifier")])
+              adjust_owner(con, tsid_flow, adjust_flow[!is.na(adjust_flow$value), c("datetime", "owner")])
+              adjust_grade(con, tsid_flow, adjust_flow[!is.na(adjust_flow$value), c("datetime", "grade")])
+              adjust_contributor(con, tsid_flow, adjust_flow[!is.na(adjust_flow$value), c("datetime", "contributor")])
               
               # Create a unique key for both data frames
               # order both data.frames by date to compare them
@@ -228,20 +239,10 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                   commit_fx1(con, imputed.remains, tsid_flow, new_flow, existing, start)
                 }
                 
-                
                 calculate_stats(timeseries_id = tsid_flow,
                                 con = con,
                                 start_recalc = start)
                 
-                # Now adjust the other tables
-                names(new_flow[names(new_flow) == "date"]) <- "datetime"
-                new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
-                
-                adjust_approval(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "approval")])
-                adjust_qualifier(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "qualifier")])
-                adjust_owner(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "owner")])
-                adjust_grade(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "grade")])
-                adjust_contributor(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "contributor")])
               } else {
                 # Check that start_datetime is correct in timeseries table
                 DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
@@ -339,12 +340,24 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               imputed <- existing[existing$imputed, ]
               imputed.remains <- data.frame()
               if (nrow(imputed) > 0) {
-                for (i in 1:nrow(imputed)) {
-                  if (!(imputed[i, "date"] %in% new_flow$date)) {
-                    imputed.remains <- rbind(imputed.remains, imputed[i , ])
+                for (j in 1:nrow(imputed)) {
+                  if (!(imputed[j, "date"] %in% new_flow$date)) {
+                    imputed.remains <- rbind(imputed.remains, imputed[j , ])
                   }
                 }
               }
+              
+              # Adjust the ancillary tables
+              adjust_level <- new_level
+              names(adjust_level)[names(adjust_level) == "date"] <- "datetime"
+              adjust_level$datetime <- as.POSIXct(adjust_level$datetime, tz = "UTC")
+              
+              adjust_approval(con, tsid_level, adjust_level[!is.na(adjust_level$value), c("datetime", "approval")])
+              adjust_qualifier(con, tsid_level, adjust_level[!is.na(adjust_level$value), c("datetime", "qualifier")])
+              adjust_owner(con, tsid_level, adjust_level[!is.na(adjust_level$value), c("datetime", "owner")])
+              adjust_grade(con, tsid_level, adjust_level[!is.na(adjust_level$value), c("datetime", "grade")])
+              adjust_contributor(con, tsid_level, adjust_level[!is.na(adjust_level$value), c("datetime", "contributor")])
+              
               # Create a unique key for both data frames
               # Order both data.frames by date to compare them
               new_level <- new_level[order(new_level$date), ]
@@ -403,15 +416,6 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                 con = con,
                                 start_recalc = start)
                 
-                # Now adjust the other tables
-                names(new_level[names(new_level) == "date"]) <- "datetime"
-                new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
-                
-                adjust_approval(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "approval")])
-                adjust_qualifier(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "qualifier")])
-                adjust_owner(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "owner")])
-                adjust_grade(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "grade")])
-                adjust_contributor(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "contributor")])
               } else {
                 # Check that star_datetime is correct in timeseries table
                 DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_level, ";"))
@@ -445,7 +449,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                               start_recalc = min(new_level$date))
               
               # Now adjust the other tables
-              names(new_level[names(new_level) == "date"]) <- "datetime"
+              names(new_level)[names(new_level) == "date"] <- "datetime"
               new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
               
               adjust_approval(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "approval")])
