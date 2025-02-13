@@ -8,17 +8,32 @@ synchronize_continuous(
   con = NULL,
   timeseries_id = "all",
   start_datetime,
-  active = "default"
+  active = "default",
+  dbName = NULL,
+  dbHost = NULL,
+  dbPort = NULL,
+  dbUser = NULL,
+  dbPass = NULL
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. If you wish to run this function in parallel you MUST leave this argument NULL. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
 \item{start_datetime}{The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
 
 \item{active}{Sets behavior for checking timeseries or not. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all timeseries}
+
+\item{dbName}{The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbHost}{The host address of the database. If left NULL, the function will use the default host address from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbPort}{The port of the database. If left NULL, the function will use the default port from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbUser}{The username for the database. If left NULL, the function will use the default username from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
 Updated entries in the hydro database.
@@ -27,6 +42,8 @@ Updated entries in the hydro database.
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
 This synchronize function pulls and replaces data referenced in table 'timeseries' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. New data is also brought in, if any exists on the remote. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables (Water Survey of Canada).
+
+If you leave the 'con' object as NULL the function will try to run in parallel, which dramatically speeds things up.
 
 In addition, grades, qualifiers, and approvals are always updated as it's computationally cheaper to do so than to check if they need updating.
 
