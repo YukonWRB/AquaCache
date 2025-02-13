@@ -55,6 +55,8 @@ Imports:
 Suggests:
     YGwater,
     DT,
+    doSNOW,
+    foreach,
     knitr,
     openxlsx,
     plotly,
@@ -62,10 +64,6 @@ Suggests:
     rmarkdown,
     rstudioapi,
     sf,
-    shiny,
-    shinyFiles,
-    shinyjs,
-    shinyWidgets,
     testthat (>= 3.0.0),
     usethis
 Remotes:
