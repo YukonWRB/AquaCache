@@ -34,7 +34,7 @@ adjust_grade <- function(con, timeseries_id, data) {
   if (!inherits(data$datetime[1], "POSIXct")) {
     stop("Column 'datetime' must be of class POSIXct.")
   }
-
+  
   unknown_grade <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK'")[1,1]
   
   data$grade[is.na(data$grade)] <- unknown_grade
@@ -67,7 +67,6 @@ adjust_grade <- function(con, timeseries_id, data) {
   
   
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$grade_type_id[1] else new_segments$grade_type_id[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(grade_id = NA,
@@ -91,6 +90,8 @@ adjust_grade <- function(con, timeseries_id, data) {
     stringsAsFactors  = FALSE
   )
   
+  current <- if (original_exist_rows > 0) exist$grade_type_id[1] else new_segments$grade_type_id[1]
+  
   index <- 1 # keeps track of the row we should be modifying in 'exist'
   
   # Now loop through the data to find where the grade_type_id changes
@@ -100,13 +101,14 @@ adjust_grade <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         exist$grade_type_id[index] <- new_segments$grade_type_id[i]
         if (index != nrow(exist)) { # Adjust the end_dt of this grade_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
         }
-        exist$start_dt[index] <- new_segments$start_dt[i]
         if (i < nrow(new_segments)) {
           index <- index + 1
           current <- new_segments$grade_type_id[i]
@@ -130,7 +132,9 @@ adjust_grade <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         if (index != nrow(exist)) { # Adjust the end_dt of this grade_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
@@ -270,7 +274,6 @@ adjust_qualifier <- function(con, timeseries_id, data) {
     "))
   
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$qualifier_type_id[1] else new_segments$qualifier_type_id[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(qualifier_id = NA,
@@ -294,6 +297,8 @@ adjust_qualifier <- function(con, timeseries_id, data) {
     stringsAsFactors  = FALSE
   )
   
+  current <- if (original_exist_rows > 0) exist$qualifier_type_id[1] else new_segments$qualifier_type_id[1]
+  
   index <- 1 # keeps track of the row we should be modifying in 'exist'
   
   # Now loop through the data to find where the qualifier_type_id changes
@@ -303,13 +308,14 @@ adjust_qualifier <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         exist$qualifier_type_id[index] <- new_segments$qualifier_type_id[i]
         if (index != nrow(exist)) { # Adjust the end_dt of this qualifier_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
         }
-        exist$start_dt[index] <- new_segments$start_dt[i]
         if (i < nrow(new_segments)) {
           index <- index + 1
           current <- new_segments$qualifier_type_id[i]
@@ -333,7 +339,9 @@ adjust_qualifier <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         if (index != nrow(exist)) { # Adjust the end_dt of this qualifier_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
@@ -383,7 +391,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
     if (length(remove) > 0) {
       DBI::dbExecute(con, paste0("DELETE FROM qualifiers WHERE qualifier_id IN (", paste(remove, collapse = ", "), ");"))
     }
-    for (i in 1:nrow(exist)) {
+    for (i in 2:nrow(exist)) {
       if (!is.na(exist$qualifier_id[i])) {  # Means that we need to update rows
         DBI::dbExecute(con, paste0("UPDATE qualifiers SET qualifier_type_id = ", exist$qualifier_type_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE qualifier_id = ", exist$qualifier_id[i], ";"))
       } else { # Means that we need to insert new rows
@@ -476,7 +484,6 @@ adjust_approval <- function(con, timeseries_id, data) {
     "))
   
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$approval_type_id[1] else new_segments$approval_type_id[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(approval_id = NA,
@@ -500,6 +507,8 @@ adjust_approval <- function(con, timeseries_id, data) {
     stringsAsFactors  = FALSE
   )
   
+  current <- if (original_exist_rows > 0) exist$approval_type_id[1] else new_segments$approval_type_id[1]
+  
   index <- 1 # keeps track of the row we should be modifying in 'exist'
   
   # Now loop through the data to find where the approval_type_id changes
@@ -509,13 +518,14 @@ adjust_approval <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         exist$approval_type_id[index] <- new_segments$approval_type_id[i]
         if (index != nrow(exist)) { # Adjust the end_dt of this approval_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
         }
-        exist$start_dt[index] <- new_segments$start_dt[i]
         if (i < nrow(new_segments)) {
           index <- index + 1
           current <- new_segments$approval_type_id[i]
@@ -539,7 +549,9 @@ adjust_approval <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         if (index != nrow(exist)) { # Adjust the end_dt of this approval_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
@@ -675,7 +687,6 @@ adjust_owner <- function(con, timeseries_id, data) {
     "))
   
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(owner_id = NA,
@@ -699,6 +710,8 @@ adjust_owner <- function(con, timeseries_id, data) {
     stringsAsFactors  = FALSE
   )
   
+  current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
+  
   index <- 1 # keeps track of the row we should be modifying in 'exist'
   
   # Now loop through the data to find where the organization_id changes
@@ -708,13 +721,14 @@ adjust_owner <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         exist$organization_id[index] <- new_segments$organization_id[i]
         if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
         }
-        exist$start_dt[index] <- new_segments$start_dt[i]
         if (i < nrow(new_segments)) {
           index <- index + 1
           current <- new_segments$organization_id[i]
@@ -738,7 +752,9 @@ adjust_owner <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
@@ -874,7 +890,6 @@ adjust_contributor <- function(con, timeseries_id, data) {
     "))
   
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(contributor_id = NA,
@@ -898,6 +913,8 @@ adjust_contributor <- function(con, timeseries_id, data) {
     stringsAsFactors  = FALSE
   )
   
+  current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
+  
   index <- 1 # keeps track of the row we should be modifying in 'exist'
   
   # Now loop through the data to find where the organization_id changes
@@ -907,13 +924,14 @@ adjust_contributor <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         exist$organization_id[index] <- new_segments$organization_id[i]
         if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
         }
-        exist$start_dt[index] <- new_segments$start_dt[i]
         if (i < nrow(new_segments)) {
           index <- index + 1
           current <- new_segments$organization_id[i]
@@ -937,7 +955,9 @@ adjust_contributor <- function(con, timeseries_id, data) {
         if (index == 1) { # If still on first row, check if its start_dt needs to be modified
           if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
             exist$start_dt[index] <- new_segments$start_dt[i]
-          }
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
         }
         if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
           exist$end_dt[index] <- new_segments$end_dt[i] 
