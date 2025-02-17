@@ -79,8 +79,8 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
     tryCatch(
       {
         DBI::dbExecute(con, rast.tmp.query)
-        DBI::dbExecute(con, "COMMENT ON TABLE public.rasters IS 'Holds raster tiles. Rasters may be broken up in multiple tiles, so refer to table rasters_reference to find the reference_ID for each raster. Otherwise this table is designed for extracting rasters using R, hence the r_class and r_proj4 columns.'")
-        DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters.reference_id IS 'Matches a unique entry in table rasters_reference. If a raster is broken up into tiles, each tile will have the same reference_id; this number is what identifies them as being tiles of the same raster.'")
+        DBI::dbExecute(con, "COMMENT ON TABLE spatial.rasters IS 'Holds raster tiles. Rasters may be broken up in multiple tiles, so refer to table rasters_reference to find the reference_ID for each raster. Otherwise this table is designed for extracting rasters using R, hence the r_class and r_proj4 columns.'")
+        DBI::dbExecute(con, "COMMENT ON COLUMN spatial.rasters.reference_id IS 'Matches a unique entry in table rasters_reference. If a raster is broken up into tiles, each tile will have the same reference_id; this number is what identifies them as being tiles of the same raster.'")
       },
       error = function(e) {
         stop('Check if postgis.raster extension is created in the database.')
@@ -220,7 +220,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
 
   purrr::pmap(list(rgrid$band, rgrid$trn, rgrid$crn, rgrid$n), export_block)
 
-  # Get the rids of the rows just appended. Done as a query here in case any rows in object rgrid failed to append
+  # Get rid of the rows just appended. Done as a query here in case any rows in object rgrid failed to append
   new_rids <- DBI::dbGetQuery(con, paste0("SELECT rid FROM ", rast_table, " WHERE rid > ", n.base, ";"))[, 1]
 
   # Create index
@@ -234,7 +234,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
   DBI::dbExecute(con, tmp.query)
 
   # 5. add raster constraints
-  tmp.query <- paste0("SELECT AddRasterConstraints('public'::name,", DBI::dbQuoteString(con, rast_table),
+  tmp.query <- paste0("SELECT AddRasterConstraints('spatial'::name,", DBI::dbQuoteString(con, rast_table),
                       "::name, 'rast'::name);")
   DBI::dbExecute(con, tmp.query)
 
