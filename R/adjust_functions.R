@@ -83,7 +83,7 @@ adjust_grade <- function(con, timeseries_id, data) {
   starts <- c(1, head(ends, -1) + 1)
   new_segments <- data.frame(
     grade_id      = NA,
-    timeseries_id     = timeseries_id,  # assume defined in your environment
+    timeseries_id     = timeseries_id,
     grade_type_id = runs$values,
     start_dt          = data$datetime[starts],
     end_dt            = data$datetime[ends],
@@ -255,7 +255,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   exist <- DBI::dbGetQuery(con, paste0(
     "SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt 
     FROM qualifiers 
-    WHERE timeseries_id = ", timeseries_id, " 
+    WHERE timeseries_id = ", timeseries_id, "
       AND (
             (
               end_dt >= '", min(data$datetime), "'
@@ -290,7 +290,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   starts <- c(1, head(ends, -1) + 1)
   new_segments <- data.frame(
     qualifier_id      = NA,
-    timeseries_id     = timeseries_id,  # assume defined in your environment
+    timeseries_id     = timeseries_id,
     qualifier_type_id = runs$values,
     start_dt          = data$datetime[starts],
     end_dt            = data$datetime[ends],
@@ -391,7 +391,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
     if (length(remove) > 0) {
       DBI::dbExecute(con, paste0("DELETE FROM qualifiers WHERE qualifier_id IN (", paste(remove, collapse = ", "), ");"))
     }
-    for (i in 2:nrow(exist)) {
+    for (i in 1:nrow(exist)) {
       if (!is.na(exist$qualifier_id[i])) {  # Means that we need to update rows
         DBI::dbExecute(con, paste0("UPDATE qualifiers SET qualifier_type_id = ", exist$qualifier_type_id[i], ", start_dt = '", exist$start_dt[i], "', end_dt = '", exist$end_dt[i], "' WHERE qualifier_id = ", exist$qualifier_id[i], ";"))
       } else { # Means that we need to insert new rows
@@ -500,7 +500,7 @@ adjust_approval <- function(con, timeseries_id, data) {
   starts <- c(1, head(ends, -1) + 1)
   new_segments <- data.frame(
     approval_id      = NA,
-    timeseries_id     = timeseries_id,  # assume defined in your environment
+    timeseries_id     = timeseries_id,
     approval_type_id = runs$values,
     start_dt          = data$datetime[starts],
     end_dt            = data$datetime[ends],
@@ -703,7 +703,7 @@ adjust_owner <- function(con, timeseries_id, data) {
   starts <- c(1, head(ends, -1) + 1)
   new_segments <- data.frame(
     owner_id      = NA,
-    timeseries_id     = timeseries_id,  # assume defined in your environment
+    timeseries_id     = timeseries_id,
     organization_id = runs$values,
     start_dt          = data$datetime[starts],
     end_dt            = data$datetime[ends],
@@ -906,7 +906,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
   starts <- c(1, head(ends, -1) + 1)
   new_segments <- data.frame(
     contributor_id      = NA,
-    timeseries_id     = timeseries_id,  # assume defined in your environment
+    timeseries_id     = timeseries_id,
     organization_id = runs$values,
     start_dt          = data$datetime[starts],
     end_dt            = data$datetime[ends],
