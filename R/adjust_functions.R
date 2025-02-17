@@ -34,11 +34,10 @@ adjust_grade <- function(con, timeseries_id, data) {
   if (!inherits(data$datetime[1], "POSIXct")) {
     stop("Column 'datetime' must be of class POSIXct.")
   }
-
+  
   unknown_grade <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK'")[1,1]
   
   data$grade[is.na(data$grade)] <- unknown_grade
-  
   
   # Get the data where at least one of the following is true:
   # has an end datetime within the range of the data
@@ -67,11 +66,7 @@ adjust_grade <- function(con, timeseries_id, data) {
     "))
   
   
-  data <- data[order(data$datetime), ]
-  
-  index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$grade_type_id[1] else data$grade[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(grade_id = NA,
@@ -81,60 +76,96 @@ adjust_grade <- function(con, timeseries_id, data) {
                         end_dt = data$datetime[1])
   }
   
-  # Now loop through the data to find where the grade changes
-  for (i in 1:nrow(data)) {
-    if (data$grade[i] != current) {
+  # Collapse consecutive rows with the same grade using run-length encoding
+  data <- data[order(data$datetime), ]
+  runs <- rle(data$grade)
+  ends <- cumsum(runs$lengths)
+  starts <- c(1, head(ends, -1) + 1)
+  new_segments <- data.frame(
+    grade_id      = NA,
+    timeseries_id     = timeseries_id,
+    grade_type_id = runs$values,
+    start_dt          = data$datetime[starts],
+    end_dt            = data$datetime[ends],
+    stringsAsFactors  = FALSE
+  )
+  
+  current <- if (original_exist_rows > 0) exist$grade_type_id[1] else new_segments$grade_type_id[1]
+  
+  index <- 1 # keeps track of the row we should be modifying in 'exist'
+  
+  # Now loop through the data to find where the grade_type_id changes
+  for (i in 1:nrow(new_segments)) {
+    if (new_segments$grade_type_id[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
-        
-        index <- index + 1
-        if (index <= original_exist_rows) { # Modify the next row in 'exist'
-          exist$start_dt[index] <- data$datetime[i]
-          exist$grade_type_id[index] <- data$grade[i]
-          
-          # Check if there are rows left in 'data'
-          if ((i == nrow(data)) && ((index) < original_exist_rows)) {
-            # In this case we may need to adjust things: the next row in 'exist' needs its start_dt to be the same as the end_dt of the last data point. However, if this results in start_dt to be later than end_dt, then the next row(s) of exist gets dropped.
-            # Drop all rows where end_dt is before the last data point
-            exist <- exist[exist$end_dt <= data$datetime[i], ]
-            # See if the start_dt of the next row in 'exist' is earlier than data$datetime[i]; if so, adjust it to be the same as data$datetime[i]. There should not be any overlaps created by thins since rows where end_dt is before the last data point are dropped already.
-            if (nrow(exist) > index) {
-              if (exist$start_dt[index + 1] < data$datetime[i]) {
-                exist$start_dt[index + 1] <- data$datetime[i]
-              }
-            }
-          }
-        } else { # Create a new row with no grade_id
-          to_append <- data.frame(grade_id = NA,
-                                  timeseries_id = timeseries_id,
-                                  grade_type_id = data$grade[i],
-                                  start_dt = data$datetime[i],
-                                  end_dt = data$datetime[i])
-          exist <- rbind(exist, to_append)
-          # from here on we only create new rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        exist$grade_type_id[index] <- new_segments$grade_type_id[i]
+        if (index != nrow(exist)) { # Adjust the end_dt of this grade_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+          current <- new_segments$grade_type_id[i]
         }
       } else { # Create new rows with no grade_id
         # Modify the last row in 'exist' and add a new row
-        exist$end_dt[nrow(exist)] <- data$datetime[i]
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
         to_append <- data.frame(grade_id = NA,
                                 timeseries_id = timeseries_id,
-                                grade_type_id = data$grade[i],
-                                start_dt = data$datetime[i],
-                                end_dt = data$datetime[i])
+                                grade_type_id = new_segments$grade_type_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
         exist <- rbind(exist, to_append)
         index <- nrow(exist)
       }
-      current <- data$grade[i]
+      current <- new_segments$grade_type_id[i]
+    } else { # If the grade_type_id is the same as the last one, check and adjust datetimes
+      if (index <= original_exist_rows) { # Modify rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        if (index != nrow(exist)) { # Adjust the end_dt of this grade_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+        }
+      } else { # Create new rows with no grade_id
+        # Modify the last row in 'exist' and add a new row
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
+        to_append <- data.frame(grade_id = NA,
+                                timeseries_id = timeseries_id,
+                                grade_type_id = new_segments$grade_type_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
+        exist <- rbind(exist, to_append)
+        index <- nrow(exist)
+      }
     }
-    if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+    
+    if (i == nrow(new_segments)) {
+      exist$end_dt[index] <- new_segments$end_dt[i] # Adjust the end_dt of this grade
     }
   }  # End of for loop
   
-  # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be removed.
+  # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be remove form the database
   if (index < nrow(exist)) {
     # Pull out the rows that are left over
-    leftovers <- exist[c(index + 1):nrow(exist), ]
+    leftovers <- exist[c((index + 1):nrow(exist)), ]
     exist <- exist[c(1:index), ]
     # Find entries that now have a start_dt and end_dt entirely captured by other rows. Label them with timeseries_id = -1 to remove later
     leftovers[leftovers$start_dt <= exist$end_dt[index] & leftovers$end_dt <= exist$end_dt[index], "timeseries_id"] <- -1
@@ -177,6 +208,7 @@ adjust_grade <- function(con, timeseries_id, data) {
   }
   
 } # End of adjust_grade function
+
 
 #' Adjust the qualifier of a timeseries in the database
 #'
@@ -223,7 +255,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   exist <- DBI::dbGetQuery(con, paste0(
     "SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt 
     FROM qualifiers 
-    WHERE timeseries_id = ", timeseries_id, " 
+    WHERE timeseries_id = ", timeseries_id, "
       AND (
             (
               end_dt >= '", min(data$datetime), "'
@@ -241,11 +273,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
-  data <- data[order(data$datetime), ]
-  
-  index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$qualifier_type_id[1] else data$qualifier[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(qualifier_id = NA,
@@ -255,57 +283,93 @@ adjust_qualifier <- function(con, timeseries_id, data) {
                         end_dt = data$datetime[1])
   }
   
-  # Now loop through the data to find where the qualifier changes
-  for (i in 1:nrow(data)) {
-    if (data$qualifier[i] != current) {
+  # Collapse consecutive rows with the same qualifier using run-length encoding
+  data <- data[order(data$datetime), ]
+  runs <- rle(data$qualifier)
+  ends <- cumsum(runs$lengths)
+  starts <- c(1, head(ends, -1) + 1)
+  new_segments <- data.frame(
+    qualifier_id      = NA,
+    timeseries_id     = timeseries_id,
+    qualifier_type_id = runs$values,
+    start_dt          = data$datetime[starts],
+    end_dt            = data$datetime[ends],
+    stringsAsFactors  = FALSE
+  )
+  
+  current <- if (original_exist_rows > 0) exist$qualifier_type_id[1] else new_segments$qualifier_type_id[1]
+  
+  index <- 1 # keeps track of the row we should be modifying in 'exist'
+  
+  # Now loop through the data to find where the qualifier_type_id changes
+  for (i in 1:nrow(new_segments)) {
+    if (new_segments$qualifier_type_id[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
-        
-        index <- index + 1
-        if (index <= original_exist_rows) { # Modify the next row in 'exist'
-          exist$start_dt[index] <- data$datetime[i]
-          exist$qualifier_type_id[index] <- data$qualifier[i]
-          
-          # Check if there are rows left in 'data'
-          if ((i == nrow(data)) && ((index) < original_exist_rows)) {
-            # In this case we may need to adjust things: the next row in 'exist' needs its start_dt to be the same as the end_dt of the last data point. However, if this results in start_dt to be later than end_dt, then the next row(s) of exist gets dropped.
-            # Drop all rows where end_dt is before the last data point
-            exist <- exist[exist$end_dt <= data$datetime[i], ]
-            # See if the start_dt of the next row in 'exist' is earlier than data$datetime[i]; if so, adjust it to be the same as data$datetime[i]. There should not be any overlaps created by thins since rows where end_dt is before the last data point are dropped already.
-            if (nrow(exist) > index) {
-              if (exist$start_dt[index + 1] < data$datetime[i]) {
-                exist$start_dt[index + 1] <- data$datetime[i]
-              }
-            }
-          }
-        } else { # Create a new row with no qualifier_id
-          to_append <- data.frame(qualifier_id = NA,
-                                  timeseries_id = timeseries_id,
-                                  qualifier_type_id = data$qualifier[i],
-                                  start_dt = data$datetime[i],
-                                  end_dt = data$datetime[i])
-          exist <- rbind(exist, to_append)
-          # from here on we only create new rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        exist$qualifier_type_id[index] <- new_segments$qualifier_type_id[i]
+        if (index != nrow(exist)) { # Adjust the end_dt of this qualifier_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+          current <- new_segments$qualifier_type_id[i]
         }
       } else { # Create new rows with no qualifier_id
         # Modify the last row in 'exist' and add a new row
-        exist$end_dt[nrow(exist)] <- data$datetime[i]
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
         to_append <- data.frame(qualifier_id = NA,
                                 timeseries_id = timeseries_id,
-                                qualifier_type_id = data$qualifier[i],
-                                start_dt = data$datetime[i],
-                                end_dt = data$datetime[i])
+                                qualifier_type_id = new_segments$qualifier_type_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
         exist <- rbind(exist, to_append)
         index <- nrow(exist)
       }
-      current <- data$qualifier[i]
+      current <- new_segments$qualifier_type_id[i]
+    } else { # If the qualifier_type_id is the same as the last one, check and adjust datetimes
+      if (index <= original_exist_rows) { # Modify rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        if (index != nrow(exist)) { # Adjust the end_dt of this qualifier_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+        }
+      } else { # Create new rows with no qualifier_id
+        # Modify the last row in 'exist' and add a new row
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
+        to_append <- data.frame(qualifier_id = NA,
+                                timeseries_id = timeseries_id,
+                                qualifier_type_id = new_segments$qualifier_type_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
+        exist <- rbind(exist, to_append)
+        index <- nrow(exist)
+      }
     }
-    if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+    
+    if (i == nrow(new_segments)) {
+      exist$end_dt[index] <- new_segments$end_dt[i] # Adjust the end_dt of this qualifier
     }
   }  # End of for loop
   
-  # if there untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be removed.
+  # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be remove form the database
   if (index < nrow(exist)) {
     # Pull out the rows that are left over
     leftovers <- exist[c((index + 1):nrow(exist)), ]
@@ -317,6 +381,8 @@ adjust_qualifier <- function(con, timeseries_id, data) {
     
     exist <- rbind(exist, leftovers)
   }
+  
+  
   
   # Now commit the changes to the database
   commit_fx <- function(con, exist) {
@@ -417,11 +483,7 @@ adjust_approval <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
-  data <- data[order(data$datetime), ]
-  
-  index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$approval_type_id[1] else data$approval[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(approval_id = NA,
@@ -431,57 +493,93 @@ adjust_approval <- function(con, timeseries_id, data) {
                         end_dt = data$datetime[1])
   }
   
-  # Now loop through the data to find where the approval changes
-  for (i in 1:nrow(data)) {
-    if (data$approval[i] != current) {
+  # Collapse consecutive rows with the same approval using run-length encoding
+  data <- data[order(data$datetime), ]
+  runs <- rle(data$approval)
+  ends <- cumsum(runs$lengths)
+  starts <- c(1, head(ends, -1) + 1)
+  new_segments <- data.frame(
+    approval_id      = NA,
+    timeseries_id     = timeseries_id,
+    approval_type_id = runs$values,
+    start_dt          = data$datetime[starts],
+    end_dt            = data$datetime[ends],
+    stringsAsFactors  = FALSE
+  )
+  
+  current <- if (original_exist_rows > 0) exist$approval_type_id[1] else new_segments$approval_type_id[1]
+  
+  index <- 1 # keeps track of the row we should be modifying in 'exist'
+  
+  # Now loop through the data to find where the approval_type_id changes
+  for (i in 1:nrow(new_segments)) {
+    if (new_segments$approval_type_id[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
-        
-        index <- index + 1
-        if (index <= original_exist_rows) { # Modify the next row in 'exist'
-          exist$start_dt[index] <- data$datetime[i]
-          exist$approval_type_id[index] <- data$approval[i]
-          
-          # Check if there are rows left in 'data'
-          if ((i == nrow(data)) && ((index) < original_exist_rows)) {
-            # In this case we may need to adjust things: the next row in 'exist' needs its start_dt to be the same as the end_dt of the last data point. However, if this results in start_dt to be later than end_dt, then the next row(s) of exist gets dropped.
-            # Drop all rows where end_dt is before the last data point
-            exist <- exist[exist$end_dt <= data$datetime[i], ]
-            # See if the start_dt of the next row in 'exist' is earlier than data$datetime[i]; if so, adjust it to be the same as data$datetime[i]. There should not be any overlaps created by thins since rows where end_dt is before the last data point are dropped already.
-            if (nrow(exist) > index) {
-              if (exist$start_dt[index + 1] < data$datetime[i]) {
-                exist$start_dt[index + 1] <- data$datetime[i]
-              }
-            }
-          }
-        } else { # Create a new row with no approval_id
-          to_append <- data.frame(approval_id = NA,
-                                  timeseries_id = timeseries_id,
-                                  approval_type_id = data$approval[i],
-                                  start_dt = data$datetime[i],
-                                  end_dt = data$datetime[i])
-          exist <- rbind(exist, to_append)
-          # from here on we only create new rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        exist$approval_type_id[index] <- new_segments$approval_type_id[i]
+        if (index != nrow(exist)) { # Adjust the end_dt of this approval_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+          current <- new_segments$approval_type_id[i]
         }
       } else { # Create new rows with no approval_id
         # Modify the last row in 'exist' and add a new row
-        exist$end_dt[nrow(exist)] <- data$datetime[i]
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
         to_append <- data.frame(approval_id = NA,
                                 timeseries_id = timeseries_id,
-                                approval_type_id = data$approval[i],
-                                start_dt = data$datetime[i],
-                                end_dt = data$datetime[i])
+                                approval_type_id = new_segments$approval_type_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
         exist <- rbind(exist, to_append)
         index <- nrow(exist)
       }
-      current <- data$approval[i]
+      current <- new_segments$approval_type_id[i]
+    } else { # If the approval_type_id is the same as the last one, check and adjust datetimes
+      if (index <= original_exist_rows) { # Modify rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        if (index != nrow(exist)) { # Adjust the end_dt of this approval_type_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+        }
+      } else { # Create new rows with no approval_id
+        # Modify the last row in 'exist' and add a new row
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
+        to_append <- data.frame(approval_id = NA,
+                                timeseries_id = timeseries_id,
+                                approval_type_id = new_segments$approval_type_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
+        exist <- rbind(exist, to_append)
+        index <- nrow(exist)
+      }
     }
-    if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+    
+    if (i == nrow(new_segments)) {
+      exist$end_dt[index] <- new_segments$end_dt[i] # Adjust the end_dt of this approval
     }
   }  # End of for loop
   
-  # if there untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be removed.
+  # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be remove form the database
   if (index < nrow(exist)) {
     # Pull out the rows that are left over
     leftovers <- exist[c((index + 1):nrow(exist)), ]
@@ -588,11 +686,7 @@ adjust_owner <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
-  data <- data[order(data$datetime), ]
-  
-  index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$organization_id[1] else data$owner[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(owner_id = NA,
@@ -602,57 +696,93 @@ adjust_owner <- function(con, timeseries_id, data) {
                         end_dt = data$datetime[1])
   }
   
-  # Now loop through the data to find where the owner changes
-  for (i in 1:nrow(data)) {
-    if (data$owner[i] != current) {
+  # Collapse consecutive rows with the same owner using run-length encoding
+  data <- data[order(data$datetime), ]
+  runs <- rle(data$owner)
+  ends <- cumsum(runs$lengths)
+  starts <- c(1, head(ends, -1) + 1)
+  new_segments <- data.frame(
+    owner_id      = NA,
+    timeseries_id     = timeseries_id,
+    organization_id = runs$values,
+    start_dt          = data$datetime[starts],
+    end_dt            = data$datetime[ends],
+    stringsAsFactors  = FALSE
+  )
+  
+  current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
+  
+  index <- 1 # keeps track of the row we should be modifying in 'exist'
+  
+  # Now loop through the data to find where the organization_id changes
+  for (i in 1:nrow(new_segments)) {
+    if (new_segments$organization_id[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
-        
-        index <- index + 1
-        if (index <= original_exist_rows) { # Modify the next row in 'exist'
-          exist$start_dt[index] <- data$datetime[i]
-          exist$organization_id[index] <- data$owner[i]
-          
-          # Check if there are rows left in 'data'
-          if ((i == nrow(data)) && ((index) < original_exist_rows)) {
-            # In this case we may need to adjust things: the next row in 'exist' needs its start_dt to be the same as the end_dt of the last data point. However, if this results in start_dt to be later than end_dt, then the next row(s) of exist gets dropped.
-            # Drop all rows where end_dt is before the last data point
-            exist <- exist[exist$end_dt <= data$datetime[i], ]
-            # See if the start_dt of the next row in 'exist' is earlier than data$datetime[i]; if so, adjust it to be the same as data$datetime[i]. There should not be any overlaps created by thins since rows where end_dt is before the last data point are dropped already.
-            if (nrow(exist) > index) {
-              if (exist$start_dt[index + 1] < data$datetime[i]) {
-                exist$start_dt[index + 1] <- data$datetime[i]
-              }
-            }
-          }
-        } else { # Create a new row with no owner_id
-          to_append <- data.frame(owner_id = NA,
-                                  timeseries_id = timeseries_id,
-                                  organization_id = data$owner[i],
-                                  start_dt = data$datetime[i],
-                                  end_dt = data$datetime[i])
-          exist <- rbind(exist, to_append)
-          # from here on we only create new rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        exist$organization_id[index] <- new_segments$organization_id[i]
+        if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+          current <- new_segments$organization_id[i]
         }
       } else { # Create new rows with no owner_id
         # Modify the last row in 'exist' and add a new row
-        exist$end_dt[nrow(exist)] <- data$datetime[i]
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
         to_append <- data.frame(owner_id = NA,
                                 timeseries_id = timeseries_id,
-                                organization_id = data$owner[i],
-                                start_dt = data$datetime[i],
-                                end_dt = data$datetime[i])
+                                organization_id = new_segments$organization_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
         exist <- rbind(exist, to_append)
         index <- nrow(exist)
       }
-      current <- data$owner[i]
+      current <- new_segments$organization_id[i]
+    } else { # If the organization_id is the same as the last one, check and adjust datetimes
+      if (index <= original_exist_rows) { # Modify rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+        }
+      } else { # Create new rows with no owner_id
+        # Modify the last row in 'exist' and add a new row
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
+        to_append <- data.frame(owner_id = NA,
+                                timeseries_id = timeseries_id,
+                                organization_id = new_segments$organization_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
+        exist <- rbind(exist, to_append)
+        index <- nrow(exist)
+      }
     }
-    if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+    
+    if (i == nrow(new_segments)) {
+      exist$end_dt[index] <- new_segments$end_dt[i] # Adjust the end_dt of this owner
     }
   }  # End of for loop
   
-  # if there untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be removed.
+  # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be remove form the database
   if (index < nrow(exist)) {
     # Pull out the rows that are left over
     leftovers <- exist[c((index + 1):nrow(exist)), ]
@@ -759,11 +889,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
-  data <- data[order(data$datetime), ]
-  
-  index <- 1
   original_exist_rows <- nrow(exist)
-  current <- if (original_exist_rows > 0) exist$organization_id[1] else data$contributor[1]
   
   if (original_exist_rows == 0) {
     exist <- data.frame(contributor_id = NA,
@@ -773,57 +899,93 @@ adjust_contributor <- function(con, timeseries_id, data) {
                         end_dt = data$datetime[1])
   }
   
-  # Now loop through the data to find where the contributor changes
-  for (i in 1:nrow(data)) {
-    if (data$contributor[i] != current) {
+  # Collapse consecutive rows with the same contributor using run-length encoding
+  data <- data[order(data$datetime), ]
+  runs <- rle(data$contributor)
+  ends <- cumsum(runs$lengths)
+  starts <- c(1, head(ends, -1) + 1)
+  new_segments <- data.frame(
+    contributor_id      = NA,
+    timeseries_id     = timeseries_id,
+    organization_id = runs$values,
+    start_dt          = data$datetime[starts],
+    end_dt            = data$datetime[ends],
+    stringsAsFactors  = FALSE
+  )
+  
+  current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
+  
+  index <- 1 # keeps track of the row we should be modifying in 'exist'
+  
+  # Now loop through the data to find where the organization_id changes
+  for (i in 1:nrow(new_segments)) {
+    if (new_segments$organization_id[i] != current) {
       if (index <= original_exist_rows) { # Modify rows in 'exist'
-        exist$end_dt[index] <- data$datetime[i]
-        
-        index <- index + 1
-        if (index <= original_exist_rows) { # Modify the next row in 'exist'
-          exist$start_dt[index] <- data$datetime[i]
-          exist$organization_id[index] <- data$contributor[i]
-          
-          # Check if there are rows left in 'data'
-          if ((i == nrow(data)) && ((index) < original_exist_rows)) {
-            # In this case we may need to adjust things: the next row in 'exist' needs its start_dt to be the same as the end_dt of the last data point. However, if this results in start_dt to be later than end_dt, then the next row(s) of exist gets dropped.
-            # Drop all rows where end_dt is before the last data point
-            exist <- exist[exist$end_dt <= data$datetime[i], ]
-            # See if the start_dt of the next row in 'exist' is earlier than data$datetime[i]; if so, adjust it to be the same as data$datetime[i]. There should not be any overlaps created by thins since rows where end_dt is before the last data point are dropped already.
-            if (nrow(exist) > index) {
-              if (exist$start_dt[index + 1] < data$datetime[i]) {
-                exist$start_dt[index + 1] <- data$datetime[i]
-              }
-            }
-          }
-        } else { # Create a new row with no contributor_id
-          to_append <- data.frame(contributor_id = NA,
-                                  timeseries_id = timeseries_id,
-                                  organization_id = data$contributor[i],
-                                  start_dt = data$datetime[i],
-                                  end_dt = data$datetime[i])
-          exist <- rbind(exist, to_append)
-          # from here on we only create new rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        exist$organization_id[index] <- new_segments$organization_id[i]
+        if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+          current <- new_segments$organization_id[i]
         }
       } else { # Create new rows with no contributor_id
         # Modify the last row in 'exist' and add a new row
-        exist$end_dt[nrow(exist)] <- data$datetime[i]
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
         to_append <- data.frame(contributor_id = NA,
                                 timeseries_id = timeseries_id,
-                                organization_id = data$contributor[i],
-                                start_dt = data$datetime[i],
-                                end_dt = data$datetime[i])
+                                organization_id = new_segments$organization_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
         exist <- rbind(exist, to_append)
         index <- nrow(exist)
       }
-      current <- data$contributor[i]
+      current <- new_segments$organization_id[i]
+    } else { # If the organization_id is the same as the last one, check and adjust datetimes
+      if (index <= original_exist_rows) { # Modify rows in 'exist'
+        if (index == 1) { # If still on first row, check if its start_dt needs to be modified
+          if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+            exist$start_dt[index] <- new_segments$start_dt[i]
+          } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+        } else {
+          exist$start_dt[index] <- new_segments$start_dt[i]
+        }
+        if (index != nrow(exist)) { # Adjust the end_dt of this organization_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+          exist$end_dt[index] <- new_segments$end_dt[i] 
+        }
+        if (i < nrow(new_segments)) {
+          index <- index + 1
+        }
+      } else { # Create new rows with no contributor_id
+        # Modify the last row in 'exist' and add a new row
+        if (index > 1) {
+          exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+        }
+        to_append <- data.frame(contributor_id = NA,
+                                timeseries_id = timeseries_id,
+                                organization_id = new_segments$organization_id[i],
+                                start_dt = new_segments$start_dt[i],
+                                end_dt = new_segments$end_dt[i])
+        exist <- rbind(exist, to_append)
+        index <- nrow(exist)
+      }
     }
-    if (i == nrow(data)) {
-      exist$end_dt[index] <- data$datetime[i]
+    
+    if (i == nrow(new_segments)) {
+      exist$end_dt[index] <- new_segments$end_dt[i] # Adjust the end_dt of this contributor
     }
   }  # End of for loop
   
-  # if there untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be removed.
+  # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be remove form the database
   if (index < nrow(exist)) {
     # Pull out the rows that are left over
     leftovers <- exist[c((index + 1):nrow(exist)), ]
