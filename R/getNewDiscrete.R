@@ -81,9 +81,17 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     }
   } else {
     if (location_id[1] == "all") {
-      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
+      if (sub_location_id == "all") {
+        all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
+      } else {
+        all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sub_location_id IN (", paste(sub_location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+      }
     } else {
-      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE location_id_id IN (", paste(location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())")
+      if (sub_location_id == "all") {
+        all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id_id IN (", paste(location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+      } else {
+        all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id_id IN (", paste(location_id, collapse = ", "), ") AND sub_location_id IN (", paste(sub_location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+      }
       if (length(unique(location_id)) != nrow(all_series)) {
         fail <- location_id[!location_id %in% all_series$location_id]
         ifelse((length(fail) == 1),
@@ -194,6 +202,9 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
       
       ## Get the data ##############
       data <- do.call(source_fx, args_list) #Get the data using the args_list
+      if (length(data) == 0) {
+        next
+      }
       
       if (!inherits(data, "list")) {
         stop("For sample_series_id ", sid, " the source function did not return a list.")
@@ -201,12 +212,17 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
         stop("For sample_series_id ", sid, " the source function did not return a list of lists (one element per sample, with two data.frames: one for sample metadata, the other for associated results).")
       }
       
-      if (length(data) > 0) {
         # Work on each list element to populate the 'samples' and 'results' tables
         for (j in 1:length(data)) {
           if (!("sample" %in% names(data[[j]])) | !("results" %in% names(data[[j]]))) {
             stop("For sample_series_id ", sid, " the source function did not return a list with elements named 'sample' and 'results'. Failed on list element ", j, ".")
           }
+          
+          # Make sure that results element has at least one row
+          if (nrow(data[[j]][["results"]]) == 0) {
+            next
+          }
+          
           
           ## Checks on sample metadata ###########
           # Ensure the sample data has required minimum columns
@@ -328,7 +344,6 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
           }
           
         } # End of looping over each list element (sample)
-      } # End of if statement for length(data) > 0
 
     }, error = function(e) {
       warning("getNewDiscrete: Failed to get new data or to append new data for sample_series_id ", sid, ". Error message: ", e$message)

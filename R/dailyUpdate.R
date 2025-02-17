@@ -47,8 +47,8 @@ dailyUpdate <- function(con = NULL, timeseries_id = "all", sample_series_id = "a
     continuous_ts <- DBI::dbGetQuery(con, "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE source_fx IS NOT NULL")
   } else {
     continuous_ts <- DBI::dbGetQuery(con, paste0("SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "')"))
-    if (length(timeseries_id) != nrow(all_timeseries)) {
-      fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
+    if (length(timeseries_id) != nrow(continuous_ts)) {
+      fail <- timeseries_id[!(timeseries_id %in% continuous_ts$timeseries_id)]
       ifelse((length(fail) == 1),
               warning("Could not find one of the timeseries_ids that you specified: ID ", fail, " is missing from the database."),
               warning("Could not find some of the timeseries_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
