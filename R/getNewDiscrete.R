@@ -69,7 +69,8 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     if (sample_series_id[1] == "all") {
       all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
     } else {
-      all_series <- DBI::dbExecute(con, "SELECT * FROM sample_series WHERE sample_series_id IN ('", paste(sample_series_id, collapse = "', '"), "') AND (synch_to IS NULL OR synch_to < now())")
+      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+      print(paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
       if (length(unique(sample_series_id)) != nrow(all_series)) {
         fail <- sample_series_id[!sample_series_id %in% all_series$sample_series_id]
         ifelse((length(fail) == 1),
@@ -82,7 +83,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     if (location_id[1] == "all") {
       all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
     } else {
-      all_series <- DBI::dbExecute(con, "SELECT * FROM sample_series WHERE location_id_id IN ('", paste(location_id, collapse = "', '"), "') AND (synch_to IS NULL OR synch_to < now())")
+      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE location_id_id IN (", paste(location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())")
       if (length(unique(location_id)) != nrow(all_series)) {
         fail <- location_id[!location_id %in% all_series$location_id]
         ifelse((length(fail) == 1),
