@@ -19,14 +19,6 @@
 
 downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, end_datetime = Sys.time(), old_loc = NULL, con = NULL, snowCon = snowConnect())
   {
-  
-  # location <- "10AD-M2SS"
-  # sub_location <- NULL
-  # start_datetime <- "1900-01-01"
-  # end_datetime <- Sys.time()
-  # old_loc <- NULL
-  # con <- NULL
-  # snowCon <- snowConnect()
 
   # Checking start_datetime parameter
   tryCatch({
@@ -120,13 +112,13 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
       sample <- new_surveys[i,]
       #Get the measurements for each survey
       meas <- DBI::dbGetQuery(snowCon, paste0("SELECT survey_id, estimate_flag, swe, depth FROM measurements WHERE survey_id = ", new_surveys$import_source_id[i], " AND exclude_flag IS FALSE AND (swe IS NOT NULL OR depth IS NOT NULL);"))
-      if (nrow(meas) == 0) next
-      meas <- data.frame(parameter_id = c(swe_paramid, depth_paramid),
-                         result = c(meas$swe, meas$depth),
-                         result_value_type = meas$estimate_flag,
-                         result_type = 1) # 1 = field observation
       
       if (nrow(meas) > 0) {
+        meas <- data.frame(parameter_id = c(swe_paramid, depth_paramid),
+                           result = c(mean(meas$swe, na.rm = TRUE), mean(meas$depth, na.rm = TRUE)),
+                           result_value_type = any(meas$estimate_flag),
+                           result_type = 1) # 1 = field observation
+        
         # Change estimated or actual values to the database values
         meas$result_value_type[meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'estimated'")[1,1]
         meas$result_value_type[!meas$result_value_type] <- DBI::dbGetQuery(con, "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'actual'")[1,1]

@@ -55,9 +55,9 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
 
   
   if (sample_series_id[1] == "all") {
-      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series")
+      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series;")
   } else {
-      all_series <- DBI::dbExecute(con, "SELECT * FROM sample_series WHERE sample_series_id IN ('", paste(sample_series_id, collapse = "', '"), "')")
+      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ");"))
     if (length(unique(sample_series_id)) != nrow(all_series)) {
       fail <- sample_series_id[!sample_series_id %in% all_series$sample_series_id]
       ifelse((length(fail) == 1),
@@ -202,6 +202,10 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             } else {
               DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime BETWEEN '", inRemote_datetimes[[j - 1]] + 1, "' AND '", inRemote_datetimes[[j]] - 1, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "';"))
             }
+          }
+          
+          if (nrow(inRemote_results) == 0) {
+            next
           }
         
           inDB_sample <- DBI::dbGetQuery(con, paste0("SELECT * FROM samples WHERE datetime = '", inRemote_sample$datetime, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, ";"))
@@ -471,7 +475,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
               }, error = function(e) {
                 DBI::dbRollback(con)
                 attr(con, "active_transaction") <<- FALSE
-                warning("getNewDiscrete: Failed to commit new data for sample_series_id, ", sid, " and iter ", j, " . Error message: ", e$message)
+                warning("getNewDiscrete: Failed to commit new data for sample_series_id ", sid, " and list element ", j, " . Error message: ", e$message)
               })
             } else { # we're already in a transaction
               commit_fx(con, inRemote_sample, inRemote_results)
@@ -484,7 +488,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
         DBI::dbExecute(con, paste0("UPDATE sample_series SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE sample_series_id = ", sid, ";"))
       }
     }, error = function(e) {
-      warning("synchronize failed on sample_series_id ", sid, "  with message: ", e$message, ".")
+      warning("synchronize failed on sample_series_id ", sid, "  with message: ", e$message)
     }
     ) # End of tryCatch
     
