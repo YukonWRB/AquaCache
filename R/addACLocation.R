@@ -29,43 +29,24 @@
 addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = NA, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = NULL) {
   
    
-  # df <- data.frame(location = "02AA001",
-  #                  name = c("test"),
-  #                  name_fr = "test",
-  #                  latitude = c(48.01222),
-  #                  longitude = c(-89.6161),
-  #                  visibility_public = "exact",
-  #                  share_with = "public_reader",
-  #                  owner = 1,
-  #                  data_sharing_agreement_id = NA,
-  #                  location_type = c(1),
-  #                  note = "Station metadata from HYDAT version 2024-10-22",
-  #                  contact = NA,
-  #                  datum_id_from = 10,
-  #                  datum_id_to = 10,
-  #                  conversion_m = 0,
-  #                  current = TRUE,
-  #                  network = NA,
-  #                  project = NA)
-  # 
-  # location <- NA
-  # name <- NA
-  # name_fr <- NA
-  # latitude <- NA
-  # longitude <- NA
-  # visibility_public <- NA
-  # share_with <- NA
-  # owner <- NA
-  # data_sharing_agreement_id <- NA
-  # location_type <- NA
-  # note <- NA
-  # contact <- NA
-  # datum_id_from <- NA
-  # datum_id_to <- NA
-  # conversion_m <- NA
-  # current <- NA
-  # network <- NA
-  # project <- NA
+  # df = NULL
+  # location = "09AB-SC02B"
+  # name = "Whitehorse Airport B_Ice Lake"
+  # name_fr = 'Aéroport de Whitehorse B_Lac Ice'
+  # latitude = 60.70085
+  # longitude = -135.0807
+  # visibility_public = 'exact'
+  # share_with = 'public_reader'
+  # owner = 2
+  # location_type = 15
+  # datum_id_from = 10
+  # datum_id_to = 35
+  # conversion_m = 740
+  # current = TRUE
+  # network = 4
+  # con = con
+  # note = NA
+  # contact = NA
 
   
   if (is.null(con)) {
@@ -285,7 +266,6 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
                              longitude = longitude[i],
                              visibility_public = visibility_public[i],
                              share_with = paste0("{", share_with[i], "}"),
-                             owner = owner[i],
                              data_sharing_agreement_id = data_sharing_agreement_id[i],
                              location_type = location_type[i],
                              note = note[i],
@@ -293,8 +273,18 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
                              geom_id = geom_id)
       DBI::dbAppendTable(con, "locations", add_location)
       
+      
+      
       # Get the location_id of the new location
       location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", location[i], "';"))[1,1]
+      
+      # Deal with ownership information ############################
+      add_owner <- data.frame(location_id = location_id,
+                              owner = owner[i],
+                              operator = owner[i],
+                              start_datetime = "1970-01-01"
+      )
+      DBI::dbAppendTable(con, "locations_metadata_owners_operators", add_owner)
       
       # Add the location's datum information to the 'datums' table ############################
       datum <- data.frame(location_id = location_id,
