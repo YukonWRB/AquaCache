@@ -122,7 +122,7 @@ downloadAquarius <- function(location,
       
       approvals$level <- ifelse(as.character(approvals$level) %in% names(approval_mapping),
                                 approval_mapping[as.character(approvals$level)],
-                                approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"])
+                                approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"])
     }
     
     grades_DB <- DBI::dbGetQuery(con, "SELECT * FROM grade_types")
@@ -157,7 +157,7 @@ downloadAquarius <- function(location,
                          "31" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"])
       grades$level <- ifelse(as.character(grades$level) %in% names(grade_mapping),
                              grade_mapping[as.character(grades$level)],
-                             grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"])
+                             grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"])
     }
     
     qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
@@ -193,7 +193,7 @@ downloadAquarius <- function(location,
                              "REL" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "REL", "qualifier_type_id"])
       qualifiers$level <- ifelse(as.character(qualifiers$level) %in% names(qualifier_mapping),
                                  qualifier_mapping[as.character(qualifiers$level)],
-                                 qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"])
+                                 qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
     }
     
     #Add in grades, approval, and qualifier columns
@@ -252,6 +252,11 @@ downloadAquarius <- function(location,
     ts <- apply_intervals(ts, approvals, "approval")
     ts <- apply_intervals(ts, grades, "grade")
     ts <- apply_intervals(ts, qualifiers, "qualifier")
+    
+    # Replace NA values in grade, approval, and qualifier with the unspecified values
+    ts$grade[is.na(ts$grade)] <- grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"]
+    ts$approval[is.na(ts$approval)] <- approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"]
+    ts$qualifier[is.na(ts$qualifier)] <- qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"]
     
     return(ts)
   } else {
