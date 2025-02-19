@@ -6,8 +6,8 @@
 \usage{
 getNewDiscrete(
   con = NULL,
-  location_id = "all",
-  sub_location_id = "all",
+  location_id = NULL,
+  sub_location_id = NULL,
   sample_series_id = NULL,
   active = "default"
 )
@@ -15,9 +15,9 @@ getNewDiscrete(
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
 
-\item{location_id}{The location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch data from all location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).}
+\item{location_id}{The location_ids you wish to have updated, as character or numeric vector. Defaults to NULL which will fetch data from all location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).}
 
-\item{sub_location_id}{The sub_location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch data from all sub_location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).}
+\item{sub_location_id}{The sub_location_ids you wish to have updated, as character or numeric vector. Defaults to NULL which will fetch data from all sub_location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).}
 
 \item{sample_series_id}{The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. This can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids.}
 
