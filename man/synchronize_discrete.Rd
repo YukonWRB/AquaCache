@@ -9,7 +9,9 @@ synchronize_discrete(
   sample_series_id = "all",
   start_datetime,
   active = "default",
-  delete = FALSE
+  delete = FALSE,
+  snowCon = NULL,
+  EQCon = NULL
 )
 }
 \arguments{
@@ -22,6 +24,10 @@ synchronize_discrete(
 \item{active}{Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id}
 
 \item{delete}{If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.}
+
+\item{snowCon}{A connection to the snow course database, created with \code{\link[=snowConnect]{snowConnect()}}. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.}
+
+\item{EQCon}{A connection to the EQWin database, created with \code{\link[=EQConnect]{EQConnect()}}. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.}
 }
 \value{
 Updated entries in the hydro database.
