@@ -35,8 +35,8 @@
 #' 
 #'
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
-#' @param location_id The location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch data from all location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
-#' @param sub_location_id The sub_location_ids you wish to have updated, as character or numeric vector. Defaults to "all" which will fetch data from all sub_location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
+#' @param location_id The location_ids you wish to have updated, as character or numeric vector. Defaults to NULL which will fetch data from all location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
+#' @param sub_location_id The sub_location_ids you wish to have updated, as character or numeric vector. Defaults to NULL which will fetch data from all sub_location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
 #' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. This can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'sample_series' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #'
@@ -44,16 +44,13 @@
 #' @export
 #'
 
-getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "all", sample_series_id = NULL, active = 'default') {
+getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NULL, sample_series_id = NULL, active = 'default') {
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
   
   # Make sure that location_id and sample_series_id are not both NULL or both not NULL
-  if (is.null(location_id) & is.null(sample_series_id)) {
-    stop("location_id and sample_series_id cannot both be NULL")
-  }
   if (!is.null(location_id) & !is.null(sample_series_id)) {
     stop("location_id and sample_series_id cannot both be specified (not NULL)")
   }
@@ -66,7 +63,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
   DBI::dbExecute(con, "SET timezone = 'UTC'")
   
   if (is.null(location_id)) {
-    if (sample_series_id[1] == "all") {
+    if (is.null(sample_series_id)) {
       all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
     } else {
       all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
@@ -80,28 +77,20 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
       }
     }
   } else {
-    if (location_id[1] == "all") {
-      if (sub_location_id == "all") {
-        all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
-      } else {
-        all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sub_location_id IN (", paste(sub_location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
-      }
+    if (is.null(sub_location_id)) {
+      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id IN (", paste(location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
     } else {
-      if (sub_location_id == "all") {
-        all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id_id IN (", paste(location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
-      } else {
-        all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id_id IN (", paste(location_id, collapse = ", "), ") AND sub_location_id IN (", paste(sub_location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
-      }
-      if (length(unique(location_id)) != nrow(all_series)) {
-        fail <- location_id[!location_id %in% all_series$location_id]
-        ifelse((length(fail) == 1),
-               warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
-               warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
-        )
-      }
+      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id IN (", paste(location_id, collapse = ", "), ") AND sub_location_id IN (", paste(sub_location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+    }
+    if (length(unique(location_id)) != nrow(all_series)) {
+      fail <- location_id[!location_id %in% all_series$location_id]
+      ifelse((length(fail) == 1),
+             warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
+             warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
+      )
     }
   }
-
+  
   
   if (active == 'default') {
     all_series <- all_series[all_series$active, ]
@@ -159,6 +148,9 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
       } else {
         last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND sub_location_id = ", sub_loc_id, " AND datetime > '", as.character(range_start), " UTC';"))[1,1] + 1
       }
+    }
+    if (is.na(last_data_point)) { # Means we're dealing with a location that has no samples in yet - probably just created
+      last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
     }
     
     if (source_fx == "downloadEQWin" & is.null(EQcon)) {
@@ -359,7 +351,7 @@ getNewDiscrete <- function(con = NULL, location_id = "all", sub_location_id = "a
     close(pb)
   }
 
-  message(count, " out of ", nrow(all_series), " sample_series were updated.")
+  message(count, " samples were found for the ", nrow(all_series), " sample_series specified.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_discrete'"))
 
 }

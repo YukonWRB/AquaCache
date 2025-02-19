@@ -98,6 +98,7 @@ downloadECCCwx <- function(location, parameter_id, start_datetime, end_datetime 
         df <- data.frame(name = 'Environment and Climate Change Canada',
                          name_fr = 'Environnement et Changement Climatique Canada')
         DBI::dbAppendTable(con, "owner_contributors", df)
+        organization_id <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE name = 'Environment and Climate Change Canada'")[1,1]
       }
       
       grade_unspecified <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'")[1,1]

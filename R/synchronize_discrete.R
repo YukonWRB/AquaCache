@@ -13,12 +13,14 @@
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `sample_series_id`, or one per element of `sample_series_id`
 #' @param active Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id
 #' @param delete If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.
+#' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
+#' @param EQCon A connection to the EQWin database, created with [EQConnect()]. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.
 #'
 #' @return Updated entries in the hydro database.
 #' @export
 #'
 
-synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_datetime, active = 'default', delete = FALSE)
+synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_datetime, active = 'default', delete = FALSE, snowCon = NULL, EQCon = NULL)
 {
   
   if (!active %in% c('default', 'all')) {
@@ -133,8 +135,11 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
       EQCon <- EQConnect(silent = TRUE)
       on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
     }
+    
     if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
-      snowCon <- snowConnect(silent = TRUE)
+      # Try with the same host and port as the AquaCache connection
+      dets <-  DBI::dbGetQuery(con, "SELECT inet_server_addr() AS ip, inet_server_port() AS port")
+      snowCon <- snowConnect(host = dets$ip, port = dets$port, silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
 

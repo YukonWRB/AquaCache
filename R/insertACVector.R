@@ -122,7 +122,7 @@ insertACVector <- function(geom, layer_name, feature_name = NULL, description = 
             DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
           }
         } else { #overwrite if FALSE
-          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM ,", schema, ".", table, ", WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
+          exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM ", schema, ".", table, " WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
           if (nrow(exist) != 0) {
             message("There is already an entry for layer_name = ", layer_name, " and feature_name = ", feat_name, " but you didn't ask to overwrite it. Would you like to aggregate the database feature with the new one?")
             agg <- readline(prompt = writeLines(paste("\n1: Yes",
