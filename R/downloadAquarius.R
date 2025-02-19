@@ -100,7 +100,7 @@ downloadAquarius <- function(location,
     #format approvals, grade, qualifiers times
     approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
     if (is.null(nrow(RawDL$Approvals)) || nrow(RawDL$Approvals) == 0) {  # Then it's probably an empty list or data.frame because there are no approvals
-      approvals <- data.frame(level = approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+      approvals <- data.frame(level = approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
       approvals <- RawDL$Approvals[, c("ApprovalLevel", "StartTime", "EndTime")]
       stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1]) - 5, nchar(approvals$StartTime[1]))
@@ -127,7 +127,7 @@ downloadAquarius <- function(location,
     
     grades_DB <- DBI::dbGetQuery(con, "SELECT * FROM grade_types")
     if (is.null(nrow(RawDL$Grades)) || nrow(RawDL$Grades) == 0) {  # Then it's probably an empty list or data.frame because there are no grades
-      grades <- data.frame(level = grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+      grades <- data.frame(level = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
       grades <- RawDL$Grades[, c("GradeCode", "StartTime", "EndTime")]
       stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1]) - 5, nchar(grades$StartTime[1]))
