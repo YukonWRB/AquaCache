@@ -122,7 +122,7 @@ downloadAquarius <- function(location,
       
       approvals$level <- ifelse(as.character(approvals$level) %in% names(approval_mapping),
                                 approval_mapping[as.character(approvals$level)],
-                                approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"])
+                                approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"])
     }
     
     grades_DB <- DBI::dbGetQuery(con, "SELECT * FROM grade_types")
@@ -157,12 +157,12 @@ downloadAquarius <- function(location,
                          "31" = grades_DB[grades_DB$grade_type_code == "B", "grade_type_id"])
       grades$level <- ifelse(as.character(grades$level) %in% names(grade_mapping),
                              grade_mapping[as.character(grades$level)],
-                             grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"])
+                             grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"])
     }
     
     qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
     if (is.null(nrow(RawDL$Qualifiers)) || nrow(RawDL$Qualifiers) == 0) {  # Then it's probably an empty list or data.frame because there are no qualifiers
-      qualifiers <- data.frame(level = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+      qualifiers <- data.frame(level = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
       qualifiers <- RawDL$Qualifiers[, c("Identifier", "StartTime", "EndTime")]
       stoffset <- substr(qualifiers$StartTime[1], nchar(qualifiers$StartTime[1]) - 5, nchar(qualifiers$StartTime[1]))
@@ -193,7 +193,7 @@ downloadAquarius <- function(location,
                              "REL" = qualifiers_DB[qualifiers_DB$qualifier_type_code == "REL", "qualifier_type_id"])
       qualifiers$level <- ifelse(as.character(qualifiers$level) %in% names(qualifier_mapping),
                                  qualifier_mapping[as.character(qualifiers$level)],
-                                 qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"])
+                                 qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"])
     }
     
     #Add in grades, approval, and qualifier columns
