@@ -100,7 +100,7 @@ downloadAquarius <- function(location,
     #format approvals, grade, qualifiers times
     approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
     if (is.null(nrow(RawDL$Approvals)) || nrow(RawDL$Approvals) == 0) {  # Then it's probably an empty list or data.frame because there are no approvals
-      approvals <- data.frame(level = approvals_DB[approvals_DB$approval_type_code == "UNK", "approval_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+      approvals <- data.frame(level = approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
       approvals <- RawDL$Approvals[, c("ApprovalLevel", "StartTime", "EndTime")]
       stoffset <- substr(approvals$StartTime[1], nchar(approvals$StartTime[1]) - 5, nchar(approvals$StartTime[1]))
@@ -127,7 +127,7 @@ downloadAquarius <- function(location,
     
     grades_DB <- DBI::dbGetQuery(con, "SELECT * FROM grade_types")
     if (is.null(nrow(RawDL$Grades)) || nrow(RawDL$Grades) == 0) {  # Then it's probably an empty list or data.frame because there are no grades
-      grades <- data.frame(level = grades_DB[grades_DB$grade_type_code == "UNK", "grade_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+      grades <- data.frame(level = grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
       grades <- RawDL$Grades[, c("GradeCode", "StartTime", "EndTime")]
       stoffset <- substr(grades$StartTime[1], nchar(grades$StartTime[1]) - 5, nchar(grades$StartTime[1]))
@@ -162,7 +162,7 @@ downloadAquarius <- function(location,
     
     qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
     if (is.null(nrow(RawDL$Qualifiers)) || nrow(RawDL$Qualifiers) == 0) {  # Then it's probably an empty list or data.frame because there are no qualifiers
-      qualifiers <- data.frame(level = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNK", "qualifier_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
+      qualifiers <- data.frame(level = qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"], start_time = min(ts$datetime), end_time = max(ts$datetime))
     } else {
       qualifiers <- RawDL$Qualifiers[, c("Identifier", "StartTime", "EndTime")]
       stoffset <- substr(qualifiers$StartTime[1], nchar(qualifiers$StartTime[1]) - 5, nchar(qualifiers$StartTime[1]))
@@ -252,6 +252,11 @@ downloadAquarius <- function(location,
     ts <- apply_intervals(ts, approvals, "approval")
     ts <- apply_intervals(ts, grades, "grade")
     ts <- apply_intervals(ts, qualifiers, "qualifier")
+    
+    # Replace NA values in grade, approval, and qualifier with the unspecified values
+    ts$grade[is.na(ts$grade)] <- grades_DB[grades_DB$grade_type_code == "UNS", "grade_type_id"]
+    ts$approval[is.na(ts$approval)] <- approvals_DB[approvals_DB$approval_type_code == "UNS", "approval_type_id"]
+    ts$qualifier[is.na(ts$qualifier)] <- qualifiers_DB[qualifiers_DB$qualifier_type_code == "UNS", "qualifier_type_id"]
     
     return(ts)
   } else {
