@@ -19,7 +19,7 @@ insertACImage(
 )
 }
 \arguments{
-\item{object}{Valid path including extension to the document to upload, or an object of class 'response' such as that provided by \code{\link[=downloadWSCImages]{downloadWSCImages()}}.}
+\item{object}{Valid path including extension to the image to upload, or an object of class 'response' such as that provided by \code{\link[=downloadWSCImages]{downloadWSCImages()}}.}
 
 \item{img_meta_id}{The img_meta_id, from the table images_index, corresponding to the image location and type. Set NULL if there is no img_meta_id yet.}
 
