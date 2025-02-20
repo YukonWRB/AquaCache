@@ -65,15 +65,23 @@ adjust_grade <- function(con, timeseries_id, data) {
     ORDER BY start_dt ASC;
     "))
   
+  # if there are no rows in exist if could mean that we're appending new data only, so let's pull up the entry closest in time for the new data
+  if (nrow(exist) == 0) {
+    exist <- DBI::dbGetQuery(con, paste0(
+      "SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt 
+      FROM grades 
+      WHERE timeseries_id = ", timeseries_id, " 
+      AND start_dt <= '", min(data$datetime), "'
+      ORDER BY start_dt DESC
+      LIMIT 1;
+      "))
+  }
   
   original_exist_rows <- nrow(exist)
   
+  # If there are still no rows it means that there's nothing in the table yet!
   if (original_exist_rows == 0) {
-    exist <- data.frame(grade_id = NA,
-                        timeseries_id = timeseries_id,
-                        grade_type_id = data$grade[1],
-                        start_dt = data$datetime[1],
-                        end_dt = data$datetime[1])
+    exist <- data.frame()
   }
   
   # Collapse consecutive rows with the same grade using run-length encoding
@@ -273,14 +281,22 @@ adjust_qualifier <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
+  # if there are no rows in exist if could mean that we're appending new data only, so let's pull up the entry closest in time for the new data
+  if (nrow(exist) == 0) {
+    exist <- DBI::dbGetQuery(con, paste0(
+      "SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt 
+      FROM qualifiers 
+      WHERE timeseries_id = ", timeseries_id, " 
+      AND start_dt <= '", min(data$datetime), "'
+      ORDER BY start_dt DESC
+      LIMIT 1;
+      "))
+  }
+  
   original_exist_rows <- nrow(exist)
   
   if (original_exist_rows == 0) {
-    exist <- data.frame(qualifier_id = NA,
-                        timeseries_id = timeseries_id,
-                        qualifier_type_id = data$qualifier[1],
-                        start_dt = data$datetime[1],
-                        end_dt = data$datetime[1])
+    exist <- data.frame()
   }
   
   # Collapse consecutive rows with the same qualifier using run-length encoding
@@ -483,14 +499,22 @@ adjust_approval <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
+  # if there are no rows in exist if could mean that we're appending new data only, so let's pull up the entry closest in time for the new data
+  if (nrow(exist) == 0) {
+    exist <- DBI::dbGetQuery(con, paste0(
+      "SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt 
+      FROM approvals 
+      WHERE timeseries_id = ", timeseries_id, " 
+      AND start_dt <= '", min(data$datetime), "'
+      ORDER BY start_dt DESC
+      LIMIT 1;
+      "))
+  }
+  
   original_exist_rows <- nrow(exist)
   
   if (original_exist_rows == 0) {
-    exist <- data.frame(approval_id = NA,
-                        timeseries_id = timeseries_id,
-                        approval_type_id = data$approval[1],
-                        start_dt = data$datetime[1],
-                        end_dt = data$datetime[1])
+    exist <- data.frame()
   }
   
   # Collapse consecutive rows with the same approval using run-length encoding
@@ -686,14 +710,22 @@ adjust_owner <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
+  # if there are no rows in exist if could mean that we're appending new data only, so let's pull up the entry closest in time for the new data
+  if (nrow(exist) == 0) {
+    exist <- DBI::dbGetQuery(con, paste0(
+      "SELECT owner_id, timeseries_id, organization_id, start_dt, end_dt 
+      FROM owners 
+      WHERE timeseries_id = ", timeseries_id, " 
+      AND start_dt <= '", min(data$datetime), "'
+      ORDER BY start_dt DESC
+      LIMIT 1;
+      "))
+  }
+  
   original_exist_rows <- nrow(exist)
   
   if (original_exist_rows == 0) {
-    exist <- data.frame(owner_id = NA,
-                        timeseries_id = timeseries_id,
-                        organization_id = data$owner[1],
-                        start_dt = data$datetime[1],
-                        end_dt = data$datetime[1])
+    exist <- data.frame()
   }
   
   # Collapse consecutive rows with the same owner using run-length encoding
@@ -889,14 +921,22 @@ adjust_contributor <- function(con, timeseries_id, data) {
           ORDER BY start_dt ASC;
     "))
   
+  # if there are no rows in exist if could mean that we're appending new data only, so let's pull up the entry closest in time for the new data
+  if (nrow(exist) == 0) {
+    exist <- DBI::dbGetQuery(con, paste0(
+      "SELECT contributor_id, timeseries_id, organization_id, start_dt, end_dt 
+      FROM contributors 
+      WHERE timeseries_id = ", timeseries_id, " 
+      AND start_dt <= '", min(data$datetime), "'
+      ORDER BY start_dt DESC
+      LIMIT 1;
+      "))
+  }
+  
   original_exist_rows <- nrow(exist)
   
   if (original_exist_rows == 0) {
-    exist <- data.frame(contributor_id = NA,
-                        timeseries_id = timeseries_id,
-                        organization_id = data$contributor[1],
-                        start_dt = data$datetime[1],
-                        end_dt = data$datetime[1])
+    exist <- data.frame()
   }
   
   # Collapse consecutive rows with the same contributor using run-length encoding
