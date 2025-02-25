@@ -30,11 +30,11 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   
    
   # df = NULL
-  # location = "09AB-SC02B"
-  # name = "Whitehorse Airport B_Ice Lake"
-  # name_fr = 'Aéroport de Whitehorse B_Lac Ice'
-  # latitude = 60.70085
-  # longitude = -135.0807
+  # location = "09BA-SC02A"
+  # name = "Twin Creeks A"
+  # name_fr = 'Twin Creeks A'
+  # latitude = 62.61997
+  # longitude = -131.278194
   # visibility_public = 'exact'
   # share_with = 'public_reader'
   # owner = 2
