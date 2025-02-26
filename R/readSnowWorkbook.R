@@ -1,9 +1,9 @@
 #' Read snow workbook and import into Snow database
 #'
 #' @description
-#' `r lifecycle::badge("experimental")`
+#' `r lifecycle::badge("stable")`
 #'
-#' Reads snow workbooks created with [YGwater::createSnowTemplate()], performs some QA/QC, and imports the data to the snow database. Designed with significant error catching and logging. As the function works through the workbook it may fail on any sheet but will continue to the next sheet until all have been processed. Warning messages will be shown alerting the user explaining the issue and the workbook sheet involved. These warning messages are designed primarily for error catching when this function is run programmatically, but are nevertheless useful for manual use as well.
+#' Reads snow workbooks created with [YGwater::createSnowTemplate()], performs QA/QC checks, and imports the data to the snow database. Designed with significant error catching and logging. As the function works through the workbook it may fail on any single sheet but will continue to the next sheet until all have been processed. Warning messages will be shown alerting the user explaining the issue and the workbook sheet involved. These warning messages are designed primarily for error catching when this function is run programmatically, but are nevertheless useful for manual use.
 #'
 #' @param workbook The path to the workbook (.xlsx) containing the snow data. Default "choose" lets you pick the file interactively.
 #' @param overwrite If `TRUE`, will overwrite existing data in the snow database if there's already an entry for the same survey date, target date, and location (regardless of parameters).
@@ -343,8 +343,8 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
         estimate_flag <- rep(FALSE, times = length(sample_datetime))
         ## Exclude_flag, swe, depth, notes, survey_id
         exclude_flag <- !is.na(measurement$Exclude.flag)
-        swe <- round(measurement$SWE * 10)
-        depth <- round(measurement[,1])
+        swe <- round(measurement$SWE * 10) # Convert to mm SWE
+        depth <- round(measurement[,1]) # Leave as cm depth
         notes <- measurement$`Sample.notes.(see.details)`
         survey_id <- rep(surv_id, times = length(sample_datetime))
       } else if (method == "bulk") {  ### Bulk workflow
@@ -354,8 +354,8 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
         estimate_flag <- FALSE
         ## Exclude_flag, swe, depth, notes, survey_id
         exclude_flag <- FALSE
-        swe <- round(calculated[2,3] * 10)
-        depth <- round(calculated[2,2])
+        swe <- round(calculated[2,3] * 10) # Convert to mm SWE
+        depth <- round(calculated[2,2]) # Leave as cm depth
         if (all(is.na(measurement$`Sample.notes.(see.details)`))) {
           notes <- NA
         } else {notes <- paste0("Sample ", row.names(measurement[!is.na(measurement$`Sample.notes.(see.details)`),]), ": ", measurement[!is.na(measurement$`Sample.notes.(see.details)`),3], collapse = ". ")}

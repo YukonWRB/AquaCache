@@ -38,5 +38,5 @@ Updated entries in the hydro database.
 This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
 }
 \details{
-Delete sample data found in AquaCache but not in the remote sources is done with the following logic: each sample_series_id is checked for any data found on the remote using the source_fx and the synch_from and synch_to datetimes assigned in table 'sample_series'. Any samples not found in the remote are deleted from the local database if the 'import_source' of the new and existing samples match. If the 'import_source' of the new and existing samples do not match, the sample is not deleted.
+Deleting sample data found in AquaCache but not in the remote sources is done with the following logic: each sample_series_id is checked for any data found on the remote using the source_fx and the synch_from and synch_to datetimes assigned in table 'sample_series'. Any samples not found in the remote are deleted from the local database if the 'import_source' of the new and existing samples match. If the 'import_source' of the new and existing samples do not match, the sample is not deleted.
 }
