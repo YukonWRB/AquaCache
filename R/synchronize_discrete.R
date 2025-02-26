@@ -6,7 +6,7 @@
 #' This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
 #' 
 #' @details
-#' Delete sample data found in AquaCache but not in the remote sources is done with the following logic: each sample_series_id is checked for any data found on the remote using the source_fx and the synch_from and synch_to datetimes assigned in table 'sample_series'. Any samples not found in the remote are deleted from the local database if the 'import_source' of the new and existing samples match. If the 'import_source' of the new and existing samples do not match, the sample is not deleted.
+#' Deleting sample data found in AquaCache but not in the remote sources is done with the following logic: each sample_series_id is checked for any data found on the remote using the source_fx and the synch_from and synch_to datetimes assigned in table 'sample_series'. Any samples not found in the remote are deleted from the local database if the 'import_source' of the new and existing samples match. If the 'import_source' of the new and existing samples do not match, the sample is not deleted.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param sample_series_id The sample_series_id you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -26,7 +26,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
-
+  
   if (inherits(start_datetime, "Date")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
   } else if (inherits(start_datetime, "character")) {
@@ -43,9 +43,9 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   DBI::dbExecute(con, "SET timezone = 'UTC'")
   
   start <- Sys.time()
-
+  
   message("Synchronizing sample series with synchronize_discrete...")
-
+  
   #Check length of start_datetime is either 1 of same as sample_series_id
   if (length(start_datetime) != 1) {
     if (length(start_datetime) != length(sample_series_id)) {
@@ -54,17 +54,17 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   } else {
     sample_series_id <- unique(sample_series_id)
   }
-
+  
   
   if (sample_series_id[1] == "all") {
-      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series;")
+    all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series;")
   } else {
-      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ");"))
+    all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ");"))
     if (length(unique(sample_series_id)) != nrow(all_series)) {
       fail <- sample_series_id[!sample_series_id %in% all_series$sample_series_id]
       ifelse((length(fail) == 1),
-              warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
-              warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
+             warning("Could not find one of the sample_series_ids that you specified: ID ", fail, " is missing from the database."),
+             warning("Could not find some of the sample_series_ids that you specified: IDs ", paste(fail, collapse = ", "), " are missing from the database.")
       )
     }
   }
@@ -85,7 +85,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   if (is.na(qualifier_unknown)) {
     stop("synchronize: Could not find qualifier type 'Unknown' in the database.")
   }
-
+  
   updated <- 0 #Counter for number of updated timeseries
   EQCon <- NULL #This prevents multiple connections to EQCon...
   snowCon <- NULL # ...and snowCon
@@ -142,7 +142,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
       snowCon <- snowConnect(host = dets$ip, port = dets$port, silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
-
+    
     tryCatch({
       args_list <- list(location = loc_code, sub_location = sub_loc_code, start_datetime = start_i, end_datetime = end_i, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
@@ -173,7 +173,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
       }
       
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
-
+      
       if (!inherits(inRemote, "list")) {
         stop("For sample_series_id ", sid, " the source function did not return a list.")
       } else if (!inherits(inRemote[[1]], "list")) {
@@ -184,7 +184,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
         # Extract the 'datetime' of each sample in the list (make a blank element if it's not found)
         inRemote_datetimes <- lapply(inRemote, function(x) if ("sample" %in% names(x)) x$sample$datetime else NA)
       }
-
+      
       if (length(inRemote) > 0) {
         for (j in 1:length(inRemote)) {
           
@@ -201,20 +201,20 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
           if (delete) {
             if (j == 1) {
               # Delete any samples between the start of the series and the first sample in the remote data, if any. Cascades to results.
-              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime > '", start_i, "' AND datetime < '", inRemote_datetimes[[j]], "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "';"))
+              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime > '", start_i, "' AND datetime < '", inRemote_datetimes[[j]], "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "' AND no_update IS FALSE;"))
             } else if (j == length(inRemote)) {
-              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime < '", end_i, "' AND datetime > '", inRemote_datetimes[[j]], "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "';"))
+              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime < '", end_i, "' AND datetime > '", inRemote_datetimes[[j]], "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "' AND no_update IS FALSE;"))
             } else {
-              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime BETWEEN '", inRemote_datetimes[[j - 1]] + 1, "' AND '", inRemote_datetimes[[j]] - 1, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "';"))
+              DBI::dbExecute(con, paste0("DELETE FROM samples WHERE datetime BETWEEN '", inRemote_datetimes[[j - 1]] + 1, "' AND '", inRemote_datetimes[[j]] - 1, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, " AND import_source = '", source_fx, "' AND no_update IS FALSE;"))
             }
           }
           
           if (nrow(inRemote_results) == 0) {
             next
           }
-        
+          
           inDB_sample <- DBI::dbGetQuery(con, paste0("SELECT * FROM samples WHERE datetime = '", inRemote_sample$datetime, "' AND location_id = ", loc_id, " AND sub_location_id ", if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL", " AND z ", if (!is.null(inRemote_sample$z)) paste0("= ", inRemote_sample$z) else "IS NULL", " AND media_id = ", inRemote_sample$media_id, " AND sample_type = ", inRemote_sample$sample_type, " AND collection_method = ", inRemote_sample$collection_method, ";"))
-        
+          
           
           # Check for any changes/additions/subtractions to the sample metadata
           # If changes are detected, update the sample metadata
@@ -242,8 +242,12 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
                 }
                 if (!identical(inDB_k, inRemote_k)) { # If TRUE, update the DB
                   # message("discrepancy found in ", k)
-                  to_insert <- if (!is.na(inRemote_k)) inRemote_k else "NULL"
-                  DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = '", to_insert, "' WHERE sample_id = ", inDB_sample$sample_id, ";"))
+                  to_insert <- if (!is.na(inRemote_k)) inRemote_k else NULL
+                  if (is.null(to_insert)) {
+                    DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = NULL WHERE sample_id = ", inDB_sample$sample_id, ";"))
+                  } else {
+                    DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = '", to_insert, "' WHERE sample_id = ", inDB_sample$sample_id, ";"))
+                  }
                 }
               }
             }
@@ -302,9 +306,9 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
                       }
                     }
                   }
-              } # End of additional checks if any NA values in 'result' column are returned
-              
-              # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction.
+                } # End of additional checks if any NA values in 'result' column are returned
+                
+                # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction.
                 result_speciation <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (", paste(unique(sub$parameter_id), collapse = ", "), ");"))
                 sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (", paste(unique(sub$parameter_id), collapse = ", "), ");"))
                 if (any(result_speciation$result_speciation_bool)) {
@@ -487,8 +491,8 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             }
           } # End of if no sample is found (making a new one)
         } # End of loop over inRemote
-
-
+        
+        
       } else { # There was no data in remote for the date range specified
         DBI::dbExecute(con, paste0("UPDATE sample_series SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE sample_series_id = ", sid, ";"))
       }
@@ -506,10 +510,10 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   if (interactive()) {
     close(pb)
   }
-
+  
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_synchronize_discrete';"))
   message("Found ", updated, " timeseries to refresh out of the ", nrow(all_series), " unique numbers provided.")
   diff <- Sys.time() - start
   message("Total elapsed time for synchronize: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
-
+  
 } #End of function

@@ -124,7 +124,7 @@ insertACVector <- function(geom, layer_name, feature_name = NULL, description = 
         } else { #overwrite if FALSE
           exist <- DBI::dbGetQuery(con, paste0("SELECT layer_name, feature_name, geom_type, geom_id FROM ", schema, ".", table, " WHERE layer_name = '", layer_name, "' AND feature_name = '", feat_name, "';"))
           if (nrow(exist) != 0) {
-            message("There is already an entry for layer_name = ", layer_name, " and feature_name = ", feat_name, " but you didn't ask to overwrite it. Would you like to aggregate the database feature with the new one?")
+            message("There is already an entry for layer_name = ", layer_name, " and feature_name = ", feat_name, " but you didn't ask to overwrite it. Would you like to delete the old feature and replace it with the new one?")
             agg <- readline(prompt = writeLines(paste("\n1: Yes",
                                                       "\n2: No way!"
             )))
@@ -133,10 +133,8 @@ insertACVector <- function(geom, layer_name, feature_name = NULL, description = 
               warning("Not writing layer_name = ", layer_name, ", feature_name = ", feat_name, ". There is already an entry matching this but parameter overwrite is FALSE.")
               success[[i]] <- FALSE
             } else {
-              message("Seeing if I can aggregate the layers together and update the existing vector entry...")
-              sub.geom <- terra::aggregate(rbind(exist, sub.geom), by = "feature_name")
-              sub.geom$geom_id <- exist[1, "geom_id"]
-              success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = c(schema, table) , data.obj = sub.geom, geom = geom_col, partial.match = TRUE, upsert.using = "geom_id"))
+              DBI::dbExecute(con, paste0("DELETE FROM ", schema, ".", table, " WHERE geom_id = ", exist$geom_id, ";"))
+              success[[i]] <- suppressMessages(rpostgis::pgWriteGeom(con, name = c(schema, table) , data.obj = sub.geom, geom = geom_col, partial.match = TRUE))
               DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_vectors'"))
               message("Succeeded in adding to the existing vector!")
             }

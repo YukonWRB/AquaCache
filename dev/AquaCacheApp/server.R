@@ -8,6 +8,7 @@ server <- function(input, output, session) {
   options(shiny.maxRequestSize = 100*1024^2)
   
   # Server logic dealing with document upload #####################################
+  
   vectors <- reactiveValues()
   selectedVectors <- reactiveValues()
   document_types <- reactiveValues()

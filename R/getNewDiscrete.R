@@ -67,7 +67,6 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
       all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
     } else {
       all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
-      print(paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
       if (length(unique(sample_series_id)) != nrow(all_series)) {
         fail <- sample_series_id[!sample_series_id %in% all_series$sample_series_id]
         ifelse((length(fail) == 1),
@@ -158,7 +157,9 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
       on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
     }
     if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
-      snowCon <- snowConnect(silent = TRUE)
+      # Try with the same host and port as the AquaCache connection
+      dets <-  DBI::dbGetQuery(con, "SELECT inet_server_addr() AS ip, inet_server_port() AS port")
+      snowCon <- snowConnect(host = dets$ip, port = dets$port, silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
     source_fx_args <- all_series$source_fx_args[i]
@@ -335,8 +336,8 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
             count <- count + 1
           }
           
-        } # End of looping over each list element (sample)
-
+        } # End of looping over each list element (sample) for a sample_series_id
+      DBI::dbExecute(con, paste0("UPDATE sample_series SET last_new_data = now() WHERE sample_series_id = ", sid, ";")) # Update the last new data column
     }, error = function(e) {
       warning("getNewDiscrete: Failed to get new data or to append new data for sample_series_id ", sid, ". Error message: ", e$message)
     }) #End of tryCatch
