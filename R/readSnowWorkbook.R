@@ -46,6 +46,12 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
     
     ##### --------------- Pull in all the data from workbook -------------- ####
     survey <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(5:11), cols = c(2:4), detectDates = TRUE, colNames = FALSE)
+    
+    if (survey[5, 2] == "no sample") {
+      message("Sheet ", s, " is marked as 'no sample'. Skipping to next sheet.")
+      next()
+    }
+        
     measurement <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12:22), cols = c(3, 7, 10, 11), colNames = TRUE)
     calculated <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12,23,25), cols = c(2,3,7), colNames = TRUE)
     estavg <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12,23), cols = c(11,12), colNames = FALSE)
@@ -450,14 +456,15 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
         survey_id <- surv_id
       }
       if (overwrite) {
-        DBI::dbExecute(con, paste0("DELETE FROM measurements WHERE survey_id = '", surv_id, "';"))
+        DBI::dbExecute(con, paste0("DELETE FROM measurements WHERE survey_id = ", surv_id, ";"))
         exist_meas <- data.frame()
       } else {
-        exist_meas <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements WHERE survey_id = ", surv_id, "';"))
+        exist_meas <- DBI::dbGetQuery(con, paste0("SELECT * FROM measurements WHERE survey_id = ", surv_id, ";"))
       }
       if (nrow(measurement) > 0 & nrow(exist_meas) == 0) {
-        meas_statement <- sprintf("INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;", paste(sprintf("('%s', '%s', '%s', '%s', %d, %d, '%s')", survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes), collapse = ", "))
+        meas_statement <- sprintf("INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;", paste(sprintf("(%s, '%s', '%s', '%s', %d, %d, '%s')", survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes), collapse = ", "))
         DBI::dbExecute(con, meas_statement)
+        
         if (overwrite) {
           message(paste0("Measurements for snow course '", survey[1,2], "' (", loc_id, ") updated."))
         } else {
