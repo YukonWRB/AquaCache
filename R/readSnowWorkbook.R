@@ -51,7 +51,6 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
       message("Sheet ", s, " is marked as 'no sample'. Skipping to next sheet.")
       next()
     }
-        
     measurement <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12:22), cols = c(3, 7, 10, 11), colNames = TRUE)
     calculated <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12,23,25), cols = c(2,3,7), colNames = TRUE)
     estavg <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12,23), cols = c(11,12), colNames = FALSE)
@@ -464,7 +463,6 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
       if (nrow(measurement) > 0 & nrow(exist_meas) == 0) {
         meas_statement <- sprintf("INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;", paste(sprintf("(%s, '%s', '%s', '%s', %d, %d, '%s')", survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes), collapse = ", "))
         DBI::dbExecute(con, meas_statement)
-        
         if (overwrite) {
           message(paste0("Measurements for snow course '", survey[1,2], "' (", loc_id, ") updated."))
         } else {
