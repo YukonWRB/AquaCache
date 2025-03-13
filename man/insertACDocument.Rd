@@ -9,6 +9,7 @@ insertACDocument(
   name,
   type,
   description,
+  tags = NULL,
   authors = NULL,
   publish_date = NULL,
   url = NULL,
@@ -25,6 +26,8 @@ insertACDocument(
 \item{type}{Type of document, which must exist in the database already. Currently one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'metadata', 'audit'.}
 
 \item{description}{A text description of what the document is. Please be detailed!}
+
+\item{tags}{Tags to associate with the document. Specify multiple tags as individual elements of a character vector, such as c("tag 1", "tag 2").}
 
 \item{authors}{Document author(s) if known. Specify multiple authors as individual elements of a character vector, such as c("author 1", "author 2").}
 
