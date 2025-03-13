@@ -15,7 +15,7 @@
 #'
 
 addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = "public_reader", visibility_public = 'exact', con = NULL) {
-  #function will add entry to images_index, then trigger getNewImages from the user-specified start_datetime
+  # function will add entry to image_series, then trigger getNewImages from the user-specified start_datetime
 
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -44,9 +44,9 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
     stop("The 'share_with' parameter must be a character vector.")
   }
   
-  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]
+  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM image_series WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]
   if (!is.na(exists)) {
-    stop("There is already an entry for that location or location_id and for images of type 'auto' in the images_index table.")
+    stop("There is already an entry for that location or location_id and for images of type 'auto' in the image_series table.")
   }
   insert <- data.frame(location_id = location_id,
                        img_type = "auto",
@@ -59,15 +59,15 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
                        active = TRUE,
                        description = "Image series automatically taken from a web or server location.")
 
-  DBI::dbAppendTable(con, "images_index", insert)
-  res <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM images_index WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]
+  DBI::dbAppendTable(con, "image_series", insert)
+  res <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM image_series WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]
   added <- getNewImages(image_meta_ids = res, con = con)
   if (length(added) == 0) {
-    warning("Failed to find or add new images. The new entry to table images_index has been deleted.")
-    DBI::dbExecute(con, paste0("DELETE FROM images_index WHERE img_meta_id = ", res, ";"))
+    warning("Failed to find or add new images. The new entry to table image_series has been deleted.")
+    DBI::dbExecute(con, paste0("DELETE FROM image_series WHERE img_meta_id = ", res, ";"))
   } else {
     first_new <- DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM images WHERE img_meta_id = ", res, ";"))[1,1]
-    DBI::dbExecute(con, paste0("UPDATE images_index SET first_img = '", first_new, "' WHERE img_meta_id = ", res, ";"))
+    DBI::dbExecute(con, paste0("UPDATE image_series SET first_img = '", first_new, "' WHERE img_meta_id = ", res, ";"))
     message("Added new image series for location_id ", location_id, " and type 'auto'. The new img_meta_id is ", res, ".")
   }
 }
