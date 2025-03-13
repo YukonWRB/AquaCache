@@ -6,38 +6,53 @@
 \usage{
 insertACImage(
   object,
-  img_meta_id,
   datetime,
   fetch_datetime = NULL,
+  img_meta_id = NULL,
   description = NULL,
+  tags = NULL,
   owner = NULL,
   contributor = NULL,
   share_with = "public_reader",
   location = NULL,
-  image_type = NULL,
+  latitude = NULL,
+  longitude = NULL,
+  azimuth_true = NULL,
+  elevation_agl = NULL,
+  elevation_msl = NULL,
   con = NULL
 )
 }
 \arguments{
 \item{object}{Valid path including extension to the image to upload, or an object of class 'response' such as that provided by \code{\link[=downloadWSCImages]{downloadWSCImages()}}.}
 
-\item{img_meta_id}{The img_meta_id, from the table images_index, corresponding to the image location and type. Set NULL if there is no img_meta_id yet.}
-
 \item{datetime}{The datetime the image was taken at, as a POSIXct object or something that can be coerced to one. If not POSIXct timezone is assumed to be UTC.}
 
 \item{fetch_datetime}{The datetime the image was retrieved (optional). If not POSIXct timezone is assumed to be UTC.}
 
-\item{description}{A description of the image. Pass as text.}
+\item{img_meta_id}{The img_meta_id, from the table image_series, corresponding to the image location and type. Set NULL if the image is not linked to an image series - in that case you'll need to specify, at minimum, a latitude and longitude for the image OR associate it with a location.}
 
-\item{owner}{The owner of the image. Pass as text.}
+\item{description}{A description of the image. Pass as text, can be left NULL; consider also using the \code{tags} parameter.}
 
-\item{contributor}{The contributor of the image. Pass as text.}
+\item{tags}{Tags to associate with the image. Pass as a character vector, one element per tag.}
 
-\item{share_with}{Which user groups should the image be shared with. Default is 'public_reader', the public group. Pass as a numeric vector.}
+\item{owner}{The owner of the image, matching the organization_id of table 'organizations'. Can be left NULL.}
 
-\item{location}{If no img_meta_id exists yet: the location or location_id with which to associate the document (must be in the database). Pass a location code as text and a location_id as a numeric. If img_meta_id is specified, this parameter is ignored.}
+\item{contributor}{The contributor of the image, matching the organization_id of table 'organizations'. Pass as text, can be left NULL.}
 
-\item{image_type}{If no img_meta_id exists yet: the type of image: 'auto', or 'manual'. Pass as text.}
+\item{share_with}{Which user groups should the image be shared with. Default is 'public_reader', the public group. Pass as a character vector, one element per group.}
+
+\item{location}{The location_id with which to associate the document (must be in the database). Pass a location_id as a numeric. If img_meta_id is specified, the location already associated is used. This parameter can also be left NULL if latitude and longitude are specified.}
+
+\item{latitude}{If no img_meta_id exists yet AND not specifying a location: the latitude of the image. Pass as numeric.}
+
+\item{longitude}{If no img_meta_id exists yet AND not specifying a location: the longitude of the image. Pass as numeric.}
+
+\item{azimuth_true}{Optional: the true azimuth of the image (direction the image was taken in. Pass as numeric.}
+
+\item{elevation_agl}{Optional: the elevation above ground level of the image in METERS. Pass as numeric.}
+
+\item{elevation_msl}{Optional: the elevation above mean sea level of the image in METERS. Pass as numeric.}
 
 \item{con}{A connection to the database. Default NULL uses AquaConnect() and close the connection afterwards.}
 }

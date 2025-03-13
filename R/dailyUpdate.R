@@ -15,7 +15,7 @@
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to "all".
-#' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
+#' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'image_series', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #' @param continuous If TRUE, will update continuous data. Default is TRUE.
 #' @param discrete If TRUE, will update discrete data. Default is TRUE.
 #' @param hydat If TRUE, will check for new HYDAT data and update timeseries in the database if needed. Default is TRUE.

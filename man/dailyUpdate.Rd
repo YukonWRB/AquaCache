@@ -23,7 +23,7 @@ dailyUpdate(
 
 \item{sample_series_id}{The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to "all".}
 
-\item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'images_index', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
+\item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'image_series', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
 
 \item{continuous}{If TRUE, will update continuous data. Default is TRUE.}
 

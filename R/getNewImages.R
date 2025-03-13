@@ -3,14 +3,14 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Retrieves new data corresponding to entries in the table "images_index". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addACTimeseries()] for a description of how to formulate these arguments.
+#' Retrieves new data corresponding to entries in the table "image_series". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
 #' This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
 #'
 #' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.
 #' @param con A connection to the database. Leaving NULL will create a connection and close it automatically.
-#' @param active Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the images_index table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
+#' @param active Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the image_series table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 #' @export
 #'
 
@@ -29,11 +29,11 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   
   # Create table of meta_ids
   if (image_meta_ids[1] == "all") {
-    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM images_index i JOIN locations l ON i.location_id = l.location_id WHERE i.img_type = 'auto' AND i.source_fx IS NOT NULL;")
+    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.img_type = 'auto' AND i.source_fx IS NOT NULL;")
   } else {
-    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM images_index i JOIN locations l ON i.location_id = l.location_id WHERE i.img_type = 'auto' AND i.source_fx IS NOT NULL AND img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
+    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.img_type = 'auto' AND i.source_fx IS NOT NULL AND img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
     if (length(image_meta_ids) != nrow(meta_ids)) {
-      warning("At least one of the image_meta_ids you called for cannot be found in the database or has no function specified in column source_fx of table images_index.")
+      warning("At least one of the image_meta_ids you called for cannot be found in the database or has no function specified in column source_fx of table image_series.")
     }
   }
   
@@ -77,7 +77,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
           args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
         }
       }
-      imgs <- do.call(source_fx, args_list) #Get the data using the args_list
+      imgs <- do.call(source_fx, args_list) # Get the data using the args_list
       if (is.null(imgs)) {
         next
       }
