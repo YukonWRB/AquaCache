@@ -86,7 +86,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
     stop("synchronize: Could not find qualifier type 'Unknown' in the database.")
   }
   
-  updated <- 0 #Counter for number of updated timeseries
+  updated <- 0 #Counter for number of updated sample series
   EQCon <- NULL #This prevents multiple connections to EQCon...
   snowCon <- NULL # ...and snowCon
   valid_sample_names <- DBI::dbGetQuery(con, "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'samples';")[,1]
@@ -111,6 +111,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
   }
+  
   for (i in 1:nrow(all_series)) {
     sid <- all_series$sample_series_id[i]
     loc_id <- all_series$location_id[i]
@@ -497,7 +498,13 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
         DBI::dbExecute(con, paste0("UPDATE sample_series SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE sample_series_id = ", sid, ";"))
       }
     }, error = function(e) {
-      warning("synchronize failed on sample_series_id ", sid, "  with message: ", e$message)
+      warning("synchronize failed on sample_series_id ", sid, "  with error: ", e$message)
+    },
+    warning = function(w) {
+      warning("synchronize threw a warning on sample_series_id ", sid, "  with warning: ", w$message)
+    },
+    message = function(m) {
+      message("synchronize threw a message on sample_series_id ", sid, "  with message: ", m$message)
     }
     ) # End of tryCatch
     
@@ -512,7 +519,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
   }
   
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_synchronize_discrete';"))
-  message("Found ", updated, " timeseries to refresh out of the ", nrow(all_series), " unique numbers provided.")
+  message("Found ", updated, " sample series to refresh out of the ", nrow(all_series), " unique numbers provided.")
   diff <- Sys.time() - start
   message("Total elapsed time for synchronize: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
   

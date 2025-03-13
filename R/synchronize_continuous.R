@@ -378,19 +378,29 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         utils::setTxtProgressBar(pb, n)
       }
       opts <- list(progress = progress)
-    }
-    
-    updated <- foreach::foreach(i = 1:nrow(all_timeseries), .packages = c("DBI", "lubridate", "AquaCache"), .options.snow = opts, .combine = sum) %dopar% {
-      if (con_params) {
-        parcon <- AquaCache::AquaConnect(name = dbName, host = dbHost, port = dbPort, username = dbUser, password = dbPass, silent = TRUE)
-      } else {
-        parcon <- AquaCache::AquaConnect(silent = TRUE)
+      
+      updated <- foreach::foreach(i = 1:nrow(all_timeseries), .packages = c("DBI", "lubridate", "AquaCache"), .options.snow = opts, .combine = sum) %dopar% {
+        if (con_params) {
+          parcon <- AquaCache::AquaConnect(name = dbName, host = dbHost, port = dbPort, username = dbUser, password = dbPass, silent = TRUE)
+        } else {
+          parcon <- AquaCache::AquaConnect(silent = TRUE)
+        }
+        success <- worker(i, all_timeseries, approval_unknown, grade_unknown, qualifier_unknown, start_datetime, parallel = TRUE, con = parcon)
+        DBI::dbDisconnect(parcon)
+        if (success) 1 else 0 # Will be summed up to get the total number of updated timeseries in object 'updated'
       }
-      success <- worker(i, all_timeseries, approval_unknown, grade_unknown, qualifier_unknown, start_datetime, parallel = TRUE, con = parcon)
-      DBI::dbDisconnect(parcon)
-      if (success) 1 else 0 # Will be summed up to get the total number of updated timeseries in object 'updated'
+    } else {
+      updated <- foreach::foreach(i = 1:nrow(all_timeseries), .packages = c("DBI", "lubridate", "AquaCache"), .combine = sum) %dopar% {
+        if (con_params) {
+          parcon <- AquaCache::AquaConnect(name = dbName, host = dbHost, port = dbPort, username = dbUser, password = dbPass, silent = TRUE)
+        } else {
+          parcon <- AquaCache::AquaConnect(silent = TRUE)
+        }
+        success <- worker(i, all_timeseries, approval_unknown, grade_unknown, qualifier_unknown, start_datetime, parallel = TRUE, con = parcon)
+        DBI::dbDisconnect(parcon)
+        if (success) 1 else 0 # Will be summed up to get the total number of updated timeseries in object 'updated'
+      }
     }
-
   } else { # Not parallel
     updated <- 0 # Counter for number of updated timeseries
     

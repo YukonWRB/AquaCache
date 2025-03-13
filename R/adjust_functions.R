@@ -80,7 +80,7 @@ adjust_grade <- function(con, timeseries_id, data) {
   data <- data[order(data$datetime), ]
   runs <- rle(data$grade)
   ends <- cumsum(runs$lengths)
-  starts <- c(1, head(ends, -1) + 1)
+  starts <- c(1, utils::head(ends, -1) + 1)
   new_segments <- data.frame(
     grade_id      = NA,
     timeseries_id     = timeseries_id,
@@ -287,7 +287,7 @@ adjust_qualifier <- function(con, timeseries_id, data) {
   data <- data[order(data$datetime), ]
   runs <- rle(data$qualifier)
   ends <- cumsum(runs$lengths)
-  starts <- c(1, head(ends, -1) + 1)
+  starts <- c(1, utils::head(ends, -1) + 1)
   new_segments <- data.frame(
     qualifier_id      = NA,
     timeseries_id     = timeseries_id,
@@ -497,7 +497,7 @@ adjust_approval <- function(con, timeseries_id, data) {
   data <- data[order(data$datetime), ]
   runs <- rle(data$approval)
   ends <- cumsum(runs$lengths)
-  starts <- c(1, head(ends, -1) + 1)
+  starts <- c(1, utils::head(ends, -1) + 1)
   new_segments <- data.frame(
     approval_id      = NA,
     timeseries_id     = timeseries_id,
@@ -700,7 +700,7 @@ adjust_owner <- function(con, timeseries_id, data) {
   data <- data[order(data$datetime), ]
   runs <- rle(data$owner)
   ends <- cumsum(runs$lengths)
-  starts <- c(1, head(ends, -1) + 1)
+  starts <- c(1, utils::head(ends, -1) + 1)
   new_segments <- data.frame(
     owner_id      = NA,
     timeseries_id     = timeseries_id,
@@ -903,7 +903,7 @@ adjust_contributor <- function(con, timeseries_id, data) {
   data <- data[order(data$datetime), ]
   runs <- rle(data$contributor)
   ends <- cumsum(runs$lengths)
-  starts <- c(1, head(ends, -1) + 1)
+  starts <- c(1, utils::head(ends, -1) + 1)
   new_segments <- data.frame(
     contributor_id      = NA,
     timeseries_id     = timeseries_id,

@@ -11,12 +11,12 @@ getNewImages(image_meta_ids = "all", con = NULL, active = "default")
 
 \item{con}{A connection to the database. Leaving NULL will create a connection and close it automatically.}
 
-\item{active}{Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the images_index table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.}
+\item{active}{Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the image_series table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.}
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Retrieves new data corresponding to entries in the table "images_index". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
+Retrieves new data corresponding to entries in the table "image_series". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
 \subsection{Default arguments passed to 'source_fx' functions:}{
 
 This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.

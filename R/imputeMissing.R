@@ -53,10 +53,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   }
   
   
-  entry <- DBI::dbGetQuery(con, paste0("SELECT t.location, p.param_name AS parameter, t.category, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.timeseries_id = ", tsid, ";"))
-  if (entry$category != "continuous") {
-    stop("This function is not designed to work with discrete category timeseries.")
-  }
+  entry <- DBI::dbGetQuery(con, paste0("SELECT t.location, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.timeseries_id = ", tsid, ";"))
   returns[["target_timeseries"]] <- entry
   
   # The interval between start and end must contain at least 50 data points (otherwise standard deviation doesn't work well to assess goodness of fit)
@@ -90,7 +87,8 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   }
   
   if (!daily) {
-    exist.values <- calculate_period(exist.values, tsid, con = con) #This is used to determine by how far to expand the datetime range.
+    period <- calculate_period(exist.values[, c("datetime")], tsid, con = con) #This is used to determine by how far to expand the datetime range.
+    exist.values <- merge(exist.values, period, by = "datetime", all.x = TRUE)
   } else {
     exist.values$period <- "P1D"
   }
@@ -142,7 +140,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       period <- 86400
     }
   }
-  
+
   exist.values[is.na(exist.values$imputed), "imputed"] <- FALSE
   exist.values$period <- NULL
 
@@ -698,7 +696,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       }
       
       DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime IN ('", paste(to_push$datetime, collapse = "', '"), "')")) #delete is here in case previously imputed values are being over-written
-      DBI::dbAppendTable(con, "measurements_continuous", to_push)
+      DBI::dbAppendTable(con, "measurements_continuous", to_push[ , c("timeseries_id", "datetime", "value", "imputed", "period")])
       
       calculate_stats(con = con, timeseries_id = tsid, start_recalc = min(to_push$datetime))
       

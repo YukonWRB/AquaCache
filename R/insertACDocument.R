@@ -12,6 +12,7 @@
 #' @param name A concise but descriptive name to give the document.
 #' @param type Type of document, which must exist in the database already. Currently one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'metadata', 'audit'.
 #' @param description A text description of what the document is. Please be detailed!
+#' @param tags Tags to associate with the document. Specify multiple tags as individual elements of a character vector, such as c("tag 1", "tag 2").
 #' @param authors Document author(s) if known. Specify multiple authors as individual elements of a character vector, such as c("author 1", "author 2").
 #' @param publish_date The date of publication, as a Date object.
 #' @param url An optional url (could also be a DOI) for the document.
@@ -22,7 +23,7 @@
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-insertACDocument <- function(path, name, type, description, authors = NULL, publish_date = NULL, url = NULL, share_with = "public_reader", geoms = NULL, con = NULL) {
+insertACDocument <- function(path, name, type, description, tags = NULL, authors = NULL, publish_date = NULL, url = NULL, share_with = "public_reader", geoms = NULL, con = NULL) {
 
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -40,6 +41,11 @@ insertACDocument <- function(path, name, type, description, authors = NULL, publ
   }
   if (length(description) > 1) {
     stop("You can only enter the description as a character vector of length 1.")
+  }
+  if (!is.null(tags)) {
+    if (!is.character(tags)) {
+      stop("Tags must be a character vector.")
+    }
   }
   if (nchar(description) < 5) {
     stop("Minimum character length for 'description' is 5. Try harder.")
@@ -86,6 +92,9 @@ insertACDocument <- function(path, name, type, description, authors = NULL, publ
   }
   if (!is.null(publish_date)) {
     DBI::dbExecute(con, paste0("UPDATE documents SET publish_date = '", publish_date, "' WHERE document_id = ", id, ";"))
+  }
+  if (!is.null(tags)) {
+    DBI::dbExecute(con, paste0("UPDATE documents SET tags = '{", paste(tags, collapse = ", "), "}' WHERE document_id = ", id, ";"))
   }
 
   if (!is.null(geoms)) {
