@@ -18,8 +18,8 @@ insertACImage(
   latitude = NULL,
   longitude = NULL,
   azimuth_true = NULL,
-  altitude_agl = NULL,
-  altitude_msl = NULL,
+  elevation_agl = NULL,
+  elevation_msl = NULL,
   con = NULL
 )
 }
@@ -50,9 +50,9 @@ insertACImage(
 
 \item{azimuth_true}{Optional: the true azimuth of the image (direction the image was taken in. Pass as numeric.}
 
-\item{altitude_agl}{Optional: the altitude above ground level of the image in METERS. Pass as numeric.}
+\item{elevation_agl}{Optional: the elevation above ground level of the image in METERS. Pass as numeric.}
 
-\item{altitude_msl}{Optional: the altitude above mean sea level of the image in METERS. Pass as numeric.}
+\item{elevation_msl}{Optional: the elevation above mean sea level of the image in METERS. Pass as numeric.}
 
 \item{con}{A connection to the database. Default NULL uses AquaConnect() and close the connection afterwards.}
 }
