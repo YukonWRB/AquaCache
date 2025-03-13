@@ -20,14 +20,14 @@
 #' @param contributor The contributor of the image, matching the organization_id of table 'organizations'. Pass as text, can be left NULL.
 #' @param share_with Which user groups should the image be shared with. Default is 'public_reader', the public group. Pass as a character vector, one element per group.
 #' @param azimuth_true Optional: the true azimuth of the image (direction the image was taken in. Pass as numeric.
-#' @param altitude_agl Optional: the altitude above ground level of the image in METERS. Pass as numeric.
-#' @param altitude_msl Optional: the altitude above mean sea level of the image in METERS. Pass as numeric.
+#' @param elevation_agl Optional: the elevation above ground level of the image in METERS. Pass as numeric.
+#' @param elevation_msl Optional: the elevation above mean sea level of the image in METERS. Pass as numeric.
 #' @param con A connection to the database. Default NULL uses AquaConnect() and close the connection afterwards.
 #'
 #' @return TRUE if an image was properly added to the database.
 #' @export
 
-insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= NULL, description = NULL, tags = NULL, owner = NULL, contributor = NULL, share_with = "public_reader", location = NULL, latitude = NULL, longitude = NULL, azimuth_true = NULL, altitude_agl = NULL, altitude_msl = NULL, con = NULL) {
+insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= NULL, description = NULL, tags = NULL, owner = NULL, contributor = NULL, share_with = "public_reader", location = NULL, latitude = NULL, longitude = NULL, azimuth_true = NULL, elevation_agl = NULL, elevation_msl = NULL, con = NULL) {
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -98,15 +98,15 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     }
   }
   
-  if (!is.null(altitude_agl)) {
-    if (!is.numeric(altitude_agl)) {
-      stop("The 'altitude_agl' parameter must be a numeric value.")
+  if (!is.null(elevation_agl)) {
+    if (!is.numeric(elevation_agl)) {
+      stop("The 'elevation_agl' parameter must be a numeric value.")
     }
   }
   
-  if (!is.null(altitude_msl)) {
-    if (!is.numeric(altitude_msl)) {
-      stop("The 'altitude_msl' parameter must be a numeric value.")
+  if (!is.null(elevation_msl)) {
+    if (!is.numeric(elevation_msl)) {
+      stop("The 'elevation_msl' parameter must be a numeric value.")
     }
   }
   
@@ -137,7 +137,7 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
       location <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM image_series WHERE img_meta_id = ", img_meta_id))[1,1]
       latitude <- DBI::dbGetQuery(con, paste0("SELECT latitude FROM locations WHERE location_id = ", location))[1,1]
       longitude <- DBI::dbGetQuery(con, paste0("SELECT longitude FROM locations WHERE location_id = ", location))[1,1]
-      altitude_msl <- DBI::dbGetQuery(con, paste0("SELECT conversion_m FROM datum_conversions WHERE location_id = ", location, " AND current IS TRUE"))[1,1]
+      elevation_msl <- DBI::dbGetQuery(con, paste0("SELECT conversion_m FROM datum_conversions WHERE location_id = ", location, " AND current IS TRUE"))[1,1]
       if (is.na(location)) {
         stop("The img_meta_id you specified does not have a location_id associated with it. Try again.")
       }
@@ -160,8 +160,8 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
       } else {
         latitude <- DBI::dbGetQuery(con, paste0("SELECT latitude FROM locations WHERE location_id = ", location))[1,1]
         longitude <- DBI::dbGetQuery(con, paste0("SELECT longitude FROM locations WHERE location_id = ", location))[1,1]
-        if (is.null(altitude_msl)) {
-          altitude_msl <- DBI::dbGetQuery(con, paste0("SELECT conversion_m FROM datum_conversions WHERE location_id = ", location, " AND current IS TRUE"))[1,1]
+        if (is.null(elevation_msl)) {
+          elevation_msl <- DBI::dbGetQuery(con, paste0("SELECT conversion_m FROM datum_conversions WHERE location_id = ", location, " AND current IS TRUE"))[1,1]
         }
       }
     }
@@ -194,7 +194,7 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
       new_id <- DBI::dbGetQuery(con, paste0("SELECT image_id FROM images WHERE datetime = '", datetime, "' AND img_meta_id = ", img_meta_id, ";"))[1,1]
       DBI::dbExecute(con, paste0("UPDATE images SET ", if (!is.null(fetch_datetime)) paste0("fetch_datetime = '", fetch_datetime, "', "), if (!is.null(description)) paste0("description = '", description, "', "), if (!is.null(owner)) paste0("owner = '", owner, "', "), if (!is.null(contributor)) paste0("contributor = '", contributor, "', "), "share_with = '{", paste(share_with, collapse = ","), "}', format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE image_id = ", new_id, ";"))
     } else {
-      new_id <- DBI::dbGetQuery(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '{",  paste(share_with, collapse = ","), "}', ", location, ", ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "');"))
+      new_id <- DBI::dbGetQuery(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '{",  paste(share_with, collapse = ","), "}', ", location, ", ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "') RETURNING image_id;"))
       if (!is.null(owner)) {
         DBI::dbExecute(con, paste0("UPDATE images SET owner = ", owner, " WHERE image_id = ", new_id, ";"))
       }
@@ -211,11 +211,11 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     if (!is.null(azimuth_true)) {
       DBI::dbExecute(con, paste0("UPDATE images SET azimuth_true = ", azimuth_true, " WHERE image_id = ", new_id, ";"))
     }
-    if (!is.null(altitude_agl)) {
-      DBI::dbExecute(con, paste0("UPDATE images SET altitude_agl_m = ", altitude_agl, " WHERE image_id = ", new_id, ";"))
+    if (!is.null(elevation_agl)) {
+      DBI::dbExecute(con, paste0("UPDATE images SET elevation_agl_m = ", elevation_agl, " WHERE image_id = ", new_id, ";"))
     }
-    if (!is.null(altitude_msl)) {
-      DBI::dbExecute(con, paste0("UPDATE images SET altitude_msl_m = ", altitude_msl, " WHERE image_id = ", new_id, ";"))
+    if (!is.null(elevation_msl)) {
+      DBI::dbExecute(con, paste0("UPDATE images SET elevation_msl_m = ", elevation_msl, " WHERE image_id = ", new_id, ";"))
     }
     
     img_times <- DBI::dbGetQuery(con, paste0("SELECT first_img, last_img FROM image_series WHERE img_meta_id = ", img_meta_id, ";"))
@@ -252,11 +252,11 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     if (!is.null(azimuth_true)) {
       DBI::dbExecute(con, paste0("UPDATE images SET azimuth_true = ", azimuth_true, " WHERE image_id = ", new_id, ";"))
     }
-    if (!is.null(altitude_agl)) {
-      DBI::dbExecute(con, paste0("UPDATE images SET altitude_agl_m = ", altitude_agl, " WHERE image_id = ", new_id, ";"))
+    if (!is.null(elevation_agl)) {
+      DBI::dbExecute(con, paste0("UPDATE images SET elevation_agl_m = ", elevation_agl, " WHERE image_id = ", new_id, ";"))
     }
-    if (!is.null(altitude_msl)) {
-      DBI::dbExecute(con, paste0("UPDATE images SET altitude_msl_m = ", altitude_msl, " WHERE image_id = ", new_id, ";"))
+    if (!is.null(elevation_msl)) {
+      DBI::dbExecute(con, paste0("UPDATE images SET elevation_msl_m = ", elevation_msl, " WHERE image_id = ", new_id, ";"))
     }
     if (!is.null(location)) {
       DBI::dbExecute(con, paste0("UPDATE images SET location_id = ", location, " WHERE image_id = ", new_id, ";"))
