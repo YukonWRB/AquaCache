@@ -12,9 +12,16 @@
 #'
 
 hydat_check <- function(silent = FALSE){
-
-  tryCatch({hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
-  }, error = function(e) {hydat_path <- NULL})
+  
+  tryCatch({
+    hydat_path <- tidyhydat::hy_downloaded_db() #Attempts to get the hydat path, in case it's downloaded already.
+    if (!file.exists(hydat_path)) {
+      hydat_path <- NULL
+    }
+  }, error = function(e) {
+    hydat_path <- NULL
+  })
+  
   new_hydat <- FALSE
   if (!is.null(hydat_path)) { #If hydat already exists, compare version numbers
     local_hydat <- as.Date(tidyhydat::hy_version(hydat_path)$Date)
@@ -51,7 +58,7 @@ hydat_check <- function(silent = FALSE){
   } else {
     updated <- FALSE
   }
-
+  
   if (!silent) {
     message("hydat_check completed.")
   }
