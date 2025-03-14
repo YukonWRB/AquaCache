@@ -420,6 +420,6 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_sync_continuous';"))
   message("Found ", updated, " timeseries to refresh or add to out of the ", nrow(all_timeseries), " unique timeseries provided.")
   diff <- Sys.time() - start
-  message("Total elapsed time for synchronize: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
+  message("Total elapsed time for synchronize continuous: ", round(diff[[1]], 2), " ", units(diff), ". End of function.")
   
 } #End of function

@@ -66,7 +66,7 @@ tryCatch({
     # Also set the owner and contributor of the images. If source_fx in images_index IN downloadWSCImages or downloadNupointImages, then both are the WSC
     wsc <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'")[1,1]
     if (is.na(wsc)) {
-      next()
+      next
     } else {
       if (DBI::dbGetQuery(con, paste0("SELECT source_fx FROM images_index WHERE img_meta_id = ", i, ";"))[1,1] %in% c("downloadWSCImages", "downloadNupointImages")) {
         DBI::dbExecute(con, paste0("UPDATE images SET owner = ", wsc, ", contributor = ", wsc, " WHERE img_meta_id = ", i, ";"))

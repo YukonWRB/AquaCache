@@ -39,12 +39,14 @@
 #' @param sub_location_id The sub_location_ids you wish to have updated, as character or numeric vector. Defaults to NULL which will fetch data from all sub_location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
 #' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. This can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'sample_series' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
+#' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
+#' @param EQCon A connection to the EQWin database, created with [EQConnect()]. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 #'
 
-getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NULL, sample_series_id = NULL, active = 'default') {
+getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NULL, sample_series_id = NULL, active = 'default', snowCon = NULL, EQCon = NULL) {
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -99,9 +101,6 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
 
   # Run for loop over timeseries rows
   message("Fetching new discrete data with getNewDiscrete...")
-  
-  EQcon <- NULL #This prevents multiple connections to EQcon...
-  snowCon <- NULL
   
   # Define a function to commit the data to the database, used later for each sample
   commit_fx <- function(con, sample, results) {
@@ -195,6 +194,7 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
       
       ## Get the data ##############
       data <- do.call(source_fx, args_list) #Get the data using the args_list
+      
       if (length(data) == 0) {
         next
       }
@@ -208,7 +208,8 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
         # Work on each list element to populate the 'samples' and 'results' tables
         for (j in 1:length(data)) {
           if (!("sample" %in% names(data[[j]])) | !("results" %in% names(data[[j]]))) {
-            stop("For sample_series_id ", sid, " the source function did not return a list with elements named 'sample' and 'results'. Failed on list element ", j, ".")
+            warning("For sample_series_id ", sid, " the source function did not return a list with elements named 'sample' and 'results'. Failed on list element ", j, ". Skipping to next element.")
+            next
           }
           
           # Make sure that results element has at least one row
@@ -238,7 +239,8 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
           if (!all(c(mandatory_samp) %in% names_samp)) {
             # Make an error message stating which column is missing
             missing <- c(mandatory_samp)[!c(mandatory_samp) %in% names_samp]
-            stop("For sample_series_id ", sid, " the source function did not return one or more mandatory column(s) for the sample metadata: '", paste(missing, collapse = "', '"), "'.")
+            warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return one or more mandatory column(s) for the sample metadata: '", paste(missing, collapse = "', '"), "' Skipping to next sample.")
+            next
           }
           
           sample$import_source <- source_fx
@@ -252,26 +254,31 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
           if (!all(c(mandatory_res) %in% names_res)) {
             # Make an error message stating which column is missing
             missing <- c(mandatory_res)[!c(mandatory_res) %in% names_res]
-            stop("For sample_series_id ", sid, " the source function did not return one or more mandatory column(s) for the sample metadata: '", paste(missing, collapse = "', '"), "'.")
+            warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return one or more mandatory column(s) for the results: '", paste(missing, collapse = "', '"), "'. Skipping to next sample.")
+            next
           }
           
           # More complex checks if 'result' is NA
           # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
           if (any(is.na(results$result))) {
             if (!("result_condition" %in% names_res)) {
-              stop("For sample_series_id ", sid, " the source function returned NA values in the column 'result' but did not return a column called 'result_condition'.")
+              warning("For sample_series_id ", sid, ", sample ", j, " (sample_datetime ", sample$datetime, ") the source function returned NA values in the column 'result' but did not return a column called 'result_condition'. Skipping to next sample.")
+              next
             } else { # Check that each NA in 'result' has a corresponding entry in 'result_condition'
               sub.results <- results[is.na(results$result), ]
               check_result_condition <- FALSE # prevents repeatedly checking for the same thing
               
+              next_flag <- FALSE
               for (k in 1:nrow(sub.results)) {
                 if (is.na(sub.results$result[k]) & is.na(sub.results$result_condition[k])) {
-                  stop("For sample_series_id ", sid, " the source function returned at least one NA result in the column 'result' but did not return a corresponding entry in the column 'result_condition'.")
+                  warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned at least one NA result in the column 'result' but did not return a corresponding entry in the column 'result_condition'. Skipping to next sample.")
+                  next_flag <- TRUE
                 } else {
                   if (!check_result_condition) {
                     if (any(sub.results$result_condition %in% c(1, 2))) {
                       if (!("result_condition_value" %in% names(results))) {
-                        stop("For sample_series_id ", sid, " the source function returned at least one row where 'result_condition' is 1 or 2 (above/below detetion limit) but there is no column for the necessary result_condition_value.")
+                        warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned at least one row where 'result_condition' is 1 or 2 (above/below detetion limit) but there is no column for the necessary result_condition_value. Skipping to next sample.")
+                        next_flag <- TRUE
                       }
                     }
                     check_result_condition <- TRUE
@@ -279,11 +286,15 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
                   
                   if (sub.results$result_condition[k] %in% c(1, 2)) {
                     if (is.na(sub.results$result_condition_value[k])) {
-                      stop("For sample_series_id ", sid, " the source function returned a value of 1 or 2 in the column 'result_condition' (indicating above or below detection limit) but did not return a corresponding entry in the column 'result_condition_value'.")
+                      warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned a value of 1 or 2 in the column 'result_condition' (indicating above or below detection limit) but did not return a corresponding entry in the column 'result_condition_value'. Skipping to the next sample.")
+                      next_flag <- TRUE
                     }
                   }
                 }
               } # End of looping over each row with NA in result column
+            }
+            if (next_flag) {
+              next
             }
           } # End of additional checks fs any NA values in 'result' column are returned
           
@@ -293,25 +304,29 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
           sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (", paste(unique(results$parameter_id), collapse = ", "), ");"))
           if (any(result_speciation$result_speciation_bool)) {
             if (!("result_speciation" %in% names(data))) {
-              stop("For sample_series_id ", sid, " the source function did not return a column 'result_speciation' but the database mandates this for at least one of the parameters.")
+              warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return a column 'result_speciation' but the database mandates this for at least one of the parameters. Skipping to next sample.")
+              next
             } else { # Check that values in the result_speciation column are not NA where necessary
               merge <- merge(results, result_speciation, by = "parameter_id")
               # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation column is not NA
               chk <- with(merge, result_speciation_bool & is.na(result_speciation))
               if (any(chk)) {
-                stop("For sample_series_id ", sid, " the source function returned NA values in the column 'result_speciation' for at least one parameter where the database mandates this value.")
+                warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned NA values in the column 'result_speciation' for at least one parameter where the database mandates this value. Skipping to next sample.")
+                next
               }
             }
           }
           if (any(sample_fraction$sample_fraction_bool)) {
             if (!("sample_fraction" %in% names(data))) {
-              stop("The source function did not return a column 'sample_fraction' but the database mandates this for at least one of the parameters.")
+              warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return a column 'sample_fraction' but the database mandates this for at least one of the parameters. Skipping to next sample.")
+              next
             } else { # Check that all values in the sample_fraction column are not NA where necessary
               merge <- merge(results, sample_fraction, by = "parameter_id")
               # For rows where sample_fraction_bool is TRUE, check that the corresponding sample_fraction column is not NA
               chk <- with(merge, sample_fraction_bool & is.na(sample_fraction))
               if (any(chk)) {
-                stop("For sample_series_id ", sid, " the source function returned NA values in the column 'sample_fraction' for at least one parameter where the database mandates this value.")
+                warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned NA values in the column 'sample_fraction' for at least one parameter where the database mandates this value. Skipping to next sample.")
+                next
               }
             }
           }
