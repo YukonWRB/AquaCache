@@ -96,7 +96,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
             image_count <- image_count + 1
           }
         } else {
-          next()
+          next
         }
       count <- count + 1
       success <- c(success, id)

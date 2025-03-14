@@ -9,7 +9,9 @@ getNewDiscrete(
   location_id = NULL,
   sub_location_id = NULL,
   sample_series_id = NULL,
-  active = "default"
+  active = "default",
+  snowCon = NULL,
+  EQCon = NULL
 )
 }
 \arguments{
@@ -22,6 +24,10 @@ getNewDiscrete(
 \item{sample_series_id}{The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. This can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids.}
 
 \item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'sample_series' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
+
+\item{snowCon}{A connection to the snow course database, created with \code{\link[=snowConnect]{snowConnect()}}. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.}
+
+\item{EQCon}{A connection to the EQWin database, created with \code{\link[=EQConnect]{EQConnect()}}. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.}
 }
 \value{
 The database is updated in-place, and a data.frame is generated with one row per updated location.

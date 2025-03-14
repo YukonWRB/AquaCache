@@ -49,7 +49,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
     
     if (survey[5, 2] == "no sample") {
       message("Sheet ", s, " is marked as 'no sample'. Skipping to next sheet.")
-      next()
+      next
     }
     measurement <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12:22), cols = c(3, 7, 10, 11), colNames = TRUE)
     calculated <- openxlsx::read.xlsx(xlsxFile = workbook, sheet = s, rows = c(12,23,25), cols = c(2,3,7), colNames = TRUE)

@@ -48,7 +48,6 @@ Imports:
     stats,
     terra,
     tidyhydat,
-    tidyr,
     tools,
     weathercan,
     zoo

@@ -496,7 +496,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
                 }
               }
               other_method <- TRUE
-              break()
+              break
             }
             if (missing_for_impute_res$exit) {
               message("Reminder to now go and impute data for timeseries_id ", selected$timeseries_id, "!")
