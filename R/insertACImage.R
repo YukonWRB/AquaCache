@@ -233,7 +233,7 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     
     
     # No update for this one, just insert
-    new_id <- DBI::dbGetQuery(con, "INSERT INTO images (datetime, share_with, latitude, longitude, format, file) VALUES ('", datetime, "', '{", paste(share_with, collapse = ","), "}', ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "') RETURNING image_id;")
+    new_id <- DBI::dbGetQuery(con, paste0("INSERT INTO images (datetime, share_with, latitude, longitude, format, file) VALUES ('", datetime, "', '{", paste(share_with, collapse = ","), "}', ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "') RETURNING image_id;"))
     if (!is.null(description)) {
       DBI::dbExecute(con, paste0("UPDATE images SET description = '", description, "' WHERE image_id = ", new_id, ";"))
     }
