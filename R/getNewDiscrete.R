@@ -151,9 +151,9 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
       last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
     }
     
-    if (source_fx == "downloadEQWin" & is.null(EQcon)) {
-      EQcon <- EQConnect(silent = TRUE)
-      on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
+    if (source_fx == "downloadEQWin" & is.null(EQCon)) {
+      EQCon <- EQConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
     }
     if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
       # Try with the same host and port as the AquaCache connection
@@ -167,7 +167,7 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
       args_list <- list(con = con, location = loc_code, sub_location = sub_loc_id, start_datetime = last_data_point, end_datetime = if (is.na(range_end)) Sys.time() else range_end)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
       if (source_fx == "downloadEQWin") {
-        args_list[["EQcon"]] <- EQcon
+        args_list[["EQCon"]] <- EQCon
       }
       if (source_fx == "downloadSnowCourse") {
         args_list[["snowCon"]] <- snowCon
