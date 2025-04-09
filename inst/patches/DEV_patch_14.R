@@ -104,6 +104,9 @@ tryCatch({
     DBI::dbExecute(con, paste0("UPDATE timeseries SET source_fx_args = '", new_args_json, "' WHERE timeseries_id = ", row$timeseries_id, ";"))
   }
   
+  # Drop table 'fetch_settings'
+  DBI::dbExecute(con, "DROP TABLE IF EXISTS fetch_settings;")
+  
   
   
   # raster_series_index ##################
