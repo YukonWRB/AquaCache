@@ -10,6 +10,8 @@ downloadSnowCourse(
   start_datetime,
   end_datetime = Sys.time(),
   old_loc = NULL,
+  adjust_start = NULL,
+  adjust_end = NULL,
   con = NULL,
   snowCon = snowConnect()
 )
@@ -24,6 +26,10 @@ downloadSnowCourse(
 \item{end_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
 
 \item{old_loc}{In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.}
+
+\item{adjust_start}{The start date or datetime to use for the adjustment of the old location data. If NULL, the start date of the new location will be used. To have no adjustment, set adjust_start and adjust_end to the same date/datetime}
+
+\item{adjust_end}{The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.}
 
 \item{con}{A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().}
 

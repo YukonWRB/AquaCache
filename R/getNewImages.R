@@ -51,31 +51,15 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   }
   for (i in 1:nrow(meta_ids)) {
     id <- meta_ids[i, "img_meta_id"]
-    location <- meta_ids[i, "location"]
     next_instant <- meta_ids[i, "last_img"] + 1 #one second after the last image
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     
     tryCatch({
-      args_list <- list(location = location, start_datetime = next_instant)
+      args_list <- list(start_datetime = next_instant)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
-        args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair) {
-          gsub("[{}]", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("\"", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("'", "", pair)
-        })
-        pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair) {
-          trimws(pair)
-        })
-        for (j in 1:length(pairs)) {
-          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-        }
+        args <- jsonlite::fromJSON(source_fx_args)
+        args_list <- c(args_list, lapply(args, as.character))
       }
       imgs <- do.call(source_fx, args_list) # Get the data using the args_list
       if (is.null(imgs)) {
