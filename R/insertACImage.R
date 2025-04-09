@@ -16,6 +16,7 @@
 #' @param longitude If no img_meta_id exists yet AND not specifying a location: the longitude of the image. Pass as numeric.
 #' @param description A description of the image. Pass as text, can be left NULL; consider also using the `tags` parameter.
 #' @param tags Tags to associate with the image. Pass as a character vector, one element per tag.
+#' @param image_type The image_type_id from table images_types corresponding to the image type. Pass as numeric, can be left NULL
 #' @param owner The owner of the image, matching the organization_id of table 'organizations'. Can be left NULL.
 #' @param contributor The contributor of the image, matching the organization_id of table 'organizations'. Pass as text, can be left NULL.
 #' @param share_with Which user groups should the image be shared with. Default is 'public_reader', the public group. Pass as a character vector, one element per group.
@@ -27,7 +28,7 @@
 #' @return TRUE if an image was properly added to the database.
 #' @export
 
-insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= NULL, description = NULL, tags = NULL, owner = NULL, contributor = NULL, share_with = "public_reader", location = NULL, latitude = NULL, longitude = NULL, azimuth_true = NULL, elevation_agl = NULL, elevation_msl = NULL, con = NULL) {
+insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= NULL, description = NULL, tags = NULL, image_type = NULL, owner = NULL, contributor = NULL, share_with = "public_reader", location = NULL, latitude = NULL, longitude = NULL, azimuth_true = NULL, elevation_agl = NULL, elevation_msl = NULL, con = NULL) {
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -77,6 +78,16 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
   if (!is.null(tags)) {
     if (!inherits(tags, "character")) {
       stop("The 'tags' parameter must be a character vector.")
+    }
+  }
+  if (!is.null(image_type)) {
+    if (!inherits(image_type, "numeric")) {
+      stop("The 'image_type' parameter must be a numeric.")
+    }
+    # Make sure it exists in the database table 'image_types'
+    image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type_id = ", image_type))[1,1]
+    if (is.na(image_type)) {
+      stop("The image_type you specified does not exist. Try again.")
     }
   }
   
@@ -208,6 +219,9 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     if (!is.null(tags)) {
       DBI::dbExecute(con, paste0("UPDATE images SET tags = '{", paste(tags, collapse = ","), "}' WHERE image_id = ", new_id, ";"))
     }
+    if (!is.null(image_type)) {
+      DBI::dbExecute(con, paste0("UPDATE images SET image_type = ", image_type, " WHERE image_id = ", new_id, ";"))
+    }
     if (!is.null(azimuth_true)) {
       DBI::dbExecute(con, paste0("UPDATE images SET azimuth_true = ", azimuth_true, " WHERE image_id = ", new_id, ";"))
     }
@@ -231,7 +245,6 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     
   } else {  # Not working with an img_meta_id
     
-    
     # No update for this one, just insert
     new_id <- DBI::dbGetQuery(con, "INSERT INTO images (datetime, share_with, latitude, longitude, format, file) VALUES ('", datetime, "', '{", paste(share_with, collapse = ","), "}', ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "') RETURNING image_id;")
     if (!is.null(description)) {
@@ -249,6 +262,9 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     if (!is.null(tags)) {
       DBI::dbExecute(con, paste0("UPDATE images SET tags = '{", paste(tags, collapse = ","), "}' WHERE image_id = ", new_id, ";"))
     }
+    if (!is.null(image_type)) {
+      DBI::dbExecute(con, paste0("UPDATE images SET image_type = ", image_type, " WHERE image_id = ", new_id, ";"))
+    }
     if (!is.null(azimuth_true)) {
       DBI::dbExecute(con, paste0("UPDATE images SET azimuth_true = ", azimuth_true, " WHERE image_id = ", new_id, ";"))
     }
@@ -262,8 +278,6 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
       DBI::dbExecute(con, paste0("UPDATE images SET location_id = ", location, " WHERE image_id = ", new_id, ";"))
     }
   }
-  
-  
   return(TRUE)
 }
 

@@ -87,7 +87,9 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
         if (inherits(imgs, "list")) {
           for (j in 1:length(imgs)) {
             img <- imgs[[j]]
-            insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertACImage
+            # Get the image_type_id from the image_types table corresponding to 'Auto'
+            image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type = 'Auto';"))[1, 1]
+            insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = "auto")  # update to the last_img and last_new_img datetime is already being done by insertACImage
             image_count <- image_count + 1
           }
         } else if (inherits(imgs, "data.frame")) {

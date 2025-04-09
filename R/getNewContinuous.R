@@ -95,7 +95,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
 
     tryCatch({
-      args_list <- list(location = loc, parameter_id = remote_parameter_id, start_datetime = last_data_point, con = con)
+      args_list <- list(location = loc, parameter = remote_parameter_id, start_datetime = last_data_point, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- strsplit(source_fx_args, "\\},\\s*\\{")
         pairs <- lapply(args, function(pair) {

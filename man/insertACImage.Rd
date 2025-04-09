@@ -11,6 +11,7 @@ insertACImage(
   img_meta_id = NULL,
   description = NULL,
   tags = NULL,
+  image_type = NULL,
   owner = NULL,
   contributor = NULL,
   share_with = "public_reader",
@@ -35,6 +36,8 @@ insertACImage(
 \item{description}{A description of the image. Pass as text, can be left NULL; consider also using the \code{tags} parameter.}
 
 \item{tags}{Tags to associate with the image. Pass as a character vector, one element per tag.}
+
+\item{image_type}{The image_type_id from table images_types corresponding to the image type. Pass as numeric, can be left NULL}
 
 \item{owner}{The owner of the image, matching the organization_id of table 'organizations'. Can be left NULL.}
 
