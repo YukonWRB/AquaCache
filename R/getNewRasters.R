@@ -61,11 +61,10 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     type <- meta_ids[i, "type"]
-    parameter <- meta_ids[i, "parameter"]
     if (type == "reanalysis") { # Reanalysis data may have preliminary rasters that should be replaced when final versions are produced.
       prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "';"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
       if (!is.na(prelim)) {
-        next_instant <- prelim - 1 #one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
+        next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
       } else {
         next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime
       }
@@ -78,26 +77,12 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
     
     
     tryCatch({
-      args_list <- list(start_datetime = next_instant, param = parameter)
+      args_list <- list(start_datetime = next_instant)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
-        args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair){
-          gsub("[{}]", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair){
-          gsub("\"", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair){
-          gsub("'", "", pair)
-        })
-        pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair){
-          trimws(pair)
-        })
-        for (j in 1:length(pairs)) {
-          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-        }
+        args <- jsonlite::fromJSON(source_fx_args)
+        args_list <- c(args_list, lapply(args, as.character))
       }
+      
       rasters <- do.call(source_fx, args_list) #Get the data using the args_list
       
       # Extract forecast and issued_datetime from the list

@@ -11,7 +11,7 @@ calculate_stats(con = NULL, timeseries_id, start_recalc = NULL)
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Specifying 'all' will work on all timeseries.}
 
-\item{start_recalc}{The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.}
+\item{start_recalc}{The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will recalculate the last two days in case there is new realtime data, plus two days in the past to account for possible past calculations with incomplete data.}
 }
 \value{
 Updated entries in the 'measurements_calculated_daily' table.

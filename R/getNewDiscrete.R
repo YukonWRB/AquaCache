@@ -123,7 +123,6 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
   }
   for (i in 1:nrow(all_series)) {
     loc_id <- all_series$location_id[i]
-    loc_code <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE location_id = ", loc_id, ";"))[1,1]
     sub_loc_id <- all_series$sub_location_id[i]
     sid <- all_series$sample_series_id[i]
     source_fx <- all_series$source_fx[i]
@@ -134,26 +133,19 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
     range_start <- all_series$synch_from[i]
     range_end <- all_series$synch_to[i]
     
-    if (is.na(sub_loc_id)) {
-      if (is.na(range_start)) {
-        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, ";"))[1,1] + 1
-      } else {
-        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND datetime > '", as.character(range_start), " UTC';"))[1,1] + 1
-      }
-    } else {
-      if (is.na(range_start)) {      
-        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND sub_location_id = ", sub_loc_id, ";"))[1,1] + 1
-      } else {
-        last_data_point <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id, " AND sub_location_id = ", sub_loc_id, " AND datetime > '", as.character(range_start), " UTC';"))[1,1] + 1
-      }
-    }
+    # Find the last data point
+    query <- paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id)
+    if (!is.na(sub_loc_id)) query <- paste0(query, " AND sub_location_id = ", sub_loc_id)
+    if (!is.na(range_start)) query <- paste0(query, " AND datetime > '", as.character(range_start), " UTC'")
+    last_data_point <- DBI::dbGetQuery(con, paste0(query, ";"))[1, 1] + 1
+    
     if (is.na(last_data_point)) { # Means we're dealing with a location that has no samples in yet - probably just created
       last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
     }
     
-    if (source_fx == "downloadEQWin" & is.null(EQcon)) {
-      EQcon <- EQConnect(silent = TRUE)
-      on.exit(DBI::dbDisconnect(EQcon), add = TRUE)
+    if (source_fx == "downloadEQWin" & is.null(EQCon)) {
+      EQCon <- EQConnect(silent = TRUE)
+      on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
     }
     if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
       # Try with the same host and port as the AquaCache connection
@@ -161,35 +153,19 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
       snowCon <- snowConnect(host = dets$ip, port = dets$port, silent = TRUE)
       on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
     }
-    source_fx_args <- all_series$source_fx_args[i]
 
     tryCatch({
-      args_list <- list(con = con, location = loc_code, sub_location = sub_loc_id, start_datetime = last_data_point, end_datetime = if (is.na(range_end)) Sys.time() else range_end)
+      args_list <- list(con = con, start_datetime = last_data_point, end_datetime = if (is.na(range_end)) Sys.time() else range_end)
       # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
       if (source_fx == "downloadEQWin") {
-        args_list[["EQcon"]] <- EQcon
+        args_list[["EQCon"]] <- EQCon
       }
       if (source_fx == "downloadSnowCourse") {
         args_list[["snowCon"]] <- snowCon
       }
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
-        args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair) {
-          gsub("[{}]", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("\"", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("'", "", pair)
-        })
-        pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair) {
-          trimws(pair)
-        })
-        for (j in 1:length(pairs)) {
-          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-        }
+        args <- jsonlite::fromJSON(source_fx_args)
+        args_list <- c(args_list, lapply(args, as.character))
       }
       
       ## Get the data ##############

@@ -6,7 +6,7 @@
 \usage{
 downloadAquarius(
   location,
-  parameter_id,
+  parameter,
   start_datetime,
   end_datetime = Sys.Date(),
   login = Sys.getenv(c("AQUSER", "AQPASS")),
@@ -17,7 +17,7 @@ downloadAquarius(
 \arguments{
 \item{location}{The location ID, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form \verb{29EA001} or \code{YOWN-0804}.}
 
-\item{parameter_id}{The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form \code{Wlevel_bgs.Calculated}.}
+\item{parameter}{The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form \code{Wlevel_bgs.Calculated}.}
 
 \item{start_datetime}{The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.}
 

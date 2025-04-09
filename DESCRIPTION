@@ -1,6 +1,6 @@
 Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
-Version: 2.4.0
+Version: 2.4.2
 Authors@R: c(
     person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),

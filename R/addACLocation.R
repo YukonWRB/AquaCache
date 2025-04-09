@@ -30,18 +30,18 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   
    
   # df = NULL
-  # location = "09BA-SC02A"
-  # name = "Twin Creeks A"
-  # name_fr = 'Twin Creeks A'
-  # latitude = 62.61997
-  # longitude = -131.278194
+  # location = "09FD-SC02"
+  # name = "Old Crow Mountain Snow Course"
+  # name_fr = "Parcours nivométrique de la montagne Old Crow"
+  # latitude = 67.60114
+  # longitude = -139.85132
   # visibility_public = 'exact'
   # share_with = 'public_reader'
   # owner = 2
   # location_type = 15
   # datum_id_from = 10
   # datum_id_to = 35
-  # conversion_m = 740
+  # conversion_m = 440
   # current = TRUE
   # network = 4
   # con = con
@@ -250,7 +250,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
                             "latitude" = latitude[i],
                             "longitude" = longitude[i])
         point <- terra::vect(point, geom = c("longitude", "latitude"), crs = "epsg:4269")
-        insertACVector(geom = point, layer_name = "Locations", feature_name_col = "feature_name", description_col = "description")
+        insertACVector(geom = point, layer_name = "Locations", feature_name_col = "feature_name", description_col = "description", con = con)
         geom_id <- DBI::dbGetQuery(con, paste0("SELECT geom_id FROM spatial.vectors WHERE layer_name = 'Locations' AND feature_name = '", location[i], "';"))[1,1]
         
       } else {

@@ -51,31 +51,15 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   }
   for (i in 1:nrow(meta_ids)) {
     id <- meta_ids[i, "img_meta_id"]
-    location <- meta_ids[i, "location"]
     next_instant <- meta_ids[i, "last_img"] + 1 #one second after the last image
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     
     tryCatch({
-      args_list <- list(location = location, start_datetime = next_instant)
+      args_list <- list(start_datetime = next_instant)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
-        args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair) {
-          gsub("[{}]", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("\"", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("'", "", pair)
-        })
-        pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair) {
-          trimws(pair)
-        })
-        for (j in 1:length(pairs)) {
-          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-        }
+        args <- jsonlite::fromJSON(source_fx_args)
+        args_list <- c(args_list, lapply(args, as.character))
       }
       imgs <- do.call(source_fx, args_list) # Get the data using the args_list
       if (is.null(imgs)) {
@@ -87,7 +71,9 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
         if (inherits(imgs, "list")) {
           for (j in 1:length(imgs)) {
             img <- imgs[[j]]
-            insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.")  # update to the last_img and last_new_img datetime is already being done by insertACImage
+            # Get the image_type_id from the image_types table corresponding to 'Auto'
+            image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type = 'Auto';"))[1, 1]
+            insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = "auto")  # update to the last_img and last_new_img datetime is already being done by insertACImage
             image_count <- image_count + 1
           }
         } else if (inherits(imgs, "data.frame")) {
