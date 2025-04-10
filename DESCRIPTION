@@ -34,6 +34,7 @@ Imports:
     hablar,
     hexView,
     httr,
+    jsonlite,
     lifecycle,
     lubridate,
     magrittr,
