@@ -14,7 +14,7 @@
 #'
 #' @param con A connection to the database. If NULL, a connection will be created and closed by the function.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Specifying 'all' will work on all timeseries.
-#' @param start_recalc The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will only calculate days for which there is realtime data but no daily data yet, plus two days in the past to account for possible past calculations with incomplete data.
+#' @param start_recalc The day on which to start daily calculations, as a vector of one element OR as NULL. If NULL will recalculate the last two days in case there is new realtime data, plus two days in the past to account for possible past calculations with incomplete data.
 #'
 #' @return Updated entries in the 'measurements_calculated_daily' table.
 #' @export

@@ -5,14 +5,14 @@
 \title{Get HRDPA rasters}
 \usage{
 downloadHRDPA(
-  param,
+  parameter,
   start_datetime,
   url = "https://dd.weather.gc.ca/model_hrdpa/2.5km/",
   clip = NULL
 )
 }
 \arguments{
-\item{param}{The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.}
+\item{parameter}{The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.}
 
 \item{start_datetime}{The datetime from which to start looking for new rasters}
 

@@ -1,6 +1,6 @@
 #' Get HRDPS rasters
 #'
-#' @param param The parameter to fetch. 
+#' @param parameter The parameter to fetch. 
 #' @param start_datetime Not a true start_datetime in the sense used in fetching other data, but rather the datetime of the last issued forecast in the database. This is compared to what's on the remote and, if different, the new forecast is fetched.
 #' @param url The url from which to get new rasters.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
@@ -8,7 +8,7 @@
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
 
-downloadHRDPS <- function(param, start_datetime, url = "https://dd.weather.gc.ca/model_hrdps/continental/2.5km/", clip = NULL) {
+downloadHRDPS <- function(parameter, start_datetime, url = "https://dd.weather.gc.ca/model_hrdps/continental/2.5km/", clip = NULL) {
   
   # check parameter 'clip'
   if (!is.null(clip)) {
@@ -55,7 +55,7 @@ downloadHRDPS <- function(param, start_datetime, url = "https://dd.weather.gc.ca
           tmp <- data.frame(link = paste0(url, i, "/", links[j], "/", timestep_links),
                             issue = as.POSIXct(substr(timestep_links, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
                             valid = as.POSIXct(substr(timestep_links, 1, 11), format = "%Y%m%dT%H", tz = "UTC") + as.numeric(links[j]) * 60 * 60,
-                            param = sub(".*HRDPS[-_](.*?)_RLatLon.*", "\\1", timestep_links))
+                            parameter = sub(".*HRDPS[-_](.*?)_RLatLon.*", "\\1", timestep_links))
           tmp_available <- rbind(tmp_available, tmp)
         }
       }
@@ -69,7 +69,7 @@ downloadHRDPS <- function(param, start_datetime, url = "https://dd.weather.gc.ca
   }
   
   #Now filter by parameter and latest issue with all data available
-  available <- available[available$param == param, ]
+  available <- available[available$parameter == parameter, ]
   available <- if (nrow(available[available$issue == max(available$issue), ]) == 48) available[available$issue == max(available$issue), ] else available[available$issue == max(available$issue) - 60*60*6, ]
   
   

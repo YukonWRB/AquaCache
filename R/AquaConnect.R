@@ -17,17 +17,13 @@
 #' @param username Username. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminUser:"username".
 #' @param password Password. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminPass:"password".
 #' @param silent TRUE suppresses messages except for errors and login messages.
-#' @param dev TRUE appends "_dev" to the database name.
 #'
 #' @return A connection to the database.
 #'
 #' @export
 
-AquaConnect <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), port = Sys.getenv("aquacachePort"), username = Sys.getenv("aquacacheAdminUser"), password = Sys.getenv("aquacacheAdminPass"), silent = FALSE, dev = FALSE){
+AquaConnect <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), port = Sys.getenv("aquacachePort"), username = Sys.getenv("aquacacheAdminUser"), password = Sys.getenv("aquacacheAdminPass"), silent = FALSE){
   
-  if (dev) {
-    name <- paste0(name, "_dev")
-  }
   tryCatch({
     con <- DBI::dbConnect(drv = RPostgres::Postgres(),
                           dbname = name,
@@ -65,7 +61,7 @@ AquaConnect <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), 
       }
     }
     # Get last patch available from package. These are in inst/patches folder and named "patch_X.R"
-    patch_files <- list.files(system.file("patches", package = "AquaCache"), pattern = "patch_[0-9]+\\.R", full.names = FALSE)
+    patch_files <- list.files(system.file("patches", package = "AquaCache"), pattern = "^patch_[0-9]+\\.R", full.names = FALSE)
     last_patch_file <- max(as.numeric(gsub("patch_|.R", "", patch_files)))
     
     if (last_patch < last_patch_file) {

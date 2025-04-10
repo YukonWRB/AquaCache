@@ -5,14 +5,14 @@
 \title{Get HRDPS rasters}
 \usage{
 downloadHRDPS(
-  param,
+  parameter,
   start_datetime,
   url = "https://dd.weather.gc.ca/model_hrdps/continental/2.5km/",
   clip = NULL
 )
 }
 \arguments{
-\item{param}{The parameter to fetch.}
+\item{parameter}{The parameter to fetch.}
 
 \item{start_datetime}{Not a true start_datetime in the sense used in fetching other data, but rather the datetime of the last issued forecast in the database. This is compared to what's on the remote and, if different, the new forecast is fetched.}
 
