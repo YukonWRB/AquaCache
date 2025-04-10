@@ -37,18 +37,12 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
   
   DBI::dbExecute(con, "SET timezone = 'UTC'")
   
-  
-  # TODO: Modify this function to work with a file and NO img_meta_id OR an object AND an img_meta_id, working with either programmatic ingests or manual uploads.
-  
   #Checks
   if (!inherits(share_with, "character")) {
     stop("The 'share_with' parameter must be a character vector with one element per share with group.")
   }
   
   if (!is.null(owner)) {
-    if (!inherits(owner, "numeric")) {
-      stop("The 'owner' parameter must be a numeric.")
-    }
     # Make sure it exists in the database table 'organizations'
     owner <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id = ", owner))[1,1]
     if (is.na(owner)) {
@@ -57,9 +51,6 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
   }
   
   if (!is.null(contributor)) {
-    if (!inherits(contributor, "numeric")) {
-      stop("The 'contributor' parameter must be a numeric.")
-    }
     # Make sure it exists in the database table 'organizations'
     contributor <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id = ", contributor))[1,1]
     if (is.na(contributor)) {
@@ -81,9 +72,6 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
     }
   }
   if (!is.null(image_type)) {
-    if (!inherits(image_type, "numeric")) {
-      stop("The 'image_type' parameter must be a numeric.")
-    }
     # Make sure it exists in the database table 'image_types'
     image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type_id = ", image_type))[1,1]
     if (is.na(image_type)) {
