@@ -43,10 +43,16 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
   }
   
   if (is.null(con)) {
+    if (all(is.null(c(dbName, dbHost, dbPort, dbUser, dbPass)))) {
+      # Try to set them from the .Renviron file
+      dbName <- "aquacache"
+      dbHost <- if (is.null(dbHost)) Sys.getenv("aquacacheHost")
+      dbPort <- if (is.null(dbPort)) Sys.getenv("aquacachePort")
+      dbUser <- if (is.null(dbUser)) Sys.getenv("aquacacheAdminUser")
+      dbPass <- if (is.null(dbPass)) Sys.getenv("aquacacheAdminPass")
+    }
     if (any(is.null(c(dbName, dbHost, dbPort, dbUser, dbPass)))) {
-      con <- AquaConnect(silent = TRUE)
-      con_params <- FALSE
-      parallel <- TRUE  # TRUE because the connection parameters can be passed on to parallel instances
+      stop("Unable to establish a connection. Please provide a connection, all connection parameters, or set them in the .Renviron file.")
     } else {
       con <- AquaConnect(name = dbName, host = dbHost, port = dbPort, username = dbUser, password = dbPass, silent = TRUE)
       con_params <- TRUE
@@ -124,6 +130,8 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
     
     tryCatch({
+      args_list <- list(start_datetime = start_datetime, con = con)
+      
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- jsonlite::fromJSON(source_fx_args)
         args_list <- c(args_list, lapply(args, as.character))
