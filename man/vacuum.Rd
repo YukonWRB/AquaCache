@@ -4,18 +4,30 @@
 \alias{vacuum}
 \title{Maintenance (vacuum) function for aquacache database.}
 \usage{
-vacuum(con = NULL, full = FALSE)
+vacuum(
+  con = NULL,
+  vacuum = TRUE,
+  vacuum_full = FALSE,
+  timeseries_check = FALSE,
+  locations_check = FALSE
+)
 }
 \arguments{
 \item{con}{A connection to the database. If left NULL will use function AquaConnect and automatically disconnect when finished.}
 
-\item{full}{If TRUE, performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space.}
+\item{vacuum}{Performs a vacuum with analyze. Default TRUE.}
+
+\item{vacuum_full}{Performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space. Default FALSE.}
+
+\item{timeseries_check}{Runs check on that data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables.}
+
+\item{locations_check}{Runs checks on the data present in the locations table: Ensures that each location is used somewhere in the database (warns if not) and makes sure that each location has an associated point in the 'vectors' table.}
 }
 \value{
-A vacuumed database.
+TRUE if completed successfully, possibly with messages printed to the console.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 
-Performs a VACUUM (ANALYZE) operation on the database, re-organizing and compacting tables.
+Performs maintenance operations operation on the database, according to the parameters selected.
 }

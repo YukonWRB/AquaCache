@@ -169,10 +169,10 @@ insertACImage <- function(object, datetime, fetch_datetime = NULL, img_meta_id= 
   
   # get the extension, and also the file itself as RAW #####
   if (inherits(object, "response")) {
-    extension <- tools::file_ext(object$url)
+    extension <- tolower(tools::file_ext(object$url))
     file <- object$content
   } else if (inherits(object, "character")) {
-    extension <- tools::file_ext(object)
+    extension <- tolower(tools::file_ext(object))
     # Make sure the extension is some sort of image
     if (!extension %in% c("jpg", "jpeg", "png", "gif", "bmp", "tiff")) {
       stop("The file extension is not recognized as an image. Please provide a valid image file.")
