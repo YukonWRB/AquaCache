@@ -44,12 +44,11 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
     stop("The 'share_with' parameter must be a character vector.")
   }
   
-  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM image_series WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]
+  exists <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM image_series WHERE location_id = ", location_id, ";"))[1,1]
   if (!is.na(exists)) {
     stop("There is already an entry for that location or location_id and for images of type 'auto' in the image_series table.")
   }
   insert <- data.frame(location_id = location_id,
-                       img_type = "auto",
                        first_img = start_datetime,
                        last_img = start_datetime,
                        source_fx = source_fx,
@@ -60,7 +59,7 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
                        description = "Image series automatically taken from a web or server location.")
 
   DBI::dbAppendTable(con, "image_series", insert)
-  res <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM image_series WHERE location_id = ", location_id, " AND img_type = 'auto'"))[1,1]
+  res <- DBI::dbGetQuery(con, paste0("SELECT img_meta_id FROM image_series WHERE location_id = ", location_id, ";"))[1,1]
   added <- getNewImages(image_meta_ids = res, con = con)
   if (length(added) == 0) {
     warning("Failed to find or add new images. The new entry to table image_series has been deleted.")

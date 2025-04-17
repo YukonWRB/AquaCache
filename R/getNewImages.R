@@ -8,7 +8,7 @@
 #' ## Default arguments passed to 'source_fx' functions:
 #' This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
 #'
-#' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids where img_type = 'auto'.
+#' @param image_meta_ids A vector of image_meta_id's. Default 'all' fetches all ids in the table.
 #' @param con A connection to the database. Leaving NULL will create a connection and close it automatically.
 #' @param active Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the image_series table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 #' @export
@@ -29,9 +29,9 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   
   # Create table of meta_ids
   if (image_meta_ids[1] == "all") {
-    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.img_type = 'auto' AND i.source_fx IS NOT NULL;")
+    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.source_fx IS NOT NULL;")
   } else {
-    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.img_type = 'auto' AND i.source_fx IS NOT NULL AND img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
+    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.source_fx IS NOT NULL AND img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
     if (length(image_meta_ids) != nrow(meta_ids)) {
       warning("At least one of the image_meta_ids you called for cannot be found in the database or has no function specified in column source_fx of table image_series.")
     }

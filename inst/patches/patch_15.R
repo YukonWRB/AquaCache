@@ -60,6 +60,14 @@ tryCatch({
   # Make everything else gray
   DBI::dbExecute(con, "UPDATE qualifier_types SET color_code = '#808080' WHERE qualifier_type_code NOT IN ('ICE', 'ICE-EST', 'DRY', 'OOW', 'SUS', 'EST', 'DD', 'REL', 'INT');")
   
+  # Drop old (no longer used) image_type column from table image_series
+  # Remove the unique constraint on img_type and location_id first
+  DBI::dbExecute(con, "ALTER TABLE image_series DROP CONSTRAINT IF EXISTS unique_location_img_type;")
+  DBI::dbExecute(con, "ALTER TABLE image_series DROP COLUMN IF EXISTS img_type;")
+  # Add a new unique constraint on location_id
+  DBI::dbExecute(con, "ALTER TABLE image_series ADD CONSTRAINT unique_location UNIQUE (location_id);")
+  
+  
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '15' WHERE item = 'Last patch number';")
   DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))
