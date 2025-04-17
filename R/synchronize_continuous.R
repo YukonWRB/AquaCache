@@ -119,35 +119,14 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     owner <- all_timeseries$default_owner[i]
-    
     source_fx_args <- all_timeseries$source_fx_args[i]
-    if (is.na(record_rate)) {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
-    } else {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
-    }
+    
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
     
     tryCatch({
-      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
-        args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair) {
-          gsub("[{}]", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("\"", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("'", "", pair)
-        })
-        pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair) {
-          trimws(pair)
-        })
-        for (j in 1:length(pairs)) {
-          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-        }
+        args <- jsonlite::fromJSON(source_fx_args)
+        args_list <- c(args_list, lapply(args, as.character))
       }
       
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
