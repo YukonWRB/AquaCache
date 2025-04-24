@@ -15,7 +15,7 @@
 #' @export
 #'
 
-vacuum <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_check = FALSE, locations_check = FALSE)
+maintain <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_check = FALSE, locations_check = FALSE)
   
 {
   if (is.null(con)) {
@@ -24,11 +24,12 @@ vacuum <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_ch
   }
   if (vacuum) {
     if (vacuum_full) {
-      DBI::dbExecute(con, "VACUUM FULL (ANALYZE)")
+      DBI::dbExecute(con, "VACUUM (FULL, ANALYZE)")
     } else {
       DBI::dbExecute(con, "VACUUM (ANALYZE)")
     }
     DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_vacuum';"))
+    message("Database vacuum completed")
   }
   
   if (timeseries_check) {
@@ -46,7 +47,7 @@ vacuum <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_ch
       
       end_rt <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[1,1]
       end_dly <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[1,1]
-      end <- if (!is.na(end_rt) & is.na(start_dly)) max(end_rt, as.POSIXct(end_dly, tz = "UTC")) else if (is.na(end_rt)) end_dly else end_rt
+      end <- if (!is.na(end_rt) & !is.na(end_dly)) max(end_rt, as.POSIXct(end_dly, tz = "UTC")) else if (is.na(end_rt)) end_dly else end_rt
       
       if (start != ts_tbl$start_datetime[i]) {
         DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "' WHERE timeseries_id = ", tsid, ";"))
@@ -55,6 +56,7 @@ vacuum <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_ch
         DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "' WHERE timeseries_id = ", tsid, ";"))
       }
     }
+    message("Timeseries checks completed")
   }
   
   if (locations_check) {
@@ -117,6 +119,7 @@ vacuum <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_ch
         insertACVector(geom = point, layer_name = "Locations", feature_name_col = "feature_name", description_col = "description", con = con)
       }
     }
+    message("Location checks completed")
   }
   
   return(TRUE)

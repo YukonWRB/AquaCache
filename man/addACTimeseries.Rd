@@ -50,7 +50,7 @@ addACTimeseries(
 
 \item{source_fx}{The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.}
 
-\item{source_fx_args}{Additional arguments to pass to the function(s) specified in parameter 'source_fx'.}
+\item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details}
 
 \item{note}{Text notes to append to the timeseries.}
 
@@ -75,7 +75,7 @@ The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If s
 For discrete data:
 This is not supported yet.
 
-Additional arguments to pass to the function specified in source_fx should take the form of "\{param1 = arg1\}, \{param2 = 'arg2'\}". The data fetch function will separate out the parameter:argument pairs based on them being within curly brackets. Do not deviate from this format!
+Additional arguments to pass to the function specified in source_fx go in argument 'source_fx_args' (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
 }
 \examples{
 \dontrun{

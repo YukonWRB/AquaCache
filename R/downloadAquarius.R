@@ -237,14 +237,21 @@ downloadAquarius <- function(location,
         )
       )
       
-      # Initialize (or reset) the qualifier column
+      # Initialize (or reset) the qualifier/approval/grade column
       df[[new_col]] <- NA
       
       # Loop through each interval and assign the qualifier
       for (i in seq_along(start_idx)) {
         st <- df[[time_col]][start_idx[i]]
         ed <- df[[time_col]][end_idx[i]]
-        df[[new_col]][df[[time_col]] >= st & df[[time_col]] <= ed] <- intervals$level[i]
+        sel <- df[[time_col]] >= st & df[[time_col]] <= ed
+        
+        # append if already present, otherwise assign
+        df[[new_col]][sel] <- ifelse(
+          is.na(df[[new_col]][sel]),
+          intervals$level[i],
+          paste(df[[new_col]][sel], intervals$level[i], sep = ",")
+        )
       }
       return(df)
     }

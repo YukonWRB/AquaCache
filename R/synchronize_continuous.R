@@ -43,10 +43,16 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
   }
   
   if (is.null(con)) {
+    if (all(is.null(c(dbName, dbHost, dbPort, dbUser, dbPass)))) {
+      # Try to set them from the .Renviron file
+      dbName <- "aquacache"
+      dbHost <- if (is.null(dbHost)) Sys.getenv("aquacacheHost")
+      dbPort <- if (is.null(dbPort)) Sys.getenv("aquacachePort")
+      dbUser <- if (is.null(dbUser)) Sys.getenv("aquacacheAdminUser")
+      dbPass <- if (is.null(dbPass)) Sys.getenv("aquacacheAdminPass")
+    }
     if (any(is.null(c(dbName, dbHost, dbPort, dbUser, dbPass)))) {
-      con <- AquaConnect(silent = TRUE)
-      con_params <- FALSE
-      parallel <- TRUE  # TRUE because the connection parameters can be passed on to parallel instances
+      stop("Unable to establish a connection. Please provide a connection, all connection parameters, or set them in the .Renviron file.")
     } else {
       con <- AquaConnect(name = dbName, host = dbHost, port = dbPort, username = dbUser, password = dbPass, silent = TRUE)
       con_params <- TRUE
@@ -119,35 +125,16 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     owner <- all_timeseries$default_owner[i]
-    
     source_fx_args <- all_timeseries$source_fx_args[i]
-    if (is.na(record_rate)) {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate IS NULL;"))[1,1]
-    } else {
-      parameter_id <- DBI::dbGetQuery(con, paste0("SELECT remote_param_name FROM fetch_settings WHERE parameter_id = ", parameter, " AND source_fx = '", source_fx, "' AND period_type = '", period_type, "' AND record_rate = '", record_rate, "';"))[1,1]
-    }
+    
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
     
     tryCatch({
-      args_list <- list(location = loc, parameter_id = parameter_id, start_datetime = start_dt, con = con)
+      args_list <- list(start_datetime = start_datetime, con = con)
+      
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
-        args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair) {
-          gsub("[{}]", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("\"", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("'", "", pair)
-        })
-        pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair) {
-          trimws(pair)
-        })
-        for (j in 1:length(pairs)) {
-          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-        }
+        args <- jsonlite::fromJSON(source_fx_args)
+        args_list <- c(args_list, lapply(args, as.character))
       }
       
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
@@ -192,19 +179,19 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         
         # Check changes in attributes
         if ("owner" %in% names(inRemote)) {
-          adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
+          adjust_owner(con, tsid, inRemote[, c("datetime", "owner")], delete = TRUE)
         }
         if ("contributor" %in% names(inRemote)) {
-          adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
+          adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")], delete = TRUE)
         }
         if ("grade" %in% names(inRemote)) {
-          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
+          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")], delete = TRUE)
         }
         if ("approval" %in% names(inRemote)) {
-          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
+          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")], delete = TRUE)
         }
         if ("qualifier" %in% names(inRemote)) {
-          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
+          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")], delete = TRUE)
         }
         
         # Drop columns owner, contributor, grade, approval, qualifier as these are already taken care of
@@ -331,7 +318,6 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
             success <- TRUE
             
           }
-          
         } else { # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
           DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
           # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.

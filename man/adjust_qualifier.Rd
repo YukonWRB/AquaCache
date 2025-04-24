@@ -4,7 +4,7 @@
 \alias{adjust_qualifier}
 \title{Adjust the qualifier of a timeseries in the database}
 \usage{
-adjust_qualifier(con, timeseries_id, data)
+adjust_qualifier(con, timeseries_id, data, delete = FALSE)
 }
 \arguments{
 \item{con}{A connection to the database with write privileges to the 'qualifiers' and 'measurements_continuous' tables.}
@@ -12,6 +12,8 @@ adjust_qualifier(con, timeseries_id, data)
 \item{timeseries_id}{The target timeseries_id}
 
 \item{data}{A data.frame with columns for 'datetime' and 'qualifier'. 'datetime' should be POSIXct and 'qualifier' should either character (in which case it must refer to entries in column 'qualifier_type_code' of table 'qualifiers' or integer/numeric, in which case it must refer to column 'qualifier_type_id' of the same table.}
+
+\item{delete}{Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.}
 }
 \value{
 Modifies the 'qualifiers' table in the database.
