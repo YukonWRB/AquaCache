@@ -4,7 +4,7 @@
 \alias{adjust_owner}
 \title{Adjust the owner of a timeseries in the database}
 \usage{
-adjust_owner(con, timeseries_id, data)
+adjust_owner(con, timeseries_id, data, delete = FALSE)
 }
 \arguments{
 \item{con}{A connection to the database with write privileges to the 'owners' and 'measurements_continuous' tables.}
@@ -12,6 +12,8 @@ adjust_owner(con, timeseries_id, data)
 \item{timeseries_id}{The target timeseries_id}
 
 \item{data}{A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'organizations' or integer/numeric, in which case it must refer to column 'organization_id' of the same table.}
+
+\item{delete}{Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.}
 }
 \value{
 Modifies the 'owners' table in the database.

@@ -3,11 +3,11 @@
 #' @description
 #' `r lifecycle::badge("stable")`
 #'
-#' Calculates daily means from data in the measurements_continuous table as well as derived statistics for each day (historical min, max, q10, q25, q50 (mean), q75, q90). Derived daily statistics are for each day of year **prior** to the current date for historical context, with the exception of the first day of record for which only the min/max are populated with the day's value.  February 29 calculations are handled differently: see details.
+#' Calculates daily means from data in the measurements_continuous table as well as derived statistics for each day (historical min, max, q10, q25, q50 (mean), q75, q90). Derived daily statistics are for each day of year **prior** to the current date for historical context, with the exception of the first day of record for which only the min/max are populated with the day's value. Any data graded as 'unusable' is excluded from calculations. February 29 calculations are handled differently: see details.
 #'
 #' Some continuous measurement data may have a period of greater than 1 day. In these cases it would be impossible to calculate daily statistics, so this function explicitly excludes data points with a period greater than P1D.
 #'
-#' This function is meant to be called from within hydro_update_daily, but is exported just in case a need arises to calculate daily means and statistics in isolation or in another function. It *must* be used with a database created by this package, or one with identical table and column names.
+#' This function is meant to be called from within hydro_update_daily, but is exported in case a need arises to calculate daily means and statistics in isolation or in another function. It *must* be used with a database created by this package, or one with identical tables.
 #'
 #' @details
 #' Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.
@@ -21,7 +21,7 @@
 #'
 
 calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
-
+  
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
@@ -35,7 +35,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     }
     if (!inherits(start_recalc, "Date")) start_recalc <- as.Date(start_recalc)
   }
-
+  
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE record_rate IN ('1 day', '< 1 day');"))
     timeseries_id <- all_timeseries$timeseries_id
@@ -49,12 +49,26 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     }
     timeseries_id <- all_timeseries$timeseries_id
   }
-
-
+  
+  
   #calculate daily means or sums for any days without them
   leap_list <- (seq(1800, 2100, by = 4))
   hydat_checked <- FALSE
   for (i in timeseries_id) {
+    
+    # Fetch the grades to disregard 'unusable' data later
+    grades_dt <- dbGetQueryDT(con, paste0("SELECT g.start_dt, g.end_dt FROM grades g LEFT JOIN grade_types gt ON g.grade_type_id = gt.grade_type_id WHERE g.timeseries_id = ", i, " AND gt.grade_type_code = 'N' ORDER BY start_dt;"))
+    # Drop rows where start_dt and end_dt are the same
+    grades_dt <- grades_dt[!(grades_dt$start_dt == grades_dt$end_dt), ]
+    # Make the SQL for the exclusions as it's reused later
+    exclusions <- sprintf("datetime NOT BETWEEN '%s' AND '%s'", grades_dt$start_dt, grades_dt$end_dt)
+    exclusions <- paste(exclusions, collapse = " AND ")
+    if (nrow(grades_dt) != 0) {
+      unusable <- TRUE
+    } else {
+      unusable <- FALSE
+    }
+    
     start_recalc_i <- start_recalc
     skip <- FALSE
     tryCatch({ #error catching for calculating stats; another one later for appending to the DB
@@ -66,7 +80,14 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
       if (is.na(earliest_day_historic)) {
         earliest_day_historic <-  as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, ";"))[1,])
       }
-      earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
+      # Find the earliest datetime in the measurements_continuous table, without considering unusable data
+      if (unusable) {
+        query <- sprintf("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = %s AND period <= 'P1D' AND %s", i, exclusions)
+        earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, query)[1,])
+      } else {
+        earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", i, " AND period <= 'P1D';"))[1,])
+      }
+      
       
       # Below lines deal with timeseries that don't have daily values but should, or don't have them far enough in the past. We check if it's necessary to calculate further back in time than start_recalc_i.
       if (is.na(earliest_day_historic)) { # This means that no daily values have been calculated yet, or that they've been completely deleted from the database. In that case we start recalculation straight from the earliest measurement date.
@@ -86,7 +107,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
       tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, source_fx FROM timeseries WHERE timeseries_id = ", i, ";"))
       period_type <- tmp[1,1] # Daily values are calculated differently depending on the period type
       source_fx <- tmp[1,2]  #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
-
+      
       if (!is.null(start_recalc_i)) { #start_recalc_i is specified (not NULL)
         if (!is.na(earliest_day_measurements)) { # If there are measurements, then we can calculate from the earliest measurement date
           if (earliest_day_historic < earliest_day_measurements) {
@@ -106,7 +127,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           last_day_historic <- DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND max IS NULL;"))[1,]
         }
       }
-
+      
       if (is.na(last_day_historic)) {
         skip <- TRUE
       }
@@ -164,11 +185,20 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           
           if (!flag) {
             if (corrections_apply) {
-              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+              if (unusable) {
+                query <- paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D' AND ", exclusions, ";")
+                gap_measurements <- DBI::dbGetQuery(con, query)
+              } else {
+                gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+              }
             } else {
-              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+              if (unusable) {
+                query <- paste0("SELECT datetime, value AS value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D' AND ", exclusions, ";")
+                gap_measurements <- DBI::dbGetQuery(con, query)
+              } else {
+                gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_hydat + 1, " 00:00:00' AND period <= 'P1D'"))
+              }
             }
-            
             
             if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date
               gap_measurements <- gap_measurements %>%
@@ -193,7 +223,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 names(backfill) <- c("date", "value")
                 backfill <- backfill[!is.na(backfill$value) , ]
                 backfill$imputed  <- FALSE
-
+                
                 #Remove any entries with values that are already in backfill and not NA, even if they've been imputed
                 backfill_imputed <- backfill_imputed[!backfill_imputed$date %in% backfill[!is.na(backfill$value), "date"], ] 
                 # Remove any entries in backfill_imputed that are already in backfill but are NA
@@ -243,9 +273,19 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         
         if (!(source_fx == "downloadWSC") || flag) { #All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
           if (corrections_apply) {
-            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+            if (unusable) {
+              query <- paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D' AND ", exclusions, ";")
+              gap_measurements <- DBI::dbGetQuery(con, query)
+            } else {
+              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+            }
           } else {
-            gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+            if (unusable) {
+              query <- paste0("SELECT datetime, value AS value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D' AND ", exclusions, ";")
+              gap_measurements <- DBI::dbGetQuery(con, query)
+            } else {
+              gap_measurements <- DBI::dbGetQuery(con, paste0("SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", i, " AND datetime >= '", last_day_historic, " 00:00:00' AND period <= 'P1D'"))
+            }
           }
           
           if (nrow(gap_measurements) > 0) { #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
@@ -406,7 +446,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
       message("Skipping calculations for timeseries ", i, " as it looks like nothing needs to be calculated.")
       next
     }
-
+    
     
     if (nrow(missing_stats) > 0) { #This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.
       tryCatch({
@@ -418,7 +458,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         if (length(remaining_dates) > 0) {
           delete_query <- paste0(delete_query, " AND date NOT IN ('", paste(remaining_dates, collapse = "','"), "')")
         }
-
+        
         
         # Now commit the changes to the database
         commit_fx2 <- function(con, delete_query, missing_stats, i) {

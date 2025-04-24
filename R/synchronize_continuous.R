@@ -179,19 +179,19 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         
         # Check changes in attributes
         if ("owner" %in% names(inRemote)) {
-          adjust_owner(con, tsid, inRemote[, c("datetime", "owner")])
+          adjust_owner(con, tsid, inRemote[, c("datetime", "owner")], delete = TRUE)
         }
         if ("contributor" %in% names(inRemote)) {
-          adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")])
+          adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")], delete = TRUE)
         }
         if ("grade" %in% names(inRemote)) {
-          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")])
+          adjust_grade(con, tsid, inRemote[, c("datetime", "grade")], delete = TRUE)
         }
         if ("approval" %in% names(inRemote)) {
-          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")])
+          adjust_approval(con, tsid, inRemote[, c("datetime", "approval")], delete = TRUE)
         }
         if ("qualifier" %in% names(inRemote)) {
-          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")])
+          adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")], delete = TRUE)
         }
         
         # Drop columns owner, contributor, grade, approval, qualifier as these are already taken care of
