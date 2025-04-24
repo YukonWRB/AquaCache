@@ -470,7 +470,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
 
 adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
   
-  if (!attr(con, "active_transaction")) {a
+  if (!attr(con, "active_transaction")) {
     DBI::dbBegin(con)
     attr(con, "active_transaction") <- TRUE
     tryCatch({
