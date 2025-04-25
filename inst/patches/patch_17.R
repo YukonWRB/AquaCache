@@ -54,13 +54,6 @@ tryCatch({
   ", tbl))
   }
   
-  
-  # Run calculate_stats and synchronize_continuous on all timeseries with source_fx = 'downloadAquarius' because historic ranges will be modified by 'unusable' data and some qualifiers can now overlap.
-  timeseries <- DBI::dbGetQuery(con, "SELECT timeseries_id FROM timeseries WHERE source_fx = 'downloadAquarius';")[,1]
-  synchronize_continuous(con = con, timeseries_id = timeseries, start_datetime = "1900-01-01")
-  calculate_stats(con = con, timeseries_id = timeseries, start_recalc = "1900-01-01")
-  
-  
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '17' WHERE item = 'Last patch number';")
   DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))
@@ -69,6 +62,13 @@ tryCatch({
   # Commit the transaction
   DBI::dbExecute(con, "COMMIT;")
   attr(con, "active_transaction") <- FALSE
+  
+  # Run calculate_stats and synchronize_continuous on all timeseries with source_fx = 'downloadAquarius' because historic ranges will be modified by 'unusable' data and some qualifiers can now overlap.
+  try({
+    timeseriesids <- DBI::dbGetQuery(con, "SELECT timeseries_id FROM timeseries WHERE source_fx = 'downloadAquarius';")[,1]
+    synchronize_continuous(con = con, timeseries_id = timeseriesids, start_datetime = "1900-01-01")
+    calculate_stats(con = con, timeseries_id = timeseriesids, start_recalc = "1900-01-01")
+  })
   
   message("Patch 17 applied successfully.")
   
