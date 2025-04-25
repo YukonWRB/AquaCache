@@ -102,14 +102,14 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         stringsAsFactors  = FALSE
       )
       
-      current <- if (original_exist_rows > 0) exist$grade_type_id[1] else new_segments$grade_type_id[1]
+      current <- if (original_exist_rows > 1) exist$grade_type_id[1] else new_segments$grade_type_id[1]
       
       index <- 1 # keeps track of the row we should be modifying in 'exist'
       
       # Now loop through the data to find where the grade_type_id changes
       for (i in 1:nrow(new_segments)) {
         if (new_segments$grade_type_id[i] != current) {
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -140,7 +140,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
           }
           current <- new_segments$grade_type_id[i]
         } else { # If the grade_type_id is the same as the last one, check and adjust datetimes
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -340,14 +340,14 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         stringsAsFactors  = FALSE
       )
       
-      current <- if (original_exist_rows > 0) exist$qualifier_type_id[1] else new_segments$qualifier_type_id[1]
+      current <- if (original_exist_rows > 1) exist$qualifier_type_id[1] else new_segments$qualifier_type_id[1]
       
       index <- 1 # keeps track of the row we should be modifying in 'exist'
       
       # Now loop through the data to find where the qualifier_type_id changes
       for (i in 1:nrow(new_segments)) {
         if (new_segments$qualifier_type_id[i] != current) {
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -378,7 +378,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           }
           current <- new_segments$qualifier_type_id[i]
         } else { # If the qualifier_type_id is the same as the last one, check and adjust datetimes
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -560,14 +560,14 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         stringsAsFactors  = FALSE
       )
       
-      current <- if (original_exist_rows > 0) exist$approval_type_id[1] else new_segments$approval_type_id[1]
+      current <- if (original_exist_rows > 1) exist$approval_type_id[1] else new_segments$approval_type_id[1]
       
       index <- 1 # keeps track of the row we should be modifying in 'exist'
       
       # Now loop through the data to find where the approval_type_id changes
       for (i in 1:nrow(new_segments)) {
         if (new_segments$approval_type_id[i] != current) {
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -598,7 +598,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
           }
           current <- new_segments$approval_type_id[i]
         } else { # If the approval_type_id is the same as the last one, check and adjust datetimes
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -777,14 +777,14 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
         stringsAsFactors  = FALSE
       )
       
-      current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
+      current <- if (original_exist_rows > 1) exist$organization_id[1] else new_segments$organization_id[1]
       
       index <- 1 # keeps track of the row we should be modifying in 'exist'
       
       # Now loop through the data to find where the organization_id changes
       for (i in 1:nrow(new_segments)) {
         if (new_segments$organization_id[i] != current) {
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -815,7 +815,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
           }
           current <- new_segments$organization_id[i]
         } else { # If the organization_id is the same as the last one, check and adjust datetimes
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -995,14 +995,14 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
         stringsAsFactors  = FALSE
       )
       
-      current <- if (original_exist_rows > 0) exist$organization_id[1] else new_segments$organization_id[1]
+      current <- if (original_exist_rows > 1) exist$organization_id[1] else new_segments$organization_id[1]
       
       index <- 1 # keeps track of the row we should be modifying in 'exist'
       
       # Now loop through the data to find where the organization_id changes
       for (i in 1:nrow(new_segments)) {
         if (new_segments$organization_id[i] != current) {
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -1033,7 +1033,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
           }
           current <- new_segments$organization_id[i]
         } else { # If the organization_id is the same as the last one, check and adjust datetimes
-          if (index <= original_exist_rows) { # Modify rows in 'exist'
+          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
