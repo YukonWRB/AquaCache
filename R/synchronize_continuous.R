@@ -137,9 +137,9 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         args_list <- c(args_list, lapply(args, as.character))
       }
       
-      inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
+      inRemote <- data.table::setDT(do.call(source_fx, args_list)) #Get the data using the args_list
       
-      inRemote <- inRemote[!is.na(inRemote$value) , ]
+      inRemote <- inRemote[!is.na(value)]
       
       if (nrow(inRemote) > 0) {
         inDB <- dbGetQueryDT(con, paste0("SELECT no_update, datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
@@ -163,17 +163,17 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         
         # Adjust parameters
         if (!("approval" %in% names(inRemote))) {
-          inRemote$approval <- approval_unknown
+          inRemote[, approval := approval_unknown]
         }
         if (!("grade" %in% names(inRemote))) {
-          inRemote$grade <- grade_unknown
+          inRemote[, grade := grade_unknown]
         }
         if (!("qualifier" %in% names(inRemote))) {
-          inRemote$qualifier <- qualifier_unknown
+          inRemote[, qualifier := qualifier_unknown]
         }
         if (!is.null(owner)) {  # There may not be an owner assigned in table timeseries
           if (!("owner" %in% names(inRemote))) {
-            inRemote$owner <- owner
+            inRemote[, owner := owner]
           }
         }
         
@@ -236,7 +236,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
                             inDB[key %in% mismatch_keys_db,  min(datetime)])
             } else if (length(mismatch_keys_remote) == 0 & length(mismatch_keys_db) > 0) { # means that there's data in the DB that is not in the remote
               mismatch <- TRUE
-              cutoff <- inRemote[key %in% mismatch_keys_db,  min(datetime)]
+              cutoff <- inDB[key %in% mismatch_keys_db,  min(datetime)]
             } else if (length(mismatch_keys_remote) > 0 & length(mismatch_keys_db) == 0) { # means that there's data in the remote that is not in the DB
               mismatch <- TRUE
               cutoff <- inRemote[key %in% mismatch_keys_remote,  min(datetime)]
