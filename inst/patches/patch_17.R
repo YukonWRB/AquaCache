@@ -55,6 +55,11 @@ tryCatch({
   }
   
   
+  # Run calculate_stats and synchronize_continuous on all timeseries with source_fx = 'downloadAquarius' because historic ranges will be modified by 'unusable' data and some qualifiers can now overlap.
+  timeseries <- DBI::dbGetQuery(con, "SELECT timeseries_id FROM timeseries WHERE source_fx = 'downloadAquarius';")[,1]
+  synchronize_continuous(con = con, timeseries_id = timeseries, start_datetime = "1900-01-01")
+  calculate_stats(con = con, timeseries_id = timeseries, start_recalc = "1900-01-01")
+  
   
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '17' WHERE item = 'Last patch number';")

@@ -129,7 +129,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
     
     start_dt <- if (length(start_datetime) > 1) start_datetime[i] else start_datetime
     
-    tryCatch({
+    tryCatch({  # Wrap the whole operation in a tryCatch block to handle errors
       args_list <- list(start_datetime = start_datetime, con = con)
       
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
@@ -142,7 +142,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
       inRemote <- inRemote[!is.na(inRemote$value) , ]
       
       if (nrow(inRemote) > 0) {
-        inDB <- DBI::dbGetQuery(con, paste0("SELECT no_update, datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
+        inDB <- dbGetQueryDT(con, paste0("SELECT no_update, datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", min(inRemote$datetime),"';"))
         # Set aside any rows where no_update == TRUE
         no_update <- inDB[inDB$no_update, ]
         inDB <- inDB[!inDB$no_update, ]
@@ -153,9 +153,9 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         imputed <- inDB[inDB$imputed, ]
         imputed.remains <- data.frame()
         if (nrow(imputed) > 0) {
-          for (i in 1:nrow(imputed)) {
-            if (!(imputed[i, "datetime"] %in% inRemote$datetime)) {
-              imputed.remains <- rbind(imputed.remains, imputed[i , ])
+          for (row in 1:nrow(imputed)) {
+            if (!(imputed[row, "datetime"] %in% inRemote$datetime)) {
+              imputed.remains <- rbind(imputed.remains, imputed[row, ])
             }
           }
         }
@@ -180,26 +180,25 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         # Check changes in attributes
         if ("owner" %in% names(inRemote)) {
           adjust_owner(con, tsid, inRemote[, c("datetime", "owner")], delete = TRUE)
+          inRemote$owner <- NULL # Drop the owner column as it's already taken care of
         }
         if ("contributor" %in% names(inRemote)) {
           adjust_contributor(con, tsid, inRemote[, c("datetime", "contributor")], delete = TRUE)
+          inRemote$contributor <- NULL # Drop the contributor column as it's already taken care of
         }
         if ("grade" %in% names(inRemote)) {
           adjust_grade(con, tsid, inRemote[, c("datetime", "grade")], delete = TRUE)
+          inRemote$grade <- NULL # Drop the grade column as it's already taken care of
         }
         if ("approval" %in% names(inRemote)) {
           adjust_approval(con, tsid, inRemote[, c("datetime", "approval")], delete = TRUE)
+          inRemote$approval <- NULL # Drop the approval column as it's already taken care of
         }
         if ("qualifier" %in% names(inRemote)) {
           adjust_qualifier(con, tsid, inRemote[, c("datetime", "qualifier")], delete = TRUE)
+          inRemote$qualifier <- NULL # Drop the qualifier column as it's already taken care of
         }
-        
-        # Drop columns owner, contributor, grade, approval, qualifier as these are already taken care of
-        inRemote$owner <- NULL
-        inRemote$contributor <- NULL
-        inRemote$grade <- NULL
-        inRemote$approval <- NULL
-        inRemote$qualifier <- NULL
+
         
         if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch so this is skipped
           if (min(inRemote$datetime) > min(inDB$datetime)) { #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
@@ -208,7 +207,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
           
           if (min(inRemote$datetime) < min(inDB$datetime)) { #if TRUE means that the remote has older data than the DB, so immediately declare mismatch = TRUE.
             mismatch <- TRUE
-            datetime <- min(inRemote$datetime)
+            cutoff <- min(inRemote$datetime)
           } else {
             #order both timeseries to compare them
             inDB <- inDB[order(inDB$datetime) , ]
@@ -230,70 +229,79 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
             # Check the inverse as well, in case there are points in the DB that are not in the remote
             mismatch_keys_db <- inDB$key[!(inDB$key %in% inRemote$key)]
             
-            # This DOES NOT catch if there are points inDB at dates in the future from what is inRemote, unless a mismatch happens before. Check for that later.
-            
-            # Check where the discrepancy is in both data frames
-            if (length(mismatch_keys_remote) > 0 | length(mismatch_keys_db) > 0) {
+            if (length(mismatch_keys_remote) > 0 & length(mismatch_keys_db) > 0) {
               mismatch <- TRUE
-              # Find the most recent datetime in the remote data that is not in the DB. This will be the datetime to start replacing from in the local.
-              datetime <- min(inRemote[inRemote$key %in% mismatch_keys_remote, "datetime"], inDB[inDB$key %in% mismatch_keys_db, "datetime"])
+              # Find the earliest datetime in the remote data that is different. This will be the datetime to start replacing from in the local.
+              cutoff <- min(inRemote[key %in% mismatch_keys_remote,  min(datetime)], 
+                            inDB[key %in% mismatch_keys_db,  min(datetime)])
+            } else if (length(mismatch_keys_remote) == 0 & length(mismatch_keys_db) > 0) { # means that there's data in the DB that is not in the remote
+              mismatch <- TRUE
+              cutoff <- inRemote[key %in% mismatch_keys_db,  min(datetime)]
+            } else if (length(mismatch_keys_remote) > 0 & length(mismatch_keys_db) == 0) { # means that there's data in the remote that is not in the DB
+              mismatch <- TRUE
+              cutoff <- inRemote[key %in% mismatch_keys_remote,  min(datetime)]
             } else {
-              if (max(inDB$datetime) > max(inRemote$datetime)) { # Check if the remote misses data that should be deleted from the DB
-                mismatch <- TRUE
-                datetime <- max(inRemote$datetime)
-              } else {
-                mismatch <- FALSE
-              }
+              mismatch <- FALSE
             }
+            
             inRemote$key <- NULL
           }
         } else { # There's no data in the DB but there is some in the remote. Automatic mismatch.
           mismatch <- TRUE
-          datetime <- min(inRemote$datetime)
+          cutoff <- min(inRemote$datetime)
         }
         
         if (mismatch) { # mismatch is TRUE: there was a mismatch between the remote and the local data
-          inRemote <- inRemote[inRemote$datetime >= datetime , ]
-          #assign a period to the data
-          if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
-            inRemote$period <- "00:00:00"
-          } else if ((period_type != "instantaneous") & !("period" %in% names(inRemote))) { #period_types of mean, median, min, max should all have a period
-            period <- calculate_period(data = inRemote[ , c("datetime")], timeseries_id = tsid, con = con)
-            inRemote <- merge(inRemote, period, by = "datetime", all.x = TRUE)
-          } else { #Check to make sure that the supplied period can actually be coerced to a period
-            check <- lubridate::period(unique(inRemote$period))
-            if (NA %in% check) {
-              inRemote$period <- NA
+          inRemote <- inRemote[inRemote$datetime >= cutoff, ]
+          if (nrow(inRemote) > 0) {
+            #assign a period to the data
+            if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
+              inRemote$period <- "00:00:00"
+            } else if ((period_type != "instantaneous") & !("period" %in% names(inRemote))) { #period_types of mean, median, min, max should all have a period
+              period <- calculate_period(data = inRemote[ , "datetime"], timeseries_id = tsid, con = con)
+              inRemote <- merge(inRemote, period, by = "datetime", all.x = TRUE)
+            } else { #Check to make sure that the supplied period can actually be coerced to a period
+              check <- lubridate::period(unique(inRemote$period))
+              if (NA %in% check) {
+                inRemote$period <- NA
+              }
             }
+            inRemote$imputed <- FALSE
+            inRemote$timeseries_id <- tsid
           }
-          inRemote$imputed <- FALSE
-          inRemote$timeseries_id <- tsid
+          
           
           
           # Now commit the changes to the database
-          commit_fx <- function(con, no_update, tsid, inRemote, inDB) {
-            # Now delete entries in measurements_continuous and measurements_calculated_daily that are no longer in the remote data and/or that need to be replaced
+          commit_fx <- function(con, no_update, tsid, inRemote, cutoff, inDB) {
+            # delete entries in measurements_continuous and measurements_calculated_daily that are no longer in the remote data and/or that need to be replaced
             if (nrow(no_update) > 0) { # Don't delete imputed data points unless there's new data to replace it!
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", datetime, "' AND datetime NOT IN ('", paste(no_update$datetime, collapse = "', '"), "');"))
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", datetime, "';"))
+              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", cutoff, "' AND datetime NOT IN ('", paste(no_update$datetime, collapse = "', '"), "');"))
+              DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date > '", substr(cutoff, 1, 10), "';"))
             } else {
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", datetime, "';"))
-              DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date >= '", datetime, "';"))
+              DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= '", cutoff, "';"))
+              DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, " AND date > '", substr(cutoff, 1, 10), "';"))
             }
             
-            DBI::dbAppendTable(con, "measurements_continuous", inRemote[, c("datetime", "value", "period", "timeseries_id", "imputed")])
-            
-            #Recalculate daily means and statistics
-            calculate_stats(timeseries_id = tsid,
-                            con = con,
-                            start_recalc = as.Date(substr(datetime, 1, 10)))
-            
+            if (nrow(inRemote) > 0) {
+              DBI::dbAppendTable(con, "measurements_continuous", inRemote[, c("datetime", "value", "period", "timeseries_id", "imputed")])
+              
+              #Recalculate daily means and statistics
+              calculate_stats(timeseries_id = tsid,
+                              con = con,
+                              start_recalc = as.Date(substr(cutoff, 1, 10)))
+            } else {
+              #Recalculate daily means and statistics
+              calculate_stats(timeseries_id = tsid,
+                              con = con,
+                              start_recalc = as.Date(substr(cutoff, 1, 10)))
+            }
             # adjust entries in table 'timeseries' to reflect the new data
-            end <- max(inRemote$datetime)
+            end <- max(DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]], 
+                       as.POSIXct(DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]], tz = "UTC"))
             DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "', last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-            earliest <- min(inRemote$datetime, 
-                            DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]], 
-                            DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]])
+            earliest <- min(DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]], 
+                            as.POSIXct(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]], tz = "UTC"))
             DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
           }
           
@@ -301,7 +309,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
             DBI::dbBegin(con)
             attr(con, "active_transaction") <- TRUE
             tryCatch({
-              commit_fx(con, no_update, tsid, inRemote, inDB)
+              commit_fx(con, no_update, tsid, inRemote, cutoff, inDB)
               DBI::dbCommit(con)
               attr(con, "active_transaction") <- FALSE
               
@@ -313,7 +321,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
               warning("synchronize failed to make database changes for ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
             })
           } else { # we're already in a transaction
-            commit_fx(con, no_update, tsid, inRemote, inDB)
+            commit_fx(con, no_update, tsid, inRemote, cutoff, inDB)
             
             success <- TRUE
             
@@ -336,7 +344,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         DBI::dbExecute(con, paste0("UPDATE timeseries SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
       }
     }, error = function(e) {
-      warning("synchronize failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
+      warning("synchronize_continuous failed on location ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
     }
     ) # End of tryCatch
     
@@ -390,11 +398,11 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
   } else { # Not parallel
     updated <- 0 # Counter for number of updated timeseries
     
-    for (i in 1:nrow(all_timeseries)) {
-      success <- worker(i, all_timeseries, approval_unknown, grade_unknown, qualifier_unknown, start_datetime, parallel = FALSE, con = con)
+    for (j in 1:nrow(all_timeseries)) {
+      success <- worker(j, all_timeseries, approval_unknown, grade_unknown, qualifier_unknown, start_datetime, parallel = FALSE, con = con)
       if (success) updated <- updated + 1
       if (interactive()) {
-        utils::setTxtProgressBar(pb, i)
+        utils::setTxtProgressBar(pb, j)
       }
     } # End of for loop
   } # End of not parallel block
