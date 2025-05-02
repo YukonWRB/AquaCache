@@ -7,11 +7,11 @@
 insertACImage(
   object,
   datetime,
+  image_type,
   fetch_datetime = NULL,
   img_meta_id = NULL,
   description = NULL,
   tags = NULL,
-  image_type = NULL,
   owner = NULL,
   contributor = NULL,
   share_with = "public_reader",
@@ -29,6 +29,8 @@ insertACImage(
 
 \item{datetime}{The datetime the image was taken at, as a POSIXct object or something that can be coerced to one. If not POSIXct timezone is assumed to be UTC.}
 
+\item{image_type}{The image_type_id from table images_types corresponding to the image type. Pass as numeric, must match an entry in table 'image_types'}
+
 \item{fetch_datetime}{The datetime the image was retrieved (optional). If not POSIXct timezone is assumed to be UTC.}
 
 \item{img_meta_id}{The img_meta_id, from the table image_series, corresponding to the image location and type. Set NULL if the image is not linked to an image series - in that case you'll need to specify, at minimum, a latitude and longitude for the image OR associate it with a location.}
@@ -36,8 +38,6 @@ insertACImage(
 \item{description}{A description of the image. Pass as text, can be left NULL; consider also using the \code{tags} parameter.}
 
 \item{tags}{Tags to associate with the image. Pass as a character vector, one element per tag.}
-
-\item{image_type}{The image_type_id from table images_types corresponding to the image type. Pass as numeric, can be left NULL}
 
 \item{owner}{The owner of the image, matching the organization_id of table 'organizations'. Can be left NULL.}
 
