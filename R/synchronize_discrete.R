@@ -73,19 +73,6 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
     all_series <- all_series[all_series$active, ]
   }
   
-  grade_unknown <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';")[1,1]
-  if (is.na(grade_unknown)) {
-    stop("synchronize: Could not find grade type 'Unknown' in the database.")
-  }
-  approval_unknown <- DBI::dbGetQuery(con, "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';")[1,1]
-  if (is.na(approval_unknown)) {
-    stop("synchronize: Could not find approval type 'Unknown' in the database.")
-  }
-  qualifier_unknown <- DBI::dbGetQuery(con, "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';")[1,1]
-  if (is.na(qualifier_unknown)) {
-    stop("synchronize: Could not find qualifier type 'Unknown' in the database.")
-  }
-  
   valid_sample_names <- DBI::dbGetQuery(con, "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'samples';")[,1]
   valid_result_names <- DBI::dbGetQuery(con, "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'results';")[,1]
   
@@ -128,14 +115,6 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
     default_owner <- all_series$default_owner[i]
     default_contributor <- all_series$default_contributor[i]
     
-    # Location codes (not numeric IDs) are needed for the source functions
-    loc_code <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE location_id = ", loc_id, ";"))[1,1]
-    if (!is.na(sub_loc_id)) {
-      sub_loc_code <- DBI::dbGetQuery(con, paste0("SELECT sub_location_name FROM sub_locations WHERE sub_location_id = ", sub_loc_id, ";"))[1,1]
-    } else {
-      sub_loc_code <- NULL
-    }
-    
     # start/end datetime for the sample series
     start_i <- if (!is.na(synch_from)) min(start_datetime, synch_from) else start_datetime
     end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
@@ -154,25 +133,10 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
     }
     
     tryCatch({
-      args_list <- list(location = loc_code, sub_location = sub_loc_code, start_datetime = start_i, end_datetime = end_i, con = con)
+      args_list <- list(start_datetime = start_i, end_datetime = end_i, con = con)
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
-        args <- strsplit(source_fx_args, "\\},\\s*\\{")
-        pairs <- lapply(args, function(pair) {
-          gsub("[{}]", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("\"", "", pair)
-        })
-        pairs <- lapply(pairs, function(pair) {
-          gsub("'", "", pair)
-        })
-        pairs <- strsplit(unlist(pairs), "=")
-        pairs <- lapply(pairs, function(pair) {
-          trimws(pair)
-        })
-        for (j in 1:length(pairs)) {
-          args_list[[pairs[[j]][1]]] <- pairs[[j]][[2]]
-        }
+        args <- jsonlite::fromJSON(source_fx_args)
+        args_list <- c(args_list, lapply(args, as.character))
       }
       
       if (source_fx == "downloadEQWin") {
@@ -185,21 +149,24 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
       inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
       
       if (length(inRemote) == 0) {
+        # There was no data in remote for the date range specified
+        DBI::dbExecute(con, paste0("UPDATE sample_series SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE sample_series_id = ", sid, ";"))
+        
         next
-      }
-      
-      if (!inherits(inRemote, "list")) {
-        stop("For sample_series_id ", sid, " the source function did not return a list.")
-      } else if (!inherits(inRemote[[1]], "list")) {
-        stop("For sample_series_id ", sid, " the source function did not return a list of lists (one element per sample, with two data.frames: one for sample metadata, the other for associated results).")
-      }
-      
-      if (delete) {
-        # Extract the 'datetime' of each sample in the list (make a blank element if it's not found)
-        inRemote_datetimes <- lapply(inRemote, function(x) if ("sample" %in% names(x)) x$sample$datetime else NA)
-      }
-      
-      if (length(inRemote) > 0) {
+        
+      } else {
+        
+        if (!inherits(inRemote, "list")) {
+          stop("For sample_series_id ", sid, " the source function did not return a list.")
+        } else if (!inherits(inRemote[[1]], "list")) {
+          stop("For sample_series_id ", sid, " the source function did not return a list of lists (one element per sample, with two data.frames: one for sample metadata, the other for associated results).")
+        }
+        
+        if (delete) {
+          # Extract the 'datetime' of each sample in the list (make a blank element if it's not found)
+          inRemote_datetimes <- lapply(inRemote, function(x) if ("sample" %in% names(x)) x$sample$datetime else NA)
+        }
+        
         for (j in 1:length(inRemote)) {
           
           if (!("sample" %in% names(inRemote[[j]])) | !("results" %in% names(inRemote[[j]]))) {
@@ -393,7 +360,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
                 inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE # result entry will not be deleted from the database
                 
               } else {
-                warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function returned a result that matched more than one result in the database. This should not happen Skipping this result.")
+                warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function returned a result that matched more than one result in the database. This should not happen. Skipping this result.")
                 inDB_results[inDB_results$result_id == inDB_sub$result_id, "checked"] <- TRUE # result entry will not be deleted
               }
             }
@@ -404,8 +371,6 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
                 DBI::dbExecute(con, paste0("DELETE FROM results WHERE result_id IN (", paste(to_delete, collapse = ", "), ");"))
               }
             }
-            
-            
             
             # Inserting a new sample #########
           } else { # No database sample was found, add the sample and corresponding results (follow same process as getNewDiscrete)
@@ -535,11 +500,8 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             new_samples <- new_samples + 1
           } # End of if no sample is found (making a new one)
           
-          
         } # End of loop over inRemote
         
-      } else { # There was no data in remote for the date range specified
-        DBI::dbExecute(con, paste0("UPDATE sample_series SET last_synchronize = '", .POSIXct(Sys.time(), "UTC"), "' WHERE sample_series_id = ", sid, ";"))
       }
     }, error = function(e) {
       warning("synchronize discrete failed on sample_series_id ", sid, " with error: ", e$message)

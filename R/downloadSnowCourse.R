@@ -155,7 +155,7 @@ downloadSnowCourse <- function(location, sub_location = NULL, start_datetime, en
       # Discard old data that overlaps with new data
       old_meas <- old_meas[!(old_meas$datetime %in% adj_meas$datetime),]
       # Add in the old_surveys$survey_id by matching on old_meas$datetime = old_surveys$survey_date
-      old_meas <- merge(old_meas, old_surveys, by.x = "datetime", by.y = "survey_date")
+      old_meas <- merge(old_meas, old_surveys[, -which(names(old_surveys) == 'survey_id')], by.x = "datetime", by.y = "survey_date")
       
       # adjust the old data in 'result' table of database with the new values, keyed by sample_id
       for (j in unique(old_meas$datetime)) {
