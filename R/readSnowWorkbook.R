@@ -105,6 +105,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
     survey_date <- survey[3, 2]
     sampler_name <- survey[4, 2]
     
+    # TODO: code below can wrongly assign 'average' when there's a bulk sample
     if (is.na(estavg[2,2])) {
       method <- survey[5,2]
     } else {

@@ -24,7 +24,7 @@ tryCatch({
   auto_type <- DBI::dbGetQuery(con, "SELECT image_type_id FROM image_types WHERE image_type = 'Auto';")[1,1]
   ice_type <- DBI::dbGetQuery(con, "SELECT image_type_id FROM image_types WHERE image_type = 'Ice observation';")[1,1]
   
-  # Update column image_type to be 'image_type' for all images in the images table where where column img_meta_id is NOT NULL
+  # Update column image_type to be auto_type for all images in the images table where where column img_meta_id is NOT NULL
   DBI::dbExecute(con, paste0("UPDATE images SET image_type = ", auto_type, " WHERE img_meta_id IS NOT NULL;"))
   DBI::dbExecute(con, paste0("UPDATE images SET image_type = ", ice_type, " WHERE img_meta_id IS NULL;"))
   

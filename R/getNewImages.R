@@ -67,7 +67,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
       }
       
       # Here, the output should be either of class "list", as results from downloadWSCImages, or data.frame, as results from downloadNupointImages.
-      image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type = 'Auto';"))[1, 1]
+      image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type = 'Automated camera';"))[1, 1]
         if (inherits(imgs, "list")) {
           for (j in 1:length(imgs)) {
             img <- imgs[[j]]
