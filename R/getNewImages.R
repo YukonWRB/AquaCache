@@ -29,9 +29,9 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   
   # Create table of meta_ids
   if (image_meta_ids[1] == "all") {
-    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.source_fx IS NOT NULL;")
+    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL;")
   } else {
-    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, l.location, i.active FROM image_series i JOIN locations l ON i.location_id = l.location_id WHERE i.source_fx IS NOT NULL AND img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
+    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL AND img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
     if (length(image_meta_ids) != nrow(meta_ids)) {
       warning("At least one of the image_meta_ids you called for cannot be found in the database or has no function specified in column source_fx of table image_series.")
     }
@@ -43,6 +43,12 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   
   message("Fetching new images with getNewImages...")
   
+  image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type = 'Automated camera';"))[1, 1]
+  
+  if (is.na(image_type)) {
+    stop("getNewImages: Could not find image type 'Automated camera' in the database table 'image_type'.")
+  }
+  
   count <- 0 #counter for number of successful new pulls
   image_count <- 0
   success <- character(0)
@@ -51,6 +57,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   }
   for (i in 1:nrow(meta_ids)) {
     id <- meta_ids[i, "img_meta_id"]
+    location_id <- meta_ids[i, "location_id"]
     next_instant <- meta_ids[i, "last_img"] + 1 #one second after the last image
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
@@ -67,17 +74,16 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
       }
       
       # Here, the output should be either of class "list", as results from downloadWSCImages, or data.frame, as results from downloadNupointImages.
-      image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type = 'Automated camera';"))[1, 1]
         if (inherits(imgs, "list")) {
           for (j in 1:length(imgs)) {
             img <- imgs[[j]]
             # Get the image_type_id from the image_types table corresponding to 'Auto'
-            insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = "auto")  # update to the last_img and last_new_img datetime is already being done by insertACImage
+            insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = "auto", location = location_id)  # update to the last_img and last_new_img datetime is already being done by insertACImage
             image_count <- image_count + 1
           }
         } else if (inherits(imgs, "data.frame")) {
           for (j in 1:nrow(imgs)) {
-            insertACImage(object = imgs[j, "file"], img_meta_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = 'auto')  # update to the last_img and last_new_img datetime is already being done by insertACImage
+            insertACImage(object = imgs[j, "file"], img_meta_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = 'auto', location = location_id)  # update to the last_img and last_new_img datetime is already being done by insertACImage
             image_count <- image_count + 1
           }
         } else {

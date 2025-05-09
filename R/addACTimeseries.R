@@ -307,20 +307,12 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       args <- strsplit(pairs, ":\\s*")
       
       # build a named list: names = keys, values = values
-      args <- setNames(
+      args <- stats::setNames(
         lapply(args, function(x) x[2]),
         sapply(args, function(x) x[1])
       )
       # convert to JSON
       args <- jsonlite::toJSON(args, auto_unbox = TRUE)
-      
-      
-      # example
-      input <- "argument1: value1, argument2: value2"
-      cat(string_to_json(input))
-      #> {"argument1":"value1","argument2":"value2"}
-      
-      
       
       add <- data.frame(location = location[i],
                         location_id = loc_id,
