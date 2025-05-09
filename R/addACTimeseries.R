@@ -314,14 +314,6 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       # convert to JSON
       args <- jsonlite::toJSON(args, auto_unbox = TRUE)
       
-      
-      # example
-      input <- "argument1: value1, argument2: value2"
-      cat(jsonlite::string_to_json(input))
-      #> {"argument1":"value1","argument2":"value2"}
-      
-      
-      
       add <- data.frame(location = location[i],
                         location_id = loc_id,
                         z = z[i],
