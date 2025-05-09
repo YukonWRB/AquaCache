@@ -11,6 +11,8 @@
 #'
 #' @return A data.table object.
 #' @export
+#' 
+#' @import data.table
 #'
 
 dbGetQueryDT <- function(con, statement, ...) {
