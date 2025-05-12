@@ -1,15 +1,14 @@
 #' Get HRDPA rasters
 #'
 #' @param parameter The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
-#' @param start_datetime The datetime from which to start looking for new rasters
-#' @param url The url from which to get new rasters.
+#' @param start_datetime The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
 #'
 
-downloadHRDPA <- function(parameter, start_datetime, url = "https://dd.weather.gc.ca/model_hrdpa/2.5km/", clip = NULL) {
+downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
 
   # check parameter 'clip'
   if (!is.null(clip)) {
@@ -18,6 +17,12 @@ downloadHRDPA <- function(parameter, start_datetime, url = "https://dd.weather.g
     } else if (nchar(clip) != 2) {
       stop("Parameter clip must be a character vector of 2 characters.")
     }
+  }
+  
+  if (!inherits(start_datetime, "POSIXct")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else {
+    attr(start_datetime, "tzone") <- "UTC"
   }
 
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
@@ -38,20 +43,25 @@ downloadHRDPA <- function(parameter, start_datetime, url = "https://dd.weather.g
   }
   # If there is no file that matches necessary use, download and save for later
   if (!file_exists) {
+    seq_days <- seq.Date(as.Date(start_datetime), as.Date(.POSIXct(Sys.time(), tz = "UTC")), by = "day")
     available <- data.frame()
-    for (i in c("00", "06", "12", "18")) {
-      links <- rvest::session(paste0(url, i)) |>
-        rvest::html_elements("a") |>
-        rvest::html_attr("href")
-      links <- links[grep("^[0-9]{8}T[0-9]{2}Z", links)]
-      links <- links[grep("Accum6h", links)] #only retain the links we're interested in
-      tmp <- data.frame(link = links,
-                        datetime = as.POSIXct(substr(links, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
-                        prelim = FALSE)
-      tmp$link <- paste0(i, "/", links)
-      available <- rbind(available, tmp)
+    for (i in 1:length(seq_days)) {
+      day <- seq_days[i]
+      for (j in c("00", "06", "12", "18")) {
+        files <- rvest::session(paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/")) |>
+          rvest::html_elements("a") |>
+          rvest::html_attr("href")
+        files <- files[grep("^[0-9]{8}T[0-9]{2}Z", files)]
+        files <- files[grep("Accum6h", files)] #only retain the files we're interested in
+        tmp <- data.frame(file = files,
+                          datetime = as.POSIXct(substr(files, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
+                          prelim = FALSE,
+                          path = paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/", files))
+        available <- rbind(available, tmp)
+      }
     }
-    available[grep("Prelim", available$link), "prelim"] <- TRUE
+
+    available[grep("Prelim", available$file), "prelim"] <- TRUE
     suppressWarnings(dir.create(paste0(tempdir(), "/downloadHRDPA")))
     name <- gsub(" ", "", Sys.time())
     name <- gsub("-", "", name)
@@ -66,7 +76,7 @@ downloadHRDPA <- function(parameter, start_datetime, url = "https://dd.weather.g
   available <- available[!(available$prelim & duplicates) | !duplicates, ]
 
   #Make clip polygon
-  extent <- paste(clip, collapse="_")
+  extent <- paste(clip, collapse = "_")
   if (!is.null(clip)) {
     clip <- prov_buff[prov_buff$PREABBR %in% clip, ] #This is package data living as shapefile in inst/extdata, loaded using file data_load.R
     if (nrow(clip) == 0) {
@@ -79,7 +89,7 @@ downloadHRDPA <- function(parameter, start_datetime, url = "https://dd.weather.g
     clipped <- FALSE
     for (i in 1:nrow(available)) {
       file <- list()
-      download_url <- paste0(url, "/", available[i, "link"[]])
+      download_url <- available$path[i]
       rast <- terra::rast(download_url)[[1]]
       file[["units"]] <- terra::units(rast) #Units is fetched now because the clip operation seems to remove them.
       if (!clipped) {
