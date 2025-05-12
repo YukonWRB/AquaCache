@@ -707,6 +707,11 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
 
 adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
   
+  # Make sure that column 'owner' is not all NA
+  if (all(is.na(data$owner))) {
+    message("adjust_owner: column 'owner' was all NA, skipped. Applies to timeseries_id ", timeseries_id, ".")
+  }
+  
   if (!attr(con, "active_transaction")) {
     DBI::dbBegin(con)
     attr(con, "active_transaction") <- TRUE
@@ -726,10 +731,6 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       stop("Column 'datetime' must be of class POSIXct.")
     }
     
-    # Make sure that column 'owner' is not all NA
-    if (all(is.na(data$owner))) {
-      return(message("adjust_owner: column 'owner' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
-    }
     
     # Check if 'owner' is character, if so match those characters to 'name' in the 'organizations' table
     if (inherits(data$owner[1], "character")) {
@@ -930,6 +931,11 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
 
 adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
   
+  # Make sure that column 'contributor' is not all NA
+  if (all(is.na(data$contributor))) {
+    message("adjust_contributor: column 'contributor' was all NA, skipped. Applies to timeseries_id ", timeseries_id, ".")
+  }
+  
   if (!attr(con, "active_transaction")) {
     DBI::dbBegin(con)
     attr(con, "active_transaction") <- TRUE
@@ -939,7 +945,6 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
   }
   
   tryCatch({
-    
     # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
     if ("date" %in% names(data) & !"datetime" %in% names(data)) {
       data$datetime <- as.POSIXct(data$date, tz = "UTC")
@@ -948,10 +953,6 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
     # Ensure that 'datetime' is POSIXct
     if (!inherits(data$datetime[1], "POSIXct")) {
       stop("Column 'datetime' must be of class POSIXct.")
-    }
-    # Make sure that column 'contributor' is not all NA
-    if (all(is.na(data$contributor))) {
-      return(message("adjust_contributor: column 'contributor' was all NA, skipped. Applies to timeseries_id ", timeseries_id, "."))
     }
     
     # Check if 'contributor' is character, if so match those characters to 'name' in the 'organizations' table

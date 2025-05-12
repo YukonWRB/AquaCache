@@ -36,7 +36,7 @@ synchronize_continuous(
 \item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 }
 \value{
-Updated entries in the hydro database.
+A data.frame showing the status of synchronization for each timeseries as well as the error or warning message, if any, plus updated entries in the hydro database.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
