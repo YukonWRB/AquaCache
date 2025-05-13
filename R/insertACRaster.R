@@ -100,7 +100,7 @@ insertACRaster <- function(con = NULL, raster, description, flag = NA, units = N
   }
 
   # Attempt to write the raster to the database
-  res <- writeRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks, constraints = TRUE)
+  res <- writeRaster(con = con, raster = raster, rast_table = c("spatial","rasters"), bit.depth = bit.depth, blocks = blocks, constraints = TRUE)
 
   if (res$status) {
     # band names

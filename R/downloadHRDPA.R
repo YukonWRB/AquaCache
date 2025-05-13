@@ -48,16 +48,21 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
     for (i in 1:length(seq_days)) {
       day <- seq_days[i]
       for (j in c("00", "06", "12", "18")) {
-        files <- rvest::session(paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/")) |>
-          rvest::html_elements("a") |>
-          rvest::html_attr("href")
-        files <- files[grep("^[0-9]{8}T[0-9]{2}Z", files)]
-        files <- files[grep("Accum6h", files)] #only retain the files we're interested in
-        tmp <- data.frame(file = files,
-                          datetime = as.POSIXct(substr(files, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
-                          prelim = FALSE,
-                          path = paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/", files))
-        available <- rbind(available, tmp)
+        tryCatch({
+          files <- rvest::session(paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/")) |>
+            rvest::html_elements("a") |>
+            rvest::html_attr("href")
+          files <- files[grep("^[0-9]{8}T[0-9]{2}Z", files)]
+          files <- files[grep("Accum6h", files)] #only retain the files we're interested in
+          tmp <- data.frame(file = files,
+                            datetime = as.POSIXct(substr(files, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
+                            prelim = FALSE,
+                            path = paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/", files))
+          available <- rbind(available, tmp)
+        }, error = function(e) {
+          message(paste0("No raster available for ", day, " at ", j, " UTC"))
+        })
+        
       }
     }
 

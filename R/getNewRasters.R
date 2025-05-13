@@ -117,6 +117,13 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
             DBI::dbExecute(con, paste0("DELETE FROM rasters_reference WHERE reference_id = ", exists, ";")) #This should cascade to the rasters table
           } else if (!is.na(exists) & !is.na(flag)) { #If the raster already exists and the new one is a prelim, skip to to the next one
             next
+          } else if (is.na(exists)) {
+            # Check if the raster already exists in non-preliminary format
+            exists <- DBI::dbGetQuery(con, paste0("SELECT reference_id FROM rasters_reference WHERE valid_from = '", valid_from, "' AND raster_series_id = ", id, " AND flag IS NULL;"))[1,1]
+            # Delete the old raster if it exists
+            if (!is.na(exists)) {
+              DBI::dbExecute(con, paste0("DELETE FROM rasters_reference WHERE reference_id = ", exists, ";")) #This should cascade to the rasters table
+            }
           } # else continue along and insert the new raster
           suppressMessages(insertACModelRaster(raster = rast, raster_series_id = id, valid_from = valid_from, valid_to = valid_to, issued = issued, flag = flag, source = source, units = units, model = model, con = con))
           DBI::dbExecute(con, paste0("UPDATE raster_series_index SET last_new_raster = '", .POSIXct(Sys.time(), tz = "UTC"), "' WHERE raster_series_id = ", id, ";"))
