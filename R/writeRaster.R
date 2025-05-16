@@ -17,23 +17,11 @@
 #' write times.
 #'
 #' @param con A connection object to a PostgreSQL database.
-#' @param raster A terra \code{SpatRaster}; objects from the raster
-#' package.
-#' @param rast_table A character string specifying a PostgreSQL schema in the
-#' database (if necessary) and table name to hold the raster (e.g.,
-#' \code{name = c("schema","table")}).
-#' @param bit.depth The bit depth of the raster. Will be set to 32-bit
-#'     (unsigned int, signed int, or float, depending on the data)
-#'     if left null, but can be specified (as character) as one of the
-#'     PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).
-#' @param blocks Optional desired number of blocks (tiles) to split the raster
-#'     into in the resulting PostGIS table. This should be specified as a
-#'     one or two-length (columns, rows) integer vector. See also 'Details'.
-#' @param constraints Whether to create constraints from raster data. Recommended
-#'     to leave \code{TRUE} unless applying constraints manually (see
-#'     \url{http://postgis.net/docs/RT_AddRasterConstraints.html}).
-#'     Note that constraint notices may print to the console,
-#'     depending on the PostgreSQL server settings.
+#' @param raster A terra \code{SpatRaster}; objects from the raster package.
+#' @param rast_table A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{name = c("schema","table")}).
+#' @param bit.depth The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).
+#' @param blocks Optional desired number of blocks (tiles) to split the raster into in the resulting PostGIS table. This should be specified as a one or two-length (columns, rows) integer vector. See also 'Details'.
+#' @param constraints Whether to create constraints from raster data. Recommended to leave \code{TRUE} unless applying constraints manually (see \url{http://postgis.net/docs/RT_AddRasterConstraints.html}). Note that constraint notices may print to the console, depending on the PostgreSQL server settings.
 #'
 #' @export
 #' @keywords internal

@@ -167,7 +167,7 @@ insertACModelRaster <- function(con = NULL, raster, raster_series_id, valid_from
   }
 
   # Attempt to write the raster to the database
-  res <- writeRaster(con = con, raster = raster, rast_table = "rasters", bit.depth = bit.depth, blocks = blocks,
+  res <- writeRaster(con = con, raster = raster, rast_table = c("spatial","rasters"), bit.depth = bit.depth, blocks = blocks,
               constraints = TRUE)
 
   if (res$status) {
