@@ -4,19 +4,12 @@
 \alias{downloadHRDPA}
 \title{Get HRDPA rasters}
 \usage{
-downloadHRDPA(
-  parameter,
-  start_datetime,
-  url = "https://dd.weather.gc.ca/model_hrdpa/2.5km/",
-  clip = NULL
-)
+downloadHRDPA(parameter, start_datetime, clip = NULL)
 }
 \arguments{
 \item{parameter}{The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.}
 
-\item{start_datetime}{The datetime from which to start looking for new rasters}
-
-\item{url}{The url from which to get new rasters.}
+\item{start_datetime}{The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC.}
 
 \item{clip}{The two-digit abbreviation(s) as per \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census} for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.}
 }

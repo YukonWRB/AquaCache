@@ -16,27 +16,15 @@ writeRaster(
 \arguments{
 \item{con}{A connection object to a PostgreSQL database.}
 
-\item{raster}{A terra \code{SpatRaster}; objects from the raster
-package.}
+\item{raster}{A terra \code{SpatRaster}; objects from the raster package.}
 
-\item{rast_table}{A character string specifying a PostgreSQL schema in the
-database (if necessary) and table name to hold the raster (e.g.,
-\code{name = c("schema","table")}).}
+\item{rast_table}{A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{name = c("schema","table")}).}
 
-\item{bit.depth}{The bit depth of the raster. Will be set to 32-bit
-(unsigned int, signed int, or float, depending on the data)
-if left null, but can be specified (as character) as one of the
-PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).}
+\item{bit.depth}{The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).}
 
-\item{blocks}{Optional desired number of blocks (tiles) to split the raster
-into in the resulting PostGIS table. This should be specified as a
-one or two-length (columns, rows) integer vector. See also 'Details'.}
+\item{blocks}{Optional desired number of blocks (tiles) to split the raster into in the resulting PostGIS table. This should be specified as a one or two-length (columns, rows) integer vector. See also 'Details'.}
 
-\item{constraints}{Whether to create constraints from raster data. Recommended
-to leave \code{TRUE} unless applying constraints manually (see
-\url{http://postgis.net/docs/RT_AddRasterConstraints.html}).
-Note that constraint notices may print to the console,
-depending on the PostgreSQL server settings.}
+\item{constraints}{Whether to create constraints from raster data. Recommended to leave \code{TRUE} unless applying constraints manually (see \url{http://postgis.net/docs/RT_AddRasterConstraints.html}). Note that constraint notices may print to the console, depending on the PostgreSQL server settings.}
 }
 \value{
 A list with TRUE for successful import and the rid(s) of the appended entries.
