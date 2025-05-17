@@ -18,7 +18,7 @@
 #'
 #' Additional arguments to pass to the function specified in source_fx go in argument 'source_fx_args' (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2". 
 #'
-#' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
+#' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
 #' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
 #' @param location A numeric vector corresponding to column 'location' of table 'locations'.
@@ -26,7 +26,7 @@
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
 #' @param media A numeric vector corresponding to column 'media_id' of table 'media_types'.
 #' @param sensor_priority A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.
-#' @param period_type A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.
+#' @param aggregation_type A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.
 #' @param record_rate A broad categorization of the rate at which recording takes place. Select from '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'; set to NA for discrete timeseries.
 #' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or strings.
 #' @param owner A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!
@@ -47,7 +47,7 @@
 #' parameter = c(34, 1154),
 #' media = 7,
 #' sensor_priority = 1,
-#' period_type = c("sum", "mean"),
+#' aggregation_type = c("sum", "mean"),
 #' record_rate = "< 1 day",
 #' share_with = "public_reader",
 #' owner = 2,
@@ -60,7 +60,7 @@
 #' addACTimeseries(df)
 #' }
 
-addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1,  period_type = 'instantaneous', record_rate = NA, share_with = "public_reader", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
+addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1,  aggregation_type = 'instantaneous', record_rate = NA, share_with = "public_reader", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
   
   # df = NULL
   # data = NULL
@@ -70,7 +70,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # z = NA
   # media = 7
   # sensor_priority = 1
-  # period_type = c('sum')
+  # aggregation_type = c('sum')
   # record_rate = c('< 1 day', '1 day', '1 day', '1 day')
   # share_with = "public_reader"
   # owner = 3
@@ -100,7 +100,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     }
     
     # Check that there is a column name for each function parameter that is not 'df'
-    if (!all(c("start_datetime", "location", "z", "parameter", "media", "sensor_priority", "period_type", "record_rate", "share_with", "owner", "source_fx", "source_fx_args", "note") %in% colnames(df))) {
+    if (!all(c("start_datetime", "location", "z", "parameter", "media", "sensor_priority", "aggregation_type", "record_rate", "share_with", "owner", "source_fx", "source_fx_args", "note") %in% colnames(df))) {
       stop("The data.frame provided does not contain all the necessary columns.")
     }
     
@@ -111,7 +111,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     parameter <- df$parameter
     media <- df$media
     sensor_priority <- df$sensor_priority
-    period_type <- df$period_type
+    aggregation_type <- df$aggregation_type
     record_rate <- df$record_rate
     share_with <- df$share_with
     owner <- df$owner
@@ -124,7 +124,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # Check on arguments
   
   # Find the longest argument, then make sure all are either NA, length 1, or the same length.
-  length <- max(length(start_datetime), length(location), length(z), length(parameter), length(media), length(sensor_priority), length(period_type), length(record_rate), length(owner), length(source_fx), length(source_fx_args), length(note))
+  length <- max(length(start_datetime), length(location), length(z), length(parameter), length(media), length(sensor_priority), length(aggregation_type), length(record_rate), length(owner), length(source_fx), length(source_fx_args), length(note))
   
   if (!inherits(start_datetime, "POSIXct")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
@@ -211,14 +211,14 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     sensor_priority <- rep(sensor_priority, length)
   }
   
-  if (any(is.na(period_type))) {
-    stop("period_type cannot contain NA values")
+  if (any(is.na(aggregation_type))) {
+    stop("aggregation_type cannot contain NA values")
   } else {
-    if (!all(period_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
-      stop("period_type must be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'")
+    if (!all(aggregation_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
+      stop("aggregation_type must be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'")
     }
-    if (length(period_type) == 1 && length > 1) {
-      period_type <- rep(period_type, length)
+    if (length(aggregation_type) == 1 && length > 1) {
+      aggregation_type <- rep(aggregation_type, length)
     }
   }
   
@@ -314,13 +314,15 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       # convert to JSON
       args <- jsonlite::toJSON(args, auto_unbox = TRUE)
       
+      aggregation_type_id <- DBI::dbGetQuery(con, paste0("SELECT aggregation_type_id FROM aggregation_types WHERE aggregation_type = '", aggregation_type[i], "';"))[1,1]
+      
       add <- data.frame(location = location[i],
                         location_id = loc_id,
                         z = z[i],
                         parameter_id = parameter[i],
                         media_id = media[i],
                         sensor_priority = sensor_priority[i],
-                        period_type = period_type[i],
+                        aggregation_type_id = aggregation_type_id,
                         record_rate = record_rate[i],
                         share_with = paste0("{", paste(share_with[i], collapse = ", "), "}"),
                         default_owner = owner[i],
@@ -331,11 +333,11 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       
       tryCatch({
         DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
-        message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", add$parameter_id, ", media_type ", add$media_id, ", and period_type ", add$period_type, ".")
-        new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
+        message("Added a new entry to the timeseries table for location ", add$location, ", parameter ", add$parameter_id, ", media_type ", add$media_id, ", and aggregation_type_id ", add$aggregation_type_id, ".")
+        new_tsid <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND aggregation_type_id = '", add$aggregation_type_id, "' AND record_rate = '", add$record_rate, "';"))[1,1]
       }, error = function(e) {
-        message("It looks like the timeseries for for location ", add$location, ", parameter ", add$parameter_id, ", media_type ", add$media_id, ", and period_type ", add$period_type, " has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries Don't worry, I'm still checking for data.")
-        new_tsid <<- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND period_type = '", add$period_type, "' AND record_rate = '", add$record_rate, "';"))[1,1]
+        message("It looks like the timeseries for for location ", add$location, ", parameter ", add$parameter_id, ", media_type ", add$media_id, ", and aggregation_type_id ", add$aggregation_type_id, " has already been added. This likely happened because this function already called function update_hydat on a flow or level timeseries of the Water Survey of Canada and automatically looked for the corresponding level/flow timeseries, or because of an earlier failed attempt to add the timeseries Don't worry, I'm still checking for data.")
+        new_tsid <<- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND aggregation_type_id = '", add$aggregation_type_id, "' AND record_rate = '", add$record_rate, "';"))[1,1]
         # Modify the end_datetime in the DB to be one second before the start_datetime
         DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", add$end_datetime, "' WHERE timeseries_id = ", new_tsid, ";"))
       }

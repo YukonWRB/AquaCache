@@ -38,9 +38,9 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
   if (new_hydat | force_update) {
     #Get the required timeseries_ids
     if (timeseries_id[1] == "all") {
-      all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, period_type FROM timeseries WHERE source_fx = 'downloadWSC';")
+      all_timeseries <- DBI::dbGetQuery(con, "SELECT t.location, t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggragation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx = 'downloadWSC';")
     } else {
-      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, period_type FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx = 'downloadWSC';"))
+      all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggragation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx = 'downloadWSC';"))
       if (length(timeseries_id) != nrow(all_timeseries)) {
         fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
         if ((length(fail) == 1)) {
@@ -131,7 +131,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "location_id" = location_id,
                                     "parameter_id" = parameter_id,
                                     "category" = "continuous",
-                                    "period_type" = "instantaneous",
+                                    "aggregation_type" = "instantaneous",
                                     "record_rate" = "< 1 day", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
                                     "media_id" = media_id,
                                     "start_datetime" = min(new_flow$date),
@@ -304,7 +304,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                                     "location_id" = location_id,
                                     "parameter_id" = parameter_id,
                                     "category" = "continuous",
-                                    "period_type" = "instantaneous",
+                                    "aggregation_type" = "instantaneous",
                                     "record_rate" = "< 1 day",  #HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
                                     "media_id" = media_id,
                                     "start_datetime" = min(new_level$date),

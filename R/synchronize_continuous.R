@@ -89,9 +89,9 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
   }
   
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, period_type, record_rate, default_owner, active FROM timeseries WHERE source_fx IS NOT NULL")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.record_rate, t.default_owner, t.active FROM timeseries t JOIN aggragation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, last_daily_calculation, period_type, record_rate, default_owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.record_rate, t.default_owner, t.active FROM timeseries t JOIN aggragation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
       fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]
       ifelse((length(fail) == 1),
@@ -124,7 +124,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
     
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter_id[i]
-    period_type <- all_timeseries$period_type[i]
+    aggregation_type <- all_timeseries$aggregation_type[i]
     record_rate <- all_timeseries$record_rate[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
@@ -267,9 +267,9 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
       inRemote <- inRemote[inRemote$datetime >= cutoff, ]
       if (nrow(inRemote) > 0) {
         #assign a period to the data
-        if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
+        if (aggregation_type == "instantaneous") { #Period is always 0 for instantaneous data
           inRemote$period <- "00:00:00"
-        } else if ((period_type != "instantaneous") & !("period" %in% names(inRemote))) { #period_types of mean, median, min, max should all have a period
+        } else if ((aggregation_type != "instantaneous") & !("period" %in% names(inRemote))) { #aggregation_types of mean, median, min, max should all have a period
           period <- calculate_period(data = inRemote[ , "datetime"], timeseries_id = tsid, con = con)
           inRemote <- merge(inRemote, period, by = "datetime", all.x = TRUE)
         } else { #Check to make sure that the supplied period can actually be coerced to a period

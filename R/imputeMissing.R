@@ -53,7 +53,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   }
   
   
-  entry <- DBI::dbGetQuery(con, paste0("SELECT t.location, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.timeseries_id = ", tsid, ";"))
+  entry <- DBI::dbGetQuery(con, paste0("SELECT t.location, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.timeseries_id = ", tsid, ";"))
   returns[["target_timeseries"]] <- entry
   
   # The interval between start and end must contain at least 50 data points (otherwise standard deviation doesn't work well to assess goodness of fit)
@@ -219,7 +219,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   if (daily) {
     exist.values$datetime <- as.POSIXct(exist.values$date, tz = "UTC")
     exist.values$date <- NULL
-    entry$period_type <- "mean"
+    entry$aggregation_type <- "mean"
     entry$record_rate <- "1 day"
   }
 
@@ -227,7 +227,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   end <- max(exist.values$datetime)
 
   #if mean, min, max then measurements over 'period' prior to the recorded point are used for the point. Capture those measurements too.
-  if (entry$period_type != "instantaneous") {
+  if (entry$aggregation_type != "instantaneous") {
     start <- min(exist.values$datetime) - period
   }
 
@@ -247,14 +247,13 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
 
   # look for timeseries within the radius (in table nrby) that might have data that can be used to impute the missing values
   if (!is.null(extra_params)) { # if there are extra parameters, look for those as well
-    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
-    
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggragation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
   } else { # if there are no extra parameters, look for the same parameter at nearby locations
-    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, t.period_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggragation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
   }
   
 
-  message("Working with location ", entry$location, ", parameter ", entry$parameter, ", period_type ", entry$period_type, ", and record rate of ", entry$record_rate, ". Look right to see what it looks like. You can zoom and pan the graph.")
+  message("Working with location ", entry$location, ", parameter ", entry$parameter, ", aggregation_type ", entry$aggregation_type, ", and record rate of ", entry$record_rate, ". Look right to see what it looks like. You can zoom and pan the graph.")
   
   # Run-length encoding to identify stretches of NAs
   lengths <- rle(is.na(full_dt$value))
@@ -356,31 +355,31 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
           #Make into mean/max/min if necessary and match the period of the target ts
           calculated <- data.frame(datetime = full_dt$datetime,
                                    value = NA)
-          if (entry$period_type == "instantaneous") {
+          if (entry$aggregation_type == "instantaneous") {
             for (j in 1:nrow(full_dt)) {
               calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
-          } else if (entry$period_type == "sum") {
+          } else if (entry$aggregation_type == "sum") {
             for (j in 1:nrow(full_dt)) {
               calculated[j, "value"] <- hablar::rationalize(sum(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
-          } else if (entry$period_type == "min") {
+          } else if (entry$aggregation_type == "min") {
             for (j in 1:nrow(full_dt)) {
               calculated[j, "value"] <- hablar::rationalize(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
-          } else if (entry$period_type == "max") {
+          } else if (entry$aggregation_type == "max") {
             for (j in 1:nrow(full_dt)) {
               calculated[j, "value"] <- hablar::rationalize(max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
-          } else if (entry$period_type == "mean") {
+          } else if (entry$aggregation_type == "mean") {
             for (j in 1:nrow(full_dt)) {
               calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
-          } else if (entry$period_type == "median") {
+          } else if (entry$aggregation_type == "median") {
             for (j in 1:nrow(full_dt)) {
               calculated[j, "value"] <- hablar::rationalize(stats::median(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
-          } else if (entry$period_type == "(min+max)/2") {
+          } else if (entry$aggregation_type == "(min+max)/2") {
             for (j in 1:nrow(full_dt)) {
               calculated[j, "value"] <- hablar::rationalize(mean(c(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE), max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))))
             }
@@ -682,7 +681,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       adjust_approval(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "approval")])
       adjust_qualifier(con = con, timeseries_id = tsid, data = to_push[, c("datetime", "qualifier")])
     } else {
-      if (entry$period_type != "instantaneous") {
+      if (entry$aggregation_type != "instantaneous") {
         #re-enter the period as ISO8601
         days <- floor(period / 86400)
         remainder <- period %% 86400

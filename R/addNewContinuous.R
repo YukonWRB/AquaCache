@@ -46,7 +46,7 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
   }
   
   
-  info <- DBI::dbGetQuery(con, paste0("SELECT period_type, record_rate, owner, active, end_datetime FROM timeseries WHERE timeseries_id = ", tsid, ";"))
+  info <- DBI::dbGetQuery(con, paste0("SELECT at.aggregation_type, t.owner, t.active, t.end_datetime FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = ", tsid, ";"))
   if (is.na(info$end_datetime)) {
     last_data_point <- NA
   } else {
@@ -113,9 +113,9 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
       df <- df[, c("datetime", "value", "timeseries_id", "imputed")]
       
       #assign a period to the data
-      if (info$period_type == "instantaneous") { #Period is always 0 for instantaneous data
+      if (info$aggregation_type == "instantaneous") { #Period is always 0 for instantaneous data
         df$period <- "00:00:00"
-      } else if ((info$period_type != "instantaneous") & !("period" %in% names(df))) { #period_types of mean, median, min, max should all have a period
+      } else if ((info$aggregation_type != "instantaneous") & !("period" %in% names(df))) { #aggregation_types of mean, median, min, max should all have a period
         df <- calculate_period(data = df, timeseries_id = tsid, con = con)
       } else { #Check to make sure that the supplied period can actually be coerced to a period
         check <- lubridate::period(unique(df$period))
