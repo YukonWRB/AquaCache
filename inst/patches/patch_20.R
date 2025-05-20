@@ -74,6 +74,17 @@ tryCatch({
   DBI::dbExecute(con, "UPDATE aggregation_types SET aggregation_type = 'maximum' WHERE aggregation_type = 'max';")
   
   
+  
+  # Modify the record_rate column to be an INTERVAL column.
+  # Dependent views are already dropped
+  # Now let's convert the < 1 day record rate to its actual interval, hourly where source_fx is not 'downloadWSC' and 5 minutes where source_fx is 'downloadWSC'
+  DBI::dbExecute(con, "UPDATE timeseries SET record_rate = '1 hour' WHERE record_rate < '1 day' AND source_fx != 'downloadWSC';")
+  DBI::dbExecute(con, "UPDATE timeseries SET record_rate = '5 minutes' WHERE record_rate < '1 day' AND source_fx = 'downloadWSC';")
+  # Now we can convert the column to INTERVAL
+  DBI::dbExecute(con, "ALTER TABLE timeseries ALTER COLUMN record_rate TYPE INTERVAL USING record_rate::interval;")
+  
+  
+  
   DBI::dbExecute(con, "
   CREATE OR REPLACE VIEW continuous.timeseries_metadata_en
   WITH(security_invoker=true)
@@ -163,6 +174,14 @@ tryCatch({
   GRANT SELECT ON TABLE continuous.timeseries_metadata_fr TO yg_reader;
   ')
   
+  
+  # Update some table comments
+  DBI::dbExecute(con, "COMMENT ON COLUMN timeseries.active IS 'Defines if the timeseries should or should not be added to or back-corrected by various AquaCache package functions.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN timeseries.record_rate IS 'The general recording interval for the timeseries, only used to differentiate between sub-daily, daily, weekly, or monthly recording. A more refined measure of the periodicity of the data is recorded in the measurements_continuous table.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN timeseries.source_fx IS 'The function used to download and pre-process data for addition to a timeseries. Must be a function present in the R package AquaCache.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN timeseries.source_fx_args IS 'Arguments to pass to the source_fx in a JSON format. Used for example to specify the url from which to fetch data or the location and parameter.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN timeseries.timeseries_id IS 'Autoincrements each time a timeseries is added. NOTE that timeseries should only be added using the R function addACTimeseries from the package AquaCache to ensure correctness of the data.'")
+  DBI::dbExecute(con, "COMMENT ON COLUMN timeseries.aggregation_type_id IS 'Descriptor for the type of aggregation applicable to this timeseries. Must match an entry to table aggregation_types, for example one of instantaneous, sum, mean, median, min, max, or (min+max)/2.'")
   
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '20' WHERE item = 'Last patch number';")

@@ -18,7 +18,7 @@
 #'
 #' Additional arguments to pass to the function specified in source_fx go in argument 'source_fx_args' (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2". 
 #'
-#' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
+#' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
 #' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
 #' @param location A numeric vector corresponding to column 'location' of table 'locations'.
@@ -27,7 +27,7 @@
 #' @param media A numeric vector corresponding to column 'media_id' of table 'media_types'.
 #' @param sensor_priority A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.
 #' @param aggregation_type A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.
-#' @param record_rate A broad categorization of the rate at which recording takes place. Select from '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'; set to NA for discrete timeseries.
+#' @param record_rate A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'; set to NA for discrete timeseries.
 #' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or strings.
 #' @param owner A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!
 #' @param source_fx The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.
@@ -48,7 +48,7 @@
 #' media = 7,
 #' sensor_priority = 1,
 #' aggregation_type = c("sum", "mean"),
-#' record_rate = "< 1 day",
+#' record_rate = "1 hour",
 #' share_with = "public_reader",
 #' owner = 2,
 #' source_fx = "downloadAquarius",
@@ -234,8 +234,11 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   
   # Check that record rate elements that are not NA are in the correct format
   rec_rate_no_na <- record_rate[!is.na(record_rate)]
-  if (!all(rec_rate_no_na %in% c('< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'))) {
-    stop("record_rate must be one of '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year', except for discrete timeseries.")
+  # USe lubridate::period() to check if the record rate is in the correct format
+  for (i in 1:length(rec_rate_no_na)) {
+    if (!lubridate::is.period(lubridate::period(rec_rate_no_na[i]))) {
+      stop("record_rate must be a character vector of the form '1 hour', '5 minutes', '1 day', '1 week', '4 weeks', '1 month', '1 year'")
+    }
   }
   
   if (any(is.na(share_with))) {
@@ -393,7 +396,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
           }
         }
         tryCatch({
-          if (add$record_rate %in% c('1 day', '< 1 day')) {
+          if (lubridate::period(add$record_rate) <= lubridate::period("1 day")) {
             calculate_stats(timeseries_id = new_tsid, con = con, start_recalc = NULL)
             message("Success! Calculated daily means and statistics for ", add$location, " and parameter ", param_name, ".")
           } else {

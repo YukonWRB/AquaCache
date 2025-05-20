@@ -37,10 +37,10 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
   }
   
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE record_rate IN ('1 day', '< 1 day');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE record_rate <= '1 day';"))
     timeseries_id <- all_timeseries$timeseries_id
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate IN ('1 day', '< 1 day');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate <= '1 day';"))
     if (nrow(all_timeseries) == 0) {
       stop("Calculations are not possible. Perhaps the timeseries_id you specified are not in table timeseries or have a record_rate of greater than 1 day.")
     }

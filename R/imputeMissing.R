@@ -247,9 +247,9 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
 
   # look for timeseries within the radius (in table nrby) that might have data that can be used to impute the missing values
   if (!is.null(extra_params)) { # if there are extra parameters, look for those as well
-    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggragation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name IN ('", paste(entry$parameter, "', '", paste(extra_params, collapse = "', '"), collapse = "', '", sep = ""), "') AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
   } else { # if there are no extra parameters, look for the same parameter at nearby locations
-    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggragation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
+    similar <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('", paste(nrby$location, collapse = "', '"), "') AND p.param_name = '", entry$parameter, "' AND t.timeseries_id != ", tsid, " AND t.start_datetime < '", min(exist.values$datetime), "';"))
   }
   
 
@@ -305,13 +305,7 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     similar <- merge(similar, nrby, by = "location")
 
     # Retain only entries with equal or more frequent record rates
-    # Replace the text strings with numeric values for record rate
-    duration_mapping <- c('< 1 day' = 1, '1 day' = 2, '1 week' = 3, '4 weeks' = 4, '1 month' = 5, 'year' = 6)
-    entry$record_rate_numeric <- duration_mapping[entry$record_rate]
-    similar$record_rate_numeric <- duration_mapping[similar$record_rate]
-    #retain only those with a more granular or equal recording rate
-    similar <- similar[similar$record_rate_numeric <= entry$record_rate_numeric , ]
-    similar <- similar[, -which(names(similar) %in% c("record_rate_numeric"))]
+    similar <- similar[lubridate::period(similar$record_rate) <= lubridate::period(entry$record_rate), ]
 
     if (nrow(similar) > 0) {
       # Check suitability for each entry (i.e. does the data all exist, rank how well it tracks normally)
