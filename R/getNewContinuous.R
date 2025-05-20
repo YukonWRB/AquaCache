@@ -39,9 +39,9 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   
   # Create table of timeseries
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, "SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, default_owner, active FROM timeseries WHERE source_fx IS NOT NULL;")
+    all_timeseries <- DBI::dbGetQuery(con, "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.end_datetime, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL;")
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT location, parameter_id, timeseries_id, source_fx, source_fx_args, end_datetime, period_type, default_owner, active FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.end_datetime, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND source_fx IS NOT NULL;"))
     if (length(timeseries_id) != nrow(all_timeseries)) {
       warning("At least one of the timeseries IDs you called for cannot be found in the database or has no function specified in column source_fx.")
     }
@@ -79,7 +79,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
   for (i in 1:nrow(all_timeseries)) {
     loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter_id[i]
-    period_type <- all_timeseries$period_type[i]
+    aggregation_type <- all_timeseries$aggregation_type[i]
     tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
@@ -147,9 +147,9 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
           ts <- ts[, c("datetime", "value", "timeseries_id", "imputed")]
           
           #assign a period to the data
-          if (period_type == "instantaneous") { #Period is always 0 for instantaneous data
+          if (aggregation_type == "instantaneous") { #Period is always 0 for instantaneous data
             ts$period <- "00:00:00"
-          } else if ((period_type != "instantaneous") & !("period" %in% names(ts))) { #period_types of mean, median, min, max should all have a period
+          } else if ((aggregation_type != "instantaneous") & !("period" %in% names(ts))) { #aggregation_types of mean, median, min, max should all have a period
             ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
           } else { #Check to make sure that the supplied period can actually be coerced to a period
             check <- lubridate::period(unique(ts$period))

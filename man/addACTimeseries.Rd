@@ -13,7 +13,7 @@ addACTimeseries(
   parameter = NA,
   media = NA,
   sensor_priority = 1,
-  period_type = "instantaneous",
+  aggregation_type = "instantaneous",
   record_rate = NA,
   share_with = "public_reader",
   owner = NA,
@@ -24,7 +24,7 @@ addACTimeseries(
 )
 }
 \arguments{
-\item{df}{A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, period_type, record_rate, share_with, owner, source_Fx, source_fx_args, note. If this parameter is provided, all other parameters save for \code{data} must be NA or left as their default values. See notes for the other parameters for more information on each column of df.}
+\item{df}{A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for \code{data} must be NA or left as their default values. See notes for the other parameters for more information on each column of df.}
 
 \item{data}{An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.}
 
@@ -40,9 +40,9 @@ addACTimeseries(
 
 \item{sensor_priority}{A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.}
 
-\item{period_type}{A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.}
+\item{aggregation_type}{A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.}
 
-\item{record_rate}{A broad categorization of the rate at which recording takes place. Select from '< 1 day', '1 day', '1 week', '4 weeks', '1 month', 'year'; set to NA for discrete timeseries.}
+\item{record_rate}{A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'; set to NA for discrete timeseries.}
 
 \item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or strings.}
 
@@ -86,8 +86,8 @@ z = c(NA, 3),
 parameter = c(34, 1154),
 media = 7,
 sensor_priority = 1,
-period_type = c("sum", "mean"),
-record_rate = "< 1 day",
+aggregation_type = c("sum", "mean"),
+record_rate = "1 hour",
 share_with = "public_reader",
 owner = 2,
 source_fx = "downloadAquarius",

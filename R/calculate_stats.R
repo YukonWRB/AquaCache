@@ -37,10 +37,10 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
   }
   
   if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE record_rate IN ('1 day', '< 1 day');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE record_rate <= '1 day';"))
     timeseries_id <- all_timeseries$timeseries_id
   } else {
-    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate IN ('1 day', '< 1 day');"))
+    all_timeseries <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id IN ('", paste(timeseries_id, collapse = "', '"), "') AND record_rate <= '1 day';"))
     if (nrow(all_timeseries) == 0) {
       stop("Calculations are not possible. Perhaps the timeseries_id you specified are not in table timeseries or have a record_rate of greater than 1 day.")
     }
@@ -104,8 +104,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         start_recalc_i <- earliest_day_measurements
       }
       
-      tmp <- DBI::dbGetQuery(con, paste0("SELECT period_type, source_fx FROM timeseries WHERE timeseries_id = ", i, ";"))
-      period_type <- tmp[1,1] # Daily values are calculated differently depending on the period type
+      tmp <- DBI::dbGetQuery(con, paste0("SELECT at.aggregation_type, t.source_fx FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ", i, ";"))
+      aggregation_type <- tmp[1,1] # Daily values are calculated differently depending on the period type
       source_fx <- tmp[1,2]  #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
       
       if (!is.null(start_recalc_i)) { #start_recalc_i is specified (not NULL)
@@ -204,7 +204,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               gap_measurements <- gap_measurements %>%
                 dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
                 dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                                 value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
+                                 value = if (aggregation_type == "sum") sum(.data$value) else if (aggregation_type == "median") stats::median(.data$value) else if (aggregation_type == "min") min(.data$value) else if (aggregation_type == "max") max(.data$value) else if (aggregation_type == "mean") mean(.data$value) else if (aggregation_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (aggregation_type == "instantaneous") mean(.data$value),
                                  imputed = sort(.data$imputed, decreasing = TRUE)[1],
                                  .groups = "drop")
               gap_measurements <- gap_measurements[,c(3:5)]
@@ -292,7 +292,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             gap_measurements <- gap_measurements %>%
               dplyr::group_by(lubridate::year(.data$datetime), lubridate::yday(.data$datetime)) %>%
               dplyr::summarize(date = mean(lubridate::date(.data$datetime)),
-                               value = if (period_type == "sum") sum(.data$value) else if (period_type == "median") stats::median(.data$value) else if (period_type == "min") min(.data$value) else if (period_type == "max") max(.data$value) else if (period_type == "mean") mean(.data$value) else if (period_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (period_type == "instantaneous") mean(.data$value),
+                               value = if (aggregation_type == "sum") sum(.data$value) else if (aggregation_type == "median") stats::median(.data$value) else if (aggregation_type == "min") min(.data$value) else if (aggregation_type == "max") max(.data$value) else if (aggregation_type == "mean") mean(.data$value) else if (aggregation_type == "(min+max)/2") mean(c(min(.data$value), max(.data$value))) else if (aggregation_type == "instantaneous") mean(.data$value),
                                imputed = sort(.data$imputed, decreasing = TRUE)[1], # Ensures that if there is even 1 imputed point in a day, the whole day is marked as imputed
                                .groups = "drop")
             gap_measurements <- gap_measurements[,c(3:5)]
