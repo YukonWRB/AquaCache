@@ -132,16 +132,13 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
       DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(df$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
     }
     
-    if (!attr(con, "active_transaction")) {
-      DBI::dbBegin(con)
-      attr(con, "active_transaction") <- TRUE
+    activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+    if (activeTrans) {
       tryCatch({
         commit_fx(con, df, last_data_point, tsid)
-        DBI::dbCommit(con)
-        attr(con, "active_transaction") <- FALSE
+        DBI::dbExecute(con, "COMMIT;")
       }, error = function(e) {
-        DBI::dbRollback(con)
-        attr(con, "active_transaction") <<- FALSE
+        DBI::dbExecute(con, "ROLLBACK;")
         warning("addNewContinuous: Failed to append new data. Returned error '", e$message, "'.")
       })
       
@@ -193,19 +190,15 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
       }
     }
     
-    if (!attr(con, "active_transaction")) {
-      DBI::dbBegin(con)
-      attr(con, "active_transaction") <- TRUE
+    activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+    if (activeTrans) {
       tryCatch({
         commit_fx(con, df, last_data_point, tsid)
-        DBI::dbCommit(con)
-        attr(con, "active_transaction") <- FALSE
+        DBI::dbExecute(con, "COMMIT;")
       }, error = function(e) {
-        DBI::dbRollback(con)
-        attr(con, "active_transaction") <<- FALSE
+        DBI::dbExecute(con, "ROLLBACK;")
         warning("addNewContinuous: Failed to append new data. Returned error '", e$message, "'.")
       })
-      
     } else {
       commit_fx(con, df, last_data_point, tsid)
     }

@@ -85,7 +85,6 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     source_fx_args <- all_timeseries$source_fx_args[i]
     owner <- all_timeseries$default_owner[i]
 
-
     last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
 
     tryCatch({
@@ -106,8 +105,6 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
         
         ts$timeseries_id <- tsid
         ts$imputed <- FALSE
-        
-        # The column for "imputed" defaults to FALSE in the DB, so even though it is NOT NULL it doesn't need to be specified UNLESS this function gets modified to impute values.
         
         if ("owner" %in% names(ts)) {
           if (!is.null(owner)) {
@@ -164,20 +161,17 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
           DBI::dbAppendTable(con, "measurements_continuous", ts)
           #make the new entry into table timeseries
           DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(ts$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
-        }
+        } # End of commit_fx function
         
-        if (!attr(con, "active_transaction")) {
-          DBI::dbBegin(con)
-          attr(con, "active_transaction") <- TRUE
+        activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress or was set up, otherwise commit will happen in the original calling function.
+        if (activeTrans) {
           tryCatch({
             commit_fx(con, ts, last_data_point, tsid)
-            DBI::dbCommit(con)
-            attr(con, "active_transaction") <- FALSE
+            DBI::dbExecute(con, "COMMIT;")
             count <- count + 1
             success <- rbind(success, data.frame("location" = loc, "parameter_id" = parameter, "timeseries_id" = tsid))
           }, error = function(e) {
-            DBI::dbRollback(con)
-            attr(con, "active_transaction") <<- FALSE
+            DBI::dbExecute(con, "ROLLBACK;")
             warning("getNewContinuous: Failed to append new data at location ", loc, " and parameter ", parameter, " (timeseries_id ", all_timeseries$timeseries_id[i], "). Returned error '", e$message, "'.")
           })
           
@@ -193,8 +187,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
     
     if (interactive()) {
       utils::setTxtProgressBar(pb, i)
-    }
-    
+      }
   } # End of for loop
   
   if (interactive()) {
@@ -203,6 +196,7 @@ getNewContinuous <- function(con = NULL, timeseries_id = "all", active = 'defaul
 
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_continuous'"))
+  
   if (nrow(success) > 0) {
     return(success)
   }

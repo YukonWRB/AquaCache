@@ -5,22 +5,54 @@
 #' @noRd
 fmt <- function(x) format(x, tz = "UTC", "%Y-%m-%d %H:%M:%S")
 
-#' @title DB transaction check
+
+#' @title Begin a transaction
 #' @description
-#' Check if a database connection is in an active transaction. If not, start a new transaction.
+#' Begin a transaction on a database connection. This function creates a temporary table to ensure the transaction is active.
 #' 
 #' @param con A database connection object.
-#' @return A boolean indicating whether a new transaction was started
+#' @return A boolean indicating whether a transaction was started
 #' @noRd
-
-dbTransBegin <- function(con) {
-  active <- attr(con, "active_transaction") 
-  if ((is.null(active) || !active) && start) {
-    DBI::dbBegin(con)
-    attr(con, "active_transaction") <- TRUE
-    active <- TRUE  # For a new transaction
-  } else {
-    active <- FALSE  # No new transaction started
+dbTransBegin <- function(con, silent = TRUE) {
+  
+  # Check if already in a transaction
+  if (dbTransCheck(con)) {
+    if (!silent) message("dbTransBegin: Transaction already active.")
+    return(FALSE)
   }
+  
+  # Begin transaction
+  DBI::dbExecute(con, "BEGIN;")
+  # Create a temporary table that auto-destructs so the xact_id is assigned (otherwise nothing happens until something is pushed)
+  DBI::dbExecute(con, "CREATE TEMPORARY TABLE a (b int) ON COMMIT DROP;") # Of course, also destroyed on rollback
+  
+  # Confirm transaction is active
+  active <- DBI::dbGetQuery(con, "SELECT pg_current_xact_id_if_assigned() IS NOT NULL AS is_transaction;")[1,1]
+  if (active) {
+    return(active)
+  } else {
+    stop("dbTransBegin: Transaction could not be started or verified as started.")
+  }
+}
+
+
+#' @title Check if a transaction is active
+#' @description
+#' Check if a database connection is in an active transaction.
+#' 
+#' @param con A database connection object.
+#' @return A boolean indicating whether a transaction is active (TRUE for active)
+#' @noRd
+dbTransCheck <- function(con) {
+  
+  active <- DBI::dbGetQuery(con, "SELECT pg_current_xact_id_if_assigned() IS NOT NULL AS is_transaction;")[1,1]
+  
+  if (!active) { # If transaction was started and nothing done yet, active would still be FALSE. Code below handles that possibility
+    # Create a temporary table that auto-destructs so the xact_id is assigned (otherwise nothing happens until something is pushed)
+    DBI::dbExecute(con, "CREATE TEMPORARY TABLE a (b int) ON COMMIT DROP;") # Of course, also destroyed on rollback
+    # Check again
+    active <- DBI::dbGetQuery(con, "SELECT pg_current_xact_id_if_assigned() IS NOT NULL AS is_transaction;")[1,1]
+  }
+
   return(active)
 }

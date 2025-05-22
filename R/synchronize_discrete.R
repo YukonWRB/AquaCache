@@ -482,16 +482,13 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             }
             
             # Append values in a transaction block ##########
-            if (!attr(con, "active_transaction")) {
-              DBI::dbBegin(con)
-              attr(con, "active_transaction") <- TRUE
+            activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+            if (activeTrans) {
               tryCatch({
                 commit_fx(con, inRemote_sample, inRemote_results)
-                DBI::dbCommit(con)
-                attr(con, "active_transaction") <- FALSE
+                DBI::dbExecute(con, "COMMIT;")
               }, error = function(e) {
-                DBI::dbRollback(con)
-                attr(con, "active_transaction") <<- FALSE
+                DBI::dbExecute(con, "ROLLBACK;")
                 warning("synchronize_discrete: Failed to commit new data for sample_series_id ", sid, " and list element ", j, " . Error message: ", e$message)
               })
             } else { # we're already in a transaction

@@ -377,17 +377,14 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               }
             }
             
-            if (!attr(con, "active_transaction")) {
-              DBI::dbBegin(con)
-              attr(con, "active_transaction") <- TRUE
+            active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function
+            if (active) {
               tryCatch({
                 commit_fx1(con, i, first_instance_no_stats, missing_stats)
-                DBI::dbCommit(con)
-                attr(con, "active_transaction") <- FALSE
+                DBI::dbExecute(con, "COMMIT;")
               }, error = function(e) {
-                DBI::dbRollback(con)
-                attr(con, "active_transaction") <<- FALSE
-                
+                DBI::dbExecute(con, "ROLLBACK;")
+
               })
             } else { # we're already in a transaction
               commit_fx1(con, i, first_instance_no_stats, missing_stats)
@@ -467,16 +464,14 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           DBI::dbExecute(con, paste0("UPDATE timeseries SET last_daily_calculation = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", i, ";"))
         }
         
-        if (!attr(con, "active_transaction")) {
-          DBI::dbBegin(con)
-          attr(con, "active_transaction") <- TRUE
+        active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+        
+        if (active) {
           tryCatch({
             commit_fx2(con, delete_query, missing_stats, i)
-            DBI::dbCommit(con)
-            attr(con, "active_transaction") <- FALSE
+            DBI::dbExecute(con, "COMMIT;")
           }, error = function(e) {
-            DBI::dbRollback(con)
-            attr(con, "active_transaction") <<- FALSE
+            DBI::dbExecute(con, "ROLLBACK;")
           })
         } else { # we're already in a transaction
           commit_fx2(con, delete_query, missing_stats, i)

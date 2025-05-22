@@ -153,7 +153,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
 
   
   # Check that there is no location with the same latitude and longitude
-  for (i in length(latitude)) {
+  for (i in 1:length(latitude)) {
     exists <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE latitude = ", latitude[i], " AND longitude = ", longitude[i], ";"))[1,1]
     if (!is.na(exists)) {
       stop("There is already a location with that latitude ", latitude[i], " and longitude ", longitude[i], " in the locations table.")
@@ -221,7 +221,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
     exists <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id = ", unique_owners, ";"))
   }
   if (length(unique_owners) != nrow(exists)) {
-    stop("At least one of the owner IDs you specified does not exist. You can add it with function addACOwner().")
+    stop("At least one of the owner IDs you specified does not exist. You can add it with function addACOrg().")
   }
   
   # Check that data_sharing_agreement_id exists in the 'documents' table
@@ -237,7 +237,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
     }
   }
   
-  DBI::dbBegin(con)
+  active <- dbTransBegin(con)
   tryCatch({
     for (i in 1:length(location)) {
       # Add the location to the 'vectors' table ############################
@@ -308,9 +308,13 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
       
       message("Added a new entry to the locations table for location ", location[i], ".")
     }
-    DBI::dbCommit(con)
+    if (active) {
+      DBI::dbExecute(con, "COMMIT;")
+    }
   }, error = function(e) {
-    DBI::dbRollback(con)
+    if (active) {
+      DBI::dbExecute(con, "ROLLBACK;")
+    }
     stop("Error adding location. No changes were made. Error: ", e$message)
   })
   
