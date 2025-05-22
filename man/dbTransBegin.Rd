@@ -8,6 +8,8 @@ dbTransBegin(con, silent = TRUE)
 }
 \arguments{
 \item{con}{A database connection object.}
+
+\item{silent}{A boolean indicating whether to suppress messages about transaction status.}
 }
 \value{
 A boolean indicating whether a transaction was started

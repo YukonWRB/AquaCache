@@ -13,6 +13,7 @@ fmt <- function(x) format(x, tz = "UTC", "%Y-%m-%d %H:%M:%S")
 #' Begin a transaction on a database connection. This function creates a temporary table to ensure the transaction is active.
 #' 
 #' @param con A database connection object.
+#' @param silent A boolean indicating whether to suppress messages about transaction status.
 #' @return A boolean indicating whether a transaction was started
 #' @export
 dbTransBegin <- function(con, silent = TRUE) {
