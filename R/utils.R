@@ -2,7 +2,9 @@
 #' @description
 #' Format a date-time object to a string that can be passed to SQL queries. Works on POSIXct objects.
 #' 
-#' @noRd
+#' @param x A date-time object (POSIXct).
+#' @return A string formatted as "YYYY-MM-DD HH:MM:SS" in UTC time zone.
+#' @export
 fmt <- function(x) format(x, tz = "UTC", "%Y-%m-%d %H:%M:%S")
 
 
@@ -12,7 +14,7 @@ fmt <- function(x) format(x, tz = "UTC", "%Y-%m-%d %H:%M:%S")
 #' 
 #' @param con A database connection object.
 #' @return A boolean indicating whether a transaction was started
-#' @noRd
+#' @export
 dbTransBegin <- function(con, silent = TRUE) {
   
   # Check if already in a transaction
@@ -42,7 +44,7 @@ dbTransBegin <- function(con, silent = TRUE) {
 #' 
 #' @param con A database connection object.
 #' @return A boolean indicating whether a transaction is active (TRUE for active)
-#' @noRd
+#' @export
 dbTransCheck <- function(con) {
   
   active <- DBI::dbGetQuery(con, "SELECT pg_current_xact_id_if_assigned() IS NOT NULL AS is_transaction;")[1,1]

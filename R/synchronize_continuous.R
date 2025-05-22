@@ -352,6 +352,10 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
   if (parallel) {
     # !Important note when troubleshooting parallel stuff: load_all() doesn't work, as the .packages argument of foreach::foreach attaches the installed version of AquaCache. 
     n.cores <- parallel::detectCores() - 2
+    # Limit the number of cores to the number of timeseries so as to free up resources
+    if (n.cores > nrow(all_timeseries)) {
+      n.cores <- nrow(all_timeseries)
+    }
     if (n.cores < 1) {
       n.cores <- 1
       warning("You're trying to run in parallel but I could only detect 2 or fewer CPU cores. Running on a single core.")
