@@ -164,30 +164,20 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   # Check that network and project exist in the 'networks' and 'projects' tables (if not NA)
   if (any(!is.na(network))) {
     network_sub <- network[!is.na(network)]
-    if (length(network_sub > 1)) {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT network_id FROM networks WHERE network_id IN (", paste(network_sub, collapse = ", "), ");"))
-      if (is.na(exists)) {
-        stop("At least one of the network IDs you specified does not exist.")
-      }
-    } else {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT network_id FROM networks WHERE network_id = ", network, ";"))[1,1]
-      if (is.na(exists)) {
-        stop("The network_id you specified does not exist.")
-      }
+    exists <- DBI::dbGetQuery(con, paste0(
+      "SELECT network_id FROM networks WHERE network_id IN (",
+      paste(network_sub, collapse = ", "), ");"))
+    if (nrow(exists) != length(unique(network_sub))) {
+      stop("At least one of the network IDs you specified does not exist.")
     }
   }
   if (any(!is.na(project))) {
     project_sub <- project[!is.na(project)]
-    if (length(project_sub > 1)) {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT project_id FROM projects WHERE project_id IN (", paste(project_sub, collapse = ", "), ");"))
-      if (is.na(exists)) {
-        stop("At least one of the project IDs you specified does not exist.")
-      }
-    } else {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT project_id FROM projects WHERE project_id = ", project, ";"))[1,1]
-      if (is.na(exists)) {
-        stop("The project_id you specified does not exist.")
-      }
+    exists <- DBI::dbGetQuery(con, paste0(
+      "SELECT project_id FROM projects WHERE project_id IN (",
+      paste(project_sub, collapse = ", "), ");"))
+    if (nrow(exists) != length(unique(project_sub))) {
+      stop("At least one of the project IDs you specified does not exist.")
     }
   }
   
