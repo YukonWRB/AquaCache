@@ -153,7 +153,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
 
   
   # Check that there is no location with the same latitude and longitude
-  for (i in length(latitude)) {
+  for (i in 1:length(latitude)) {
     exists <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE latitude = ", latitude[i], " AND longitude = ", longitude[i], ";"))[1,1]
     if (!is.na(exists)) {
       stop("There is already a location with that latitude ", latitude[i], " and longitude ", longitude[i], " in the locations table.")
@@ -164,30 +164,20 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   # Check that network and project exist in the 'networks' and 'projects' tables (if not NA)
   if (any(!is.na(network))) {
     network_sub <- network[!is.na(network)]
-    if (length(network_sub > 1)) {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT network_id FROM networks WHERE network_id IN (", paste(network_sub, collapse = ", "), ");"))
-      if (is.na(exists)) {
-        stop("At least one of the network IDs you specified does not exist.")
-      }
-    } else {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT network_id FROM networks WHERE network_id = ", network, ";"))[1,1]
-      if (is.na(exists)) {
-        stop("The network_id you specified does not exist.")
-      }
+    exists <- DBI::dbGetQuery(con, paste0(
+      "SELECT network_id FROM networks WHERE network_id IN (",
+      paste(network_sub, collapse = ", "), ");"))
+    if (nrow(exists) != length(unique(network_sub))) {
+      stop("At least one of the network IDs you specified does not exist.")
     }
   }
   if (any(!is.na(project))) {
     project_sub <- project[!is.na(project)]
-    if (length(project_sub > 1)) {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT project_id FROM projects WHERE project_id IN (", paste(project_sub, collapse = ", "), ");"))
-      if (is.na(exists)) {
-        stop("At least one of the project IDs you specified does not exist.")
-      }
-    } else {
-      exists <- DBI::dbGetQuery(con, paste0("SELECT project_id FROM projects WHERE project_id = ", project, ";"))[1,1]
-      if (is.na(exists)) {
-        stop("The project_id you specified does not exist.")
-      }
+    exists <- DBI::dbGetQuery(con, paste0(
+      "SELECT project_id FROM projects WHERE project_id IN (",
+      paste(project_sub, collapse = ", "), ");"))
+    if (nrow(exists) != length(unique(project_sub))) {
+      stop("At least one of the project IDs you specified does not exist.")
     }
   }
   
@@ -221,7 +211,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
     exists <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id = ", unique_owners, ";"))
   }
   if (length(unique_owners) != nrow(exists)) {
-    stop("At least one of the owner IDs you specified does not exist. You can add it with function addACOwner().")
+    stop("At least one of the owner IDs you specified does not exist. You can add it with function addACOrg().")
   }
   
   # Check that data_sharing_agreement_id exists in the 'documents' table
@@ -237,7 +227,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
     }
   }
   
-  DBI::dbBegin(con)
+  active <- dbTransBegin(con)
   tryCatch({
     for (i in 1:length(location)) {
       # Add the location to the 'vectors' table ############################
@@ -308,9 +298,13 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
       
       message("Added a new entry to the locations table for location ", location[i], ".")
     }
-    DBI::dbCommit(con)
+    if (active) {
+      DBI::dbExecute(con, "COMMIT;")
+    }
   }, error = function(e) {
-    DBI::dbRollback(con)
+    if (active) {
+      DBI::dbExecute(con, "ROLLBACK;")
+    }
     stop("Error adding location. No changes were made. Error: ", e$message)
   })
   

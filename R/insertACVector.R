@@ -35,10 +35,6 @@ insertACVector <- function(geom, layer_name, feature_name = NULL, description = 
   
   DBI::dbExecute(con, "SET timezone = 'UTC'")
   
-  if (inherits(con, "Pool")) {
-    con <- pool::localCheckout(con)  # Automatically returned when the function exits
-  }
-  
   exist_layer_names <- DBI::dbGetQuery(con, paste0("SELECT DISTINCT layer_name FROM ", schema, ".", table, ";"))
   
   if (!layer_name %in% exist_layer_names$layer_name) {

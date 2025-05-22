@@ -32,9 +32,6 @@ AquaConnect <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), 
                           user = username,
                           password = password)
     
-    # Add a new attribute to the connection object to track if a transaction is active
-    attr(con, "active_transaction") <- FALSE
-    
     # Explicitly set the timezone to UTC as all functions in this package work with UTC timezones
     DBI::dbExecute(con, "SET timezone = 'UTC'")
     

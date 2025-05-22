@@ -207,7 +207,6 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
       inRemote$qualifier <- NULL # Drop the qualifier column as it's already taken care of
     }
     
-    
     if (nrow(inDB) > 0) { # If nothing inDB it's an automatic mismatch so this is skipped
       min_inRemote <- min(inRemote$datetime)
       min_inDB <- min(inDB$datetime)
@@ -316,18 +315,13 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
         DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
       }
       
-      if (!attr(con, "active_transaction")) {
-        DBI::dbBegin(con)
-        attr(con, "active_transaction") <- TRUE
+      activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+      if (activeTrans) {
         tryCatch({
           commit_fx(con, no_update, tsid, inRemote, cutoff, inDB)
-          DBI::dbCommit(con)
-          attr(con, "active_transaction") <- FALSE
-          
-          
+          DBI::dbExecute(con, "COMMIT;")
         }, error = function(e) {
-          DBI::dbRollback(con)
-          attr(con, "active_transaction") <<- FALSE
+          DBI::dbExecute(con, "ROLLBACK;")
           warning("synchronize failed to make database changes for ", loc, " and parameter code ", parameter, " (timeseries_id ", tsid, ") with message: ", e$message, ".")
         })
       } else { # we're already in a transaction
@@ -342,7 +336,7 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
                       DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]], 
                       as.POSIXct(DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]], tz = "UTC"))
       
-      DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", earliest, "' WHERE timeseries_id = ", tsid, ";"))
+      DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", fmt(earliest), "' WHERE timeseries_id = ", tsid, ";"))
     }
   } # End of worker function
   
@@ -358,6 +352,10 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
   if (parallel) {
     # !Important note when troubleshooting parallel stuff: load_all() doesn't work, as the .packages argument of foreach::foreach attaches the installed version of AquaCache. 
     n.cores <- parallel::detectCores() - 2
+    # Limit the number of cores to the number of timeseries so as to free up resources
+    if (n.cores > nrow(all_timeseries)) {
+      n.cores <- nrow(all_timeseries)
+    }
     if (n.cores < 1) {
       n.cores <- 1
       warning("You're trying to run in parallel but I could only detect 2 or fewer CPU cores. Running on a single core.")

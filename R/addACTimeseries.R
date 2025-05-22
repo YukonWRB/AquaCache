@@ -124,19 +124,19 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # Check on arguments
   
   # Find the longest argument, then make sure all are either NA, length 1, or the same length.
-  length <- max(length(start_datetime), length(location), length(z), length(parameter), length(media), length(sensor_priority), length(aggregation_type), length(record_rate), length(owner), length(source_fx), length(source_fx_args), length(note))
+  maxlength <- max(length(start_datetime), length(location), length(z), length(parameter), length(media), length(sensor_priority), length(aggregation_type), length(record_rate), length(owner), length(source_fx), length(source_fx_args), length(note))
   
   if (!inherits(start_datetime, "POSIXct")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
   }
-  if (length(start_datetime) == 1 && length > 1) {
+  if (length(start_datetime) == 1 && maxlength > 1) {
     start_datetime <- rep(start_datetime, length)
   }
-  if (!is.null(data) & length(data) != length) {
+  if (!is.null(data) & length(data) != maxlength) {
     stop("The 'data' parameter must be a list of data.frames of the same length as the other parameters.")
   }
   
-  if (length(share_with) != 1 && length(share_with) != length) {
+  if (length(share_with) != 1 && length(share_with) != maxlength) {
     stop("share_with must be a single value or a vector of the same length as the other parameters. Please check the function documentation.")
   }
   
@@ -146,7 +146,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     if (!inherits(location, "character")) {
       stop("location must be a character vector")
     }
-    if (length(location) == 1 && length > 1) {
+    if (length(location) == 1 && maxlength > 1) {
       location <- rep(location, length)
     }
     #Check that every location in 'location' already exists
@@ -163,8 +163,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       stop("z must be a numeric vector or left as NA")
     }
   }
-  if (length(z) == 1 && length > 1) {
-    z <- rep(z, length)
+  if (length(z) == 1 && maxlength > 1) {
+    z <- rep(z, maxlength)
   }
   
   
@@ -174,8 +174,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     if (!inherits(parameter, "numeric")) {
       stop("parameter must be a numeric vector")
     }
-    if (length(parameter) == 1 && length > 1) {
-      parameter <- rep(parameter, length)
+    if (length(parameter) == 1 && maxlength > 1) {
+      parameter <- rep(parameter, maxlength)
     }
     db_param <- DBI::dbGetQuery(con, paste0("SELECT parameter_id FROM parameters WHERE parameter_id IN (", paste(unique(parameter), collapse = ", "), ");"))
     
@@ -190,8 +190,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     if (!inherits(media, "numeric")) {
       stop("media must be a numeric vector")
     }
-    if (length(media) == 1 && length > 1) {
-      media <- rep(media, length)
+    if (length(media) == 1 && maxlength > 1) {
+      media <- rep(media, maxlength)
     }
     db_media <- DBI::dbGetQuery(con, paste0("SELECT media_id FROM media_types WHERE media_id IN (", paste(unique(media), collapse = ", "), ");"))
     if (nrow(db_media) < length(unique(media))) {
@@ -207,8 +207,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   } else if (!inherits(sensor_priority, "numeric")) {
     stop("sensor_priority must be a numeric vector")
   }
-  if (length(sensor_priority) == 1 && length > 1) {
-    sensor_priority <- rep(sensor_priority, length)
+  if (length(sensor_priority) == 1 && maxlength > 1) {
+    sensor_priority <- rep(sensor_priority, maxlength)
   }
   
   if (any(is.na(aggregation_type))) {
@@ -217,8 +217,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     if (!all(aggregation_type %in% c('instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'))) {
       stop("aggregation_type must be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'")
     }
-    if (length(aggregation_type) == 1 && length > 1) {
-      aggregation_type <- rep(aggregation_type, length)
+    if (length(aggregation_type) == 1 && maxlength > 1) {
+      aggregation_type <- rep(aggregation_type, maxlength)
     }
   }
   
@@ -226,8 +226,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   if (any(is.na(record_rate))) {
     stop("record_rate cannot contain NA values")
   } else {
-    if (length(record_rate) == 1 && length > 1) {
-      record_rate <- rep(record_rate, length)
+    if (length(record_rate) == 1 && maxlength > 1) {
+      record_rate <- rep(record_rate, maxlength)
     }
   }
   
@@ -249,8 +249,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   } else if (!inherits(share_with, "character")) {
     stop("share_with must be a character vector.")
   }
-  if (length(share_with) == 1 && length > 1) {
-    share_with <- rep(share_with, length)
+  if (length(share_with) == 1 && maxlength > 1) {
+    share_with <- rep(share_with, maxlength)
   }
   
   if (any(is.na(owner))) {
@@ -258,8 +258,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   } else if (!inherits(owner, "numeric")) {
     stop("owner must be a numeric vector")
   }
-  if (length(owner) == 1 && length > 1) {
-    owner <- rep(owner, length)
+  if (length(owner) == 1 && maxlength > 1) {
+    owner <- rep(owner, maxlength)
   }
   db_owner <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id IN (", paste(unique(owner), collapse = ", "), ");"))
   if (nrow(db_owner) < length(unique(owner))) {
@@ -275,11 +275,11 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       stop("At least one of the source_fx strings you entered does not exist in the AquaCache package.")
     }
   }
-  if (length(source_fx) == 1 && length > 1) {
-    source_fx <- rep(source_fx, length)
+  if (length(source_fx) == 1 && maxlength > 1) {
+    source_fx <- rep(source_fx, maxlength)
   }
   
-  if (length(source_fx_args) == 1 && length > 1) {
+  if (length(source_fx_args) == 1 && maxlength > 1) {
     stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
   }
   if (!any(is.na(source_fx_args))) {
@@ -288,7 +288,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     }
   }
   
-  if (length(note) == 1 && length > 1) {
+  if (length(note) == 1 && maxlength > 1) {
     stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
   }
   if (!any(is.na(note))) {

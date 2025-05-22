@@ -4,7 +4,7 @@
 #'
 #' @param con A connection to the database with write privileges to the 'approvals' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
-#' @param data A data.frame with columns for 'datetime' and 'approval'. 'datetime' should be POSIXct and 'approval' should either character (in which case it must refer to entries in column 'approval_type_code' of table 'approval_types' or integer/numeric, in which case it must refer to column 'approval_type_id' of the same table.
+#' @param data A data.frame with columns for 'datetime' and 'grade'. 'datetime' should be POSIXct and 'grade' should either character (in which case it must refer to entries in column 'grade_type_code' of table 'grade_types' or integer/numeric, in which case it must refer to column 'grade_type_id' of the same table.
 #' @param delete Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
 #'
 #' @return Modifies the 'approvals' table in the database.
@@ -13,16 +13,9 @@
 
 adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
   
-  if (!attr(con, "active_transaction")) {
-    DBI::dbBegin(con)
-    attr(con, "active_transaction") <- TRUE
-    new_transaction <- TRUE
-  } else {
-    new_transaction <- FALSE
-  }
+  active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
   
   tryCatch({
-    
     # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
     if ("date" %in% names(data) & !"datetime" %in% names(data)) {
       data$datetime <- as.POSIXct(data$date, tz = "UTC")
@@ -43,8 +36,12 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
     
     data$grade[is.na(data$grade)] <- unknown_grade
     
+    # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
+    min_datetime <- fmt(min(data$datetime))
+    max_datetime <- fmt(max(data$datetime))
+    
     if (delete) {
-      DBI::dbExecute(con, paste0("DELETE FROM grades WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min(data$datetime), "';"))
+      DBI::dbExecute(con, paste0("DELETE FROM grades WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min_datetime, "';"))
     }
     
     # Get the data where at least one of the following is true:
@@ -52,8 +49,6 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
     # has a start datetime within the range of the data
     # has a start datetime before the range of the data and an end datetime after the range of the data
     # This leaves out entries that are entirely before or after the range of the data.
-    min_datetime <- min(data$datetime)
-    max_datetime <- max(data$datetime)
     exist <- DBI::dbGetQuery(con, sprintf(
       "WITH matched AS (
     SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
@@ -83,15 +78,16 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
       timeseries_id
     ))
     
-    original_exist_rows <- nrow(exist) + 1
     
-    if (original_exist_rows == 1) {
+    if (nrow(exist) == 0) {
       exist <- data.frame(grade_id = NA,
                           timeseries_id = timeseries_id,
                           grade_type_id = data$grade[1],
                           start_dt = data$datetime[1],
                           end_dt = data$datetime[1])
     }
+    original_exist_rows <- nrow(exist)
+    
     
     # Collapse consecutive rows with the same grade using run-length encoding
     data <- data[order(data$datetime), ]
@@ -114,7 +110,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
     # Now loop through the data to find where the grade_type_id changes
     for (i in 1:nrow(new_segments)) {
       if (new_segments$grade_type_id[i] != current) {
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -145,7 +141,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         }
         current <- new_segments$grade_type_id[i]
       } else { # If the grade_type_id is the same as the last one, check and adjust datetimes
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -210,18 +206,15 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
     
     commit_fx(con, exist)
     
-    if (new_transaction) {
-      DBI::dbCommit(con)
-      attr(con, "active_transaction") <- FALSE
+    if (active) {
+      DBI::dbExecute(con, "COMMIT;")
     }
   }, error = function(e) {
-    if (new_transaction) {
-      DBI::dbRollback(con)
-      attr(con, "active_transaction") <<- FALSE
+    if (active) {
+      DBI::dbExecute(con, "ROLLBACK;")
     }
     warning("adjust_grade: Failed to commit changes to the database with error ", e$message)
   })
-  
 } # End of adjust_grade function
 
 
@@ -237,13 +230,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
 
 adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
   
-  if (!attr(con, "active_transaction")) {
-    DBI::dbBegin(con)
-    attr(con, "active_transaction") <- TRUE
-    new_transaction <- TRUE
-  } else {
-    new_transaction <- FALSE
-  }  
+  active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
   
   tryCatch({
     
@@ -280,20 +267,22 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
     datalist <- split(data, data$rank)
     
     if (delete) {
-      DBI::dbExecute(con, paste0("DELETE FROM qualifiers WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min(data$datetime), "';"))
+      DBI::dbExecute(con, paste0("DELETE FROM qualifiers WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", fmt(min(data$datetime)), "';"))
     }
     
     # Work on each table in the list
     for (tbl in names(datalist)) {
       data <- datalist[[tbl]]
       
+      # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
+      min_datetime <- fmt(min(data$datetime))
+      max_datetime <- fmt(max(data$datetime))
+      
       # Get the data where at least one of the following is true:
       # has an end datetime within the range of the data
       # has a start datetime within the range of the data
       # has a start datetime before the range of the data and an end datetime after the range of the data
       # This leaves out entries that are entirely before or after the range of the data.
-      min_datetime <- min(data$datetime)
-      max_datetime <- max(data$datetime)
       exist <- DBI::dbGetQuery(con, sprintf(
         "WITH matched AS (
     SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt
@@ -327,15 +316,14 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         data$qualifier[1]
       ))
       
-      original_exist_rows <- nrow(exist) + 1
-      
-      if (original_exist_rows == 1) {
+      if (nrow(exist) == 0) {
         exist <- data.frame(qualifier_id = NA,
                             timeseries_id = timeseries_id,
                             qualifier_type_id = data$qualifier[1],
                             start_dt = data$datetime[1],
                             end_dt = data$datetime[1])
       }
+      original_exist_rows <- nrow(exist)
       
       # Collapse consecutive rows with the same qualifier using run-length encoding
       data <- data[order(data$datetime), ]
@@ -358,7 +346,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
       # Now loop through the data to find where the qualifier_type_id changes
       for (i in 1:nrow(new_segments)) {
         if (new_segments$qualifier_type_id[i] != current) {
-          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+          if (index <= original_exist_rows) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -389,7 +377,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           }
           current <- new_segments$qualifier_type_id[i]
         } else { # If the qualifier_type_id is the same as the last one, check and adjust datetimes
-          if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+          if (index <= original_exist_rows) { # Modify rows in 'exist'
             if (index == 1) { # If still on first row, check if its start_dt needs to be modified
               if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
                 exist$start_dt[index] <- new_segments$start_dt[i]
@@ -453,14 +441,12 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
     } # End of for loop iterating on tables
     
     
-    if (new_transaction) {
-      DBI::dbCommit(con)
-      attr(con, "active_transaction") <- FALSE
+    if (active) {
+      DBI::dbExecute(con, "COMMIT;")
     }
   }, error = function(e) {
-    if (new_transaction) {
-      DBI::dbRollback(con)
-      attr(con, "active_transaction") <<- FALSE
+    if (active) {
+      DBI::dbExecute(con, "ROLLBACK;")
     }
     warning("adjust_qualifier: Failed to commit changes to the database with error ", e$message)
   })
@@ -482,13 +468,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
 
 adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
   
-  if (!attr(con, "active_transaction")) {
-    DBI::dbBegin(con)
-    attr(con, "active_transaction") <- TRUE
-    new_transaction <- TRUE
-  } else {
-    new_transaction <- FALSE
-  }
+  active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
   
   tryCatch({
     
@@ -512,8 +492,12 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
     
     data$approval[is.na(data$approval)]  <- unknown_approval
     
+    # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
+    min_datetime <- fmt(min(data$datetime))
+    max_datetime <- fmt(max(data$datetime))
+    
     if (delete) {
-      DBI::dbExecute(con, paste0("DELETE FROM approvals WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min(data$datetime), "';"))
+      DBI::dbExecute(con, paste0("DELETE FROM approvals WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min_datetime, "';"))
     }
     
     # Get the data where at least one of the following is true:
@@ -521,8 +505,6 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
     # has a start datetime within the range of the data
     # has a start datetime before the range of the data and an end datetime after the range of the data
     # This leaves out entries that are entirely before or after the range of the data.
-    min_datetime <- min(data$datetime)
-    max_datetime <- max(data$datetime)
     exist <- DBI::dbGetQuery(con, sprintf(
       "WITH matched AS (
     SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt
@@ -552,16 +534,15 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
       timeseries_id
     ))
     
-    
-    original_exist_rows <- nrow(exist) + 1
-    
-    if (original_exist_rows == 1) {
+    if (nrow(exist) == 0) {
       exist <- data.frame(approval_id = NA,
                           timeseries_id = timeseries_id,
                           approval_type_id = data$approval[1],
                           start_dt = data$datetime[1],
                           end_dt = data$datetime[1])
     }
+    
+    original_exist_rows <- nrow(exist)
     
     # Collapse consecutive rows with the same approval using run-length encoding
     data <- data[order(data$datetime), ]
@@ -584,7 +565,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
     # Now loop through the data to find where the approval_type_id changes
     for (i in 1:nrow(new_segments)) {
       if (new_segments$approval_type_id[i] != current) {
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -615,7 +596,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         }
         current <- new_segments$approval_type_id[i]
       } else { # If the approval_type_id is the same as the last one, check and adjust datetimes
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -680,14 +661,12 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
     
     commit_fx(con, exist)
     
-    if (new_transaction) {
-      DBI::dbCommit(con)
-      attr(con, "active_transaction") <- FALSE
+    if (active) {
+      DBI::dbExecute(con, "COMMIT;")
     }
   }, error = function(e) {
-    if (new_transaction) {
-      DBI::dbRollback(con)
-      attr(con, "active_transaction") <<- FALSE
+    if (active) {
+      DBI::dbExecute(con, "ROLLBACK;")
     }
     warning("adjust_approval: Failed to commit changes to the database with error ", e$message)
   })
@@ -712,13 +691,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
     message("adjust_owner: column 'owner' was all NA, skipped. Applies to timeseries_id ", timeseries_id, ".")
   }
   
-  if (!attr(con, "active_transaction")) {
-    DBI::dbBegin(con)
-    attr(con, "active_transaction") <- TRUE
-    new_transaction <- TRUE
-  } else {
-    new_transaction <- FALSE
-  }
+  active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
   
   tryCatch({
     # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
@@ -738,8 +711,12 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       data$owner <- owner_table$organization_id[match(data$owner, owner_table$name)]
     }
     
+    # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
+    min_datetime <- fmt(min(data$datetime))
+    max_datetime <- fmt(max(data$datetime))
+    
     if (delete) {
-      DBI::dbExecute(con, paste0("DELETE FROM owners WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min(data$datetime), "';"))
+      DBI::dbExecute(con, paste0("DELETE FROM owners WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min_datetime, "';"))
     }
     
     # Get the data where at least one of the following is true:
@@ -747,8 +724,6 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
     # has a start datetime within the range of the data
     # has a start datetime before the range of the data and an end datetime after the range of the data
     # This leaves out entries that are entirely before or after the range of the data.
-    min_datetime <- min(data$datetime)
-    max_datetime <- max(data$datetime)
     exist <- DBI::dbGetQuery(con, sprintf(
       "WITH matched AS (
     SELECT owner_id, timeseries_id, organization_id, start_dt, end_dt
@@ -778,15 +753,14 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       timeseries_id
     ))
     
-    original_exist_rows <- nrow(exist) + 1
-    
-    if (original_exist_rows == 1) {
+    if (nrow(exist) == 0) {
       exist <- data.frame(owner_id = NA,
                           timeseries_id = timeseries_id,
                           organization_id = data$owner[1],
                           start_dt = data$datetime[1],
                           end_dt = data$datetime[1])
     }
+    original_exist_rows <- nrow(exist)
     
     # Collapse consecutive rows with the same owner using run-length encoding
     data <- data[order(data$datetime), ]
@@ -809,7 +783,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
     # Now loop through the data to find where the organization_id changes
     for (i in 1:nrow(new_segments)) {
       if (new_segments$organization_id[i] != current) {
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -840,7 +814,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
         }
         current <- new_segments$organization_id[i]
       } else { # If the organization_id is the same as the last one, check and adjust datetimes
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -905,14 +879,12 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
     
     commit_fx(con, exist)
     
-    if (new_transaction) {
-      DBI::dbCommit(con)
-      attr(con, "active_transaction") <- FALSE
+    if (active) {
+      DBI::dbExecute(con, "COMMIT;")
     }
   }, error = function(e) {
-    if (new_transaction) {
-      DBI::dbRollback(con)
-      attr(con, "active_transaction") <<- FALSE
+    if (active) {
+      DBI::dbExecute(con, "ROLLBACK;")
     }
     warning("adjust_owner: Failed to commit changes to the database with error ", e$message)
   })
@@ -936,13 +908,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
     message("adjust_contributor: column 'contributor' was all NA, skipped. Applies to timeseries_id ", timeseries_id, ".")
   }
   
-  if (!attr(con, "active_transaction")) {
-    DBI::dbBegin(con)
-    attr(con, "active_transaction") <- TRUE
-    new_transaction <- TRUE
-  } else {
-    new_transaction <- FALSE
-  }
+  active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
   
   tryCatch({
     # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
@@ -961,8 +927,12 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
       data$contributor <- contributor_table$organization_id[match(data$contributor, contributor_table$name)]
     }
     
+    # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
+    min_datetime <- fmt(min(data$datetime))
+    max_datetime <- fmt(max(data$datetime))
+    
     if (delete) {
-      DBI::dbExecute(con, paste0("DELETE FROM contributors WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min(data$datetime), "';"))
+      DBI::dbExecute(con, paste0("DELETE FROM contributors WHERE timeseries_id = ", timeseries_id, " AND start_dt >= '", min_datetime, "';"))
     }
     
     # Get the data where at least one of the following is true:
@@ -970,8 +940,6 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
     # has a start datetime within the range of the data
     # has a start datetime before the range of the data and an end datetime after the range of the data
     # This leaves out entries that are entirely before or after the range of the data.
-    min_datetime <- min(data$datetime)
-    max_datetime <- max(data$datetime)
     exist <- DBI::dbGetQuery(con, sprintf(
       "WITH matched AS (
     SELECT contributor_id, timeseries_id, organization_id, start_dt, end_dt
@@ -1001,16 +969,14 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
       timeseries_id
     ))
     
-    
-    original_exist_rows <- nrow(exist) + 1
-    
-    if (original_exist_rows == 1) {
+    if (nrow(exist) == 0) {
       exist <- data.frame(contributor_id = NA,
                           timeseries_id = timeseries_id,
                           organization_id = data$contributor[1],
                           start_dt = data$datetime[1],
                           end_dt = data$datetime[1])
     }
+    original_exist_rows <- nrow(exist)
     
     # Collapse consecutive rows with the same contributor using run-length encoding
     data <- data[order(data$datetime), ]
@@ -1033,7 +999,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
     # Now loop through the data to find where the organization_id changes
     for (i in 1:nrow(new_segments)) {
       if (new_segments$organization_id[i] != current) {
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -1064,7 +1030,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
         }
         current <- new_segments$organization_id[i]
       } else { # If the organization_id is the same as the last one, check and adjust datetimes
-        if (index <= original_exist_rows - 1) { # Modify rows in 'exist'
+        if (index <= original_exist_rows) { # Modify rows in 'exist'
           if (index == 1) { # If still on first row, check if its start_dt needs to be modified
             if (exist$start_dt[index] > new_segments$start_dt[i]) { # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
               exist$start_dt[index] <- new_segments$start_dt[i]
@@ -1128,15 +1094,13 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
     }
     
     commit_fx(con, exist)
-
-    if (new_transaction) {
-      DBI::dbCommit(con)
-      attr(con, "active_transaction") <- FALSE
+    
+    if (active) {
+      DBI::dbExecute(con, "COMMIT;")
     }
   }, error = function(e) {
-    if (new_transaction) {
-      DBI::dbRollback(con)
-      attr(con, "active_transaction") <<- FALSE
+    if (active) {
+      DBI::dbExecute(con, "ROLLBACK;")
     }
     warning("adjust_contributor: Failed to commit changes to the database with error ", e$message)
   })

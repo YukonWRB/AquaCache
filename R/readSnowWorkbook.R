@@ -177,7 +177,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
       notes <- paste0("At time of sampling: ", notes)
     }
     
-      ## CHECKS
+    ## CHECKS
     # Remove apostrophes in text.
     notes <- gsub("'", "", notes)
     sampler_name <- gsub("'", "", sampler_name)
@@ -225,9 +225,9 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
         # Update the survey entry
         if (is.null(ice_notes)) {
           DBI::dbExecute(con, paste0("UPDATE surveys SET notes = '", notes, "', sampler_name = '", sampler_name, "', method = '", method, "' WHERE location = '", location, "' AND target_date = '", target_date, "' AND survey_date = '", survey_date, "'"))
-          } else {
+        } else {
           DBI::dbExecute(con, paste0("UPDATE surveys SET notes = '", notes, "', sampler_name = '", sampler_name, "', method = '", method, "', ice_notes = '", ice_notes, "' WHERE location = '", location, "' AND target_date = '", target_date, "' AND survey_date = '", survey_date, "'"))
-          }
+        }
         message("Surveys table for survey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, " updated.")
       } else {
         warning("FAILED to create new entry for survey at '", survey[1,2], "' for target date ", target_date, " and survey date ", survey_date, ".")
@@ -321,7 +321,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
       hours <- as.numeric(substr(survey[7,2], 1, nchar(survey[7,2]) - 2))
       survey[7,2] <- hours/24 + minutes/1440
     }
-
+    
     # Check that end time is after start time
     if (survey[7,2] < survey[6,2]) {
       check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))
@@ -446,7 +446,7 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
     ##### ------------------ Import into snow database -------------------- ####
     
     ## Begin db transaction
-    DBI::dbBegin(con)
+    active <- dbTransBegin(con)
     
     tryCatch({
       ## Insert into measurements table
@@ -498,11 +498,15 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
       }
       
       ## Commit import
-      DBI::dbCommit(con)
+      if (active) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
       message("SUCCESS: new snow course data for '", survey[1,2], "' (", loc_id, ") imported.")
     }, error = function(e) {
       # Rollback transaction if any statement fails
-      DBI::dbRollback(con)
+      if (active) {
+        DBI::dbExecute(con, "ROLLBACK;")
+      }
       
       # Check if there are measurements for that survey_id. If not, delete the survey_id from surveys table.
       check <- DBI::dbGetQuery(con, paste0("SELECT SWE, depth FROM measurements WHERE survey_id = ", surv_id, ";"))

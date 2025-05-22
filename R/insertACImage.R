@@ -185,10 +185,7 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
   
   # Add the image in a transaction
   tryCatch({
-    if (!attr(con, "active_transaction")) {
-      DBI::dbExecute(con, "BEGIN")
-      attr(con, "active_transaction") <- TRUE
-    }
+    activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
     
     if (meta_id) { # There's an associated meta_id
       exist_img <- DBI::dbGetQuery(con, paste0("SELECT datetime FROM images WHERE datetime = '", datetime, "' AND img_meta_id = ", img_meta_id, ";"))[1,1]
@@ -271,15 +268,13 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
       }
     }
     
-    if (attr(con, "active_transaction")) {
+    if (activeTrans) {
       DBI::dbExecute(con, "COMMIT;")
-      attr(con, "active_transaction") <- FALSE
     }
     return(TRUE)
   }, error = function(e) {
-    if (attr(con, "active_transaction")) {
+    if (activeTrans) {
       DBI::dbExecute(con, "ROLLBACK")
-      attr(con, "active_transaction") <<- FALSE
     }
     stop("An error occurred while inserting the image: ", e$message)
   })

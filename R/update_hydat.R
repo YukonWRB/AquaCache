@@ -223,16 +223,13 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                   DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_flow, ";"))
                 }
                 
-                if (!attr(con, "active_transaction")) {
-                  DBI::dbBegin(con)
-                  attr(con, "active_transaction") <- TRUE
+                activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+                if (activeTrans) {
                   tryCatch({
                     commit_fx1(con, imputed.remains, tsid_flow, new_flow, existing, start)
-                    DBI::dbCommit(con)
-                    attr(con, "active_transaction") <- FALSE
+                    DBI::dbExecute(con, "COMMIT;")
                   }, error = function(e) {
-                    DBI::dbRollback(con)
-                    attr(con, "active_transaction") <<- FALSE
+                    DBI::dbExecute(con, "ROLLBACK;")
                     warning("update_hydat: Failed to add new flow data for location ", i)
                   })
                 } else { # we're already in a transaction
@@ -255,16 +252,13 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_flow$date), "'WHERE timeseries_id = ", tsid_flow, ";"))
               }
               
-              if (!attr(con, "active_transaction")) {
-                DBI::dbBegin(con)
-                attr(con, "active_transaction") <- TRUE
+              activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+              if (activeTrans) {
                 tryCatch({
                   commit_fx2(con, tsid_flow, new_flow)
-                  DBI::dbCommit(con)
-                  attr(con, "active_transaction") <- FALSE
+                  DBI::dbExecute(con, "COMMIT;")
                 }, error = function(e) {
-                  DBI::dbRollback(con)
-                  attr(con, "active_transaction") <<- FALSE
+                  DBI::dbExecute(con, "ROLLBACK;")
                   warning("update_hydat: Failed to add new flow data for location ", i)
                 })
               } else { # we're already in a transaction
@@ -396,16 +390,13 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                   DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "'WHERE timeseries_id = ", tsid_level, ";"))
                 }
                 
-                if (!attr(con, "active_transaction")) {
-                  DBI::dbBegin(con)
-                  attr(con, "active_transaction") <- TRUE
+                activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+                if (activeTrans) {
                   tryCatch({
                     commit_fx3(con, imputed.remains, tsid_level, new_level, existing, start)
-                    DBI::dbCommit(con)
-                    attr(con, "active_transaction") <- FALSE
+                    DBI::dbExecute(con, "COMMIT;")
                   }, error = function(e) {
-                    DBI::dbRollback(con)
-                    attr(con, "active_transaction") <<- FALSE
+                    DBI::dbExecute(con, "ROLLBACK;")
                     warning("update_hydat: Failed to add new level data for location ", i)
                   })
                 } else { # we're already in a transaction
@@ -428,16 +419,13 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
                 DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", min(new_level$date), "'WHERE timeseries_id = ", tsid_level, ";"))
               }
               
-              if (!attr(con, "active_transaction")) {
-                DBI::dbBegin(con)
-                attr(con, "active_transaction") <- TRUE
+              activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+              if (activeTrans) {
                 tryCatch({
                   commit_fx4(con, tsid_level, new_level)
-                  DBI::dbCommit(con)
-                  attr(con, "active_transaction") <- FALSE
+                  DBI::dbExecute(con, "COMMIT;")
                 }, error = function(e) {
-                  DBI::dbRollback(con)
-                  attr(con, "active_transaction") <<- FALSE
+                  DBI::dbExecute(con, "ROLLBACK;")
                   warning("update_hydat: Failed to add new level data for location ", i)
                 })
               } else { # we're already in a transaction

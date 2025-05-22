@@ -24,7 +24,7 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
   
   # for variables left as "Sys.getenv(xxxx)", check that these exist
   if (is.null(Sys.getenv("nupointUser")) | is.null(Sys.getenv("nupointPass")) | is.null(Sys.getenv("nupointServer")) | is.null(Sys.getenv("nupointPort")) | is.null(Sys.getenv("nupointFolder")) ) {
-    stop("One or more of the necessary environment variables are missing. Please ensure that nupointUser, nupointPass, nupointServer, nupointPort, and nupointFolder are set in your .Renviron file OR specify them yourself in the funciton call.")
+    stop("One or more of the necessary environment variables are missing. Please ensure that nupointUser, nupointPass, nupointServer, nupointPort, and nupointFolder are set in your .Renviron file OR specify them yourself in the function call.")
   }
   
   # Create connection setup to nupoint
