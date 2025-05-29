@@ -18,7 +18,7 @@ writeRaster(
 
 \item{raster}{A terra \code{SpatRaster}; objects from the raster package.}
 
-\item{rast_table}{A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{name = c("schema","table")}).}
+\item{rast_table}{A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{c("schema","table")}).}
 
 \item{bit.depth}{The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).}
 

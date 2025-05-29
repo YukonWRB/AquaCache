@@ -18,7 +18,7 @@
 #'
 #' @param con A connection object to a PostgreSQL database.
 #' @param raster A terra \code{SpatRaster}; objects from the raster package.
-#' @param rast_table A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{name = c("schema","table")}).
+#' @param rast_table A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{c("schema","table")}).
 #' @param bit.depth The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).
 #' @param blocks Optional desired number of blocks (tiles) to split the raster into in the resulting PostGIS table. This should be specified as a one or two-length (columns, rows) integer vector. See also 'Details'.
 #' @param constraints Whether to create constraints from raster data. Recommended to leave \code{TRUE} unless applying constraints manually (see \url{http://postgis.net/docs/RT_AddRasterConstraints.html}). Note that constraint notices may print to the console, depending on the PostgreSQL server settings.
@@ -42,7 +42,8 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
   r_class <- DBI::dbQuoteString(con, class(raster)[1])
   r_crs <- DBI::dbQuoteString(con, terra::crs(raster))
 
-  if (!(rast_table %in% DBI::dbListTables(con))) {
+  if (!any(rast_table %in% DBI::dbListTables(con))) {
+    rast_table <- if (length(rast_table) == 2) paste0(rast_table[1], ".", rast_table[2]) else rast_table
     message("Raster table does not already exist. Creating it.")
     version <- DBI::dbGetQuery(con, "SELECT version()")
     if (grepl("PostgreSQL", version$version)){
@@ -76,19 +77,20 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
       }
     )
     n.base <- 0
-    new <- T
+    new <- TRUE
   } else {
+    rast_table <- if (length(rast_table) == 2) paste0(rast_table[1], ".", rast_table[2]) else rast_table
     message("Appending to existing table. Dropping any existing raster constraints...")
-    try(DBI::dbExecute(con, paste0("SELECT DropRasterConstraints('", rast_table, "','rast',",
+    try(DBI::dbExecute(con, paste0("SELECT DropRasterConstraints('", sub(".*\\.", "", rast_table), "','rast',",
                                    paste(rep("TRUE", 12), collapse = ","),");")))
     n.base <- DBI::dbGetQuery(con, paste0("SELECT max(rid) r from ", rast_table, ";"))$r
     if (is.na(n.base)) {
       n.base <- 0
-      new <- T
+      new <- TRUE
       tmp.query <- paste0("DROP INDEX ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
       DBI::dbExecute(con, tmp.query)
     } else {
-      new <- F
+      new <- FALSE
     }
   }
 
@@ -216,13 +218,13 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
     tmp.query <- paste0("DROP INDEX ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
     DBI::dbExecute(con, tmp.query)
   }
-  tmp.query <- paste0("CREATE INDEX ", gsub("\"", "", rast_table),
+  tmp.query <- paste0("CREATE INDEX ", gsub("\"", "", sub(".*\\.", "", rast_table)),
                       "_rast_st_conhull_idx ON ", rast_table,
                       " USING gist( ST_ConvexHull(rast) );")
   DBI::dbExecute(con, tmp.query)
 
   # 5. add raster constraints
-  tmp.query <- paste0("SELECT AddRasterConstraints('spatial'::name,", DBI::dbQuoteString(con, rast_table),
+  tmp.query <- paste0("SELECT AddRasterConstraints('spatial'::name,", DBI::dbQuoteString(con,sub(".*\\.", "", rast_table)),
                       "::name, 'rast'::name);")
   DBI::dbExecute(con, tmp.query)
 

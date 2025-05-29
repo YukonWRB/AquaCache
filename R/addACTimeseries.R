@@ -31,7 +31,7 @@
 #' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or strings.
 #' @param owner A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!
 #' @param source_fx The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.
-#' @param source_fx_args Arguments to pass to the function(s) specified in parameter 'source_fx'. See details
+#' @param source_fx_args Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.
 #' @param note Text notes to append to the timeseries.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. Leave NULL to use the package default connection and have it closed afterwards automatically.
 #'
@@ -282,11 +282,6 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   if (length(source_fx_args) == 1 && maxlength > 1) {
     stop("source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors.")
   }
-  if (!any(is.na(source_fx_args))) {
-    if (!all(grepl("\\{.*?\\}", source_fx_args))) {
-      stop("source_fx_args must be in the form of '{param1 = arg1}, {param2 = arg2}', with each parameter:argument pair enclosed in curly brackets.")
-    }
-  }
   
   if (length(note) == 1 && maxlength > 1) {
     stop("note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors.")
@@ -304,10 +299,10 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     tryCatch({
       args <- source_fx_args[i]
       # split into "argument1: value1" etc.
-      args <- pairs <- strsplit(args, ",\\s*")[[1]]
+      args <- strsplit(args, ",\\s*")[[1]]
       
       # split each pair on ":" and trim whitespace
-      args <- strsplit(pairs, ":\\s*")
+      args <- strsplit(args, ":\\s*")
       
       # build a named list: names = keys, values = values
       args <- stats::setNames(

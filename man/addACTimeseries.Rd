@@ -50,7 +50,7 @@ addACTimeseries(
 
 \item{source_fx}{The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.}
 
-\item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details}
+\item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.}
 
 \item{note}{Text notes to append to the timeseries.}
 
