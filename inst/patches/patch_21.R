@@ -75,15 +75,21 @@ tryCatch({
   ORDER BY ts.timeseries_id;
   ')
   
+  # Wrapper function to allow expression index on hour
+  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION continuous.trunc_hour_utc(ts timestamptz)
+RETURNS timestamptz
+LANGUAGE sql IMMUTABLE AS
+$$ SELECT date_trunc('hour', ts AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'; $$;")
+  
   # Improve performance of measurements_corrected_hourly view by dropping an ORDER BY clause
   DBI::dbExecute(con, "CREATE OR REPLACE VIEW continuous.measurements_hourly_corrected
 AS SELECT timeseries_id,
-    date_trunc('hour'::text, datetime) AS datetime,
+    continuous.trunc_hour_utc(datetime) AS datetime,
     avg(value_raw) AS value_raw,
     avg(value_corrected) AS value_corrected,
     bool_or(imputed) AS imputed
    FROM measurements_continuous_corrected mcc
-  GROUP BY timeseries_id, (date_trunc('hour'::text, datetime));
+  GROUP BY timeseries_id, continuous.trunc_hour_utc(datetime);
 ")
   
   DBI::dbExecute(con, "CREATE OR REPLACE VIEW continuous.measurements_continuous_corrected AS
@@ -111,13 +117,10 @@ AS SELECT timeseries_id,
   
   
   # Add a few indices for performance
+  # Add GiST index on corrections for efficient range queries
   DBI::dbExecute(con, "CREATE INDEX idx_corrections_timeseries_range_gist ON continuous.corrections USING gist (timeseries_id, tstzrange(start_dt, end_dt));")
-  
-  DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION continuous.trunc_hour_utc(ts timestamptz)
-RETURNS timestamptz
-LANGUAGE sql IMMUTABLE AS
-$$ SELECT date_trunc('hour', ts AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'; $$;")
-DBI::dbExecute(con, "CREATE INDEX measurements_continuous_hour_idx
+  # Add index to speed up hourly aggregations using the immutable wrapper
+  DBI::dbExecute(con, "CREATE INDEX measurements_continuous_hour_idx
     ON continuous.measurements_continuous
         USING btree (timeseries_id, continuous.trunc_hour_utc(datetime));")
   
