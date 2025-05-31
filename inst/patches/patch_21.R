@@ -14,8 +14,13 @@ message("This patch updates the timeseries_metadata views to give a more complet
 
 # Begin a transaction
 message("Starting transaction...")
-DBI::dbExecute(con, "BEGIN;")
-attr(con, "active_transaction") <- TRUE
+
+check <- dbTransCheck(con) # Check if a transaction is already in progress
+if (check) {
+  stop("A transaction is already in progress. Please commit or rollback the current transaction before applying this patch.")
+}
+active <- dbTransBegin(con)
+
 tryCatch({
   
   # First change the owner of table 'rasters' to 'admin' if it's still 'posgres'
@@ -171,14 +176,12 @@ AS SELECT timeseries_id,
   
   # Commit the transaction
   DBI::dbExecute(con, "COMMIT;")
-  attr(con, "active_transaction") <- FALSE
-  
+
   message("Patch 21 applied successfully.")
   
 }, error = function(e) {
   
   # Rollback the transaction
   DBI::dbExecute(con, "ROLLBACK;")
-  attr(con, "active_transaction") <<- FALSE
   stop("Patch 21 failed and the DB has been rolled back to its earlier state. ", e$message)
 })
