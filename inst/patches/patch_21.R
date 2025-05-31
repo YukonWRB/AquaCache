@@ -10,7 +10,7 @@ if (check$session_user != "postgres") {
 
 message("Working on Patch 21. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?).")
 
-message("This patch updates the timeseries_medatada views to give a more complete picture of the timeseries table and associated data.")
+message("This patch updates the timeseries_metadata views to give a more complete picture of the timeseries table and associated data.")
 
 # Begin a transaction
 message("Starting transaction...")
@@ -19,7 +19,7 @@ attr(con, "active_transaction") <- TRUE
 tryCatch({
   
   # First change the owner of table 'rasters' to 'admin' if it's still 'posgres'
-  DBI::dbExecute(con, "ALTER TABLE rasters OWNER TO admin;")
+  DBI::dbExecute(con, "ALTER TABLE spatial.rasters OWNER TO admin;")
   
   # Drop the views
   DBI::dbExecute(con, "DROP VIEW IF EXISTS continuous.timeseries_metadata_en;")
@@ -49,6 +49,25 @@ tryCatch({
   LEFT JOIN aggregation_types at ON ts.aggregation_type_id = at.aggregation_type_id
   ORDER BY ts.timeseries_id;
   ")
+
+  DBI::dbExecute(con, '
+  ALTER TABLE continuous.timeseries_metadata_en OWNER TO "admin";
+  ')
+  DBI::dbExecute(con, '
+  GRANT ALL ON TABLE continuous.timeseries_metadata_en TO "admin";
+    ')
+  DBI::dbExecute(con, '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_en TO public_reader;
+    ')
+  DBI::dbExecute(con, '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_en TO discrete_editor;
+    ')
+  DBI::dbExecute(con, '
+  GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE continuous.timeseries_metadata_en TO continuous_editor;
+    ')
+  DBI::dbExecute(con, '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_en TO yg_reader;
+  ')
   
   # Now update the French version
   DBI::dbExecute(con, '
@@ -74,12 +93,33 @@ tryCatch({
      LEFT JOIN aggregation_types ag ON ts.aggregation_type_id = ag.aggregation_type_id
   ORDER BY ts.timeseries_id;
   ')
+
+  DBI::dbExecute(con, '
+  ALTER TABLE continuous.timeseries_metadata_fr OWNER TO "admin";
+  ')
+  DBI::dbExecute(con, '
+  GRANT ALL ON TABLE continuous.timeseries_metadata_fr TO "admin";
+    ')
+  DBI::dbExecute(con, '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_fr TO public_reader;
+    ')
+  DBI::dbExecute(con, '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_fr TO discrete_editor;
+    ')
+  DBI::dbExecute(con, '
+  GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE continuous.timeseries_metadata_fr TO continuous_editor;
+    ')
+  DBI::dbExecute(con, '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_fr TO yg_reader;
+  ')
   
   # Wrapper function to allow expression index on hour
   DBI::dbExecute(con, "CREATE OR REPLACE FUNCTION continuous.trunc_hour_utc(ts timestamptz)
 RETURNS timestamptz
 LANGUAGE sql IMMUTABLE AS
 $$ SELECT date_trunc('hour', ts AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'; $$;")
+
+  DBI::dbExecute(con, "ALTER FUNCTION continuous.trunc_hour_utc(timestamptz) OWNER TO admin;")
   
   # Improve performance of measurements_corrected_hourly view by dropping an ORDER BY clause
   DBI::dbExecute(con, "CREATE OR REPLACE VIEW continuous.measurements_hourly_corrected
