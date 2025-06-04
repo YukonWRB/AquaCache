@@ -4,14 +4,12 @@
 \alias{addNewContinuous}
 \title{Add new data to the measurements_continuous or measurements_calculated_daily tables}
 \usage{
-addNewContinuous(tsid, df, target = "realtime", con = NULL)
+addNewContinuous(tsid, df, con = NULL)
 }
 \arguments{
 \item{tsid}{The timeseries_id to which the data will be appended. This is a required parameter.}
 
-\item{df}{A data.frame containing the data. Must have columns named 'datetime' OR 'date', and 'value' at minimum. If 'datetime' is present data will be appended to measurements_continuous, otherwise 'date' will be used to append to measurements_calculated_daily. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the \code{adjust_} series of functions to see how these are used.}
-
-\item{target}{One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.}
+\item{df}{A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the \code{adjust_} series of functions to see how these are used.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
 }
