@@ -33,14 +33,22 @@ calculate_period <- function(data, timeseries_id, con = NULL)
   
   
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
-  names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input
+  col_names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input
   if (!is.na(timeseries_id)) {
-    no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", timeseries_id, ") AND datetime NOT IN ('", paste(data$datetime, collapse = "', '"), "');"))
+    no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(col_names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", timeseries_id, ") AND datetime NOT IN ('", paste(data$datetime, collapse = "', '"), "');"))
     if (nrow(no_period) > 0) {
-      data <- rbind(data, no_period)
+      if (data.table::is.data.table(data)) {
+        data <- data.table::rbindlist(list(data, no_period), use.names = TRUE)
+      } else {
+        data <- rbind(data, no_period)
+      }    
     }
   }
-  data <- data[order(data$datetime) , , drop = FALSE] #Sort ascending
+  if (data.table::is.data.table(data)) {
+    data.table::setorder(data, datetime)
+  } else {
+    data <- data[order(data$datetime), , drop = FALSE]
+  }
   diffs <- as.numeric(diff(data$datetime), units = "hours")
   smoothed_diffs <- zoo::rollmedian(diffs, k = 3, fill = NA, align = "center")
   # Initialize variables to track changes
@@ -53,7 +61,7 @@ calculate_period <- function(data, timeseries_id, con = NULL)
         consecutive_count <- consecutive_count + 1
         if (consecutive_count == 3) { # At three consecutive new measurements it's starting to look like a pattern
           last_diff <- smoothed_diffs[j]
-          change <- data.frame(datetime = data$datetime[j - 3],
+          change <- data.frame(datetime = data$datetime[j - 2],
                                period = last_diff)
           changes <- rbind(changes, change)
           consecutive_count <- 0
@@ -80,9 +88,14 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     if (is.na(timeseries_id)) {
       stop("There were too few measurements to calculate a period and no timeseries_id was provided to fetch additional data.")
     }
-    no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
-    data <- rbind(data, no_period)
-    data <- data[order(data$datetime), , drop = FALSE]
+    no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(col_names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
+    if (data.table::is.data.table(data)) {
+      data <- data.table::rbindlist(list(data, no_period), use.names = TRUE)
+      data.table::setorder(data, datetime)
+    } else {
+      data <- rbind(data, no_period)
+      data <- data[order(data$datetime), , drop = FALSE]
+    }
     diffs <- as.numeric(diff(data$datetime), units = "hours")
     smoothed_diffs <- zoo::rollmedian(diffs, k = 3, fill = NA, align = "center")
     consecutive_count <- 0
@@ -90,11 +103,11 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     last_diff <- 0
     if (length(smoothed_diffs) > 0) {
       for (j in 1:length(smoothed_diffs)) {
-        if (!is.na(smoothed_diffs[j]) && smoothed_diffs[j] < 25 && smoothed_diffs[j] != last_diff) {
+        if (!is.na(smoothed_diffs[j]) && smoothed_diffs[j] != last_diff) {
           consecutive_count <- consecutive_count + 1
           if (consecutive_count == 3) {
             last_diff <- smoothed_diffs[j]
-            change <- data.frame(datetime = data$datetime[j - 3],
+            change <- data.frame(datetime = data$datetime[j - 2],
                                  period = last_diff)
             changes <- rbind(changes, change)
             consecutive_count <- 0
