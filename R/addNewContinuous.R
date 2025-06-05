@@ -57,11 +57,14 @@ addNewContinuous <- function(tsid, df, con = NULL, target = "realtime") {
   }
   
   
-  info <- DBI::dbGetQuery(con, paste0("SELECT at.aggregation_type, t.default_owner AS owner, t.active, t.end_datetime FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = ", tsid, ";"))
-  if (is.na(info$end_datetime)) {
+  info <- DBI::dbGetQuery(con, paste0("SELECT at.aggregation_type, t.default_owner AS owner FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = ", tsid, ";"))
+  end_datetime_realtime <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]]
+  end_datetime_daily <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]]
+  
+  if (is.na(end_datetime_realtime) && is.na(end_datetime_daily)) {
     last_data_point <- NA
   } else {
-    last_data_point = info$end_datetime + 1
+    last_data_point = max(end_datetime_realtime, end_datetime_daily, na.rm = TRUE) + 1
   }
   df <- df[!is.na(df$value) , ]
   

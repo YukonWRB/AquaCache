@@ -49,7 +49,7 @@ calculate_period <- function(data, timeseries_id, con = NULL)
   last_diff <- 0
   if (length(smoothed_diffs) > 0) {
     for (j in 1:length(smoothed_diffs)) {
-      if (!is.na(smoothed_diffs[j]) && smoothed_diffs[j] < 25 && smoothed_diffs[j] != last_diff) { # Check if smoothed interval is less than threshold, which is set to more than a whole day (greatest interval possible is 24 hours) as well as not the same as the last recorded diff
+      if (!is.na(smoothed_diffs[j]) && smoothed_diffs[j] != last_diff) { # Check if smoothed interval is not the same as the last recorded diff
         consecutive_count <- consecutive_count + 1
         if (consecutive_count == 3) { # At three consecutive new measurements it's starting to look like a pattern
           last_diff <- smoothed_diffs[j]

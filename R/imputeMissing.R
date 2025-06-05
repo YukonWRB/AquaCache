@@ -628,7 +628,6 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   message("Look right for the result. Does it look ok?")
   commit <- readline(prompt = writeLines(paste("\n1: Yes, and please modify the timeseries in the database",
                                                "\n2: Yes, but please ONLY return the result",
-                                               "\n3: No, I'd like to try something different"
   )))
   commit <- as.numeric(commit)
 
@@ -636,8 +635,8 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     return(returns)
   }
 
-  if (!(commit %in% c(1:3))) {
-    while (!(commit %in% c(1:3))) {
+  if (!(commit %in% c(1:2))) {
+    while (!(commit %in% c(1:2))) {
       commit <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
       commit <- as.numeric(commit)
     }
@@ -692,9 +691,5 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     }
     
     message("Timeseries_id ", tsid, " has been updated in the database and daily stats recalculated if necessary.")
-  }
-  
-  if (commit == 3) {
-    message("This part of the function doesn't work yet.")
   }
 }
