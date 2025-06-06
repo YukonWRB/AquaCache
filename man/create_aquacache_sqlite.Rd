@@ -5,23 +5,29 @@
 \title{Create a small SQLite copy of the AquaCache database}
 \usage{
 create_aquacache_sqlite(
-  con,
-  file,
+  file = "choose",
   continuous_locations = NULL,
   discrete_locations = NULL,
-  overwrite = TRUE
+  overwrite = TRUE,
+  start_datetime = NULL,
+  end_datetime = NULL,
+  con = NULL
 )
 }
 \arguments{
-\item{con}{An open connection to the AquaCache PostgreSQL database.  Use \code{\link[=AquaConnect]{AquaConnect()}} to create this connection.}
-
-\item{file}{Path to the SQLite file to create.}
+\item{file}{Path to the SQLite file to create; leave as 'choose' to prompt the user to select a directory to save the file in.}
 
 \item{continuous_locations}{Character vector of location codes to retain in continuous tables.  Defaults to the first location found in the database when \code{NULL}.}
 
 \item{discrete_locations}{Character vector of location codes to retain in discrete tables.  Defaults to \code{continuous_locations} when \code{NULL}.}
 
 \item{overwrite}{Logical. Overwrite \code{file} if it already exists.}
+
+\item{start_datetime}{The start datetime for the data to be copied.  If \code{NULL}, data is copied from the beginning of records to \code{end_datetime} for the affected locations.}
+
+\item{end_datetime}{The end datetime for the data to be copied.  If \code{NULL}, all data is copied from \code{start_datetime} to the end of records for the affected locations.}
+
+\item{con}{An open connection to the AquaCache PostgreSQL database.  Use \code{\link[=AquaConnect]{AquaConnect()}} to create this connection.}
 }
 \value{
 The path to the created SQLite file.
@@ -35,7 +41,7 @@ Only the specified locations are kept from the source database.  Continuous data
 \examples{
 \dontrun{
 pg <- AquaConnect()
-create_aquacache_sqlite(pg, "aquacache_test.sqlite",
+create_aquacache_sqlite("aquacache_test.sqlite",
   continuous_locations = "09EA004",
   discrete_locations = "09AA004")
 DBI::dbDisconnect(pg)
