@@ -99,6 +99,10 @@ addNewContinuous <- function(tsid, df, con = NULL, target = "realtime", overwrit
     df$imputed <- FALSE
   }
   
+  if (!("no_update" %in% names(df))) {
+    df$no_update <- FALSE
+  }
+  
   # Append the data ##########################################################
   if (target == "realtime") {
     if (!inherits(df$datetime, "POSIXct")) {
@@ -131,7 +135,7 @@ addNewContinuous <- function(tsid, df, con = NULL, target = "realtime", overwrit
       }
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
-      df <- df[, c("datetime", "value", "timeseries_id", "imputed")]
+      df <- df[, c("datetime", "value", "timeseries_id", "imputed", "no_update")]
       
       #assign a period to the data
       if (info$aggregation_type == "instantaneous") { #Period is always 0 for instantaneous data
@@ -216,7 +220,7 @@ addNewContinuous <- function(tsid, df, con = NULL, target = "realtime", overwrit
       
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
-      df <- df[, c("date", "value", "timeseries_id", "imputed")]
+      df <- df[, c("date", "value", "timeseries_id", "imputed", "no_update")]
       
       if (overwrite == "all") {
         DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE date BETWEEN ('", min(df$date), "' AND '", max(df$date), "') AND timeseries_id = ", tsid, ";"))
