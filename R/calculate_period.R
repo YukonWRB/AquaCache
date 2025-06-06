@@ -88,12 +88,12 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     if (is.na(timeseries_id)) {
       stop("There were too few measurements to calculate a period and no timeseries_id was provided to fetch additional data.")
     }
-    no_period <- dbGetQueryDT(con, paste0("SELECT ", paste(col_names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
+    extra <- dbGetQueryDT(con, paste0("SELECT ", paste(col_names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
     if (data.table::is.data.table(data)) {
-      data <- data.table::rbindlist(list(data, no_period), use.names = TRUE)
+      data <- data.table::rbindlist(list(data, extra), use.names = TRUE)
       data.table::setorder(data, datetime)
     } else {
-      data <- rbind(data, no_period)
+      data <- rbind(data, extra)
       data <- data[order(data$datetime), , drop = FALSE]
     }
     diffs <- as.numeric(diff(data$datetime), units = "hours")
