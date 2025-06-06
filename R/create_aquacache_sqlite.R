@@ -121,18 +121,29 @@ create_aquacache_sqlite <- function(file = "choose",
                           sprintf("SELECT * FROM timeseries WHERE location_id IN (%s)",
                                   paste(continuous_locations, collapse = ",")))
     if (nrow(ts) > 0) {
+      ts$start_datetime <- as.character(ts$start_datetime)  # Ensure start_datetime is in character format
+      ts$end_datetime <- as.character(ts$end_datetime)  # Ensure end_datetime is in character format
+      ts$last_daily_calculation <- as.character(ts$last_daily_calculation)  # Ensure last_daily_calculated is in character format
+      ts$last_synchronize <- as.character(ts$last_synchronize)  # Ensure last_synchronized is in character format
+      ts$record_rate <- as.character(ts$record_rate)  # Ensure record_rate is in character format
       DBI::dbWriteTable(sqlite, "timeseries", ts)
       
       g <- DBI::dbGetQuery(con, paste0("SELECT * FROM grades WHERE timeseries_id IN (",
                                        paste(ts$timeseries_id, collapse = ","), ") AND start_dt >= '", start_datetime, "' OR end_dt <= '", end_datetime, "'"))
+      g$start_dt <- as.character(g$start_dt)  # Ensure start_dt is in character format
+      g$end_dt <- as.character(g$end_dt)  # Ensure end_dt is in character format
       DBI::dbWriteTable(sqlite, "grades", g)
       
       a <- DBI::dbGetQuery(con, paste0("SELECT * FROM approvals WHERE timeseries_id IN (",
                                        paste(ts$timeseries_id, collapse = ","), ") AND start_dt >= '", start_datetime, "' OR end_dt <= '", end_datetime, "'"))
+      a$start_dt <- as.character(a$start_dt)  # Ensure start_dt is in character format
+      a$end_dt <- as.character(a$end_dt)  # Ensure end_dt is in character format
       DBI::dbWriteTable(sqlite, "approvals", a)
       
       q <- DBI::dbGetQuery(con, paste0("SELECT * FROM qualifiers WHERE timeseries_id IN (",
                                        paste(ts$timeseries_id, collapse = ","), ") AND start_dt >= '", start_datetime, "' OR end_dt <= '", end_datetime, "'"))
+      q$start_dt <- as.character(q$start_dt)  # Ensure start_dt is in character format
+      q$end_dt <- as.character(q$end_dt)  # Ensure end_dt is in character format
       DBI::dbWriteTable(sqlite, "qualifiers", q)
       
       
@@ -140,32 +151,40 @@ create_aquacache_sqlite <- function(file = "choose",
       mc <- DBI::dbGetQuery(con,
                             sprintf("SELECT * FROM measurements_continuous WHERE timeseries_id IN (%s) AND datetime >= '%s' AND datetime <= '%s'",
                                     ts_ids, start_datetime, end_datetime))
+      mc$datetime <- as.character(mc$datetime)  # Ensure datetime is in character format
       DBI::dbWriteTable(sqlite, "measurements_continuous", mc)
       
       md <- DBI::dbGetQuery(con,
                             sprintf("SELECT * FROM measurements_calculated_daily WHERE timeseries_id IN (%s) AND date >= '%s' AND date <= '%s'",
                                     ts_ids, start_datetime, end_datetime))
+      md$date <- as.character(md$date)  # Ensure date is in character format
       DBI::dbWriteTable(sqlite, "measurements_calculated_daily", md)
       
       corr <- DBI::dbGetQuery(con,
                               sprintf("SELECT * FROM corrections WHERE timeseries_id IN (%s)",
                                       ts_ids))
+      corr$start_dt <- as.character(corr$start_dt)  # Ensure start_dt is in character format
+      corr$end_dt <- as.character(corr$end_dt)  # Ensure end_dt is in character format
       DBI::dbWriteTable(sqlite, "corrections", corr)
       
       mcc <- DBI::dbGetQuery(con,
                              sprintf("SELECT * FROM measurements_continuous_corrected WHERE timeseries_id IN (%s) AND datetime >= '%s' AND datetime <= '%s'",
                                      ts_ids, start_datetime, end_datetime))
+      mcc$datetime <- as.character(mcc$datetime)  # Ensure datetime is in character format
       DBI::dbWriteTable(sqlite, "measurements_continuous_corrected", mcc)
       
       mhc <- DBI::dbGetQuery(con,
                              sprintf("SELECT * FROM measurements_hourly_corrected WHERE timeseries_id IN (%s) AND datetime >= '%s' AND datetime <= '%s'",
                                      ts_ids, start_datetime, end_datetime))
+      mhc$datetime <- as.character(mhc$datetime)  # Ensure datetime is in character format
       DBI::dbWriteTable(sqlite, "measurements_hourly_corrected", mhc)
       
       mdc <- DBI::dbGetQuery(con,
                              sprintf("SELECT * FROM measurements_calculated_daily_corrected WHERE timeseries_id IN (%s) AND date >= '%s' AND date <= '%s'",
                                      ts_ids, start_datetime, end_datetime))
+      mdc$date <- as.character(mdc$date)  # Ensure date is in character format
       DBI::dbWriteTable(sqlite, "measurements_calculated_daily_corrected", mdc)
+      
     } else {
       warning("No continuous timeseries found for the specified locations.")
     }
@@ -176,11 +195,16 @@ create_aquacache_sqlite <- function(file = "choose",
     
     ss <- DBI::dbGetQuery(con, sprintf("SELECT * FROM sample_series WHERE location_id IN (%s)",
                                        paste(discrete_locations, collapse = ",")))
+    ss$last_new_data <- as.character(ss$last_new_data)  # Ensure last_new_data is in character format
+    ss$last_synchronize <- as.character(ss$last_synchronize)  # Ensure last_synchronize is in character format
     DBI::dbWriteTable(sqlite, "sample_series", ss)
     
     samples <- DBI::dbGetQuery(con,
                                sprintf("SELECT * FROM samples WHERE location_id IN (%s) AND datetime >= '%s' AND datetime <= '%s'",
                                        paste(discrete_locations, collapse = ","), start_datetime, end_datetime))
+    samples$datetime <- as.character(samples$datetime)  # Ensure datetime is in character format
+    samples$target_datetime <- as.character(samples$target_datetime)  # Ensure target_datetime is in character format
+    
     if (nrow(samples) > 0) {
       DBI::dbWriteTable(sqlite, "samples", samples)
       sample_ids <- paste(samples$sample_id, collapse = ",")
