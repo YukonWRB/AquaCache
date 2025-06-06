@@ -3,31 +3,47 @@
 #' This function can be used to append new contiuous type data directly to the database without downloading it from a remote source. Differs from [getNewContinuous()] as the later is used to pull data from a remote before append.
 #'
 #' @param tsid The timeseries_id to which the data will be appended. This is a required parameter.
-#' @param df A data.frame containing the data. Must have columns named 'datetime' OR 'date', and 'value' at minimum. If 'datetime' is present data will be appended to measurements_continuous, otherwise 'date' will be used to append to measurements_calculated_daily. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the `adjust_` series of functions to see how these are used.
-#' @param target One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.
+#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the `adjust_` series of functions to see how these are used.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
+#' @param target One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.
+#' @param overwrite Select one of "no", "all", "conflict". Default is "no", which will not overwrite any existing data (and fail if there is a conflict). "all" will wipe and replace all database entries for the target timeseries in the temporal range of `df`, while "conflict" will overwrite only those entries that conflict with the data in `df` (i.e. have the same datetime or date).
 #'
 #' @return Nothing; data is added to the database silently.
 #' @export
 #'
 
-addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
+addNewContinuous <- function(tsid, df, con = NULL, target = "realtime", overwrite = "no") {
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
-
+  
   # Check that the timeseries_id is valid
   check <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id = ", tsid))[1,1]
   if (is.na(check)) {
     stop("The timeseries_id you specified does not exist.")
   }
   
-  # Check if we have a 'date' or 'datetime' column
-  if (!("datetime" %in% names(df) || "date" %in% names(df))) {
-    stop("The data.frame must contain a column named 'datetime' or 'date'.")
+  if (!overwrite %in% c("no", "all", "conflict")) {
+    stop("Parameter 'overwrite' must be one of 'no', 'all', or 'conflict'.")
   }
+  
+  if (!target %in% c("realtime", "daily")) {
+    stop("Parameter 'target' must be one of 'realtime' or 'daily'")
+  }
+  
+  if (target == "realtime") {
+    # Ensure there's a 'datetime' column
+    if (!("datetime" %in% names(df))) {
+      stop("The data.frame must contain a column named 'datetime' if the parameter 'target' is set to 'daily'.")
+    }
+  } else {
+    if (!"date" %in% names(df)) {
+      stop("The data.frame must contain a column named 'date' if the parameter 'target' is set to 'daily'.")
+    }
+  }
+  
   if (!("value" %in% names(df))) {
     stop("The data.frame must contain a column named 'value'.")
   }
@@ -46,11 +62,14 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
   }
   
   
-  info <- DBI::dbGetQuery(con, paste0("SELECT at.aggregation_type, t.owner, t.active, t.end_datetime FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = ", tsid, ";"))
-  if (is.na(info$end_datetime)) {
+  info <- DBI::dbGetQuery(con, paste0("SELECT at.aggregation_type, t.default_owner AS owner FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = ", tsid, ";"))
+  end_datetime_realtime <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[[1]]
+  end_datetime_daily <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[[1]]
+  
+  if (is.na(end_datetime_realtime) && is.na(end_datetime_daily)) {
     last_data_point <- NA
   } else {
-    last_data_point = info$end_datetime + 1
+    last_data_point = max(end_datetime_realtime, end_datetime_daily, na.rm = TRUE) + 1
   }
   df <- df[!is.na(df$value) , ]
   
@@ -80,14 +99,20 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
     df$imputed <- FALSE
   }
   
+  if (!("no_update" %in% names(df))) {
+    df$no_update <- FALSE
+  }
+  
   # Append the data ##########################################################
-  ## Append for measurements_continuous #####
-  if ('datetime' %in% names(df)) {
+  if (target == "realtime") {
     if (!inherits(df$datetime, "POSIXct")) {
-      stop("The 'datetime' column must be in POSIXct format.")
-    }
-    if (target == "daily") {
-      stop("The 'target' parameter is set to 'daily' but the data.frame contains a 'datetime' column. Please set 'target' to 'continuous'.")
+      if (inherits(df$datetime, "character")) {
+        df$datetime <- as.POSIXct(df$datetime, tz = "UTC")
+      } else if (inherits(df$datetime, "Date")) {
+        df$datetime <- as.POSIXct(df$datetime, tz = "UTC")
+      } else {
+        stop("The 'datetime' column must be in POSIXct format or convertible to it (time zone will be assumed as UTC).")
+      }
     }
     
     if (is.na(last_data_point)) {
@@ -110,13 +135,26 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
       }
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
-      df <- df[, c("datetime", "value", "timeseries_id", "imputed")]
+      df <- df[, c("datetime", "value", "timeseries_id", "imputed", "no_update")]
       
       #assign a period to the data
       if (info$aggregation_type == "instantaneous") { #Period is always 0 for instantaneous data
         df$period <- "00:00:00"
       } else if ((info$aggregation_type != "instantaneous") & !("period" %in% names(df))) { #aggregation_types of mean, median, min, max should all have a period
-        df <- calculate_period(data = df, timeseries_id = tsid, con = con)
+        df_period <- calculate_period(data = df, timeseries_id = tsid, con = con)
+        no_period <- dbGetQueryDT(con, paste0("SELECT datetime FROM measurements_continuous WHERE timeseries_id = ", tsid, " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ", tsid, ") AND datetime NOT IN ('", paste(df$datetime, collapse = "', '"), "');"))
+        
+        # Update the period column in the database with the calculated periods from 'df_period' where there is a match with datetimes in no_period
+        if (nrow(no_period) > 0) {
+          no_period$period <- df_period$period[match(no_period$datetime, df_period$datetime)]
+          for (i in seq_len(nrow(no_period))) {
+            DBI::dbExecute(con, paste0("UPDATE measurements_continuous SET period = '", no_period$period[i], "' WHERE datetime = '", no_period$datetime[i], "' AND timeseries_id = ", tsid, ";"))
+          }
+        }
+
+        # Only retain rows in df_period that were in df (calculate_period could have added rows if it needed to pull extra data to calculate the period)
+        df <- df[df$datetime %in% df_period$datetime, ]
+        
       } else { #Check to make sure that the supplied period can actually be coerced to a period
         check <- lubridate::period(unique(df$period))
         if (NA %in% check) {
@@ -124,10 +162,21 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
         }
       }
       
-      if (min(df$datetime) < last_data_point - 1) {
-        DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime >= '", min(df$datetime), "' AND timeseries_id = ", tsid, ";"))
+      if (overwrite == "all") {
+        DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime BETWEEN ('", min(df$datetime), "' AND '", max(df$datetime), "') AND timeseries_id = ", tsid, ";"))
+      } else if (overwrite == "conflict") {
+        DBI::dbExecute(con, paste0("DELETE FROM measurements_continuous WHERE datetime IN ('", paste(df$datetime, collapse = "', '"), "') AND timeseries_id = ", tsid, ";"))
+      } else {
+        # If overwrite is "no", we do not delete any existing data, so we just append
       }
       DBI::dbAppendTable(con, "measurements_continuous", df)
+      
+      tryCatch({
+        calculate_stats(con = con, timeseries_id = tsid, start_recalc = min(df$datetime))
+      }, error = function(e) {
+        message("addNewContinuous: Failed to recalculate statistics for timeseries_id ", tsid, ". Error message: '", e$message, "'.")
+      })
+      
       #make the new entry into table timeseries
       DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(df$datetime),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
     }
@@ -139,20 +188,15 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
         DBI::dbExecute(con, "COMMIT;")
       }, error = function(e) {
         DBI::dbExecute(con, "ROLLBACK;")
-        warning("addNewContinuous: Failed to append new data. Returned error '", e$message, "'.")
+        warning("addNewContinuous: Failed to append new data. Returned error: ", e$message, ".")
       })
       
     } else {
       commit_fx(con, df, last_data_point, tsid)
     }
-    
-    ## Append for measurements_calculated_daily #####
-  } else if ('date' %in% names(df)) {
+  } else {
     if (!inherits(df$date, "Date")) {
       stop("The 'date' column must be in Date format.")
-    }
-    if (target == "continuous") {
-      stop("The 'target' parameter is set to 'continuous' but the data.frame contains a 'date' column. Please set 'target' to 'daily'.")
     }
     
     if (is.na(last_data_point)) {
@@ -176,17 +220,21 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
       
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
-      df <- df[, c("date", "value", "timeseries_id", "imputed")]
+      df <- df[, c("date", "value", "timeseries_id", "imputed", "no_update")]
       
-      if (min(df$date) < last_data_point - 1) {
-        DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE date >= '", min(df$date), "' AND timeseries_id = ", tsid, ";"))
+      if (overwrite == "all") {
+        DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE date BETWEEN ('", min(df$date), "' AND '", max(df$date), "') AND timeseries_id = ", tsid, ";"))
+      } else if (overwrite == "conflict") {
+        DBI::dbExecute(con, paste0("DELETE FROM measurements_calculated_daily WHERE date IN ('", paste(df$date, collapse = "', '"), "') AND timeseries_id = ", tsid, ";"))
+      } else {
+        # If overwrite is "no", we do not delete any existing data, so we just append
       }
       DBI::dbAppendTable(con, "measurements_calculated_daily", df)
       #make the new entry into table timeseries
       if (max(df$date) > last_data_point) {
         DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", max(df$date),"', last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
       } else {
-      DBI::dbExecute(con, paste0("UPDATE timeseries SET last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
+        DBI::dbExecute(con, paste0("UPDATE timeseries SET last_new_data = '", .POSIXct(Sys.time(), "UTC"), "' WHERE timeseries_id = ", tsid, ";"))
       }
     }
     
@@ -202,8 +250,7 @@ addNewContinuous <- function(tsid, df, target = "realtime", con = NULL) {
     } else {
       commit_fx(con, df, last_data_point, tsid)
     }
-    
-  } # End of appending to 'continuous' table
+  }
   
 }
 

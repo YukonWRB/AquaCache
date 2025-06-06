@@ -28,6 +28,36 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
   }
   
   DBI::dbExecute(con, "SET timezone = 'UTC'")
+
+  # helper to determine the last date available in HYDAT for a station
+  get_last_hydat_date <- function(hcon, station, param) {
+    if (param == "flow") {
+      last_year <- DBI::dbGetQuery(hcon, sprintf(
+        "SELECT MAX(year) FROM DLY_FLOWS WHERE STATION_NUMBER = '%s';",
+        station
+      ))[1, 1]
+      if (is.na(last_year)) return(NA)
+      dat <- tidyhydat::hy_daily_flows(
+        station,
+        start_date = paste0(last_year, "-01-01"),
+        end_date   = paste0(last_year, "-12-31")
+      )
+    } else {
+      last_year <- DBI::dbGetQuery(hcon, sprintf(
+        "SELECT MAX(year) FROM DLY_LEVELS WHERE STATION_NUMBER = '%s';",
+        station
+      ))[1, 1]
+      if (is.na(last_year)) return(NA)
+      dat <- tidyhydat::hy_daily_levels(
+        station,
+        start_date = paste0(last_year, "-01-01"),
+        end_date   = paste0(last_year, "-12-31")
+      )
+    }
+
+    if (nrow(dat) == 0) return(NA)
+    max(as.Date(dat$Date))
+  }
   
   if (!is.null(start_recalc)) {
     if (length(start_recalc) != 1) {
@@ -52,7 +82,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
   
   
   #calculate daily means or sums for any days without them
-  leap_list <- (seq(1800, 2100, by = 4))
+  years <- 1800:2100
+  leap_list <- years[(years %% 400 == 0) | (years %% 4 == 0 & years %% 100 != 0)]
   hydat_checked <- FALSE
   for (i in timeseries_id) {
     
@@ -154,29 +185,10 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           }
           tmp <- DBI::dbGetQuery(con, paste0("SELECT t.location, t.parameter_id, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter_id = p.parameter_id WHERE t.timeseries_id = ", i, ";"))
           hydat_con <- DBI::dbConnect(RSQLite::SQLite(), tidyhydat::hy_downloaded_db())
-          if (tmp[, "param_name"] == "flow") {
-            last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_FLOWS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
-            if (is.na(last_hydat_year)) { # There is no data in hydat yet
+          if (tmp[, "param_name"] %in% c("flow", "water level")) {
+            last_hydat <- get_last_hydat_date(hydat_con, tmp[, "location"], tmp[, "param_name"])
+            if (is.na(last_hydat) || last_day_historic > last_hydat) {
               flag <- TRUE
-            }
-            if (!flag) {
-              max_mth <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (month) FROM DLY_FLOWS WHERE STATION_NUMBER = '", tmp[, "location"], "' AND year = ", last_hydat_year, ";"))[1,1]
-              last_hydat <- as.Date(paste0(last_hydat_year, "-", max_mth, if (max_mth %in% c(1,3,5,7,8,10,12)) "-31" else if (max_mth %in% c(4,6,9,11)) "-30" else "28"), format = "%Y-%m-%d")
-            }
-            if (last_day_historic > last_hydat) {
-              flag <- TRUE
-            }
-          } else if (tmp[, "param_name"] == "water level") {
-            last_hydat_year <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (year) FROM DLY_LEVELS WHERE STATION_NUMBER = '", tmp[, "location"], "';"))[1,1]
-            if (is.na(last_hydat_year)) {
-              flag <- TRUE
-            }
-            if (!flag) {
-              max_mth <- DBI::dbGetQuery(hydat_con, paste0("SELECT MAX (month) FROM DLY_LEVELS WHERE STATION_NUMBER = '", tmp[, "location"], "' AND year = ", last_hydat_year, ";"))[1,1]
-              last_hydat <- as.Date(paste0(last_hydat_year, "-", max_mth, if (max_mth %in% c(1,3,5,7,8,10,12)) "-31" else if (max_mth %in% c(4,6,9,11)) "-30" else "28"), format = "%Y-%m-%d")
-              if (last_day_historic > last_hydat) {
-                flag <- TRUE
-              }
             }
           } else {
             flag <- TRUE

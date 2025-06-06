@@ -4,16 +4,18 @@
 \alias{addNewContinuous}
 \title{Add new data to the measurements_continuous or measurements_calculated_daily tables}
 \usage{
-addNewContinuous(tsid, df, target = "realtime", con = NULL)
+addNewContinuous(tsid, df, con = NULL, target = "realtime", overwrite = "no")
 }
 \arguments{
 \item{tsid}{The timeseries_id to which the data will be appended. This is a required parameter.}
 
-\item{df}{A data.frame containing the data. Must have columns named 'datetime' OR 'date', and 'value' at minimum. If 'datetime' is present data will be appended to measurements_continuous, otherwise 'date' will be used to append to measurements_calculated_daily. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the \code{adjust_} series of functions to see how these are used.}
+\item{df}{A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the \code{adjust_} series of functions to see how these are used.}
+
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
 
 \item{target}{One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
+\item{overwrite}{Select one of "no", "all", "conflict". Default is "no", which will not overwrite any existing data (and fail if there is a conflict). "all" will wipe and replace all database entries for the target timeseries in the temporal range of \code{df}, while "conflict" will overwrite only those entries that conflict with the data in \code{df} (i.e. have the same datetime or date).}
 }
 \value{
 Nothing; data is added to the database silently.
