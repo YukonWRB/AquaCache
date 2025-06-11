@@ -1,12 +1,9 @@
 #' Impute missing values
 #'
 #' @description
-#' ## Note
-#' See function predictMissing() (not finished yet!) for machine learning predictions, especially useful if there are no timeseries than be be used with a direct relationship such as predicting flow using level, or level using multiple other level stations.
-#' 
 #'Impute missing values using either a nearby timeseries or using linear or spline interpolation on the time-series itself. If using nearby timeseries, they can be of same or of other parameters, as specified with parameter 'extra_params'. User interaction is necessary to select the most appropriate timeseries and to review the result of imputation before updating the database.
 #'
-#' Imputing long periods of missing data using spline or linear interpolation on the timeseries itself is not recommended. If this is the only feasible option presented by this function because no nearby timeseries can be used for imputation, we recommend using predictMissing() instead (in the 'dev' folder, not finished).
+#' Imputing long periods of missing data using spline or linear interpolation on the timeseries itself is not recommended. If this is the only feasible option presented by this function because no nearby timeseries can be used for imputation, consider using a more advanced modelling approach for better accuracy.
 #'
 #' @param tsid The target timeseries_id.
 #' @param radius The radius in kilometers within which to search for similar timeseries.
@@ -589,35 +586,31 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
       imputed <- impute_function(full_dt, min_gap, max_gap, "spline")
     }
     returns[["imputed_data"]] <- imputed
+
   } else {
-    # Now ask user if they want to impute directly (with an offset) between the two timeseries or if a model should be used.
-    message("Would you like to impute directly between the two timeseries or use a model to impute the data?")
-    impute_type <- readline(prompt = writeLines(paste("\n1: Impute directly between the two timeseries. An average offset will be calculated between the two timeseries and used to impute the data.",
-                                                      "\n2: Use a random forest model to impute the data.",
-                                                      "\n3: Stop! I'd like to exit."
+    message("Impute directly using the selected timeseries or exit?")
+    impute_type <- readline(prompt = writeLines(paste(
+      "\n1: Impute directly using the selected timeseries. An average offset will be applied.",
+      "\n2: Stop! I'd like to exit."
     )))
-    if (impute_type == 2) { # Use a model to impute the data 
-      message("Use function predictMissing() to impute using a model (must exit this function).")
-      while (impute_type == 2) {
-        impute_type <- readline(prompt = writeLines(paste("\nTry again with 1 (Impute directly using the selected timeseries) or 3, exit.")))
-        impute_type <- as.numeric(impute_type)
-      }
-    }
-    if (!(impute_type %in% c(1,3))) {
-      while (!(impute_type %in% c(1,3))) {
+    impute_type <- as.numeric(impute_type)
+
+    if (!(impute_type %in% c(1, 2))) {
+      while (!(impute_type %in% c(1, 2))) {
         impute_type <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
         impute_type <- as.numeric(impute_type)
       }
     }
-    if (impute_type == 3) {
+
+    if (impute_type == 2) {
       return(returns)
     }
+
     if (impute_type == 1) {
       imputed <- impute_function(full_dt, min_gap, max_gap, "direct", selected, data)
       returns[["imputed_data"]] <- imputed
     }
-  } 
-
+  }
   #plot and ask the user to confirm ok before modifying the DB
   plot_fx <- function(data) {
     without <- data # without will be data without imputed values
@@ -635,7 +628,6 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
   message("Look right for the result. Does it look ok?")
   commit <- readline(prompt = writeLines(paste("\n1: Yes, and please modify the timeseries in the database",
                                                "\n2: Yes, but please ONLY return the result",
-                                               "\n3: No, I'd like to try something different"
   )))
   commit <- as.numeric(commit)
 
@@ -643,8 +635,8 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     return(returns)
   }
 
-  if (!(commit %in% c(1:3))) {
-    while (!(commit %in% c(1:3))) {
+  if (!(commit %in% c(1:2))) {
+    while (!(commit %in% c(1:2))) {
       commit <- readline(prompt = writeLines(paste("\nThat isn't an acceptable number. Try again.")))
       commit <- as.numeric(commit)
     }
@@ -699,9 +691,5 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
     }
     
     message("Timeseries_id ", tsid, " has been updated in the database and daily stats recalculated if necessary.")
-  }
-  
-  if (commit == 3) {
-    message("This part of the function doesn't work yet.")
   }
 }
