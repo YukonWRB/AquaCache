@@ -146,6 +146,7 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
   ecmwfr::wf_request_batch(
     request = requests,  # the request
     path = data_dir,
+    user = user,
     workers = 10
   )
 
