@@ -77,6 +77,13 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
   # Create a temperary directory to store the downloaded data, from which we will create rasters to upload to AC
   data_dir <- file.path(tempdir(), "downloadERA5")
   data_dir <- normalizePath(data_dir, mustWork = FALSE)
+  dir.create(data_dir)
+  on.exit({
+    # Clean up the temporary directory
+    if (dir.exists(data_dir)) {
+      unlink(data_dir, recursive = TRUE, force = TRUE)
+    }
+  }, add = TRUE)
 
   # create requests for monthly data (don't include the last month, which is handled separately)
   for (ii in seq_along(seq_months)[-length(seq_months)]) {
@@ -155,24 +162,14 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
     file.remove(zip_file)
   }
 
-
-  # Process all zip files in data_dir
-  zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
-  for (zip_file in zip_files) {
-    unzip(zip_file, exdir = data_dir)
-    base_filename <- sub("\\.zip$", "", basename(zip_file))
-    nc_file <- file.path(data_dir, "data_0.nc")
-    if (file.exists(nc_file)) {
-      file.rename(nc_file, file.path(data_dir, paste0(base_filename, ".nc")))
-    }
-  }
-
+  files <- list()
+  jj <- 1
   for (request in requests) {
 
     name <- request$target
     # Create a string representation of the request for logging
     url = paste(names(request), as.character(request), sep = ": ", collapse = "; ")
-    model <- paste0("ERA5_", request$param)
+    model <- request$dataset_short_name
 
     if ("date" %in% names(request)){
       is_timeseries <- TRUE
@@ -193,15 +190,14 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
 
       # load the nc raster
       filename <- file.path(data_dir, paste0(request$target, ".nc"))
-      raster_file_path <- file.path(data_dir, paste0(filename, ".nc"))
-      rasters <- terra::rast(raster_file_path)
+      rasters <- terra::rast(filename)
 
       for (ii in seq_along(seq_dates)) {
-        datetime_ii <- seq_dates[ii]
+        datetime_ii <- as.POSIXct(seq_dates[ii], tz = "UTC")
         file <- list()
         file[["rast"]] <- rasters[[ii]]
         file[["valid_from"]] <- datetime_ii
-        file[["valid_to"]] <- datetime_ii
+        file[["valid_to"]] <- datetime_ii + 60*60
         file[["flag"]] <- "None"
         file[["source"]] <- "CDS"
         file[["model"]] <- model
@@ -214,17 +210,16 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
     } else {
 
       # For single day requests, we use year, month, and day
-      from_date <- paste0(request$year, "-", request$month, "-", request$day)
+      from_date <- as.POSIXct(paste0(request$year, "-", request$month, "-", request$day), tz = "UTC")
 
       # load the raster
       filename <- file.path(data_dir, paste0(request$target, ".nc"))
-      raster_file_path <- file.path(data_dir, paste0(filename, ".nc"))
-      raster <- terra::rast(raster_file_path)
+      raster <- terra::rast(filename)
 
       file <- list()
       file[["rast"]] <- raster
       file[["valid_from"]] <- from_date
-      file[["valid_to"]] <- from_date
+      file[["valid_to"]] <- from_date + 60 * 60
       file[["flag"]] <- "None"
       file[["source"]] <- "CDS"
       file[["model"]] <- model
