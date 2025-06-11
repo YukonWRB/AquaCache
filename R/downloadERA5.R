@@ -3,48 +3,27 @@
 #' @param param The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
 #' @param start_datetime The datetime from which to start looking for new rasters
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
+#' @param user The username to use for ECMWF authentication.
+#' @param key The key to use for EMCWF authentication.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
 #'
 
-# key corresponding to user "everett.snieder@gmail.com"
-ecmwfr::wf_set_key(key = "5815cfa9-2642-46bd-9a7f-9ac2099b32f4")
+downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
 
-load_era5_metadata <- function(metadata_dir = "inst/extdata/era5") {
-  params_invariant <- readr::read_csv(file.path(metadata_dir, "table1.csv"))
-  params_instantaneous <- readr::read_csv(file.path(metadata_dir, "table2.csv"))
-  params_accumulations <- readr::read_csv(file.path(metadata_dir, "table3.csv"))
-  mean_rates_and_fluxes <- readr::read_csv(file.path(metadata_dir, "table4.csv"))
-  params_vertical_instantaneous <- readr::read_csv(file.path(metadata_dir, "table6.csv"))
-
-  # Add a column with the table_name names as the column values
-  params_invariant$table_name <- "params_invariant"
-  params_instantaneous$table_name <- "params_instantaneous"
-  params_accumulations$table_name <- "params_accumulations"
-  mean_rates_and_fluxes$table_name <- "mean_rates_and_fluxes"
-  params_vertical_instantaneous$table_name <- "params_vertical_instantaneous"
-
-  param_md <- dplyr::bind_rows(
-    params_invariant,
-    params_instantaneous,
-    params_accumulations,
-    mean_rates_and_fluxes,
-    params_vertical_instantaneous
-  )
-  return(param_md)
-}
-
-scrape_era5_land_metadata <- function(url = "https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation") {
-  page <- rvest::read_html(url)
-  tables <- rvest::html_table(page, fill = TRUE)
-  # Optionally, assign names to tables based on their captions or order
-  names(tables) <- paste0("table", seq_along(tables))
-  return(tables)
-}
-
-downloadERA5 <- function(start_datetime, clip = "YT", param = "snow_depth_water_equivalent") {
-
+  
+  ecmwfr::wf_set_key(key = key, user = user)
+  
+  # Get that param is valid and fetch short form
+  scrape_era5_land_metadata <- function(url = "https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation") {
+    page <- rvest::read_html(url)
+    tables <- rvest::html_table(page, fill = TRUE)
+    # Optionally, assign names to tables based on their captions or order
+    names(tables) <- paste0("table", seq_along(tables))
+    return(tables)
+  }
+  
   # check parameter 'clip'
   if (!is.null(clip)) {
     if (!inherits(clip, "character")) {
@@ -70,12 +49,7 @@ downloadERA5 <- function(start_datetime, clip = "YT", param = "snow_depth_water_
 
   # get the extent of the clip polygon
   area <- terra::ext(clip)
-  area <- c(area@ymax, area@xmin, area@ymin, area@xmax)
-
-  # area and param for debugging
-  #area = c(72, -150, 55, -120)
-  #param <- "snow_depth_water_equivalent"
-  #start_datetime <- as.POSIXct("1980-01-01 00:00:00", tz = "UTC")
+  area <- c(area$ymax, area$xmin, area$ymin, area$xmax)
 
   # Load the metadata for ERA5-Land parameters
   tables <- scrape_era5_land_metadata()
@@ -117,13 +91,6 @@ downloadERA5 <- function(start_datetime, clip = "YT", param = "snow_depth_water_
     to_day <- sprintf("%02d", as.numeric(format(to_datetime, "%d")))
     hour <- sprintf("%02d", as.numeric(format(from_datetime, "%H")))
     name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour, "_to_", to_year, to_month, to_day, hour)
-
-    # TODO
-    # check to make sure all of the dates within the month are not already in the DB
-    seq_days_ii <- seq.Date(from_datetime, to_datetime, by = "day")
-    for (datetime_ii in seq_days_ii) {
-      print(datetime_ii)
-    }
 
     request <- list(
       dataset_short_name = "reanalysis-era5-land",
@@ -172,7 +139,6 @@ downloadERA5 <- function(start_datetime, clip = "YT", param = "snow_depth_water_
   ecmwfr::wf_request_batch(
     request = requests,  # the request
     path = data_dir,
-    user = "everett.snieder@gmail.com",
     workers = 10
   )
 
@@ -189,7 +155,6 @@ downloadERA5 <- function(start_datetime, clip = "YT", param = "snow_depth_water_
     file.remove(zip_file)
   }
 
-  # Create a string representation of the request for logging
 
   # Process all zip files in data_dir
   zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
@@ -205,6 +170,7 @@ downloadERA5 <- function(start_datetime, clip = "YT", param = "snow_depth_water_
   for (request in requests) {
 
     name <- request$target
+    # Create a string representation of the request for logging
     url = paste(names(request), as.character(request), sep = ": ", collapse = "; ")
     model <- paste0("ERA5_", request$param)
 

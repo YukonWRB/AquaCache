@@ -62,7 +62,7 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
     source_fx_args <- meta_ids[i, "source_fx_args"]
     type <- meta_ids[i, "type"]
     if (type == "reanalysis") { # Reanalysis data may have preliminary rasters that should be replaced when final versions are produced.
-      prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "';"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
+      prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "' AND raster_series_id = ", id, ";"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
       if (!is.na(prelim)) {
         next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
       } else {
