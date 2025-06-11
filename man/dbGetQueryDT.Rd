@@ -4,12 +4,14 @@
 \alias{dbGetQueryDT}
 \title{Retrieve a data.table from a database connection}
 \usage{
-dbGetQueryDT(con, statement, ...)
+dbGetQueryDT(con, statement, sqlite_date_convert = TRUE, ...)
 }
 \arguments{
 \item{con}{A connection object as returned by a \code{\link[DBI:dbConnect]{DBI::dbConnect()}} call or, in the context of this package, a \code{\link[=AquaConnect]{AquaConnect()}} or \code{\link[=snowConnect]{snowConnect()}} call.}
 
 \item{statement}{A SQL statement to be passed to the database.}
+
+\item{sqlite_date_convert}{Logical. If TRUE AND \code{con} is to an sqlite DB, the function will convert character strings to date or datetime objects with UTC 0 offset. This is useful for sqlite databases where dates are stored as text. If FALSE, no conversion will be done. Defaults to TRUE.}
 
 \item{...}{Other parameters passed to the ... parameter of \code{\link[DBI:dbGetQuery]{DBI::dbGetQuery()}}.}
 }
