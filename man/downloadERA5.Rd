@@ -4,7 +4,7 @@
 \alias{downloadERA5}
 \title{Get ERA5 rasters}
 \usage{
-downloadERA5(start_datetime, clip, param, user, key)
+downloadERA5(start_datetime, clip = "YT", param, user, key)
 }
 \arguments{
 \item{start_datetime}{The datetime from which to start looking for new rasters}
