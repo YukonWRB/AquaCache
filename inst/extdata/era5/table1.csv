@@ -1,0 +1,15 @@
+count,name,units,Variable name in CDS,shortName,ParamId,an,fc
+1,Lake cover,(0 - 1),lake_cover,cl,26,x,x
+2,Lake depth,m,lake_depth,dl,228007,x,x
+3,Low vegetation cover,(0 - 1),low_vegetation_cover,cvl,27,x,
+4,High vegetation cover,(0 - 1),high_vegetation_cover,cvh,28,x,
+5,Type of low vegetation,~,type_of_low_vegetation,tvl,29,x,
+6,Type of high vegetation,~,type_of_high_vegetation,tvh,30,x,
+7,Soil type1,~,soil_type,slt,43,x,
+8,Standard deviation of filtered subgrid orography,m,standard_deviation_of_filtered_subgrid_orography,sdfor,74,x,
+9,Geopotential,m**2 s**-2,geopotential,z,129,x,x
+10,Standard deviation of sub-gridscale orography,~,standard_deviation_of_orography,sdor,160,x,
+11,Anisotropy of sub-gridscale orography,~,anisotropy_of_sub_gridscale_orography,isor,161,x,
+12,Angle of sub-gridscale orography,radians,angle_of_sub_gridscale_orography,anor,162,x,
+13,Slope of sub-gridscale orography,~,slope_of_sub_gridscale_orography,slor,163,x,
+14,Land-sea mask,(0 - 1),land_sea_mask,lsm,172,x,x

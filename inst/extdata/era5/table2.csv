@@ -1,0 +1,76 @@
+count,name,units,Variable name in CDS,shortName,ParamId,an,fc
+1,Convective inhibition,J kg**-1,convective_inhibition,cin,228001,,x
+2,Friction velocity,m s**-1,friction_velocity,zust,228003,,x
+3,Lake mix-layer temperature,K,lake_mix_layer_temperature,lmlt,228008,x,x
+4,Lake mix-layer depth,m,lake_mix_layer_depth,lmld,228009,x,x
+5,Lake bottom temperature,K,lake_bottom_temperature,lblt,228010,x,x
+6,Lake total layer temperature,K,lake_total_layer_temperature,ltlt,228011,x,x
+7,Lake shape factor,dimensionless,lake_shape_factor,lshf,228012,x,x
+8,Lake ice temperature,K,lake_ice_temperature,lict,228013,x,x
+9,Lake ice depth,m,lake_ice_depth,licd,228014,x,x
+10,UV visible albedo for direct radiation,(0 - 1),uv_visible_albedo_for_direct_radiation,aluvp,15,x,x
+11,Minimum vertical gradient of refractivity inside trapping layer,m**-1,minimum_vertical_gradient_of_refractivity_inside_trapping_layer,dndzn,228015,,x
+12,UV visible albedo for diffuse radiation,(0 - 1),uv_visible_albedo_for_diffuse_radiation,aluvd,16,x,x
+13,Mean vertical gradient of refractivity inside trapping layer,m**-1,mean_vertical_gradient_of_refractivity_inside_trapping_layer,dndza,228016,,x
+14,Near IR albedo for direct radiation,(0 - 1),near_ir_albedo_for_direct_radiation,alnip,17,x,x
+15,Duct base height,m,duct_base_height,dctb,228017,,x
+16,Near IR albedo for diffuse radiation,(0 - 1),near_ir_albedo_for_diffuse_radiation,alnid,18,x,x
+17,Trapping layer base height,m,trapping_layer_base_height,tplb,228018,,x
+18,Trapping layer top height,m,trapping_layer_top_height,tplt,228019,,x
+19,Cloud base height,m,cloud_base_height,cbh,228023,,x
+20,Zero degree level,m,zero_degree_level,deg0l,228024,,x
+21,Instantaneous 10 metre wind gust,m s**-1,instantaneous_10m_wind_gust,i10fg,228029,,x
+22,Sea ice area fraction,(0 - 1),sea-ice_cover,ci,31,x,x
+23,Snow albedo,(0 - 1),snow_albedo,asn,32,x,x
+24,Snow density,kg m**-3,snow_density,rsn,33,x,x
+25,Sea surface temperature,K,sea_surface_temperature,sst,34,x,x
+26,Ice temperature layer 1,K,ice_temperature_layer_1,istl1,35,x,x
+27,Ice temperature layer 2,K,ice_temperature_layer_2,istl2,36,x,x
+28,Ice temperature layer 3,K,ice_temperature_layer_3,istl3,37,x,x
+29,Ice temperature layer 4,K,ice_temperature_layer_4,istl4,38,x,x
+30,Volumetric soil water layer 11,m**3 m**-3,volumetric_soil_water_layer_1,swvl1,39,x,x
+31,Volumetric soil water layer 21,m**3 m**-3,volumetric_soil_water_layer_2,swvl2,40,x,x
+32,Volumetric soil water layer 31,m**3 m**-3,volumetric_soil_water_layer_3,swvl3,41,x,x
+33,Volumetric soil water layer 41,m**3 m**-3,volumetric_soil_water_layer_4,swvl4,42,x,x
+34,Convective available potential energy,J kg**-1,convective_available_potential_energy,cape,59,x,x
+35,"Leaf area index, low vegetation3",m**2 m**-2,leaf_area_index_low_vegetation,lai_lv,66,x,x
+36,"Leaf area index, high vegetation3",m**2 m**-2,leaf_area_index_high_vegetation,lai_hv,67,x,x
+37,Neutral wind at 10 m u-component,m s**-1,10m_u-component_of_neutral_wind,u10n,228131,x,x
+38,Neutral wind at 10 m v-component,m s**-1,10m_v-component_of_neutral_wind,v10n,228132,x,x
+39,Surface pressure,Pa,surface_pressure,sp,134,x,x
+40,Soil temperature level 11,K,soil_temperature_level_1,stl1,139,x,x
+41,Snow depth,m of water equivalent,snow_depth,sd,141,x,x
+42,Charnock,~,charnock,chnk,148,x,x
+43,Mean sea level pressure,Pa,mean_sea_level_pressure,msl,151,x,x
+44,Boundary layer height,m,boundary_layer_height,blh,159,x,x
+45,Total cloud cover,(0 - 1),total_cloud_cover,tcc,164,x,x
+46,10 metre U wind component,m s**-1,10m_u_component_of_wind,10u,165,x,x
+47,10 metre V wind component,m s**-1,10m_v_component_of_wind,10v,166,x,x
+48,2 metre temperature,K,2m_temperature,2t,167,x,x
+49,2 metre dewpoint temperature,K,2m_dewpoint_temperature,2d,168,x,x
+50,Soil temperature level 21,K,soil_temperature_level_2,stl2,170,x,x
+51,Soil temperature level 31,K,soil_temperature_level_3,stl3,183,x,x
+52,Low cloud cover,(0 - 1),low_cloud_cover,lcc,186,x,x
+53,Medium cloud cover,(0 - 1),medium_cloud_cover,mcc,187,x,x
+54,High cloud cover,(0 - 1),high_cloud_cover,hcc,188,x,x
+55,Skin reservoir content,m of water equivalent,skin_reservoir_content,src,198,x,x
+56,Instantaneous large-scale surface precipitation fraction,(0 - 1),instantaneous_large_scale_surface_precipitation_fraction,ilspf,228217,,x
+57,Convective rain rate,kg m**-2 s**-1,convective_rain_rate,crr,228218,,x
+58,Large scale rain rate,kg m**-2 s**-1,large_scale_rain_rate,lsrr,228219,,x
+59,Convective snowfall rate water equivalent,kg m**-2 s**-1,convective_snowfall_rate_water_equivalent,csfr,228220,,x
+60,Large scale snowfall rate water equivalent,kg m**-2 s**-1,large_scale_snowfall_rate_water_equivalent,lssfr,228221,,x
+61,Instantaneous eastward turbulent surface stress,N m**-2,instantaneous_eastward_turbulent_surface_stress,iews,229,x,x
+62,Instantaneous northward turbulent surface stress,N m**-2,instantaneous_northward_turbulent_surface_stress,inss,230,x,x
+63,Instantaneous surface sensible heat flux,W m**-2,instantaneous_surface_sensible_heat_flux,ishf,231,x,x
+64,Instantaneous moisture flux,kg m**-2 s**-1,instantaneous_moisture_flux,ie,232,x,x
+65,Skin temperature,K,skin_temperature,skt,235,x,x
+66,Soil temperature level 41,K,soil_temperature_level_4,stl4,236,x,x
+67,Temperature of snow layer,K,temperature_of_snow_layer,tsn,238,x,x
+68,Forecast albedo,(0 - 1),forecast_albedo,fal,243,x,x
+69,Forecast surface roughness,m,forecast_surface_roughness,fsr,244,x,x
+70,Forecast logarithm of surface roughness for heat,~,forecast_logarithm_of_surface_roughness_for_heat,flsr,245,x,x
+71,100 metre U wind component,m s**-1,100m_u-component_of_wind,100u,228246,x,x
+72,100 metre V wind component,m s**-1,100m_v-component_of_wind,100v,228247,x,x
+73,Precipitation type2,code table (4.201),precipitation_type,ptype,260015,,x
+74,K index2,K,k_index,kx,260121,,x
+75,Total totals index2,K,total_totals_index,totalx,260123,,x

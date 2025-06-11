@@ -5,8 +5,8 @@
 #' @details
 #' Additional arguments to pass to the function specified in source_fx go in argument 'source_fx_args' (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2". 
 #'
-#' @param model The model producing the raster
-#' @param parameter The parameter to import, exactly as you'd find in the FTP link for the model rasters. For example, check out the [HRDPS parameters](https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps-datamart_en/). This must be something understood by the `source_fx` function.
+#' @param model The model producing the raster, as a character string
+#' @param parameter The parameter to import, as a string.
 #' @param start_datetime The datetime (as POSIXct) from which to look for rasters
 #' @param source_fx The function to use for fetching new rasters. Must be an existing function in this package.
 #' @param type The type of raster, 'forecast' or 'reanalysis'. Reanalysis rasters are kept forever, forecasts are replaced when a new one is issued.

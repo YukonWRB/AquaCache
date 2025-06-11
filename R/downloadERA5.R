@@ -2,17 +2,49 @@
 #'
 #' @param param The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
 #' @param start_datetime The datetime from which to start looking for new rasters
-#' @param url The url from which to get new rasters.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
 #'
 
-downloadHRDPA <- function(param, start_datetime, url = "https://dd.weather.gc.ca/model_hrdpa/2.5km/", clip = NULL) {
+# key corresponding to user "everett.snieder@gmail.com"
+ecmwfr::wf_set_key(key = "5815cfa9-2642-46bd-9a7f-9ac2099b32f4")
 
-  param <- NULL
-  
+load_era5_metadata <- function(metadata_dir = "inst/extdata/era5") {
+  params_invariant <- readr::read_csv(file.path(metadata_dir, "table1.csv"))
+  params_instantaneous <- readr::read_csv(file.path(metadata_dir, "table2.csv"))
+  params_accumulations <- readr::read_csv(file.path(metadata_dir, "table3.csv"))
+  mean_rates_and_fluxes <- readr::read_csv(file.path(metadata_dir, "table4.csv"))
+  params_vertical_instantaneous <- readr::read_csv(file.path(metadata_dir, "table6.csv"))
+
+  # Add a column with the table_name names as the column values
+  params_invariant$table_name <- "params_invariant"
+  params_instantaneous$table_name <- "params_instantaneous"
+  params_accumulations$table_name <- "params_accumulations"
+  mean_rates_and_fluxes$table_name <- "mean_rates_and_fluxes"
+  params_vertical_instantaneous$table_name <- "params_vertical_instantaneous"
+
+  param_md <- dplyr::bind_rows(
+    params_invariant,
+    params_instantaneous,
+    params_accumulations,
+    mean_rates_and_fluxes,
+    params_vertical_instantaneous
+  )
+  return(param_md)
+}
+
+scrape_era5_land_metadata <- function(url = "https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation") {
+  page <- rvest::read_html(url)
+  tables <- rvest::html_table(page, fill = TRUE)
+  # Optionally, assign names to tables based on their captions or order
+  names(tables) <- paste0("table", seq_along(tables))
+  return(tables)
+}
+
+downloadERA5 <- function(start_datetime, clip = "YT", param = "snow_depth_water_equivalent") {
+
   # check parameter 'clip'
   if (!is.null(clip)) {
     if (!inherits(clip, "character")) {
@@ -22,90 +54,222 @@ downloadHRDPA <- function(param, start_datetime, url = "https://dd.weather.gc.ca
     }
   }
 
-  # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
-  saved_files <- list.files(paste0(tempdir(), "/downloadHRDPA"))
-  if (length(saved_files) == 0) {
-    file_exists <- FALSE
-  } else {
-    saved_files <- data.frame(file = saved_files,
-                              datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"))
-    ok <- saved_files[saved_files$datetime > Sys.time() - 10*60, ]
-    if (nrow(ok) > 0) {
-      target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
-      available <- readRDS(paste0(tempdir(), "/downloadHRDPA/", target_file$file))
-      file_exists <- TRUE
+  prov_buff <- terra::vect("inst/extdata/prov_buffers/Provinces_buffered_300km.shp")
+  prov_buff <- terra::project(prov_buff, "epsg:4326")
+
+  # make sure clip is in the province shapefile
+  if (!all(clip %in% prov_buff$PREABBR)) {
+    stop(sprintf(
+      "Some values in 'clip' are not valid province abbreviations. Valid values are: %s",
+      paste(unique(prov_buff$PREABBR), collapse = ", ")
+    ))
+  }
+
+  # This is package data living as shapefile in inst/extdata, loaded using file data_load.R
+  clip <- prov_buff[prov_buff$PREABBR %in% clip, ]
+
+  # get the extent of the clip polygon
+  area <- terra::ext(clip)
+  area <- c(area@ymax, area@xmin, area@ymin, area@xmax)
+
+  # area and param for debugging
+  #area = c(72, -150, 55, -120)
+  #param <- "snow_depth_water_equivalent"
+  #start_datetime <- as.POSIXct("1980-01-01 00:00:00", tz = "UTC")
+
+  # Load the metadata for ERA5-Land parameters
+  tables <- scrape_era5_land_metadata()
+  param_md <- dplyr::bind_rows(tables)
+
+  # Check if the parameter is in the metadata
+  if (!(param %in% param_md$`Variable name in CDS`)) {
+    stop(sprintf("Parameter '%s' not found in metadata. Be sure to use the 'Variable name in CDS', which can be found at 'https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation'", param))
+  }
+  # Remove rows with NA in 'Variable name in CDS'
+  param_md <- param_md[!is.na(param_md$`Variable name in CDS`), ]
+  param_md <- param_md[param_md$`Variable name in CDS` == param, ]
+  # Get the short name for the parameter
+  param_short <- param_md$shortName
+
+  # for the entire date range, create a monthly array of dates to download data one month at a time
+  # for the remainder (current month), we create a second, daily date array
+  # downloading one day at a time is relatively slow, so we try to download as much as possible in one go
+  seq_months <- seq.Date(as.Date(start_datetime), as.Date(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC"), by = "month")
+  seq_days <- seq.Date(tail(seq_months, 1), as.Date(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC"), by = "day")
+
+  # Create a list to hold the requests
+  requests <- list()
+
+  # Create a temperary directory to store the downloaded data, from which we will create rasters to upload to AC
+  data_dir <- file.path(tempdir(), "downloadERA5")
+  data_dir <- normalizePath(data_dir, mustWork = FALSE)
+
+  # create requests for monthly data (don't include the last month, which is handled separately)
+  for (ii in seq_along(seq_months)[-length(seq_months)]) {
+    from_datetime <- seq_months[ii]
+
+    from_year <- sprintf("%d", as.numeric(format(from_datetime, "%Y")))
+    from_month <- sprintf("%02d", as.numeric(format(from_datetime, "%m")))
+    from_day <- sprintf("%02d", as.numeric(format(from_datetime, "%d")))
+    to_datetime <- seq_months[ii + 1] - 1
+    to_year <- sprintf("%d", as.numeric(format(to_datetime, "%Y")))
+    to_month <- sprintf("%02d", as.numeric(format(to_datetime, "%m")))
+    to_day <- sprintf("%02d", as.numeric(format(to_datetime, "%d")))
+    hour <- sprintf("%02d", as.numeric(format(from_datetime, "%H")))
+    name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour, "_to_", to_year, to_month, to_day, hour)
+
+    # TODO
+    # check to make sure all of the dates within the month are not already in the DB
+    seq_days_ii <- seq.Date(from_datetime, to_datetime, by = "day")
+    for (datetime_ii in seq_days_ii) {
+      print(datetime_ii)
+    }
+
+    request <- list(
+      dataset_short_name = "reanalysis-era5-land",
+      product_type = "reanalysis",
+      variable = param,
+      date = paste0(from_year, "-", from_month, "-", from_day, "/", to_year, "-", to_month, "-", to_day),
+      time = paste0(hour, ":00"),
+      format = "netcdf",
+      area = area,
+      target = name
+    )
+    requests[[length(requests) + 1]] <- request
+  }
+
+  # add requests for daily data (the last month)
+  # we use the last month, which is the current month minus 5 days (latency of ERA5-Land data)
+  for (ii in seq_along(seq_days)) {
+    from_datetime <- seq_days[ii]
+
+    from_year <- sprintf("%d", as.numeric(format(from_datetime, "%Y")))
+    from_month <- sprintf("%02d", as.numeric(format(from_datetime, "%m")))
+    from_day <- sprintf("%02d", as.numeric(format(from_datetime, "%d")))
+
+    hour <- sprintf("%02d", as.numeric(format(from_datetime, "%H")))
+    name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour)
+
+    request <- list(
+      dataset_short_name = "reanalysis-era5-land",
+      product_type = "reanalysis",
+      variable = param,
+      year = sprintf("%d", as.numeric(format(from_datetime, "%Y"))),
+      month = sprintf("%02d", as.numeric(format(from_datetime, "%m"))),
+      day = sprintf("%02d", as.numeric(format(from_datetime, "%d"))),
+      time = paste0(hour, ":00"),
+      format = "netcdf",
+      area = area,
+      target = name
+    )
+    requests[[length(requests) + 1]] <- request
+  }
+
+  # Download the data using the Copernicus API
+  # Note: You need to have the Copernicus API credentials set up in your .Renviron file
+  # or use the `wfr::set_key()` function to set them in your R session
+
+  ecmwfr::wf_request_batch(
+    request = requests,  # the request
+    path = data_dir,
+    user = "everett.snieder@gmail.com",
+    workers = 10
+  )
+
+  # extract the downloaded zip files, rename the .nc files, and delete the zip files
+  zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
+  for (zip_file in zip_files) {
+    unzip(zip_file, exdir = data_dir)
+    base_filename <- sub("\\.zip$", "", basename(zip_file))
+    nc_file <- file.path(data_dir, "data_0.nc")
+    if (file.exists(nc_file)) {
+      file.rename(nc_file, file.path(data_dir, paste0(base_filename, ".nc")))
+    }
+    # Delete the zip file after processing
+    file.remove(zip_file)
+  }
+
+  # Create a string representation of the request for logging
+
+  # Process all zip files in data_dir
+  zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
+  for (zip_file in zip_files) {
+    unzip(zip_file, exdir = data_dir)
+    base_filename <- sub("\\.zip$", "", basename(zip_file))
+    nc_file <- file.path(data_dir, "data_0.nc")
+    if (file.exists(nc_file)) {
+      file.rename(nc_file, file.path(data_dir, paste0(base_filename, ".nc")))
+    }
+  }
+
+  for (request in requests) {
+
+    name <- request$target
+    url = paste(names(request), as.character(request), sep = ": ", collapse = "; ")
+    model <- paste0("ERA5_", request$param)
+
+    if ("date" %in% names(request)){
+      is_timeseries <- TRUE
     } else {
-      file_exists <- FALSE
+      is_timeseries <- FALSE
     }
-  }
-  # If there is no file that matches necessary use, download and save for later
-  if (!file_exists) {
-    available <- data.frame()
-    for (i in c("00", "06", "12", "18")) {
-      links <- rvest::session(paste0(url, i)) |>
-        rvest::html_elements("a") |>
-        rvest::html_attr("href")
-      links <- links[grep("^[0-9]{8}T[0-9]{2}Z", links)]
-      links <- links[grep("Accum6h", links)] #only retain the links we're interested in
-      tmp <- data.frame(link = links,
-                        datetime = as.POSIXct(substr(links, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
-                        prelim = FALSE)
-      tmp$link <- paste0(i, "/", links)
-      available <- rbind(available, tmp)
-    }
-    available[grep("Prelim", available$link), "prelim"] <- TRUE
-    suppressWarnings(dir.create(paste0(tempdir(), "/downloadHRDPA")))
-    name <- gsub(" ", "", Sys.time())
-    name <- gsub("-", "", name)
-    name <- substr(gsub(":", "", name), 1,12)
-    saveRDS(available, paste0(tempdir(), "/downloadHRDPA/", name, ".rds"))
-  }
 
-  #Now filter by start_datetime, discard prelim rasters if non-prelim exists
-  available <- available[available$datetime >= start_datetime , ]
-  available <- available[order(available$datetime), ]
-  duplicates <- duplicated(available$datetime, fromLast = TRUE) | duplicated(available$datetime)
-  available <- available[!(available$prelim & duplicates) | !duplicates, ]
+    # if the request is for >1 timestamp, it's a timeseries
+    # loop through the raster bands and store each timestamp as an entry in 'files'
 
-  #Make clip polygon
-  extent <- paste(clip, collapse="_")
-  if (!is.null(clip)) {
-    clip <- prov_buff[prov_buff$PREABBR %in% clip, ] #This is package data living as shapefile in inst/extdata, loaded using file data_load.R
-    if (nrow(clip) == 0) {
-      clip <- NULL
-    }
-  }
+    if (is_timeseries) {
 
-  if (nrow(available) > 0) {
-    files <- list()
-    clipped <- FALSE
-    for (i in 1:nrow(available)) {
+      # multi-day requests have a date range, here we parse the date range and iterate over each day
+      date_range <- strsplit(request$date, "/")[[1]]
+      from_date <- date_range[1]
+      to_date <- date_range[2]
+      seq_dates <- seq.Date(as.Date(from_date), as.Date(to_date), by = "day")
+
+      # load the nc raster
+      filename <- file.path(data_dir, paste0(request$target, ".nc"))
+      raster_file_path <- file.path(data_dir, paste0(filename, ".nc"))
+      rasters <- terra::rast(raster_file_path)
+
+      for (ii in seq_along(seq_dates)) {
+        datetime_ii <- seq_dates[ii]
+        file <- list()
+        file[["rast"]] <- rasters[[ii]]
+        file[["valid_from"]] <- datetime_ii
+        file[["valid_to"]] <- datetime_ii
+        file[["flag"]] <- "None"
+        file[["source"]] <- "CDS"
+        file[["model"]] <- model
+        file[["url"]] <- url
+
+        files[[jj]] <- file
+        jj <- jj + 1
+      }
+
+    } else {
+
+      # For single day requests, we use year, month, and day
+      from_date <- paste0(request$year, "-", request$month, "-", request$day)
+
+      # load the raster
+      filename <- file.path(data_dir, paste0(request$target, ".nc"))
+      raster_file_path <- file.path(data_dir, paste0(filename, ".nc"))
+      raster <- terra::rast(raster_file_path)
+
       file <- list()
-      download_url <- paste0(url, "/", available[i, "link"[]])
-      rast <- terra::rast(download_url)[[1]]
-      file[["units"]] <- terra::units(rast) #Units is fetched now because the clip operation seems to remove them.
-      if (!clipped) {
-        if (!is.null(clip)) {
-          clip <- terra::project(clip, rast) #project clip vector to crs of the raster
-        }
-        clipped <- TRUE #So that project doesn't happen after the first iteration
-      }
-      if (!is.null(clip)) {
-        rast <- terra::mask(rast, clip) #Makes NA values beyond the boundary of clip
-        rast <- terra::trim(rast) #Trims the NA values
-      }
-      file[["rast"]] <- rast
-      file[["valid_from"]] <- available[i, "datetime"] + 60*60*6
-      file[["valid_to"]] <- available[i, "datetime"]
-      file[["flag"]] <- if (available[i, "prelim"]) "PRELIMINARY" else NA
-      file[["source"]] <- download_url
-      file[["model"]] <- "HRDPA"
-      files[[i]] <- file
+      file[["rast"]] <- raster
+      file[["valid_from"]] <- from_date
+      file[["valid_to"]] <- from_date
+      file[["flag"]] <- "None"
+      file[["source"]] <- "CDS"
+      file[["model"]] <- model
+      file[["url"]] <- url
+
+      files[[jj]] <- file
+      jj <- jj + 1
+
     }
-    files[["forecast"]] <- FALSE
-  } else {
-    files <- NULL
   }
 
+  files[["forecast"]] <- FALSE
   return(files)
 }
