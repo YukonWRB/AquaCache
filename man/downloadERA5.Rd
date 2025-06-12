@@ -4,10 +4,20 @@
 \alias{downloadERA5}
 \title{Get ERA5 rasters}
 \usage{
-downloadERA5(start_datetime, clip = "YT", param, user, key)
+downloadERA5(
+  start_datetime,
+  end_datetime = .POSIXct(Sys.time(), tz = "UTC") - 60 * 60 * 24 * 5,
+  clip = "YT",
+  param,
+  user,
+  key,
+  hrs = c(0)
+)
 }
 \arguments{
-\item{start_datetime}{The datetime from which to start looking for new rasters}
+\item{start_datetime}{The datetime from which to start looking for new rasters.}
+
+\item{end_datetime}{The datetime until which to look for new rasters. If NULL, the current datetime is used.}
 
 \item{clip}{The two-digit abbreviation(s) as per \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census} for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.}
 
@@ -16,6 +26,8 @@ downloadERA5(start_datetime, clip = "YT", param, user, key)
 \item{user}{The username to use for ECMWF authentication.}
 
 \item{key}{The key to use for EMCWF authentication.}
+
+\item{hrs}{ERA5 data is provided in hourly chunks. Specify a vector of hours from 0 to 23 specifying the hourly rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at midnight/00:00 UTC.}
 }
 \value{
 A list of lists, where each element consists of the target raster as well as associated attributes.
