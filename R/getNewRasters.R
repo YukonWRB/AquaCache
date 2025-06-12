@@ -58,6 +58,7 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
   }
   for (i in 1:nrow(meta_ids)) {
     id <- meta_ids[i, "raster_series_id"]
+    message("Working on raster_series_id ", id, " for parameter '", meta_ids[i, "parameter"], "' and source function '", meta_ids[i, "source_fx"], "'")
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     type <- meta_ids[i, "type"]
@@ -90,6 +91,7 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
       if (is.null(forecast)) {
         forecast <- FALSE
       }
+      # The list of rasters 'rasters' only has an 'issued' element if the rasters are from a forecast. If not, it is NULL.
       issued_datetime <- rasters[["issued"]]
       if (is.null(issued_datetime)) {
         issued_datetime <- NA
@@ -149,8 +151,11 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
       } else {
         message("getNewRasters: No new rasters found for raster_series_id ", id, ".")
       }
-    }, error = function(e){
-      warning("getNewRasters: Failed to get new rasters or to append new rasters for raster_series_id ", id, ".")
+    }, error = function(e) {
+      warning("getNewRasters: Failed to get new rasters or to append new rasters for raster_series_id ", id, " with error message: ", e$message)
+    },
+    warning = function(w) {
+      warning("getNewRasters: Warning while processing raster_series_id ", id, ": ", w$message)
     })
     
     if (interactive()) {

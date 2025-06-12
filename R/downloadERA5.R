@@ -1,19 +1,38 @@
 #' Get ERA5 rasters
 #'
 #' @param param The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
-#' @param start_datetime The datetime from which to start looking for new rasters
+#' @param start_datetime The datetime from which to start looking for new rasters.
+#' @param end_datetime The datetime until which to look for new rasters. If NULL, the current datetime is used.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #' @param user The username to use for ECMWF authentication.
 #' @param key The key to use for EMCWF authentication.
+#' @param hrs ERA5 data is provided in hourly chunks. Specify a vector of hours from 0 to 23 specifying the hourly rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at midnight/00:00 UTC.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
 #'
 
-downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
-
+downloadERA5 <- function(start_datetime, end_datetime = Sys.time(), clip = "YT", param, user, key, hrs = c(0)) {
   
-  ecmwfr::wf_set_key(key = key, user = user)
+  # Checks and conversions for datetimes
+  if (!inherits(start_datetime, "POSIXct")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else {
+    attr(start_datetime, "tzone") <- "UTC"
+  }
+  
+  if (!inherits(end_datetime, "POSIXct")) {
+    end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
+  } else {
+    attr(end_datetime, "tzone") <- "UTC"
+  }
+  
+  # Check that 'hrs' is a numeric vector of integers between 0 and 23
+  if (!inherits(hrs, "numeric") || any(hrs < 0) || any(hrs > 23) || any(!is.finite(hrs)) || any(!is.integer(hrs))) {
+    stop("Parameter 'hrs' must be a numeric vector of integers between 0 and 23.")
+  }
+  
+  suppressMessages(ecmwfr::wf_set_key(key = key, user = user))
   
   # Get that param is valid and fetch short form
   scrape_era5_land_metadata <- function(url = "https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation") {
@@ -32,10 +51,10 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
       stop("Parameter clip must be a character vector of 2 characters.")
     }
   }
-
+  
   prov_buff <- terra::vect("inst/extdata/prov_buffers/Provinces_buffered_300km.shp")
   prov_buff <- terra::project(prov_buff, "epsg:4326")
-
+  
   # make sure clip is in the province shapefile
   if (!all(clip %in% prov_buff$PREABBR)) {
     stop(sprintf(
@@ -43,18 +62,18 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
       paste(unique(prov_buff$PREABBR), collapse = ", ")
     ))
   }
-
+  
   # This is package data living as shapefile in inst/extdata, loaded using file data_load.R
   clip <- prov_buff[prov_buff$PREABBR %in% clip, ]
-
+  
   # get the extent of the clip polygon
   area <- terra::ext(clip)
   area <- c(area$ymax, area$xmin, area$ymin, area$xmax)
-
+  
   # Load the metadata for ERA5-Land parameters
   tables <- scrape_era5_land_metadata()
-  param_md <- dplyr::bind_rows(tables)
-
+  param_md <- suppressMessages(dplyr::bind_rows(tables))
+  
   # Check if the parameter is in the metadata
   if (!(param %in% param_md$`Variable name in CDS`)) {
     stop(sprintf("Parameter '%s' not found in metadata. Be sure to use the 'Variable name in CDS', which can be found at 'https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation'", param))
@@ -64,31 +83,35 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
   param_md <- param_md[param_md$`Variable name in CDS` == param, ]
   # Get the short name for the parameter
   param_short <- param_md$shortName
-
+  
   # for the entire date range, create a monthly array of dates to download data one month at a time
   # for the remainder (current month), we create a second, daily date array
   # downloading one day at a time is relatively slow, so we try to download as much as possible in one go
   seq_months <- seq.Date(as.Date(start_datetime), as.Date(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC"), by = "month")
   seq_days <- seq.Date(tail(seq_months, 1), as.Date(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC"), by = "day")
-
+  
   # Create a list to hold the requests
   requests <- list()
-
+  
   # Create a temperary directory to store the downloaded data, from which we will create rasters to upload to AC
   data_dir <- file.path(tempdir(), "downloadERA5")
   data_dir <- normalizePath(data_dir, mustWork = FALSE)
-  dir.create(data_dir)
-  on.exit({
-    # Clean up the temporary directory
-    if (dir.exists(data_dir)) {
-      unlink(data_dir, recursive = TRUE, force = TRUE)
-    }
-  }, add = TRUE)
-
+  # Clean up the directory in case it has leftover files from previous runs
+  unlink(data_dir, recursive = TRUE, force = TRUE)
+  suppressWarnings(dir.create(data_dir))
+  
+  # NOT USED because the files need to live on to the getNewRasters function
+  # on.exit({
+  #   # Clean up the temporary directory on exit also
+  #   if (dir.exists(data_dir)) {
+  #     unlink(data_dir, recursive = TRUE, force = TRUE)
+  #   }
+  # }, add = TRUE)
+  
   # create requests for monthly data (don't include the last month, which is handled separately)
   for (ii in seq_along(seq_months)[-length(seq_months)]) {
     from_datetime <- seq_months[ii]
-
+    
     from_year <- sprintf("%d", as.numeric(format(from_datetime, "%Y")))
     from_month <- sprintf("%02d", as.numeric(format(from_datetime, "%m")))
     from_day <- sprintf("%02d", as.numeric(format(from_datetime, "%d")))
@@ -98,7 +121,7 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
     to_day <- sprintf("%02d", as.numeric(format(to_datetime, "%d")))
     hour <- sprintf("%02d", as.numeric(format(from_datetime, "%H")))
     name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour, "_to_", to_year, to_month, to_day, hour)
-
+    
     request <- list(
       dataset_short_name = "reanalysis-era5-land",
       product_type = "reanalysis",
@@ -111,19 +134,19 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
     )
     requests[[length(requests) + 1]] <- request
   }
-
+  
   # add requests for daily data (the last month)
   # we use the last month, which is the current month minus 5 days (latency of ERA5-Land data)
   for (ii in seq_along(seq_days)) {
     from_datetime <- seq_days[ii]
-
+    
     from_year <- sprintf("%d", as.numeric(format(from_datetime, "%Y")))
     from_month <- sprintf("%02d", as.numeric(format(from_datetime, "%m")))
     from_day <- sprintf("%02d", as.numeric(format(from_datetime, "%d")))
-
+    
     hour <- sprintf("%02d", as.numeric(format(from_datetime, "%H")))
     name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour)
-
+    
     request <- list(
       dataset_short_name = "reanalysis-era5-land",
       product_type = "reanalysis",
@@ -138,20 +161,25 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
     )
     requests[[length(requests) + 1]] <- request
   }
-
+  
   # Download the data using the Copernicus API
-  # Note: You need to have the Copernicus API credentials set up in your .Renviron file
-  # or use the `wfr::set_key()` function to set them in your R session
-
-  ecmwfr::wf_request_batch(
-    request = requests,  # the request
-    path = data_dir,
-    user = user,
-    workers = 10
+  
+  message("downloading ERA5 rasters... this could take a while.")
+  zip_files <- suppressMessages(
+    ecmwfr::wf_request_batch(
+      request = requests,  # the request
+      path = data_dir,
+      user = user,
+      workers = 10
+    )
   )
-
+  message("ERA 5 download completed.")
+  if (length(zip_files) == 0) {
+    stop("No data was downloaded. Please check your parameters and try again.")
+  }
+  
   # extract the downloaded zip files, rename the .nc files, and delete the zip files
-  zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
+  # zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
   for (zip_file in zip_files) {
     unzip(zip_file, exdir = data_dir)
     base_filename <- sub("\\.zip$", "", basename(zip_file))
@@ -162,76 +190,77 @@ downloadERA5 <- function(start_datetime, clip = "YT", param, user, key) {
     # Delete the zip file after processing
     file.remove(zip_file)
   }
-
+  
   files <- list()
   jj <- 1
   for (request in requests) {
-
+    
     name <- request$target
     # Create a string representation of the request for logging
     url = paste(names(request), as.character(request), sep = ": ", collapse = "; ")
     model <- request$dataset_short_name
-
+    
     if ("date" %in% names(request)){
       is_timeseries <- TRUE
     } else {
       is_timeseries <- FALSE
     }
-
+    
     # if the request is for >1 timestamp, it's a timeseries
     # loop through the raster bands and store each timestamp as an entry in 'files'
-
     if (is_timeseries) {
-
+      
       # multi-day requests have a date range, here we parse the date range and iterate over each day
       date_range <- strsplit(request$date, "/")[[1]]
       from_date <- date_range[1]
       to_date <- date_range[2]
       seq_dates <- seq.Date(as.Date(from_date), as.Date(to_date), by = "day")
-
+      
       # load the nc raster
       filename <- file.path(data_dir, paste0(request$target, ".nc"))
       rasters <- terra::rast(filename)
-
+      
       for (ii in seq_along(seq_dates)) {
         datetime_ii <- as.POSIXct(seq_dates[ii], tz = "UTC")
         file <- list()
         file[["rast"]] <- rasters[[ii]]
         file[["valid_from"]] <- datetime_ii
         file[["valid_to"]] <- datetime_ii + 60*60
-        file[["flag"]] <- "None"
-        file[["source"]] <- "CDS"
+        file[["flag"]] <- NA
+        file[["source"]] <- "ECMWF download"
         file[["model"]] <- model
         file[["url"]] <- url
-
+        file[["units"]] <- terra::units(rasters[[ii]])
+        file[["issued"]] <- as.POSIXct(as.numeric(gsub("sd_valid_time=", "", names(rasters[[ii]]))))
+        
         files[[jj]] <- file
         jj <- jj + 1
       }
-
     } else {
-
+      
       # For single day requests, we use year, month, and day
       from_date <- as.POSIXct(paste0(request$year, "-", request$month, "-", request$day), tz = "UTC")
-
+      
       # load the raster
       filename <- file.path(data_dir, paste0(request$target, ".nc"))
       raster <- terra::rast(filename)
-
+      
       file <- list()
       file[["rast"]] <- raster
       file[["valid_from"]] <- from_date
       file[["valid_to"]] <- from_date + 60 * 60
-      file[["flag"]] <- "None"
-      file[["source"]] <- "CDS"
+      file[["flag"]] <- NA
+      file[["source"]] <- "ECMWF download"
       file[["model"]] <- model
       file[["url"]] <- url
-
+      file[["units"]] <- terra::units(raster)
+      file[["issued"]] <- as.POSIXct(as.numeric(gsub("sd_valid_time=", "", names(raster))), tz = "UTC")
+      
       files[[jj]] <- file
       jj <- jj + 1
-
     }
   }
-
+  
   files[["forecast"]] <- FALSE
   return(files)
 }
