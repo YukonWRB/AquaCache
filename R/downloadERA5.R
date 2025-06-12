@@ -27,8 +27,23 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
     attr(end_datetime, "tzone") <- "UTC"
   }
   
+  # ERA5-Land data are only available up to five days prior to the current time
+  max_end <- as.POSIXct(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC")
+  if (end_datetime > max_end) {
+    end_datetime <- max_end
+  }
+  if (start_datetime > end_datetime) {
+    stop("Parameter 'start_datetime' must be before 'end_datetime'.")
+  }
+  
+  # 'hrs' might have been passed in a a character vector like 0,6,12,18. Separate on the commas so it can be made a numeric vector
+  if (inherits(hrs, "character")) {
+    hrs <- strsplit(hrs, ",")[[1]]
+  }
+  
   # Check that 'hrs' is a numeric vector of integers between 0 and 23
-  if (!inherits(hrs, "numeric") || any(hrs < 0) || any(hrs > 23) || any(!is.finite(hrs)) || any(!is.integer(hrs))) {
+  if (!inherits(hrs, "numeric")) hrs <- as.numeric(hrs)
+  if (!is.numeric(hrs) || any(hrs < 0) || any(hrs > 23) || any(!is.finite(hrs)) || any(hrs %% 1 != 0)) {
     stop("Parameter 'hrs' must be a numeric vector of integers between 0 and 23.")
   }
   
@@ -119,20 +134,23 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
     to_year <- sprintf("%d", as.numeric(format(to_datetime, "%Y")))
     to_month <- sprintf("%02d", as.numeric(format(to_datetime, "%m")))
     to_day <- sprintf("%02d", as.numeric(format(to_datetime, "%d")))
-    hour <- sprintf("%02d", as.numeric(format(from_datetime, "%H")))
-    name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour, "_to_", to_year, to_month, to_day, hour)
     
-    request <- list(
-      dataset_short_name = "reanalysis-era5-land",
-      product_type = "reanalysis",
-      variable = param,
-      date = paste0(from_year, "-", from_month, "-", from_day, "/", to_year, "-", to_month, "-", to_day),
-      time = paste0(hour, ":00"),
-      format = "netcdf",
-      area = area,
-      target = name
-    )
-    requests[[length(requests) + 1]] <- request
+    for (hh in hrs) {
+      hour <- sprintf("%02d", hh)
+      name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour, "_to_", to_year, to_month, to_day, hour)
+      
+      request <- list(
+        dataset_short_name = "reanalysis-era5-land",
+        product_type = "reanalysis",
+        variable = param,
+        date = paste0(from_year, "-", from_month, "-", from_day, "/", to_year, "-", to_month, "-", to_day),
+        time = paste0(hour, ":00"),
+        format = "netcdf",
+        area = area,
+        target = name
+      )
+      requests[[length(requests) + 1]] <- request
+    }
   }
   
   # add requests for daily data (the last month)
@@ -144,26 +162,27 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
     from_month <- sprintf("%02d", as.numeric(format(from_datetime, "%m")))
     from_day <- sprintf("%02d", as.numeric(format(from_datetime, "%d")))
     
-    hour <- sprintf("%02d", as.numeric(format(from_datetime, "%H")))
-    name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour)
-    
-    request <- list(
-      dataset_short_name = "reanalysis-era5-land",
-      product_type = "reanalysis",
-      variable = param,
-      year = sprintf("%d", as.numeric(format(from_datetime, "%Y"))),
-      month = sprintf("%02d", as.numeric(format(from_datetime, "%m"))),
-      day = sprintf("%02d", as.numeric(format(from_datetime, "%d"))),
-      time = paste0(hour, ":00"),
-      format = "netcdf",
-      area = area,
-      target = name
-    )
-    requests[[length(requests) + 1]] <- request
+    for (hh in hrs) {
+      hour <- sprintf("%02d", hh)
+      name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour)
+      
+      request <- list(
+        dataset_short_name = "reanalysis-era5-land",
+        product_type = "reanalysis",
+        variable = param,
+        year = sprintf("%d", as.numeric(format(from_datetime, "%Y"))),
+        month = sprintf("%02d", as.numeric(format(from_datetime, "%m"))),
+        day = sprintf("%02d", as.numeric(format(from_datetime, "%d"))),
+        time = paste0(hour, ":00"),
+        format = "netcdf",
+        area = area,
+        target = name
+      )
+      requests[[length(requests) + 1]] <- request
+    }
   }
   
   # Download the data using the Copernicus API
-  
   message("downloading ERA5 rasters... this could take a while.")
   zip_files <- suppressMessages(
     ecmwfr::wf_request_batch(
@@ -219,27 +238,31 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       # load the nc raster
       filename <- file.path(data_dir, paste0(request$target, ".nc"))
       rasters <- terra::rast(filename)
+      hour_val <- as.numeric(substr(request$time, 1, 2))
       
       for (ii in seq_along(seq_dates)) {
-        datetime_ii <- as.POSIXct(seq_dates[ii], tz = "UTC")
+        datetime_ii <- as.POSIXct(seq_dates[ii], tz = "UTC") + hour_val * 60* 60
         file <- list()
         file[["rast"]] <- rasters[[ii]]
         file[["valid_from"]] <- datetime_ii
-        file[["valid_to"]] <- datetime_ii + 60*60
+        file[["valid_to"]] <- datetime_ii + 60 * 60
         file[["flag"]] <- NA
         file[["source"]] <- "ECMWF download"
         file[["model"]] <- model
         file[["url"]] <- url
         file[["units"]] <- terra::units(rasters[[ii]])
-        file[["issued"]] <- as.POSIXct(as.numeric(gsub("sd_valid_time=", "", names(rasters[[ii]]))))
+        file[["issued"]] <- as.POSIXct(as.numeric(gsub("sd_valid_time=", "", names(rasters[[ii]])))) + 5 * 60 * 60 * 24
         
-        files[[jj]] <- file
-        jj <- jj + 1
+        if (datetime_ii >= start_datetime && datetime_ii <= end_datetime) {
+          files[[jj]] <- file
+          jj <- jj + 1
+        }
       }
     } else {
       
       # For single day requests, we use year, month, and day
-      from_date <- as.POSIXct(paste0(request$year, "-", request$month, "-", request$day), tz = "UTC")
+      time_hour <- as.numeric(substr(request$time, 1, 2))
+      from_date <- as.POSIXct(paste0(request$year, "-", request$month, "-", request$day), tz = "UTC") + time_hour * 60 * 60
       
       # load the raster
       filename <- file.path(data_dir, paste0(request$target, ".nc"))
@@ -256,8 +279,10 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       file[["units"]] <- terra::units(raster)
       file[["issued"]] <- as.POSIXct(as.numeric(gsub("sd_valid_time=", "", names(raster))), tz = "UTC")
       
-      files[[jj]] <- file
-      jj <- jj + 1
+      if (from_date >= start_datetime && from_date <= end_datetime) {
+        files[[jj]] <- file
+        jj <- jj + 1
+      }
     }
   }
   

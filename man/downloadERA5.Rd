@@ -6,7 +6,7 @@
 \usage{
 downloadERA5(
   start_datetime,
-  end_datetime = Sys.time(),
+  end_datetime = .POSIXct(Sys.time(), tz = "UTC") - 60 * 60 * 24 * 5,
   clip = "YT",
   param,
   user,
