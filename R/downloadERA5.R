@@ -12,7 +12,7 @@
 #' @export
 #'
 
-downloadERA5 <- function(start_datetime, end_datetime = Sys.time(), clip = "YT", param, user, key, hrs = c(0)) {
+downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz = "UTC") - 60*60*24*5, clip = "YT", param, user, key, hrs = c(0)) {
   
   # Checks and conversions for datetimes
   if (!inherits(start_datetime, "POSIXct")) {
@@ -87,8 +87,8 @@ downloadERA5 <- function(start_datetime, end_datetime = Sys.time(), clip = "YT",
   # for the entire date range, create a monthly array of dates to download data one month at a time
   # for the remainder (current month), we create a second, daily date array
   # downloading one day at a time is relatively slow, so we try to download as much as possible in one go
-  seq_months <- seq.Date(as.Date(start_datetime), as.Date(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC"), by = "month")
-  seq_days <- seq.Date(tail(seq_months, 1), as.Date(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC"), by = "day")
+  seq_months <- seq.Date(as.Date(start_datetime), as.Date(end_datetime), by = "month")
+  seq_days <- seq.Date(tail(seq_months, 1), as.Date(end_datetime), by = "day")
   
   # Create a list to hold the requests
   requests <- list()
