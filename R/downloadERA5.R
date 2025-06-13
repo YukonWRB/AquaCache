@@ -1,7 +1,7 @@
 #' Get ERA5 rasters
 #'
 #' @param param The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
-#' @param start_datetime The datetime from which to start looking for new rasters.
+#' @param start_datetime The datetime from which to start looking for new rasters. This date does not need to align with the first day of a month. Portions of the first and last months are downloaded day by day while any complete months in between are requested in a single call.
 #' @param end_datetime The datetime until which to look for new rasters. If NULL, the current datetime is used.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #' @param user The username to use for ECMWF authentication.
@@ -99,16 +99,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
   # Get the short name for the parameter
   param_short <- param_md$shortName
   
-  # for the entire date range, create a monthly array of dates to download data one month at a time
-  # for the remainder (current month), we create a second, daily date array
-  # downloading one day at a time is relatively slow, so we try to download as much as possible in one go
-  seq_months <- seq.Date(as.Date(start_datetime), as.Date(end_datetime), by = "month")
-  seq_days <- seq.Date(tail(seq_months, 1), as.Date(end_datetime), by = "day")
-  
-  # Create a list to hold the requests
-  requests <- list()
-  
-  # Create a temperary directory to store the downloaded data, from which we will create rasters to upload to AC
+  # Create a temporary directory to store the downloaded data, from which we will create rasters to upload to AC
   data_dir <- file.path(tempdir(), "downloadERA5")
   data_dir <- normalizePath(data_dir, mustWork = FALSE)
   # Clean up the directory in case it has leftover files from previous runs
@@ -117,69 +108,84 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
   
   # NOT USED because the files need to live on to the getNewRasters function
   # on.exit({
-  #   # Clean up the temporary directory on exit also
+  #   # Clean up the temporary directory on exit
   #   if (dir.exists(data_dir)) {
   #     unlink(data_dir, recursive = TRUE, force = TRUE)
   #   }
   # }, add = TRUE)
   
-  # create requests for monthly data (don't include the last month, which is handled separately)
-  for (ii in seq_along(seq_months)[-length(seq_months)]) {
-    from_datetime <- seq_months[ii]
-    
-    from_year <- sprintf("%d", as.numeric(format(from_datetime, "%Y")))
-    from_month <- sprintf("%02d", as.numeric(format(from_datetime, "%m")))
-    from_day <- sprintf("%02d", as.numeric(format(from_datetime, "%d")))
-    to_datetime <- seq_months[ii + 1] - 1
-    to_year <- sprintf("%d", as.numeric(format(to_datetime, "%Y")))
-    to_month <- sprintf("%02d", as.numeric(format(to_datetime, "%m")))
-    to_day <- sprintf("%02d", as.numeric(format(to_datetime, "%d")))
-    
-    for (hh in hrs) {
-      hour <- sprintf("%02d", hh)
-      name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour, "_to_", to_year, to_month, to_day, hour)
-      
-      request <- list(
-        dataset_short_name = "reanalysis-era5-land",
-        product_type = "reanalysis",
-        variable = param,
-        date = paste0(from_year, "-", from_month, "-", from_day, "/", to_year, "-", to_month, "-", to_day),
-        time = paste0(hour, ":00"),
-        format = "netcdf",
-        area = area,
-        target = name
-      )
-      requests[[length(requests) + 1]] <- request
-    }
-  }
+  # Build download requests a month at a time.  Full months are requested in a single call while partial months are requested day by day so that only the necessary days are downloaded.
+  # Create a list to hold the requests
+  requests <- list()
   
-  # add requests for daily data (the last month)
-  # we use the last month, which is the current month minus 5 days (latency of ERA5-Land data)
-  for (ii in seq_along(seq_days)) {
-    from_datetime <- seq_days[ii]
+  # helper to compute the first day of the next month
+  next_month <- function(x) seq.Date(as.Date(x), by = "month", length.out = 2)[2]
+  
+  current_day <- as.Date(start_datetime)
+  end_day <- as.Date(end_datetime)
+  
+  while (current_day <= end_day) {
+    month_start <- as.Date(format(current_day, "%Y-%m-01"))
+    month_end <- next_month(month_start) - 1
     
-    from_year <- sprintf("%d", as.numeric(format(from_datetime, "%Y")))
-    from_month <- sprintf("%02d", as.numeric(format(from_datetime, "%m")))
-    from_day <- sprintf("%02d", as.numeric(format(from_datetime, "%d")))
+    range_start <- current_day
+    range_end <- min(end_day, month_end)
     
-    for (hh in hrs) {
-      hour <- sprintf("%02d", hh)
-      name <- paste0("ERA5_", param_short, "_", from_year, from_month, from_day, hour)
-      
-      request <- list(
-        dataset_short_name = "reanalysis-era5-land",
-        product_type = "reanalysis",
-        variable = param,
-        year = sprintf("%d", as.numeric(format(from_datetime, "%Y"))),
-        month = sprintf("%02d", as.numeric(format(from_datetime, "%m"))),
-        day = sprintf("%02d", as.numeric(format(from_datetime, "%d"))),
-        time = paste0(hour, ":00"),
-        format = "netcdf",
-        area = area,
-        target = name
-      )
-      requests[[length(requests) + 1]] <- request
+    if (range_start == month_start && range_end == month_end) {
+      # request the entire month in a single call
+      for (hh in hrs) {
+        hour <- sprintf("%02d", hh)
+        name <- paste0(
+          "ERA5_", param_short, "_",
+          format(month_start, "%Y%m%d"), hour,
+          "_to_",
+          format(month_end, "%Y%m%d"), hour
+        )
+        
+        request <- list(
+          dataset_short_name = "reanalysis-era5-land",
+          product_type = "reanalysis",
+          variable = param,
+          date = paste0(
+            format(month_start, "%Y-%m-%d"), "/",
+            format(month_end, "%Y-%m-%d")
+          ),
+          time = paste0(hour, ":00"),
+          format = "netcdf",
+          area = area,
+          target = name
+        )
+        requests[[length(requests) + 1]] <- request
+      }
+    } else {
+      # partial month - request day by day
+      seq_days <- seq.Date(range_start, range_end, by = "day")
+      for (i in 1:length(seq_days)) {
+        dd <- seq_days[[i]]
+        for (hh in hrs) {
+          hour <- sprintf("%02d", hh)
+          name <- paste0(
+            "ERA5_", param_short, "_",
+            format(dd, "%Y%m%d"), hour
+          )
+          
+          request <- list(
+            dataset_short_name = "reanalysis-era5-land",
+            product_type = "reanalysis",
+            variable = param,
+            year = format(dd, "%Y"),
+            month = format(dd, "%m"),
+            day = format(dd, "%d"),
+            time = paste0(hour, ":00"),
+            format = "netcdf",
+            area = area,
+            target = name
+          )
+          requests[[length(requests) + 1]] <- request
+        }
+      }
     }
+    current_day <- range_end + 1
   }
   
   # Download the data using the Copernicus API
