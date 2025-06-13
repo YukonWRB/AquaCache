@@ -184,12 +184,14 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
   
   # Download the data using the Copernicus API
   message("downloading ERA5 rasters... this could take a while.")
+  workers <- max(length(requests), 10)
   zip_files <- suppressMessages(
     ecmwfr::wf_request_batch(
       request = requests,  # the request
       path = data_dir,
       user = user,
-      workers = 10
+      workers = workers,
+      retry = 30
     )
   )
   message("ERA 5 download completed.")
@@ -225,7 +227,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       is_timeseries <- FALSE
     }
     
-    # if the request is for >1 timestamp, it's a timeseries
+    # if the request is for > 1 timestamp, it's a timeseries
     # loop through the raster bands and store each timestamp as an entry in 'files'
     if (is_timeseries) {
       
@@ -273,7 +275,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       file[["valid_from"]] <- from_date
       file[["valid_to"]] <- from_date + 60 * 60
       file[["flag"]] <- NA
-      file[["source"]] <- "ECMWF download"
+      file[["source"]] <- "ECMWF API"
       file[["model"]] <- model
       file[["url"]] <- url
       file[["units"]] <- terra::units(raster)
