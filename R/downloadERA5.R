@@ -67,7 +67,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
     }
   }
   
-  prov_buff <- terra::vect("inst/extdata/prov_buffers/Provinces_buffered_300km.shp")
+  prov_buff <- terra::vect(system.file("extdata/prov_buffers/Provinces_buffered_300km.shp", package = "YGwater"))
   prov_buff <- terra::project(prov_buff, "epsg:4326")
   
   # make sure clip is in the province shapefile

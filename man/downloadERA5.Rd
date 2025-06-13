@@ -15,7 +15,7 @@ downloadERA5(
 )
 }
 \arguments{
-\item{start_datetime}{The datetime from which to start looking for new rasters.}
+\item{start_datetime}{The datetime from which to start looking for new rasters. This date does not need to align with the first day of a month. Portions of the first and last months are downloaded day by day while any complete months in between are requested in a single call.}
 
 \item{end_datetime}{The datetime until which to look for new rasters. If NULL, the current datetime is used.}
 
