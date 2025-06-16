@@ -15,6 +15,12 @@
 #' If a specified number of blocks is desired, set blocks to a one or two-length
 #' integer vector. Note that fewer, larger blocks generally results in faster
 #' write times.
+#' 
+#' If the raster has no CRS specified, it will be assigned
+#' \code{EPSG:4326} before being written. This avoids importing
+#' tiles with an SRID of 0, which can lead to "Multiple SRIDs"
+#' errors when reading the raster back.
+#'
 #'
 #' @param con A connection object to a PostgreSQL database.
 #' @param raster A terra \code{SpatRaster}; objects from the raster package.
@@ -36,6 +42,14 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
 
   if (!inherits(raster, "SpatRaster")){
     stop("Raster must be a terra SpatRaster object.")
+  }
+  
+  # Make sure raster is in WGS84 (EPSG:4326) before writing to the database
+  rast <- terra::project(rast, "epsg:4326")
+  # Ensure a CRS is present to avoid SRID 0 in the database
+  if (is.na(terra::crs(raster)) || terra::crs(raster) == "") {
+    warning("Raster has no CRS. Defaulting to EPSG:4326.")
+    terra::crs(raster) <- "EPSG:4326"
   }
 
   # class and crs
@@ -124,13 +138,15 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
   bit.depth <- DBI::dbQuoteString(con, bit.depth)
   ndval <- -99999
 
-  srid <- 0
-  try(srid <- suppressMessages(rpostgis::pgSRID(con, sf::st_crs(terra::crs(r1)), create.srid = TRUE)),
-      silent = TRUE)
+  srid <- tryCatch(
+    suppressMessages(rpostgis::pgSRID(con, sf::st_crs(terra::crs(r1)), create.srid = TRUE)),
+    error = function(e) 0
+  )
 
-  # Warning about no CRS
-  if (length(srid) == 1) {
-    if (srid == 0) warning("The raster has no CRS specified.")
+  # Default to EPSG:4326 when CRS is missing or unrecognized
+  if (length(srid) != 1 || srid == 0) {
+    warning("The raster CRS was missing or unrecognized. Defaulting to EPSG:4326.")
+    srid <- 4326
   }
 
   # Grid with all band/block combinations

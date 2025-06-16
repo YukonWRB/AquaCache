@@ -96,6 +96,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       file <- list()
       download_url <- available$path[i]
       rast <- terra::rast(download_url)[[1]]
+      rast <- terra::project(rast, "epsg:4326") #Project to WGS84 (EPSG:4326)
       file[["units"]] <- terra::units(rast) #Units is fetched now because the clip operation seems to remove them.
       if (!clipped) {
         if (!is.null(clip)) {

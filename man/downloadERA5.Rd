@@ -36,5 +36,5 @@ downloadERA5(
 A list of lists, where each element consists of the target raster as well as associated attributes.
 }
 \description{
-Interfaces with the ecmwfr package to download ERA5-Land reanalysis data from the ECMWF Copernicus Climate Data Store (CDS). The function downloads the data in netCDF format and returns a list of rasters with associated metadata. Data are downloaded sequentially starting from the earliest requested timestamp. If a download fails, the function returns the rasters that were successfully downloaded up to that point.
+Interfaces with the ecmwfr package to download ERA5-Land reanalysis data from the ECMWF Copernicus Climate Data Store (CDS). The function downloads the data in netCDF format and returns a list of rasters with associated metadata. Data are downloaded sequentially starting from the earliest requested timestamp. If a download fails, the function returns the rasters that were successfully downloaded up to that point. Rasters are returned in the geographic coordinate reference system (EPSG:4326).
 }

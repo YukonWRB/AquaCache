@@ -1,6 +1,6 @@
 #' Get ERA5 rasters
 #' 
-#' @description Interfaces with the ecmwfr package to download ERA5-Land reanalysis data from the ECMWF Copernicus Climate Data Store (CDS). The function downloads the data in netCDF format and returns a list of rasters with associated metadata. Data are downloaded sequentially starting from the earliest requested timestamp. If a download fails, the function returns the rasters that were successfully downloaded up to that point.
+#' @description Interfaces with the ecmwfr package to download ERA5-Land reanalysis data from the ECMWF Copernicus Climate Data Store (CDS). The function downloads the data in netCDF format and returns a list of rasters with associated metadata. Data are downloaded sequentially starting from the earliest requested timestamp. If a download fails, the function returns the rasters that were successfully downloaded up to that point. Rasters are returned in the geographic coordinate reference system (EPSG:4326).
 #'
 #' @param param The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
 #' @param start_datetime The datetime from which to start looking for new rasters. This date does not need to align with the first day of a month. Portions of the first and last months are downloaded day by day while any complete months in between are requested in a single call .Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone.
@@ -294,6 +294,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       # load the nc raster
       filename <- file.path(data_dir, paste0(request$target, ".nc"))
       rasters <- terra::rast(filename)
+      terra::crs(rasters) <- "EPSG:4326"
       hour_val <- as.numeric(substr(request$time, 1, 2))
       
       for (ii in seq_along(seq_dates)) {
