@@ -215,9 +215,9 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
     num_requests <- length(requests)
     if (interactive()) {
       pb <- utils::txtProgressBar(min = 0, max = num_requests, style = 3)
-      on.exit(utils::close(pb), add = TRUE)
+      on.exit(close(pb), add = TRUE)
     }
-    for (ii in num_requests) {
+    for (ii in 1:num_requests) {
       req <- requests[[ii]]
       if (interactive()) {
         utils::setTxtProgressBar(pb, ii)

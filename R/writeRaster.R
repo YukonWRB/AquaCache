@@ -183,17 +183,17 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
     if (band == 1) {
 
       # Create empty raster
-      tmp.query <- paste0("INSERT INTO ", rast_table, " (rid, r_class, r_proj4, rast) VALUES (",n,
-                          ",",r_class,",",r_crs,", ST_MakeEmptyRaster(",
+      tmp.query <- paste0("INSERT INTO ", rast_table, " (rid, r_class, r_proj4, rast) VALUES (", n,
+                          ",", r_class,",", r_crs, ", ST_MakeEmptyRaster(",
                           d[2], ",", d[1], ",", ex[1], ",", ex[4], ",",
                           res[1], ",", -res[2], ", 0, 0,", srid[1], ") );")
       DBI::dbExecute(con, tmp.query)
 
       # Upper left x/y for alignment snapping
       # if (trn == 1 & crn == 1) {
-      tmp.query <- paste0("SELECT ST_UpperLeftX(rast) x FROM ", rast_table ," where rid = 1;")
+      tmp.query <- paste0("SELECT ST_UpperLeftX(rast) x FROM ", rast_table ," where rid = ", n, ";")
       upx <- DBI::dbGetQuery(con, tmp.query)$x
-      tmp.query <- paste0("SELECT ST_UpperLeftY(rast) y FROM ", rast_table ," where rid = 1;")
+      tmp.query <- paste0("SELECT ST_UpperLeftY(rast) y FROM ", rast_table ," where rid = ", n, ";")
       upy <- DBI::dbGetQuery(con, tmp.query)$y
       # }
 
