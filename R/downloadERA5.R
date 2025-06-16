@@ -1,18 +1,21 @@
 #' Get ERA5 rasters
+#' 
+#' @description Interfaces with the ecmwfr package to download ERA5-Land reanalysis data from the ECMWF Copernicus Climate Data Store (CDS). The function downloads the data in netCDF format and returns a list of rasters with associated metadata. Data are downloaded sequentially starting from the earliest requested timestamp. If a download fails, the function returns the rasters that were successfully downloaded up to that point.
 #'
 #' @param param The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
-#' @param start_datetime The datetime from which to start looking for new rasters. This date does not need to align with the first day of a month. Portions of the first and last months are downloaded day by day while any complete months in between are requested in a single call.
-#' @param end_datetime The datetime until which to look for new rasters. If NULL, the current datetime is used.
+#' @param start_datetime The datetime from which to start looking for new rasters. This date does not need to align with the first day of a month. Portions of the first and last months are downloaded day by day while any complete months in between are requested in a single call .Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone.
+#' @param end_datetime The datetime until which to look for new rasters. If NULL, the current datetime is used. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #' @param user The username to use for ECMWF authentication.
 #' @param key The key to use for EMCWF authentication.
 #' @param hrs ERA5 data is provided in hourly chunks. Specify a vector of hours from 0 to 23 specifying the hourly rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at midnight/00:00 UTC.
+#' @param batch Should a batch request be used or should downloads be sequential? Batch request can be much quicker but will fail if any of the requests fail. Sequential runs each request one by one from the earliest possible raster so that if one fails rasters are returned up to the last successful download.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
 #'
 
-downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz = "UTC") - 60*60*24*5, clip = "YT", param, user, key, hrs = c(0)) {
+downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz = "UTC"), clip = "YT", param, user, key, hrs = c(0), batch = TRUE) {
   
   # Checks and conversions for datetimes
   if (!inherits(start_datetime, "POSIXct")) {
@@ -189,22 +192,67 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
   }
   
   # Download the data using the Copernicus API
-  message("downloading ERA5 rasters... this could take a while.")
-  workers <- max(length(requests), 10)
-  zip_files <- suppressMessages(
-    ecmwfr::wf_request_batch(
-      request = requests,  # the request
-      path = data_dir,
-      user = user,
-      workers = workers,
-      retry = 30
+  if (batch) {
+    message("downloading ERA5 rasters using batch request... please be patient.")
+    workers <- max(length(requests), 10)
+    zip_files <- suppressMessages(
+      ecmwfr::wf_request_batch(
+        request_list = requests,  # the requests we built above
+        path = data_dir,
+        user = user,
+        workers = workers,
+        retry = 30
+      )
     )
-  )
-  message("ERA 5 download completed.")
+  } else {
+    # Download the data using the Copernicus API sequentially so that a failure does not discard already downloaded rasters
+    message("downloading ERA5 rasters sequentially... please be patient.")
+    zip_files <- c()
+    downloaded_requests <- list()
+    download_failed <- FALSE
+
+    # If interactive, show progress bar
+    num_requests <- length(requests)
+    if (interactive()) {
+      pb <- utils::txtProgressBar(min = 0, max = num_requests, style = 3)
+      on.exit(utils::close(pb), add = TRUE)
+    }
+    for (ii in num_requests) {
+      req <- requests[[ii]]
+      if (interactive()) {
+        utils::setTxtProgressBar(pb, ii)
+      }
+      tryCatch({
+        # use invisible and capture.output so that the progress bar from wf_request is suppressed
+        invisible(capture.output(
+        zf <- suppressMessages(
+          ecmwfr::wf_request(
+            request = req, # Individual request
+            path = data_dir,
+            user = user,
+            transfer = TRUE,
+            retry = 30
+          )
+        )
+        ))
+        zip_files <- c(zip_files, zf)
+        downloaded_requests[[length(downloaded_requests) + 1]] <- req
+      }, error = function(e) {
+        message(sprintf("Failed to download request '%s': %s", req$target, e$message))
+        download_failed <<- TRUE
+      })
+      if (download_failed) break
+    }
+
+    requests <- downloaded_requests
+    
+    if (download_failed) message("Download incomplete due to an error. Returning available rasters only.")
+  }
+  
+  
   if (length(zip_files) == 0) {
     stop("No data was downloaded. Please check your parameters and try again.")
   }
-  
   # extract the downloaded zip files, rename the .nc files, and delete the zip files
   # zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
   for (zip_file in zip_files) {
@@ -285,7 +333,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       file[["model"]] <- model
       file[["url"]] <- url
       file[["units"]] <- terra::units(raster)
-      file[["issued"]] <- as.POSIXct(as.numeric(gsub("sd_valid_time=", "", names(raster))), tz = "UTC")
+      file[["issued"]] <- NA
       
       if (from_date >= start_datetime && from_date <= end_datetime) {
         files[[jj]] <- file

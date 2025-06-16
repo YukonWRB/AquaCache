@@ -9,17 +9,36 @@
 #' @param con A connection to the database. Default is NULL, which will use the package default connection settings and close the connection afterwards.
 #' @param keep_forecasts Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'
 #' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
+#' @param start_datetime A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with `replace = TRUE`, could be used to replace rasters from a specific datetime to `end_datetime`. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!
+#' @param end_datetime An end datetime to fetch rasters to. By default, fetches to the current time, however this parameter is provided for flexibility. If combined with `replace = TRUE`, could be used to replace rasters from `start_datetime` to a specific datetime. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!
 
 #' @export
 
-getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts = 'selective', active = 'default') {
-
+getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts = 'selective', active = 'default', start_datetime = NULL, end_datetime = NULL, replace = TRUE) {
+  
   if (!keep_forecasts %in% c('selective', 'all', 'none')) {
     stop("The 'keep_forecasts' parameter must be either 'selective', 'all', or 'none'.")
   }
   
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  
+  # Checks and conversions for datetimes
+  if (!is.null(start_datetime)) {
+    if (!inherits(start_datetime, "POSIXct")) {
+      start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+    } else {
+      attr(start_datetime, "tzone") <- "UTC"
+    }
+  }
+  
+  if (!is.null(end_datetime)) {
+    if (!inherits(end_datetime, "POSIXct")) {
+      end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
+    } else {
+      attr(end_datetime, "tzone") <- "UTC"
+    }
   }
   
   if (is.null(con)) {
@@ -42,7 +61,7 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
   if (active == 'default') {
     meta_ids <- meta_ids[meta_ids$active, ]
   }
-
+  
   if (nrow(meta_ids) == 0) {
     message("No raster_series_id's found to update base on input parameters.")
     return(NULL)
@@ -62,14 +81,30 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     type <- meta_ids[i, "type"]
+    end_datetime_i <- end_datetime
+    start_datetime_i <- start_datetime
     if (type == "reanalysis") { # Reanalysis data may have preliminary rasters that should be replaced when final versions are produced.
       prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "' AND raster_series_id = ", id, ";"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
       if (!is.na(prelim)) {
-        next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
+        if (!is.null(end_datime)) {
+          if (start_datetime_i < prelim) {
+            next_instant <- start_datetime_i
+          } else {
+            next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
+          }
+        } else {
+          next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
+        }
       } else {
-        next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime
+        if (!is.null(start_datetime_i)) {
+          next_instant <- start_datetime_i
+        } else {
+          next_instant <- meta_ids[i, "end_datetime"] + 1 # one second after the last raster end_datetime
+        }
       }
     } else if (type == "forecast") { # Forecast rasters should be replaced with the next forecast, so we fetch the last_issue
+      if (!is.null(end_datetime_i)) end_datetime_i <- NULL
+      if (!is.null(start_datetime_i)) start_datetime_i <- NULL
       next_instant <- meta_ids[i, "last_issue"]
       if (is.na(next_instant)) { #If there is no last_issue, we fetch from the last raster end_datetime. This could happen when creating a new series.
         next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime
@@ -79,6 +114,9 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
     
     tryCatch({
       args_list <- list(start_datetime = next_instant)
+      if (!is.null(end_datetime_i)) {
+        args_list$end_datetime <- end_datetime_i # If end_datetime_i is specified, add it to the args_list
+      }
       if (!is.na(source_fx_args)) { #add some arguments if they are specified
         args <- jsonlite::fromJSON(source_fx_args)
         args_list <- c(args_list, lapply(args, as.character))
