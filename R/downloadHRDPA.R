@@ -1,6 +1,6 @@
 #' Get HRDPA rasters
 #'
-#' @param parameter The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.
+#' @param parameter The parameter for which to get new rasters. Currently only "APCP_Sfc" are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.
 #' @param start_datetime The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #'
@@ -53,7 +53,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
             rvest::html_elements("a") |>
             rvest::html_attr("href")
           files <- files[grep("^[0-9]{8}T[0-9]{2}Z", files)]
-          files <- files[grep("Accum6h", files)] #only retain the files we're interested in
+          files <- files[grep(parameter, files)] # only retain the files we're interested in
           tmp <- data.frame(file = files,
                             datetime = as.POSIXct(substr(files, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
                             prelim = FALSE,
