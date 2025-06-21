@@ -101,7 +101,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
     if (is.na(n.base)) {
       n.base <- 0
       new <- TRUE
-      tmp.query <- paste0("DROP INDEX ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
+      tmp.query <- paste0("DROP INDEX IF EXISTS ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
       DBI::dbExecute(con, tmp.query)
     } else {
       new <- FALSE
@@ -231,7 +231,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
 
   # Create index
   if (!new) {
-    tmp.query <- paste0("DROP INDEX ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
+    tmp.query <- paste0("DROP INDEX IF EXISTS ", gsub("\"", "", rast_table), "_rast_st_conhull_idx")
     DBI::dbExecute(con, tmp.query)
   }
   tmp.query <- paste0("CREATE INDEX ", gsub("\"", "", sub(".*\\.", "", rast_table)),

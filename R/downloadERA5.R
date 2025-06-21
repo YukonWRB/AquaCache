@@ -117,7 +117,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
   #   }
   # }, add = TRUE)
   
-  # Build download requests a month at a time.  Full months are requested in a single call while partial months are requested day by day so that only the necessary days are downloaded.
+  # Build download requests a month at a time.  Full months are requested in a single call while partial months are requested day by day so that only the necessary days and hours are downloaded.
   # Create a list to hold the requests
   requests <- list()
   
@@ -127,6 +127,12 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
   current_day <- as.Date(start_datetime)
   end_day <- as.Date(end_datetime)
   
+  # Pull out the start and end hour components of start and end datetime, plus the min/max hours for each day
+  start_hr <- as.integer(format(start_datetime, "%H"))
+  end_hr   <- as.integer(format(end_datetime,   "%H"))
+  hr_min   <- min(hrs)
+  hr_max   <- max(hrs)
+  
   while (current_day <= end_day) {
     month_start <- as.Date(format(current_day, "%Y-%m-01"))
     month_end <- next_month(month_start) - 1
@@ -134,8 +140,11 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
     range_start <- current_day
     range_end <- min(end_day, month_end)
     
-    if (range_start == month_start && range_end == month_end) {
-      # request the entire month in a single call
+    full_month_start <- as.POSIXct(month_start, tz="UTC") + hr_min*3600
+    full_month_end   <- as.POSIXct(month_end,   tz="UTC") + hr_max*3600
+    
+    if (range_start == month_start && range_end == month_end && full_month_start >= start_datetime &&  full_month_end <= end_datetime) {
+      # request the entire month in a single call for efficiency
       for (hh in hrs) {
         hour <- sprintf("%02d", hh)
         name <- paste0(
@@ -165,7 +174,11 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       seq_days <- seq.Date(range_start, range_end, by = "day")
       for (i in 1:length(seq_days)) {
         dd <- seq_days[[i]]
-        for (hh in hrs) {
+        hrs_to_request <- hrs
+        if (dd == as.Date(start_datetime)) hrs_to_request <- hrs_to_request[hrs_to_request >= start_hr]
+        if (dd == as.Date(end_datetime))   hrs_to_request <- hrs_to_request[hrs_to_request   <= end_hr]
+        
+        for (hh in hrs_to_request) {
           hour <- sprintf("%02d", hh)
           name <- paste0(
             "ERA5_", param_short, "_",
@@ -301,8 +314,8 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
         datetime_ii <- as.POSIXct(seq_dates[ii], tz = "UTC") + hour_val * 60* 60
         file <- list()
         file[["rast"]] <- rasters[[ii]]
-        file[["valid_from"]] <- datetime_ii
-        file[["valid_to"]] <- datetime_ii + 60 * 60
+        file[["valid_from"]] <- datetime_ii - 60 * 60
+        file[["valid_to"]] <- datetime_ii 
         file[["flag"]] <- NA
         file[["source"]] <- "ECMWF download"
         file[["model"]] <- model
