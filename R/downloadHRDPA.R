@@ -112,6 +112,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       file[["valid_to"]] <- available[i, "datetime"]
       file[["flag"]] <- if (available[i, "prelim"]) "PRELIMINARY" else NA
       file[["source"]] <- download_url
+      file[["issued"]] <- available[i, "issue"]
       file[["model"]] <- "HRDPA"
       files[[i]] <- file
     }

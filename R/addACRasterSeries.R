@@ -5,8 +5,8 @@
 #' @details
 #' Additional arguments to pass to the function specified in source_fx go in argument 'source_fx_args' (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2". 
 #'
-#' @param model The model producing the raster
-#' @param parameter The parameter to import, exactly as you'd find in the FTP link for the model rasters. For example, check out the [HRDPS parameters](https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps-datamart_en/). This must be something understood by the `source_fx` function.
+#' @param model The model producing the raster, as a character string
+#' @param parameter The parameter to import, as a string.
 #' @param start_datetime The datetime (as POSIXct) from which to look for rasters
 #' @param source_fx The function to use for fetching new rasters. Must be an existing function in this package.
 #' @param type The type of raster, 'forecast' or 'reanalysis'. Reanalysis rasters are kept forever, forecasts are replaced when a new one is issued.
@@ -19,6 +19,13 @@
 
 addACRasterSeries <- function(model, parameter, start_datetime, source_fx, type, source_fx_args = NA, con = NULL) {
   #function will add entry to raster_series_index, then trigger getNewRasters from the user-specified start_datetime
+  
+  # model <- "ERA5"
+  # parameter = "snow water equivalent"
+  # start_datetime <- "2025-01-01 00:00:00"
+  # type <- "reanalysis"
+  # source_fx <- "downloadERA5"
+  # source_fx_args <- "param: snow_depth_water_equivalent, clip: YT, key: 5815cfa9-2642-46bd-9a7f-9ac2099b32f4, user: everett.snieder@gmail.com"
 
   if (!type %in% c("forecast", "reanalysis")) {
     stop("The 'type' parameter must be either 'forecast' or 'reanalysis'.")
@@ -35,9 +42,10 @@ addACRasterSeries <- function(model, parameter, start_datetime, source_fx, type,
   }
   
   args <- source_fx_args
+  # split into "argument1: value1" etc.
+  args <- strsplit(args, ",\\s*")[[1]]
   # split each pair on ":" and trim whitespace
   args <- strsplit(args, ":\\s*")
-  
   # build a named list: names = keys, values = values
   args <- stats::setNames(
     lapply(args, function(x) x[2]),

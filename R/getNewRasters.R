@@ -58,11 +58,12 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
   }
   for (i in 1:nrow(meta_ids)) {
     id <- meta_ids[i, "raster_series_id"]
+    message("Working on raster_series_id ", id, " for parameter '", meta_ids[i, "parameter"], "' and source function '", meta_ids[i, "source_fx"], "'")
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     type <- meta_ids[i, "type"]
     if (type == "reanalysis") { # Reanalysis data may have preliminary rasters that should be replaced when final versions are produced.
-      prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "';"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
+      prelim <- DBI::dbGetQuery(con, paste0("SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '", meta_ids[i, "end_datetime"] - 60*60*24*30, "' AND raster_series_id = ", id, ";"))[1,1] #searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
       if (!is.na(prelim)) {
         next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
       } else {
@@ -90,6 +91,7 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
       if (is.null(forecast)) {
         forecast <- FALSE
       }
+      # The list of rasters 'rasters' only has an 'issued' element if the rasters are from a forecast. If not, it is NULL.
       issued_datetime <- rasters[["issued"]]
       if (is.null(issued_datetime)) {
         issued_datetime <- NA
@@ -149,8 +151,11 @@ getNewRasters <- function(raster_series_ids = "all", con = NULL, keep_forecasts 
       } else {
         message("getNewRasters: No new rasters found for raster_series_id ", id, ".")
       }
-    }, error = function(e){
-      warning("getNewRasters: Failed to get new rasters or to append new rasters for raster_series_id ", id, ".")
+    }, error = function(e) {
+      warning("getNewRasters: Failed to get new rasters or to append new rasters for raster_series_id ", id, " with error message: ", e$message)
+    },
+    warning = function(w) {
+      warning("getNewRasters: Warning while processing raster_series_id ", id, ": ", w$message)
     })
     
     if (interactive()) {

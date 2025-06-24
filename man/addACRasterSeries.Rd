@@ -15,9 +15,9 @@ addACRasterSeries(
 )
 }
 \arguments{
-\item{model}{The model producing the raster}
+\item{model}{The model producing the raster, as a character string}
 
-\item{parameter}{The parameter to import, exactly as you'd find in the FTP link for the model rasters. For example, check out the \href{https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps-datamart_en/}{HRDPS parameters}. This must be something understood by the \code{source_fx} function.}
+\item{parameter}{The parameter to import, as a string.}
 
 \item{start_datetime}{The datetime (as POSIXct) from which to look for rasters}
 

@@ -198,7 +198,34 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
         new_id <- DBI::dbGetQuery(con, paste0("SELECT image_id FROM images WHERE datetime = '", datetime, "' AND img_meta_id = ", img_meta_id, ";"))[1,1]
         DBI::dbExecute(con, paste0("UPDATE images SET ", if (!is.null(fetch_datetime)) paste0("fetch_datetime = '", fetch_datetime, "', "), if (!is.null(description)) paste0("description = '", description, "', "), if (!is.null(owner)) paste0("owner = '", owner, "', "), if (!is.null(contributor)) paste0("contributor = '", contributor, "', "), "share_with = '{", paste(share_with, collapse = ","), "}', format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE image_id = ", new_id, ";"))
       } else {
-        new_id <- DBI::dbGetQuery(con, paste0("INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file, image_type) VALUES ('", img_meta_id, "', '", datetime, "', '", fetch_datetime, "', '", description, "', '{",  paste(share_with, collapse = ","), "}', ", location, ", ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "',", image_type, ") RETURNING image_id;"))
+        new_id <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "INSERT INTO images (img_meta_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file, image_type) VALUES (",
+            img_meta_id, ", '", datetime, "', ",
+            if (!is.null(fetch_datetime)) paste0("'", fetch_datetime, "'") else "NULL", ", ",
+            if (!is.null(description)) paste0("'", description, "'") else "NULL", ", ",
+            "'{", paste(share_with, collapse = ","), "}', ",
+            location, ", ",
+            latitude, ", ",
+            longitude, ", '",
+            extension, "', '\\x",
+            paste0(file, collapse = ""), "', ",
+            image_type,
+            ") ON CONFLICT (file_hash) DO UPDATE SET ",
+            "img_meta_id = EXCLUDED.img_meta_id, ",
+            "datetime = EXCLUDED.datetime, ",
+            "fetch_datetime = EXCLUDED.fetch_datetime, ",
+            "description = EXCLUDED.description, ",
+            "share_with = EXCLUDED.share_with, ",
+            "location_id = EXCLUDED.location_id, ",
+            "latitude = EXCLUDED.latitude, ",
+            "longitude = EXCLUDED.longitude, ",
+            "format = EXCLUDED.format, ",
+            "image_type = EXCLUDED.image_type ",
+            "RETURNING image_id;"
+          )
+        )
         if (!is.null(owner)) {
           DBI::dbExecute(con, paste0("UPDATE images SET owner = ", owner, " WHERE image_id = ", new_id, ";"))
         }
@@ -236,8 +263,21 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
       
     } else {  # Not working with an img_meta_id
       
-      # No update for this one, just insert
-      new_id <- DBI::dbGetQuery(con, paste0("INSERT INTO images (datetime, share_with, latitude, longitude, format, file, image_type) VALUES ('", datetime, "', '{", paste(share_with, collapse = ","), "}', ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "', ", image_type, ") RETURNING image_id;"))
+      new_id <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "INSERT INTO images (datetime, share_with, latitude, longitude, format, file, image_type) VALUES ('",
+          datetime, "', '{", paste(share_with, collapse = ","), "}', ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "', ", image_type, 
+          ") ON CONFLICT (file_hash) DO UPDATE SET ",
+          "datetime = EXCLUDED.datetime, ",
+          "share_with = EXCLUDED.share_with, ",
+          "latitude = EXCLUDED.latitude, ",
+          "longitude = EXCLUDED.longitude, ",
+          "format = EXCLUDED.format, ",
+          "image_type = EXCLUDED.image_type ",
+          "RETURNING image_id;"
+        )
+      )
       if (!is.null(description)) {
         DBI::dbExecute(con, paste0("UPDATE images SET description = '", description, "' WHERE image_id = ", new_id, ";"))
       }
