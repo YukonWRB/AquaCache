@@ -21,7 +21,8 @@
 #' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
 #' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
-#' @param location A numeric vector corresponding to column 'location' of table 'locations'.
+#' @param location A character vector corresponding to column 'location' of table 'locations' OR a numeric vector corresponding to column 'location_id' of table 'locations'.
+#' @param sub_location A character vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
 #' @param media A numeric vector corresponding to column 'media_id' of table 'media_types'.
@@ -60,7 +61,7 @@
 #' addACTimeseries(df)
 #' }
 
-addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1,  aggregation_type = 'instantaneous', record_rate = NA, share_with = "public_reader", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
+addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, location = NA, sub_location = NA, z = NA, parameter = NA, media = NA, sensor_priority = 1,  aggregation_type = 'instantaneous', record_rate = NA, share_with = "public_reader", owner = NA, source_fx = NA, source_fx_args = NA, note = NA, con = NULL) {
   
   # df = NULL
   # data = NULL
@@ -107,6 +108,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     # Assign each column of the data.frame to the corresponding function parameter
     start_datetime <- df$start_datetime
     location <- df$location
+    sub_location <- df$sub_location
     z <- df$z
     parameter <- df$parameter
     media <- df$media
@@ -143,18 +145,29 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   if (any(is.na(location))) {
     stop("location cannot contain NA values")
   } else {
-    if (!inherits(location, "character")) {
-      stop("location must be a character vector")
-    }
     if (length(location) == 1 && maxlength > 1) {
       location <- rep(location, length)
     }
+    
     #Check that every location in 'location' already exists
     new_locs <- NULL
-    exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
-    if (!all(location %in% exist_locs)) {
+    if (inherits(location, "numeric")) {
+      exist_locs <- DBI::dbGetQuery(con, "SELECT location_id FROM locations")[,1]
       new_locs <- location[!(location %in% exist_locs)]
-      stop("Not all of the locations in your timeseries_df are already in the database. Please add the following location(s) first using addACLocation(): ", paste(new_locs, collapse = ", "), ", or use one of the existing locations.")
+    } else if (inherits(location, "character")) {
+      exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[,1]
+      new_locs <- location[!(location %in% exist_locs)]
+    }
+    if (!all(location %in% exist_locs)) {
+      stop("Not all of the locations in your timeseries_df are already in the database. Please add the following location(s) first using addACLocation() or the add location Shiny module: ", paste(new_locs, collapse = ", "), ", or use one of the existing locations.")
+    }
+  }
+  
+  # Check that every sub_location in 'sub_location' already exists, if specified
+  if (!is.na(sub_location)) {
+    db_sub_loc <- DBI::dbGetQuery(con, "SELECT sub_location_id FROM sub_locations;")[,1]
+    if (!all(subocation %in% db_sub_loc)) {
+      stop("At least one of the sub_location_ids you specified does not exist in the database. Please add it first using the add sub-location Shiny module.")
     }
   }
   
@@ -222,7 +235,6 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     }
   }
   
-  
   if (any(is.na(record_rate))) {
     stop("record_rate cannot contain NA values")
   } else {
@@ -230,7 +242,6 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       record_rate <- rep(record_rate, maxlength)
     }
   }
-  
   
   # Check that record rate elements that are not NA are in the correct format
   rec_rate_no_na <- record_rate[!is.na(record_rate)]
@@ -295,7 +306,14 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   #Add the timeseries #######################################################################################################
   
   for (i in 1:length(location)) {
-    loc_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", location[i], "';"))
+    loc_code <- location[i]
+    if (inherits(loc_code, "character")) {
+      # Get the location_id from the database
+      loc_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location = '", loc_code, "';"))[1,1]
+    } else {
+      loc_id <- loc_code
+      loc_code <- DBI::dbGetQuery(con, paste0("SELECT location FROM locations WHERE location_id = ", loc_id, ";"))[1,1]
+    }
     tryCatch({
       args <- source_fx_args[i]
       # split into "argument1: value1" etc.
@@ -314,7 +332,8 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
       
       aggregation_type_id <- DBI::dbGetQuery(con, paste0("SELECT aggregation_type_id FROM aggregation_types WHERE aggregation_type = '", aggregation_type[i], "';"))[1,1]
       
-      add <- data.frame(location = location[i],
+      add <- data.frame(location = loc_code,
+                        sub_location_id = sub_location[i],
                         location_id = loc_id,
                         z = z[i],
                         parameter_id = parameter[i],
