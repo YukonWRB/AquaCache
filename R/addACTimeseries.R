@@ -66,18 +66,19 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # df = NULL
   # data = NULL
   # start_datetime = "1940-01-01"
-  # location = "1556"
-  # parameter = c(34, 34, 35, 1221)
+  # location = 323
+  # sub_location = NA
+  # parameter = 1165
   # z = NA
-  # media = 7
+  # media = 1
   # sensor_priority = 1
-  # aggregation_type = c('sum')
-  # record_rate = c('< 1 day', '1 day', '1 day', '1 day')
+  # aggregation_type = 'instantaneous'
+  # record_rate = '1 hour'
   # share_with = "public_reader"
-  # owner = 3
-  # source_fx = "downloadECCCwx"
-  # source_fx_args = c("{interval = 'hour'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}")
-  # note = c(NA, NA, NA, NA)
+  # owner = 4
+  # source_fx = "downloadNWIS"
+  # source_fx_args = "location: 15056500, parameter: 00065"
+  # note = NA
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -166,7 +167,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # Check that every sub_location in 'sub_location' already exists, if specified
   if (!is.na(sub_location)) {
     db_sub_loc <- DBI::dbGetQuery(con, "SELECT sub_location_id FROM sub_locations;")[,1]
-    if (!all(subocation %in% db_sub_loc)) {
+    if (!all(sub_location %in% db_sub_loc)) {
       stop("At least one of the sub_location_ids you specified does not exist in the database. Please add it first using the add sub-location Shiny module.")
     }
   }
@@ -357,8 +358,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
         new_tsid <<- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND aggregation_type_id = '", add$aggregation_type_id, "' AND record_rate = '", add$record_rate, "';"))[1,1]
         # Modify the end_datetime in the DB to be one second before the start_datetime
         DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", add$end_datetime, "' WHERE timeseries_id = ", new_tsid, ";"))
-      }
-      )
+      } )
       
       if (!is.null(data)) {
         if (!is.na(data[i])) {
