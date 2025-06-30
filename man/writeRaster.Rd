@@ -44,5 +44,10 @@ a default value of 100 copies of the data in the memory at any point in time.
 If a specified number of blocks is desired, set blocks to a one or two-length
 integer vector. Note that fewer, larger blocks generally results in faster
 write times.
+
+If the raster has no CRS specified, it will be assigned
+\code{EPSG:4326} before being written. This avoids importing
+tiles with an SRID of 0, which can lead to "Multiple SRIDs"
+errors when reading the raster back.
 }
 \keyword{internal}

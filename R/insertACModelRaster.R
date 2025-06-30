@@ -186,6 +186,7 @@ insertACModelRaster <- function(con = NULL, raster, raster_series_id, valid_from
                         "flag" = flag)
     DBI::dbAppendTable(con, "rasters_reference", entry)
     new_id <- DBI::dbGetQuery(con, "SELECT max(reference_id) FROM rasters_reference")[1,1]
+    
     DBI::dbExecute(con, paste0("UPDATE rasters SET reference_id = ", new_id, " WHERE rid IN (", paste(res$appended_rids, collapse = ","), ");"))
 
     if (add_constraints) {
