@@ -68,7 +68,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # start_datetime = "1940-01-01"
   # location = 323
   # sub_location = NA
-  # parameter = 1165
+  # parameter = 1150
   # z = NA
   # media = 1
   # sensor_priority = 1
@@ -77,7 +77,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # share_with = "public_reader"
   # owner = 4
   # source_fx = "downloadNWIS"
-  # source_fx_args = "location: 15056500, parameter: 00065"
+  # source_fx_args = "location: 15056500, parameter: 00060"
   # note = NA
   
   if (is.null(con)) {
@@ -122,7 +122,6 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     source_fx_args <- df$source_fx_args
     note <- df$note
   } 
-  
   
   # Check on arguments
   
