@@ -96,6 +96,7 @@ downloadHRDPS <- function(parameter, start_datetime, url = "https://dd.weather.g
       file <- list()
       download_url <- available[i, "link"[]]
       rast <- terra::rast(download_url)[[1]]
+      rast <- terra::project(rast, "epsg:4326") #Project to WGS84 (EPSG:4326)
       file[["units"]] <- terra::units(rast) #Units is fetched now because the clip operation seems to remove them.
       if (!clipped) { #Only project and clip once
         if (!is.null(clip)) {
