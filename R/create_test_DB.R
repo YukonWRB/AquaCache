@@ -20,17 +20,17 @@
 #'
 
 create_test_db <- function(name = "aquacache", 
-                    host = Sys.getenv("aquacacheHost"), 
-                    port = Sys.getenv("aquacachePort"), 
-                    username = Sys.getenv("aquacacheAdminUser"), 
-                    password = Sys.getenv("aquacacheAdminPass"), 
-                    outpath = testthat::test_path("fixtures"),
-                    pg_dump = NULL, 
-                    psql = NULL, 
-                    continuous_locations = NULL, 
-                    discrete_locations = NULL, 
-                    start_datetime = "2020-01-01 00:00",
-                    end_datetime = "2024-01-01 00:00") {
+                           host = Sys.getenv("aquacacheHost"), 
+                           port = Sys.getenv("aquacachePort"), 
+                           username = Sys.getenv("aquacacheAdminUser"), 
+                           password = Sys.getenv("aquacacheAdminPass"), 
+                           outpath = testthat::test_path("fixtures"),
+                           pg_dump = NULL, 
+                           psql = NULL, 
+                           continuous_locations = NULL, 
+                           discrete_locations = NULL, 
+                           start_datetime = "2020-01-01 00:00",
+                           end_datetime = "2024-01-01 00:00") {
   
   # Quick parameter setting for testing
   # name <- "aquacache"
@@ -54,7 +54,7 @@ create_test_db <- function(name = "aquacache",
     if (!interactive()) {
       stop("You must specify a save path when running in non-interactive mode.")
     }
-    message("Select the path to the folder where you want this report saved.")
+    message("Select the path to the folder where you want the zipped SQL file saved.")
     outpath <- rstudioapi::selectDirectory(caption = "Select Save Folder", path = file.path(Sys.getenv("USERPROFILE"), "Desktop"))
   }
   
@@ -142,7 +142,7 @@ create_test_db <- function(name = "aquacache",
   )
   
   res <- system(load_command, intern = TRUE, ignore.stderr = FALSE)
-
+  
   # Check if the schema was loaded successfully
   if (DBI::dbGetQuery(test_con, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")[1,1] == 0) {
     stop("Failed to load schema into the test database. Please check your database connection and credentials.")
@@ -160,30 +160,30 @@ create_test_db <- function(name = "aquacache",
   
   message("Loading ancillary tables...")
   full_tbls <- c("continuous.aggregation_types",
-            "discrete.collection_methods",
-            "discrete.protocols_methods",
-            "discrete.result_conditions",
-            "discrete.result_speciations",
-            "discrete.result_types",
-            "discrete.result_value_types",
-            "discrete.sample_fractions",
-            "discrete.sample_types",
-            "files.document_types",
-            "information.internal_status",
-            "information.version_info",
-            "public.approval_types",
-            "public.correction_types",
-            "public.datum_list",
-            "public.grade_types",
-            "public.location_types",
-            "public.media_types",
-            "public.network_project_types",
-            "public.parameters",
-            "public.parameter_groups",
-            "public.parameter_sub_groups",
-            "public.qualifier_types",
-            "public.organizations"
-            )
+                 "discrete.collection_methods",
+                 "discrete.protocols_methods",
+                 "discrete.result_conditions",
+                 "discrete.result_speciations",
+                 "discrete.result_types",
+                 "discrete.result_value_types",
+                 "discrete.sample_fractions",
+                 "discrete.sample_types",
+                 "files.document_types",
+                 "information.internal_status",
+                 "information.version_info",
+                 "public.approval_types",
+                 "public.correction_types",
+                 "public.datum_list",
+                 "public.grade_types",
+                 "public.location_types",
+                 "public.media_types",
+                 "public.network_project_types",
+                 "public.parameters",
+                 "public.parameter_groups",
+                 "public.parameter_sub_groups",
+                 "public.qualifier_types",
+                 "public.organizations"
+  )
   
   # Load the ancillary tables into the test database using DBI
   for (tbl in full_tbls) {
@@ -249,15 +249,15 @@ create_test_db <- function(name = "aquacache",
   
   # datum conversions (applies to discrete or continuous)
   dc <- DBI::dbGetQuery(con, sprintf("SELECT * FROM datum_conversions WHERE location_id IN (%s)",
-                                paste(locations, collapse = ",")))
+                                     paste(locations, collapse = ",")))
   message("Loading table public.datum_conversions into the test database...")
   DBI::dbAppendTable(test_con, "datum_conversions", dc)
-
+  
   
   # Continuous data --------------------------------------------------------
   if (length(continuous_locations) > 0) {
     ts <- DBI::dbGetQuery(con, sprintf("SELECT * FROM timeseries WHERE location_id IN (%s)",
-                                  paste(continuous_locations, collapse = ",")))
+                                       paste(continuous_locations, collapse = ",")))
     if (nrow(ts) > 0) {
       message("Loading table continuous.timeseries into the test database")
       DBI::dbAppendTable(test_con, "timeseries", ts)
@@ -325,9 +325,9 @@ create_test_db <- function(name = "aquacache",
     }
   }
   
-
   
-
+  
+  
   
   # Do a final dump of the test database schema and data
   # Create the pg_dump command for schema/data
@@ -378,5 +378,5 @@ create_test_db <- function(name = "aquacache",
   Sys.unsetenv("PGPASSWORD")
   
   # Return paths of the output file
-   return(schema_outfile)
+  return(schema_outfile)
 }
