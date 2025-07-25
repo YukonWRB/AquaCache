@@ -237,7 +237,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
       }
       tryCatch({
         # use invisible and capture.output so that the progress bar from wf_request is suppressed
-        invisible(capture.output(
+        invisible(utils::capture.output(
         zf <- suppressMessages(
           ecmwfr::wf_request(
             request = req, # Individual request
@@ -269,7 +269,7 @@ downloadERA5 <- function(start_datetime, end_datetime = .POSIXct(Sys.time(), tz 
   # extract the downloaded zip files, rename the .nc files, and delete the zip files
   # zip_files <- list.files(data_dir, pattern = "\\.zip$", full.names = TRUE)
   for (zip_file in zip_files) {
-    unzip(zip_file, exdir = data_dir)
+    utils::unzip(zip_file, exdir = data_dir)
     base_filename <- sub("\\.zip$", "", basename(zip_file))
     nc_file <- file.path(data_dir, "data_0.nc")
     if (file.exists(nc_file)) {
