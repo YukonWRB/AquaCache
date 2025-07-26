@@ -159,7 +159,8 @@ create_test_db <- function(name = "aquacache",
   DBI::dbExecute(test_con, "SET search_path TO public, continuous, discrete, spatial, files, instruments, information;")
   
   message("Loading ancillary tables...")
-  full_tbls <- c("continuous.aggregation_types",
+  full_tbls <- c("information.version_info",
+                 "continuous.aggregation_types",
                  "discrete.collection_methods",
                  "discrete.protocols_methods",
                  "discrete.result_conditions",
