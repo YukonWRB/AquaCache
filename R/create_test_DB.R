@@ -1,6 +1,6 @@
 #' Create a small test database
 #' 
-#' This function uses the `pg_dump` utility to create a dump of the schema and a subset of the data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
+#' This function uses the `pg_dump` utility to create a dump of the schema and a subset of the data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes a command to set the database `search_path` on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
 #'
 #' @param name Target database name (i.e. the one to be dumped). By default, it is set to "aquacache". If you want to dump a different database, specify its name here.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost="hostname".
@@ -363,8 +363,19 @@ create_test_db <- function(name = "aquacache",
   if (!file.exists(outpath) || file.info(outpath)$size == 0) {
     stop("schema dump did not produce a valid file at ", outpath)
   }
+
+   # append statement to set search_path on restore
+  alter_stmt <- paste(
+    "-- ensure search_path is set when restoring the database",
+    "DO $$",
+    "BEGIN",
+    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete, spatial, files, instruments, information;', current_database());",
+    "END$$;",
+    sep = "\n"
+  )
+  cat(alter_stmt, file = outpath, append = TRUE)
   
-  # gz and tar the output file
+  # gz the output file
   schema_outfile <- paste0(outpath, ".gz")
   if (!file.exists(schema_outfile)) {
     R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
