@@ -8,6 +8,7 @@
 #' @param username Username. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminUser="username".
 #' @param password Password. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminPass="password".
 #' @param outpath The path to the folder/location where the .sql dump will be saved. If "choose", the user will be prompted to select a folder. Default is this package's tests/testthat/fixtures folder.
+#' @param replace If TRUE and a file of name testdb.sql.gz exists in `outpath` will attempt to replaced the file.
 #' @param pg_dump The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
 #' @param psql The path to the psql utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
 #' @param continuous_locations Character vector of location codes to retain in continuous tables.  Defaults to the first location found in the database when `NULL`.
@@ -25,12 +26,13 @@ create_test_db <- function(name = "aquacache",
                            username = Sys.getenv("aquacacheAdminUser"), 
                            password = Sys.getenv("aquacacheAdminPass"), 
                            outpath = testthat::test_path("fixtures"),
+                           replace = TRUE,
                            pg_dump = NULL, 
                            psql = NULL, 
                            continuous_locations = NULL, 
                            discrete_locations = NULL, 
-                           start_datetime = "2020-01-01 00:00",
-                           end_datetime = "2024-01-01 00:00") {
+                           start_datetime = "2015-12-31 00:00",
+                           end_datetime = "2023-01-02 00:00") {
   
   # Quick parameter setting for testing
   # name <- "aquacache"
@@ -159,8 +161,7 @@ create_test_db <- function(name = "aquacache",
   DBI::dbExecute(test_con, "SET search_path TO public, continuous, discrete, spatial, files, instruments, information;")
   
   message("Loading ancillary tables...")
-  full_tbls <- c("information.version_info",
-                 "continuous.aggregation_types",
+  full_tbls <- c("continuous.aggregation_types",
                  "discrete.collection_methods",
                  "discrete.protocols_methods",
                  "discrete.result_conditions",
@@ -199,7 +200,7 @@ create_test_db <- function(name = "aquacache",
   }
   
   
-  message("Loading subsets of data into the test database...")
+  message("\nLoading subsets of data into the test database...")
   if (is.null(continuous_locations)) {
     # Find the locations for the Liard River at upper crossing and Marsh Lake, plus Tagish meteorological
     continuous_locations <- DBI::dbGetQuery(con, "SELECT DISTINCT(location_id) FROM timeseries WHERE location IN ('09EA004', '09AB004', '09AA-M1')")$location_id
@@ -334,6 +335,11 @@ create_test_db <- function(name = "aquacache",
   # Create the pg_dump command for schema/data
   outpath <- file.path(paste0(outpath, "/test_db.sql"))
   outpath <- normalizePath(outpath, mustWork = FALSE)
+  
+  if (replace && file.exists(outpath)) {
+    file.remove(outpath)
+  }
+    
   dump_args <- c(
     "-U", username,
     "-h", host,
@@ -377,12 +383,12 @@ create_test_db <- function(name = "aquacache",
   
   # gz the output file
   schema_outfile <- paste0(outpath, ".gz")
-  if (!file.exists(schema_outfile)) {
-    R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
-  } else {
+  if (replace && file.exists(schema_outfile)) {
     warning("The gzipped output file already exists at ", schema_outfile, ". It will be overwritten.")
-    R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
+    file.remove(schema_outfile)  # Remove the .gz file if it exists and replace is TRUE
   }
+
+    R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
   
   message("Test database .sql dump created successfully at ", outpath)
   

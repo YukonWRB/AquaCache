@@ -11,12 +11,13 @@ create_test_db(
   username = Sys.getenv("aquacacheAdminUser"),
   password = Sys.getenv("aquacacheAdminPass"),
   outpath = testthat::test_path("fixtures"),
+  replace = TRUE,
   pg_dump = NULL,
   psql = NULL,
   continuous_locations = NULL,
   discrete_locations = NULL,
-  start_datetime = "2020-01-01 00:00",
-  end_datetime = "2024-01-01 00:00"
+  start_datetime = "2015-12-31 00:00",
+  end_datetime = "2023-01-02 00:00"
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ create_test_db(
 \item{password}{Password. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminPass="password".}
 
 \item{outpath}{The path to the folder/location where the .sql dump will be saved. If "choose", the user will be prompted to select a folder. Default is this package's tests/testthat/fixtures folder.}
+
+\item{replace}{If TRUE and a file of name testdb.sql.gz exists in \code{outpath} will attempt to replaced the file.}
 
 \item{pg_dump}{The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.}
 
@@ -48,5 +51,5 @@ create_test_db(
 An SQL file containing the schema definition saved to the 'outfile' path.
 }
 \description{
-This function uses the \code{pg_dump} utility to create a dump of the schema and a subset of the data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
+This function uses the \code{pg_dump} utility to create a dump of the schema and a subset of the data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes a command to set the database \code{search_path} on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
 }
