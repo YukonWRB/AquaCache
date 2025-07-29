@@ -120,7 +120,8 @@ create_test_db <- function(name = "aquacache",
   )
   
   # Check if pg_dump was successful
-  exit_status <- attr(dump_out, "status") %||% 0
+  exit_status <- attr(dump_out, "status")
+  if (is.null(exit_status)) exit_status <- 0
   if (exit_status != 0) {
     stop(
       "pg_dump failed (exit ", exit_status, ")\n",
@@ -266,15 +267,15 @@ create_test_db <- function(name = "aquacache",
       
       ts_ids <- paste(ts$timeseries_id, collapse = ",")
       
-      g <- DBI::dbGetQuery(con, paste0("SELECT * FROM grades WHERE timeseries_id IN (", ts_ids, ") AND (start_dt >= '", start_datetime, "' OR end_dt <= '", end_datetime, "')"))
+      g <- DBI::dbGetQuery(con, paste0("SELECT * FROM grades WHERE timeseries_id IN (", ts_ids, ")"))
       message("Loading table continuous.grades into the test database")
       DBI::dbAppendTable(test_con, "grades", g)
       
-      a <- DBI::dbGetQuery(con, paste0("SELECT * FROM approvals WHERE timeseries_id IN (", ts_ids, ") AND (start_dt >= '", start_datetime, "' OR end_dt <= '", end_datetime, "')"))
+      a <- DBI::dbGetQuery(con, paste0("SELECT * FROM approvals WHERE timeseries_id IN (", ts_ids, ")"))
       message("Loading table continuous.approvals into the test database")
       DBI::dbAppendTable(test_con, "approvals", a)
       
-      q <- DBI::dbGetQuery(con, paste0("SELECT * FROM qualifiers WHERE timeseries_id IN (", ts_ids, ") AND (start_dt >= '", start_datetime, "' OR end_dt <= '", end_datetime, "')"))
+      q <- DBI::dbGetQuery(con, paste0("SELECT * FROM qualifiers WHERE timeseries_id IN (", ts_ids, ")"))
       message("Loading table continuous.qualifiers into the test database")
       DBI::dbAppendTable(test_con, "qualifiers", q)
       
@@ -355,7 +356,8 @@ create_test_db <- function(name = "aquacache",
   )
   
   # Check if pg_dump was successful
-  exit_status <- attr(dump_out, "status") %||% 0
+  exit_status <- attr(dump_out, "status")
+  if (is.null(exit_status)) exit_status <- 0
   if (exit_status != 0) {
     stop(
       "pg_dump failed (exit ", exit_status, ")\n",
@@ -388,7 +390,7 @@ create_test_db <- function(name = "aquacache",
 
     R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
   
-  message("Test database .sql dump created successfully at ", outpath)
+  message("Test database .sql dump created successfully at ", schema_outfile)
   
   # Clear the password environment variable
   Sys.unsetenv("PGPASSWORD")
