@@ -203,7 +203,7 @@ create_test_db <- function(name = "aquacache",
   message("\nLoading subsets of data into the test database...")
   if (is.null(continuous_locations)) {
     # Find the locations for the Liard River at upper crossing and Marsh Lake, plus Tagish meteorological
-    continuous_locations <- DBI::dbGetQuery(con, "SELECT DISTINCT(location_id) FROM timeseries WHERE location IN ('09EA004', '09AB004', '09AA-M1')")$location_id
+    continuous_locations <- DBI::dbGetQuery(con, "SELECT DISTINCT(location_id) FROM timeseries WHERE location IN ('09EA004', '09AB004', '09AA-M1', '48168')")$location_id
   } 
   if (is.null(discrete_locations)) {
     discrete_locations <- c(46, 44)  # Tagish and Log cabin snow courses
@@ -285,8 +285,8 @@ create_test_db <- function(name = "aquacache",
       DBI::dbAppendTable(test_con, "measurements_continuous", mc)
       
       md <- DBI::dbGetQuery(con,
-                            sprintf("SELECT * FROM measurements_calculated_daily WHERE timeseries_id IN (%s) AND date >= '%s' AND date <= '%s'",
-                                    ts_ids, start_datetime, end_datetime))
+                            sprintf("SELECT * FROM measurements_calculated_daily WHERE timeseries_id IN (%s) AND date <= '%s'",
+                                    ts_ids, end_datetime))
       message("Loading table continuous.measurements_calculated_daily into the test database")
       DBI::dbAppendTable(test_con, "measurements_calculated_daily", md)
       
@@ -326,8 +326,6 @@ create_test_db <- function(name = "aquacache",
       warning("No discrete samples found for the specified locations.")
     }
   }
-  
-  
   
   
   
