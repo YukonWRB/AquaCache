@@ -17,6 +17,11 @@
 downloadWSC <- function(location, parameter, start_datetime, end_datetime = Sys.time(), con = NULL)
 {
   
+  # location <- "09EA004"
+  # parameter <- 47
+  # start_datetime <- "2025-07-01"
+  # end_datetime <- "2025-08-01"
+  
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
@@ -67,7 +72,7 @@ downloadWSC <- function(location, parameter, start_datetime, end_datetime = Sys.
   datetime_string <- paste0("start_date=", substr(start_datetime, 1, 10), "%20", substr(start_datetime, 12, 19), "&end_date=", substr(end_datetime, 1, 10), "%20", substr(end_datetime, 12, 19))
   url <- paste0(baseurl, location_string, "&", parameters_string, "&", datetime_string)
 
-  data <- data.table::fread(url, showProgress = FALSE, data.table = TRUE, select = c("Date" = "POSIXct", "Value/Valeur" = "numeric", "Grade/Classification" = "numeric", "Approval/Approbation" = "character", "Qualifier/Qualificatif" = "numeric"), col.names = c("datetime", "value", "grade", "approval", "qualifier"))
+  data <- data.table::fread(url, showProgress = FALSE, data.table = TRUE, select = c("Date" = "POSIXct", "Value/Valeur" = "numeric", "Grade/Classification" = "numeric", "Approval/Approbation" = "character", "Qualifiers/Qualificatifs" = "numeric"), col.names = c("datetime", "value", "grade", "approval", "qualifier"))
   
   if (nrow(data) > 0) {
     qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
