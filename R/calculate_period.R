@@ -45,7 +45,7 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     }
   }
   if (data.table::is.data.table(data)) {
-    data.table::setorder(data, datetime)
+    data.table::setorder(data, "datetime")
   } else {
     data <- data[order(data$datetime), , drop = FALSE]
   }
