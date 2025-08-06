@@ -107,7 +107,7 @@ downloadWSC <- function(location, parameter, start_datetime, end_datetime = Sys.
     organization_id <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'")[1,1]
     if (is.na(organization_id)) {
       df <- data.frame(name = 'Water Survey of Canada')
-      DBI::dbAppendTable(con, "owner_contributors", df)
+      DBI::dbAppendTable(con, "organizations", df)
     }
     
     data$owner <- organization_id
