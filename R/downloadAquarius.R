@@ -80,7 +80,7 @@ downloadAquarius <- function(location,
     end <- paste0(end, " 23:59:59.9999999")
   }
   end <- gsub(" ", "T", end)
-  end <- paste0(end, "-00:00")
+  end <- paste0(end, "-00:00")  # For UTC offset of 0
 
   # Read corrected time-series data from Aquarius, format time series to POSIXct
   RawDL <- timeseries$getTimeSeriesCorrectedData(c(config$timeSeriesName), queryFrom = start, queryTo = end)

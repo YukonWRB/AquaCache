@@ -17,11 +17,6 @@
 downloadWSC <- function(location, parameter, start_datetime, end_datetime = Sys.time(), con = NULL)
 {
   
-  # location <- "09EA004"
-  # parameter <- 47
-  # start_datetime <- "2025-07-01"
-  # end_datetime <- "2025-08-01"
-  
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
