@@ -45,7 +45,7 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     }
   }
   if (data.table::is.data.table(data)) {
-    data.table::setorder(data, datetime)
+    data.table::setorder(data, "datetime")
   } else {
     data <- data[order(data$datetime), , drop = FALSE]
   }
@@ -91,7 +91,7 @@ calculate_period <- function(data, timeseries_id, con = NULL)
     extra <- dbGetQueryDT(con, paste0("SELECT ", paste(col_names, collapse = ', '), " FROM measurements_continuous WHERE timeseries_id = ", timeseries_id, " ORDER BY datetime DESC LIMIT 10;"))
     if (data.table::is.data.table(data)) {
       data <- data.table::rbindlist(list(data, extra), use.names = TRUE)
-      data.table::setorder(data, datetime)
+      data.table::setorder(data, "datetime")
     } else {
       data <- rbind(data, extra)
       data <- data[order(data$datetime), , drop = FALSE]

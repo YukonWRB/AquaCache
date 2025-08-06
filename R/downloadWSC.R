@@ -67,7 +67,7 @@ downloadWSC <- function(location, parameter, start_datetime, end_datetime = Sys.
   datetime_string <- paste0("start_date=", substr(start_datetime, 1, 10), "%20", substr(start_datetime, 12, 19), "&end_date=", substr(end_datetime, 1, 10), "%20", substr(end_datetime, 12, 19))
   url <- paste0(baseurl, location_string, "&", parameters_string, "&", datetime_string)
 
-  data <- data.table::fread(url, showProgress = FALSE, data.table = TRUE, select = c("Date" = "POSIXct", "Value/Valeur" = "numeric", "Grade/Classification" = "numeric", "Approval/Approbation" = "character", "Qualifier/Qualificatif" = "numeric"), col.names = c("datetime", "value", "grade", "approval", "qualifier"))
+  data <- data.table::fread(url, showProgress = FALSE, data.table = TRUE, select = c("Date" = "POSIXct", "Value/Valeur" = "numeric", "Grade/Classification" = "numeric", "Approval/Approbation" = "character", "Qualifiers/Qualificatifs" = "numeric"), col.names = c("datetime", "value", "grade", "approval", "qualifier"))
   
   if (nrow(data) > 0) {
     qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
@@ -107,7 +107,7 @@ downloadWSC <- function(location, parameter, start_datetime, end_datetime = Sys.
     organization_id <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'")[1,1]
     if (is.na(organization_id)) {
       df <- data.frame(name = 'Water Survey of Canada')
-      DBI::dbAppendTable(con, "owner_contributors", df)
+      DBI::dbAppendTable(con, "organizations", df)
     }
     
     data$owner <- organization_id

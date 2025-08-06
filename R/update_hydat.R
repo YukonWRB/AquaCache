@@ -55,7 +55,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
     organization_id <- DBI::dbGetQuery(con, "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'")[1,1]
     if (is.na(organization_id)) {
       df <- data.frame(name = 'Water Survey of Canada')
-      DBI::dbAppendTable(con, "owner_contributors", df)
+      DBI::dbAppendTable(con, "organizations", df)
     }
     
     grade_unspecified <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'")[1,1]

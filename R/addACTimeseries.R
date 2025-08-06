@@ -66,18 +66,19 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # df = NULL
   # data = NULL
   # start_datetime = "1940-01-01"
-  # location = "1556"
-  # parameter = c(34, 34, 35, 1221)
+  # location = 323
+  # sub_location = NA
+  # parameter = 1150
   # z = NA
-  # media = 7
+  # media = 1
   # sensor_priority = 1
-  # aggregation_type = c('sum')
-  # record_rate = c('< 1 day', '1 day', '1 day', '1 day')
+  # aggregation_type = 'instantaneous'
+  # record_rate = '1 hour'
   # share_with = "public_reader"
-  # owner = 3
-  # source_fx = "downloadECCCwx"
-  # source_fx_args = c("{interval = 'hour'}", "{interval = 'day'}", "{interval = 'day'}", "{interval = 'day'}")
-  # note = c(NA, NA, NA, NA)
+  # owner = 4
+  # source_fx = "downloadNWIS"
+  # source_fx_args = "location: 15056500, parameter: 00060"
+  # note = NA
   
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -122,7 +123,6 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
     note <- df$note
   } 
   
-  
   # Check on arguments
   
   # Find the longest argument, then make sure all are either NA, length 1, or the same length.
@@ -166,7 +166,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
   # Check that every sub_location in 'sub_location' already exists, if specified
   if (!is.na(sub_location)) {
     db_sub_loc <- DBI::dbGetQuery(con, "SELECT sub_location_id FROM sub_locations;")[,1]
-    if (!all(subocation %in% db_sub_loc)) {
+    if (!all(sub_location %in% db_sub_loc)) {
       stop("At least one of the sub_location_ids you specified does not exist in the database. Please add it first using the add sub-location Shiny module.")
     }
   }
@@ -357,8 +357,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
         new_tsid <<- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM timeseries WHERE location = '", add$location, "' AND parameter_id = ", add$parameter_id, " AND aggregation_type_id = '", add$aggregation_type_id, "' AND record_rate = '", add$record_rate, "';"))[1,1]
         # Modify the end_datetime in the DB to be one second before the start_datetime
         DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", add$end_datetime, "' WHERE timeseries_id = ", new_tsid, ";"))
-      }
-      )
+      } )
       
       if (!is.null(data)) {
         if (!is.na(data[i])) {
@@ -387,7 +386,7 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
           DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", new_start$min, "' WHERE timeseries_id = ", new_tsid, ";"))
         }, error = function(e) {
           message("Failed to add new continuous data for location ", add$location, " and parameter ", add$parameter_id, ".")
-          if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "flow")) {
+          if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "water flow")) {
             message("Attempting to add historical data from HYDAT database")
             remove_after_hydat <<- TRUE
           } else {
@@ -397,9 +396,9 @@ addACTimeseries <- function(df = NULL, data = NULL, start_datetime = NA, locatio
         })
         
         # Now conditionally check for HYDAT data
-        if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "flow")) {
+        if ((add$source_fx == "downloadWSC") & param_name %in% c("water level", "water flow")) {
           message("Adding historical data from HYDAT database")
-          suppressMessages(update_hydat(timeseries_id = new_tsid, force_update = TRUE))
+          suppressMessages(update_hydat(con = con, timeseries_id = new_tsid, force_update = TRUE))
           if (remove_after_hydat) {
             # see if anything exists in table measurements_calculated_daily for this timeseries_id. If not, delete the timeseries.
             exist <- DBI::dbGetQuery(con, paste0("SELECT timeseries_id FROM measurements_calculated_daily WHERE timeseries_id = ", new_tsid, ";"))

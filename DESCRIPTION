@@ -1,11 +1,13 @@
 Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
-Version: 2.4.10
+Version: 2.4.11
 Authors@R: c(
     person("Ghislain", "de Laplante", , "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
-    person("Emilie", "Stewart-Jones", , "emilie.stewart-jones@yukon.ca", role = "aut",
-           comment = c(ORCID = "0000-0002-0013-8953"))
+    person("Emilie", "Stewart-Jones", , "emilie.stewart-jones@yukon.ca", role = "ctb",
+           comment = c(ORCID = "0000-0002-0013-8953")),
+           person("Everett", "Snieder", email = "everett.snieder@gmail.com", role = c("ctb"), 
+           comment = c(ORCID = "0000-0003-4997-3404"))
   )
 Description: Set of functions for the creation and ongoing maintenance of
     the Yukon Government's hydrometeorological databases in postgreSQL
@@ -64,6 +66,7 @@ Suggests:
     plotly,
     rmarkdown,
     rstudioapi,
+    R.utils,
     sf,
     testthat (>= 3.0.0),
     usethis

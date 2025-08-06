@@ -11,9 +11,10 @@ Set of functions for the creation and ongoing maintenance of the Yukon Governmen
 \author{
 \strong{Maintainer}: Ghislain de Laplante \email{ghislain.delaplante@yukon.ca} (\href{https://orcid.org/0000-0002-5093-9185}{ORCID})
 
-Authors:
+Other contributors:
 \itemize{
-  \item Emilie Stewart-Jones \email{emilie.stewart-jones@yukon.ca} (\href{https://orcid.org/0000-0002-0013-8953}{ORCID})
+  \item Emilie Stewart-Jones \email{emilie.stewart-jones@yukon.ca} (\href{https://orcid.org/0000-0002-0013-8953}{ORCID}) [contributor]
+  \item Everett Snieder \email{everett.snieder@gmail.com} (\href{https://orcid.org/0000-0003-4997-3404}{ORCID}) [contributor]
 }
 
 }
