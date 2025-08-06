@@ -33,6 +33,6 @@ test_that("downloadWSC fetches data", {
   
   expect_gt(nrow(res), 0)
   expect_s3_class(res$datetime, "POSIXct")
-  expect_named(res, c("datetime", "value", "approval", "grade", "qualifier"))
+  expect_named(res, c("datetime", "value", "grade", "approval", "qualifier", "owner", "contributor"))
   DBI::dbDisconnect(con)
 })
