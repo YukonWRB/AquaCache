@@ -6,7 +6,7 @@ test_that("downloadWSC fetches data", {
   end_dt <- Sys.time() # now
   res <- downloadWSC(location = "09EA004", parameter = 47, start_datetime = start_dt, end_datetime = end_dt, con)
   
-  expect_ft(nrow(res), 0)
+  expect_gt(nrow(res), 0)
   expect_s3_class(res$datetime, "POSIXct")
   expect_named(res, c("datetime", "value", "approval", "grade", "qualifier"))
   DBI::dbDisconnect(con)
