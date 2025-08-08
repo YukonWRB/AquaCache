@@ -25,18 +25,16 @@ if (choice == "2") {
 
 if (choice == "1") {
   message("The boreholes schema will be populated with data from the Access and SQL Server databases.")
-}
-
-if (choice == "1") {
+ 
   # Ask the user to confirm the path to the Access database
-  message("Is 'X:/YWWR/App/Database27.mdb' the correct path to the Access database? Enter 1 for yes or type in the correct path.")
+  message("Is '//carver/infosys/YWWR/App/Database27.mdb' the correct path to the Access database? Enter 1 for yes or type in the correct path.")
   choice <- readline(prompt = "Enter 1 or the correct path: ")
   if (choice != "1") {
     accessPath <- choice
     message("Using the provided path: ", path)
   } else {
-    accessPath <- "X:/YWWR/App/Database27.mdb"
-    message("Using the default path: X:/YWWR/App/Database27.mdb")
+    accessPath <- "//carver/infosys/YWWR/App/Database27.mdb"
+    message("Using the default path: //carver/infosys/YWWR/App/Database27.mdb")
   }
   
   message("Using the SQL Server database 'YWWR' on server 'sql-apps2-prd'. Ensure you have access to this database and the necessary permissions to create tables and schemas.")
