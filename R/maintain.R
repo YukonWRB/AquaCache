@@ -10,12 +10,13 @@
 #' @param vacuum_full Performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space. Default FALSE.
 #' @param timeseries_check Runs check on that data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables.
 #' @param locations_check Runs checks on the data present in the locations table: Ensures that each location is used somewhere in the database (warns if not) and makes sure that each location has an associated point in the 'vectors' table.
+#' @param visibility_check Checks all table entries where share_with != 'public_reader' AND an entry to column private_expiry. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL
 #'
 #' @return TRUE if completed successfully, possibly with messages printed to the console.
 #' @export
 #'
 
-maintain <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_check = FALSE, locations_check = FALSE)
+maintain <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_check = FALSE, locations_check = FALSE, visibility_check = TRUE)
   
 {
   if (is.null(con)) {
@@ -120,6 +121,29 @@ maintain <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_
       }
     }
     message("Location checks completed")
+  }
+  
+  if (visibility_check) {
+    # get tables that have BOTH share_with (text[]) and private_expiry (date)
+    sql <- "
+SELECT table_schema, table_name
+FROM information_schema.columns
+WHERE (column_name IN ('share_with','private_expiry'))
+  AND table_schema NOT IN ('pg_catalog','information_schema')
+GROUP BY table_schema, table_name
+HAVING COUNT(DISTINCT column_name) = 2;
+"
+    tbls <- DBI::dbGetQuery(con, sql)
+    
+    for (k in seq_len(nrow(tbls))) {
+      sch <- tbls$table_schema[k]
+      tab <- tbls$table_name[k]
+      # Update share_with to 'public_reader' and set private_expiry to NULL if private_expiry is before today
+      DBI::dbExecute(con, paste0("UPDATE ", sch, ".", tab, " SET share_with = ARRAY['public_reader']::text[] WHERE share_with IS DISTINCT FROM ARRAY['public_reader']::text[] AND private_expiry < CURRENT_DATE;"))
+      # Set private_expiry to NULL if share_with is 'public_reader'
+      DBI::dbExecute(con, paste0("UPDATE ", sch, ".", tab, " SET private_expiry = NULL WHERE share_with = ARRAY['public_reader']::text[];"))
+      
+    }
   }
   
   return(TRUE)

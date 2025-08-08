@@ -18,9 +18,11 @@ choice <- readline(prompt = "Enter 1 or 2: ")
 if (choice != "1" && choice != "2") {
   stop("Invalid choice. Please enter 1 or 2.")
 }
+
 if (choice == "2") {
   message("The boreholes schema will be created but will be empty.")
-} 
+}
+
 if (choice == "1") {
   message("The boreholes schema will be populated with data from the Access and SQL Server databases.")
 }
@@ -118,9 +120,9 @@ tryCatch({
       ground_elevation_m NUMERIC,
       elevation_source TEXT,
       depth_m NUMERIC,
-      import_borehold_id TEXT,
+      import_borehole_id TEXT,
       created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );")
   # Create an index on the borehole_name column for faster searches
   DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_name ON boreholes.boreholes(borehole_name);")
@@ -271,10 +273,34 @@ tryCatch({
   # Add new document types
   new_types <- data.frame(document_type_en = c("borehole log", "pumping test", "water quality test", "geological profile", "water well record"),
                           document_type_fr = c("journal de forage", "essai de pompage", "test de qualité de l'eau", "profil géologique", "enregistrement de puits d'eau"))
-  DBI::dbAppendTable(con, "document_types", new_types)
   
+  # The document types might exist already, so only insert if they don't
+  for (i in 1:nrow(new_types)) {
+    type_exists <- DBI::dbGetQuery(con, paste0("SELECT document_type_id FROM document_types WHERE document_type_en = '", new_types$document_type_en[i], "';"))[1,1]
+    if (is.na(type_exists)) {
+      DBI::dbExecute(con, paste0("INSERT INTO document_types (document_type_en, document_type_fr) VALUES ('", new_types$document_type_en[i], "', '", new_types$document_type_fr[i], "');"))
+    }
+  }
   
+  # Add a new column 'private_expiry' to all tables with column 'share_with'
+  # Will be used to search the private_expiry column for a date now in the past and change share_with entry to public_reader for those records
   
+  # Find all tables containing a column called 'share_with'
+  tbls <- DBI::dbGetQuery(con, "SELECT DISTINCT table_name FROM information_schema.columns WHERE column_name = 'share_with';")
+  for (i in 1:nrow(tbls)) {
+    tbl <- tbls$table_name[i]
+    # Check if the table already has a column called 'private_expiry'
+    col_exists <- DBI::dbGetQuery(con, paste0("SELECT column_name FROM information_schema.columns WHERE table_name = '", tbl, "' AND column_name = 'private_expiry';"))
+    if (nrow(col_exists) == 0) {
+      # Add the new column 'private_expiry' to the table
+      DBI::dbExecute(con, paste0("ALTER TABLE ", tbl, " ADD COLUMN private_expiry DATE;"))
+      message("Added column 'private_expiry' to table ", tbl)
+    } else {
+      message("Column 'private_expiry' already exists in table ", tbl)
+    }
+  }
+  
+  # Add new data if Access and SQL Server connections are available   #############
   # Bring in data from the 'R_Driller' Access table
   if (access && sql_server) {
     drillers <- DBI::dbGetQuery(acc, "SELECT * FROM R_Driller;")
@@ -295,91 +321,85 @@ tryCatch({
     # Bring in the borehole data from the Access database. There may or may not be any way to match to the SQL Server data, so this is a best effort.
     boreholes_acc <- DBI::dbGetQuery(acc, "SELECT BoreholeID AS _import_borehole_id_Access, Permafrost, PFDepthFrm, PFDepthTo, Depth, DrillerCode, DrillerNames FROM 1_BOREHOLE;")
     boreholes_sql <- DBI::dbGetQuery(sql, "SELECT BoreholeId AS _import_borehole_id_SQL, WellName, UTMZone, Easting, Northing, LocationSource, Purpose, DepthToBedrock, DrillYear, DrillMonth, DrillDay, WellDepth, StaticWaterLevel, EstimatedYield, TopOfScreen, BottomOfScreen, WellHeadStickUp FROM WellRecords;")
-    boreholes <- merge(boreholes_acc, boreholes_sql, by.x = "_import_borehole_id_Access", by.y = "_import_borehole_id_SQL", all.y = TRUE) # We are purposely dropping any boreholes that are only in Access as these don't have a water well associated and are 'orphan' records
-    # drop _import_borehole_id_Access
-    boreholes$`_import_borehole_id_Access` <- NULL
+    boreholes <- merge(boreholes_sql, boreholes_acc, by.y = "_import_borehole_id_Access", by.x = "_import_borehole_id_SQL", all.x = TRUE) # We are purposely dropping any boreholes that are only in Access as these don't have a water well associated and are 'orphan' records
     
-    # Make an integer ID column
-    boreholes$borehole_id <- seq_len(nrow(boreholes))
     
     # convert the easting and northing (plus UTM zones) to latitude and longitude
-    if (nrow(boreholes) > 0) {
-      boreholes$latitude <- NA
-      boreholes$longitude <- NA
-      rlang::check_installed("oce", "for converting UTM coordinates to latitude and longitude")
-      for (i in 1:nrow(boreholes)) {
-        res <- oce::utm2lonlat(boreholes$Easting[i], boreholes$Northing[i], zone = boreholes$UTMZone[i], hemisphere = "N")
-        boreholes$latitude[i] <- res$latitude
-        boreholes$longitude[i] <- res$longitude
+    boreholes$latitude <- NA
+    boreholes$longitude <- NA
+    rlang::check_installed("oce", "for converting UTM coordinates to latitude and longitude")
+    for (i in 1:nrow(boreholes)) {
+      res <- oce::utm2lonlat(boreholes$Easting[i], boreholes$Northing[i], zone = boreholes$UTMZone[i], hemisphere = "N")
+      boreholes$latitude[i] <- res$latitude
+      boreholes$longitude[i] <- res$longitude
+    }
+    
+    # Convert the completion date to a date format
+    boreholes$completion_date <- as.Date(paste(boreholes$DrillYear, boreholes$DrillMonth, boreholes$DrillDay, sep = "-"))
+    # Make any date before 1900 NA
+    boreholes$completion_Date[boreholes$completion_date < as.Date("1900-01-01")] <- NA
+    
+    
+    # Deal with elevations. We'll extract elevation from a web service as they're all shit
+    rlang::check_installed("elevatr", "for fetching elevations from a web service")
+    for (i in 1:nrow(boreholes)) {
+      pts <- data.frame(x = boreholes$longitude[i], y = boreholes$latitude[i])
+      # If x or y is NA, skip this point
+      if (is.na(pts$x) || is.na(pts$y)) {
+        boreholes$ground_elevation_m[i] <- NA
+        next
       }
-      
-      # Convert the completion date to a date format
-      boreholes$completion_date <- as.Date(paste(boreholes$DrillYear, boreholes$DrillMonth, boreholes$DrillDay, sep = "-"))
-      # Make any date before 1900 NA
-      boreholes$completion_Date[boreholes$completion_date < as.Date("1900-01-01")] <- NA
-      
-      
-      # Deal with elevations. We'll extract elevation from a web service as they're all shit
-      rlang::check_installed("elevatr", "for fetching elevations from a web service")
-      for (i in 1:nrow(boreholes)) {
-        pts <- data.frame(x = boreholes$longitude[i], y = boreholes$latitude[i])
-        # If x or y is NA, skip this point
-        if (is.na(pts$x) || is.na(pts$y)) {
-          boreholes$ground_elevation_m[i] <- NA
-          next
-        }
-        sf_pts <- sf::st_as_sf(pts, coords = c("x","y"), crs = 4326)
-        elev_data <- elevatr::get_elev_point(locations = sf_pts, src = "aws", z = 14)
-        boreholes$ground_elevation_m[i] <- elev_data$elevation[1]
+      sf_pts <- sf::st_as_sf(pts, coords = c("x","y"), crs = 4326)
+      elev_data <- elevatr::get_elev_point(locations = sf_pts, src = "aws", z = 14)
+      boreholes$ground_elevation_m[i] <- elev_data$elevation[1]
+    }
+    
+    # Deal with well depth. Use column from SQL Server, convert from feet to meters
+    boreholes$depth_m <- boreholes$WellDepth * 0.3048 # Convert feet to meters
+    
+    # Find the driller information. Access table R_Driller column Driller_Code matches boreholes_acc$DrillerCode, but have to find the match for 'R_Driller.Drilling Company Names' to the new Postres table 'drillers' in order to match on id
+    new_drillers <- DBI::dbGetQuery(con, "SELECT driller_id, name FROM boreholes.drillers;")
+    # Match the table 'drillers', fetched earlier from Access, to the new_drillers table on drillers$Drilling Company Names = new_drillers$name to find drillers$Driller_code
+    new_drillers <- merge(new_drillers, drillers[, c("Driller_code", "Drilling Company Names")], by.x = 'name', by.y = 'Drilling Company Names')
+    boreholes$drilled_by <- NA 
+    for (i in 1:nrow(boreholes)) {
+      new_id <- NA
+      new_id <- new_drillers[new_drillers$Driller_code == boreholes$DrillerCode[i], "driller_id"]
+      if (is.na(new_id[1]))  { # Also check for a match on column 'DrillerNames'
+        new_id <- new_drillers[new_drillers$Driller_code == boreholes$DrillerNames[i], "driller_id"]
       }
-      
-      # Deal with well depth. Use column from SQL Server, convert from feet to meters
-      boreholes$depth_m <- boreholes$WellDepth * 0.3048 # Convert feet to meters
-      
-      
-      
-      # Find the driller information. Access table R_Driller column Driller_Code matches boreholes_acc$DrillerCode, but have to find the match for 'R_Driller.Drilling Company Names' to the new Postres table 'drillers' in order to match on id
-      new_drillers <- DBI::dbGetQuery(con, "SELECT driller_id, name FROM boreholes.drillers;")
-      # Match the table 'drillers', fetched earlier from Access, to the new_drillers table on drillers$Drilling Company Names = new_drillers$name to find drillers$Driller_code
-      new_drillers <- merge(new_drillers, drillers[, c("Driller_code", "Drilling Company Names")], by.x = 'name', by.y = 'Drilling Company Names')
-      boreholes$drilled_by <- NA 
-      for (i in 1:nrow(boreholes)) {
-        new_id <- NA
-        new_id <- new_drillers[new_drillers$Driller_code == boreholes$DrillerCode[i], "driller_id"]
-        if (is.na(new_id[1]))  { # Also check for a match on column 'DrillerNames'
-          new_id <- new_drillers[new_drillers$Driller_code == boreholes$DrillerNames[i], "driller_id"]
-        }
-        if (!is.na(new_id[1])) {
-          boreholes$drilled_by[i] <- new_id
-        } else {
-          boreholes$drilled_by[i] <- NA
-        }
+      if (!is.na(new_id[1])) {
+        boreholes$drilled_by[i] <- new_id
+      } else {
+        boreholes$drilled_by[i] <- NA
       }
-      
-      # Make a data.frame mapped to the new boreholes table
-      boreholes_import <- data.frame(
-        borehole_name = boreholes$WellName,
-        completion_date = boreholes$completion_date,
-        latitude = boreholes$latitude,
-        longitude = boreholes$longitude,
-        location_source = boreholes$LocationSource,
-        ground_elevation_m = boreholes$ground_elevation_m,
-        elevation_source = "web service, NRCAN",
-        import_borehole_id = boreholes$`_import_borehole_id_SQL`,
-        depth_m = boreholes$depth_m,
-        drilled_by = boreholes$drilled_by
-      )
-      no_coords <- boreholes_import[is.na(boreholes_import$latitude) | is.na(boreholes_import$longitude), ]
-      # Drop the no_coords from the main boreholes_import data frame
-      boreholes_import <- boreholes_import[!is.na(boreholes_import$latitude) & !is.na(boreholes_import$longitude), ]
-      
-      # Append the borehole data to the boreholes table
-      DBI::dbAppendTable(con, "boreholes", boreholes_import)
-      message("Imported borehole data from the Access and SQL databases.")
-      
-      
-      # Make a new postgres table for the boreholes with no coordinates (which may or may not ever be fixed)
-      DBI::dbExecute(con, "
+    }
+    
+    # Make a data.frame mapped to the new boreholes table
+    boreholes_import <- data.frame(
+      borehole_name = boreholes$WellName,
+      completion_date = boreholes$completion_date,
+      latitude = boreholes$latitude,
+      longitude = boreholes$longitude,
+      location_source = boreholes$LocationSource,
+      ground_elevation_m = boreholes$ground_elevation_m,
+      elevation_source = "web service, NRCAN",
+      import_borehole_id = boreholes$`_import_borehole_id_SQL`,
+      depth_m = boreholes$depth_m,
+      drilled_by = boreholes$drilled_by
+    )
+    no_coords <- boreholes_import[is.na(boreholes_import$latitude) | is.na(boreholes_import$longitude), ]
+    
+    # Drop the no_coords from the main boreholes_import data frame
+    boreholes_import <- boreholes_import[!is.na(boreholes_import$latitude) & !is.na(boreholes_import$longitude), ]
+    
+    # Append the borehole data to the boreholes table
+    DBI::dbAppendTable(con, "boreholes", boreholes_import)
+    message("Imported borehole data from the Access and SQL databases.")
+    
+    
+    # Make a new postgres table for the boreholes with no coordinates (which may or may not ever be fixed)
+    DBI::dbExecute(con, "
           CREATE TABLE IF NOT EXISTS boreholes.boreholes_no_coords (
             borehole_id SERIAL PRIMARY KEY,
             borehole_name TEXT,
@@ -397,23 +417,22 @@ tryCatch({
             created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );")
-      # Create an index on the borehole_name column for faster searches
-      DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_name ON boreholes.boreholes(borehole_name);")
-      # Create an index on latitude and longitude for faster spatial queries
-      DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_lat_lon ON boreholes.boreholes(latitude, longitude);")
-      
-      
-      # Create a join table for documents
-      DBI::dbExecute(con, "
+    # Create an index on the borehole_name column for faster searches
+    DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_name ON boreholes.boreholes(borehole_name);")
+    # Create an index on latitude and longitude for faster spatial queries
+    DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_lat_lon ON boreholes.boreholes(latitude, longitude);")
+    
+    
+    # Create a join table for documents
+    DBI::dbExecute(con, "
                  CREATE TABLE IF NOT EXISTS boreholes.boreholes_no_coords_documents (
                   borehole_id INTEGER NOT NULL REFERENCES boreholes.boreholes(borehole_id) ON DELETE CASCADE ON UPDATE CASCADE,
                   document_id INTEGER NOT NULL REFERENCES files.documents(document_id) ON DELETE CASCADE ON UPDATE CASCADE,
                   PRIMARY KEY (borehole_id, document_id)
     );")
-      
-      DBI::dbAppendTable(con, "boreholes_no_coords", no_coords)
-      message("Imported boreholes with no coordinates into the boreholes.boreholes_no_coords table.")
-    }
+    
+    DBI::dbAppendTable(con, "boreholes_no_coords", no_coords)
+    message("Imported boreholes with no coordinates into the boreholes.boreholes_no_coords table.")
     
     
     
@@ -421,6 +440,7 @@ tryCatch({
     new_boreholes <- DBI::dbGetQuery(con, "SELECT borehole_id, import_borehole_id, borehole_name FROM boreholes.boreholes;")
     for (i in 1:nrow(new_boreholes)) {
       ftp <- DBI::dbGetQuery(sql, paste0("SELECT WellLog FROM WellRecords WHERE BoreholeId = ", new_boreholes$import_borehole_id[i], ";"))[1,1]
+      additional_ftp <- DBI::dbGetQuery(sql, paste0("SELECT DocumentLinks FROM WellRecords WHERE BoreholeId = ", new_boreholes$import_borehole_id[i], ";"))[1,1]
       if (!is.na(ftp)) {
         # Get the file extension from the FTP link
         file_ext <- tools::file_ext(ftp)
@@ -467,8 +487,8 @@ tryCatch({
                 }
               }
             }
-            insertACDocument(path = path, name = name, type = "water well record", description = "Water well or borehole drilling record.", tags = c("water well", "well", "borehole"), con = con)
-            new_doc <- DBI::dbGetQuery(con, "SELECT max(document_id) FROM files.documents")[1,1]
+            res <- insertACDocument(path = path, name = name, type = "water well record", description = "Water well or borehole drilling record.", tags = c("water well", "well", "borehole"), con = con)
+            new_doc <- res$new_document_id
           }, error = function(e) {
             if (stringr::str_detect(e$message, stringr::fixed("Key (file_hash)="))) {
               # If the document already exists, get the hash from the error message and find the document_id
@@ -481,13 +501,126 @@ tryCatch({
           })
           
           if (!is.na(new_doc)) {
-            # Link the document to the borehole via the join table
-            DBI::dbExecute(con, paste0("INSERT INTO boreholes.boreholes_documents (borehole_id, document_id) VALUES (", new_boreholes$borehole_id[i], ",", new_doc, ");"))
-            
+            # Check if the document is already linked to the borehole
+            check <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM boreholes.boreholes_documents WHERE borehole_id = ", new_boreholes$borehole_id[i], " AND document_id = ", new_doc, ";"))[1,1]
+            if (check == 0) {
+              DBI::dbExecute(con, paste0("INSERT INTO boreholes.boreholes_documents (borehole_id, document_id) VALUES (", new_boreholes$borehole_id[i], ",", new_doc, ");"))
+            }
           }
         }
       }
-    }
+      
+      if (!is.na(additional_ftp)) {
+        # Get the file extension from the FTP link
+        file_ext <- tools::file_ext(additional_ftp)
+        path <- tempfile(fileext = paste0(".", file_ext))
+        # Fetch the document from the FTP server
+        tryCatch({
+          curl::curl_download(additional_ftp, path)
+        }, error = function(e) {
+          warning("Failed to download document for borehole ", new_boreholes$import_borehole_id[i], ": ", e$message)
+        })
+        
+        if (file.exists(path)) {
+          
+          borehole_name <- new_boreholes$borehole_name[i]
+          if (is.na(borehole_name)) {
+            borehole_name <- new_boreholes$borehole_id[i]
+          }
+          
+          if (file_ext == "zip") { # unzip the files to a tempdir
+            dir <- paste0(tempdir(), "/", new_boreholes$import_borehole_id[i], "_additional")
+            # Delete the directory if it exists so we start clean
+            if (dir.exists(dir)) {
+              unlink(dir, recursive = TRUE)
+            }
+            dir.create(dir)
+            utils::unzip(path, exdir = dir)
+            dir <- list.files(dir, full.names = TRUE)
+            files <- list.files(dir, full.names = TRUE)
+            # Create a name for each file
+            names <- character(0)
+            additional_increment <- 1
+            for (j in 1:length(files)) {
+              name <- tools::file_path_sans_ext(basename(files[j]))
+              
+              if (tolower(name) != "report") {
+                names[j] <- paste0(name, " for borehole ", borehole_name)
+              } else {
+                if (additional_increment > 1) {
+                  names[j] <- paste0("Additional document (", additional_increment, ") for borehole ", borehole_name)
+                  additional_increment <- additional_increment + 1
+                } else {
+                  names[j] <- paste0("Additional document for borehole ", borehole_name)
+                }
+              }
+            }
+          }
+        } else {  # not a zip file (probably a pdf)
+          files <- path
+          if (tolower(name) != "report") {
+            names <- paste0(tools::file_path_sans_ext(basename(files)), " for borehole ", borehole_name)
+          } else {
+            names <- paste0("Additional document for borehole ", borehole_name)
+          }
+        }
+        
+        # Append the document(s) to the files.documents table
+        for (j in 1:length(files)) {
+          
+          f <- files[j]
+          n <- names[j]
+          # Append the document to the files.documents table
+          tryCatch({
+            # Check if the name already exists in the files.documents table
+            exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+            if (exists > 0) {
+              n <- paste0(n, " (2)")
+              exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+              if (exists > 0) {
+                n <- paste0(n, " (3)")
+                exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                if (exists > 0) {
+                  n <- paste0(n, " (4)")
+                  exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                  if (exists > 0) {
+                    n <- paste0(n, " (5)")
+                    exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                    if (exists > 0) {
+                      n <- paste0(n, " (6)")
+                      exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                      if (exists > 0) {
+                        stop("Too many documents with the same name exist. Please rename the document manually and try again.")
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            res <- insertACDocument(path = f, name = n, type = "water well record", description = "Water well or borehole drilling record.", tags = c("water well", "well", "borehole"), con = con)
+            new_doc <- res$new_document_id
+          }, error = function(e) {
+            if (stringr::str_detect(e$message, stringr::fixed("Key (file_hash)="))) {
+              # If the document already exists, get the hash from the error message and find the document_id
+              hash <- stringr::str_match(e$message, "Key \\(file_hash\\)=\\(([0-9a-f]+)\\)")[,2]
+              # Get the document_id for this hash
+              new_doc <<- DBI::dbGetQuery(con, paste0("SELECT document_id FROM files.documents WHERE file_hash = '", hash, "';"))[1,1]
+            } else {
+              new_doc <<- NA
+            }
+          })
+          
+          if (!is.na(new_doc)) {
+            # Check if the document is already linked to the borehole
+            check <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM boreholes.boreholes_documents WHERE borehole_id = ", new_boreholes$borehole_id[i], " AND document_id = ", new_doc, ";"))[1,1]
+            if (check == 0) {
+              DBI::dbExecute(con, paste0("INSERT INTO boreholes.boreholes_documents (borehole_id, document_id) VALUES (", new_boreholes$borehole_id[i], ",", new_doc, ");"))
+            }
+          }
+        }
+      }
+    } # End of loop over new_boreholes
+    
     
     # Do the same thing for boreholes_no_coords
     new_boreholes_no_coords <- DBI::dbGetQuery(con, "SELECT borehole_id, import_borehole_id, borehole_name FROM boreholes.boreholes_no_coords;")
@@ -509,7 +642,7 @@ tryCatch({
           if (!is.na(name)) {
             name <- paste0("Well record for ", name)
           } else {
-            id <- new_boreholes$borehole_id[i]
+            id <- new_boreholes_no_coords$borehole_id[i]
             name <- paste0("Well record for well ID ", id)
           }
           # Append the document to the files.documents table
@@ -539,8 +672,8 @@ tryCatch({
                 }
               }
             }
-            insertACDocument(path = path, name = name, type = "water well record", description = "Water well or borehole drilling record.", tags = c("water well", "well", "borehole"), con = con)
-            new_doc <- DBI::dbGetQuery(con, "SELECT max(document_id) FROM files.documents")[1,1]
+            res <- insertACDocument(path = path, name = name, type = "water well record", description = "Water well or borehole drilling record.", tags = c("water well", "well", "borehole"), con = con)
+            new_doc <- res$new_document_id
           }, error = function(e) {
             if (stringr::str_detect(e$message, stringr::fixed("Key (file_hash)="))) {
               # If the document already exists, get the hash from the error message and find the document_id
@@ -553,9 +686,121 @@ tryCatch({
           })
           
           if (!is.na(new_doc)) {
-            # Link the document to the borehole
-            DBI::dbExecute(con, paste0("INSERT INTO boreholes.boreholes_no_coords_documents (borehole_id, document_id) VALUES (", new_boreholes$borehole_id[i], ",", new_doc, ");"))
+            # Check if the document is already linked to the borehole
+            check <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM boreholes.boreholes_no_coords_documents WHERE borehole_id = ", new_boreholes_no_coords$borehole_id[i], " AND document_id = ", new_doc, ";"))[1,1]
+            if (check == 0) {
+              DBI::dbExecute(con, paste0("INSERT INTO boreholes.boreholes_no_coords_documents (borehole_id, document_id) VALUES (", new_boreholes_no_coords$borehole_id[i], ",", new_doc, ");"))
+            }
+          }
+          
+          
+          if (!is.na(additional_ftp)) {
+            # Get the file extension from the FTP link
+            file_ext <- tools::file_ext(additional_ftp)
+            path <- tempfile(fileext = paste0(".", file_ext))
+            # Fetch the document from the FTP server
+            tryCatch({
+              curl::curl_download(additional_ftp, path)
+            }, error = function(e) {
+              warning("Failed to download document for borehole ", new_boreholes_no_coords$import_borehole_id[i], ": ", e$message)
+            })
             
+            if (file.exists(path)) {
+              
+              borehole_name <- new_boreholes_no_coords$borehole_name[i]
+              if (is.na(borehole_name)) {
+                borehole_name <- new_boreholes_no_coords$borehole_id[i]
+              }
+              
+              if (file_ext == "zip") { # unzip the files to a tempdir
+                dir <- paste0(tempdir(), "/", new_boreholes_no_coords$import_borehole_id[i], "_additional")
+                # Delete the directory if it exists so we start clean
+                if (dir.exists(dir)) {
+                  unlink(dir, recursive = TRUE)
+                }
+                dir.create(dir)
+                utils::unzip(path, exdir = dir)
+                dir <- list.files(dir, full.names = TRUE)
+                files <- list.files(dir, full.names = TRUE)
+                # Create a name for each file
+                names <- character(0)
+                additional_increment <- 1
+                for (j in 1:length(files)) {
+                  name <- tools::file_path_sans_ext(basename(files[j]))
+                  
+                  if (tolower(name) != "report") {
+                    names[j] <- paste0(name, " for borehole ", borehole_name)
+                  } else {
+                    if (additional_increment > 1) {
+                      names[j] <- paste0("Additional document (", additional_increment, ") for borehole ", borehole_name)
+                      additional_increment <- additional_increment + 1
+                    } else {
+                      names[j] <- paste0("Additional document for borehole ", borehole_name)
+                    }
+                  }
+                }
+              }
+            } else {  # not a zip file (probably a pdf)
+              files <- path
+              if (tolower(name) != "report") {
+                names <- paste0(tools::file_path_sans_ext(basename(files)), " for borehole ", borehole_name)
+              } else {
+                names <- paste0("Additional document for borehole ", borehole_name)
+              }
+            }
+            
+            # Append the document(s) to the files.documents table
+            for (j in 1:length(files)) {
+              
+              f <- files[j]
+              n <- names[j]
+              # Append the document to the files.documents table
+              tryCatch({
+                # Check if the name already exists in the files.documents table
+                exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                if (exists > 0) {
+                  n <- paste0(n, " (2)")
+                  exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                  if (exists > 0) {
+                    n <- paste0(n, " (3)")
+                    exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                    if (exists > 0) {
+                      n <- paste0(n, " (4)")
+                      exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                      if (exists > 0) {
+                        n <- paste0(n, " (5)")
+                        exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                        if (exists > 0) {
+                          n <- paste0(n, " (6)")
+                          exists <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM files.documents WHERE name = '", n, "';"))[1,1]
+                          if (exists > 0) {
+                            stop("Too many documents with the same name exist. Please rename the document manually and try again.")
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                res <- insertACDocument(path = f, name = n, type = "water well record", description = "Water well or borehole drilling record.", tags = c("water well", "well", "borehole"), con = con)
+                new_doc <- res$new_document_id              }, error = function(e) {
+                  if (stringr::str_detect(e$message, stringr::fixed("Key (file_hash)="))) {
+                    # If the document already exists, get the hash from the error message and find the document_id
+                    hash <- stringr::str_match(e$message, "Key \\(file_hash\\)=\\(([0-9a-f]+)\\)")[,2]
+                    # Get the document_id for this hash
+                    new_doc <<- DBI::dbGetQuery(con, paste0("SELECT document_id FROM files.documents WHERE file_hash = '", hash, "';"))[1,1]
+                  } else {
+                    new_doc <<- NA
+                  }
+                })
+              
+              if (!is.na(new_doc)) {
+                # Check if the document is already linked to the borehole
+                check <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM boreholes.boreholes_no_coords_documents WHERE borehole_id = ", new_boreholes_no_coords$borehole_id[i], " AND document_id = ", new_doc, ";"))[1,1]
+                if (check == 0) {
+                  DBI::dbExecute(con, paste0("INSERT INTO boreholes.boreholes_no_coords_documents (borehole_id, document_id) VALUES (", new_boreholes_no_coords$borehole_id[i], ",", new_doc, ");"))
+                }
+              }
+            }
           }
         }
       }
@@ -589,7 +834,7 @@ tryCatch({
         Sys.sleep(pause)
         attempt <- attempt + 1
       }
-      stop("All ", max_attempts, " attempts failed. Access is garbage.")
+      stop("All ", max_attempts, " attempts failed. MS Access is garbage.")
     }
     
     for (i in 1:nrow(boreholes)) {
@@ -628,6 +873,35 @@ tryCatch({
         DBI::dbAppendTable(con, "wells", df)
       }
     }
+    
+    
+    # Now let's see if we can associate boreholes with existing locations in the database, using the borehole latitude and longitude and a 200m buffer around the locations table latitude/longitude
+    locations <- DBI::dbGetQuery(con, "SELECT location_id, name, latitude, longitude FROM locations WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND location LIKE 'YOWN%';")
+    bohole_locs <- DBI::dbGetQuery(con, "SELECT borehole_id, borehole_name, latitude, longitude FROM boreholes.boreholes;")
+    
+    # Ensure geosphere package is installed
+    rlang::check_installed("geosphere", "calculate distances between points")
+    for (i in 1:nrow(bohole_locs)) {
+      # Calculate the distance from this borehole to all locations
+      dists <- geosphere::distHaversine(matrix(c(bohole_locs$longitude[i], bohole_locs$latitude[i]), ncol = 2),
+                                        matrix(c(locations$longitude, locations$latitude), ncol = 2))
+      # Find the minimum distance
+      min_dist <- min(dists, na.rm = TRUE)
+      if (min_dist <= 200) { # If the minimum distance is less than or equal to 200m, associate the borehole with that location
+        loc_id <- locations$location_id[which.min(dists)]
+        # Ask the user if they want to associate the borehole with this location
+        borehole_name <- bohole_locs$borehole_name[i]
+        location_name <- locations$name[which.min(dists)]
+        response <- readline(prompt = paste0("Borehole '", borehole_name, "' is ", round(min_dist), "m from location '", location_name, "'. Associate with this location? (y/n): "))
+        if (tolower(response) == "y") {
+          DBI::dbExecute(con, paste0("UPDATE boreholes.boreholes SET location_id = ", loc_id, " WHERE borehole_id = ", bohole_locs$borehole_id[i], ";"))
+          message("Associated borehole '", borehole_name, "' with location '", location_name, "'.")
+        } else {
+          message("Did not associate borehole '", borehole_name, "' with any location.")
+        }
+      }
+    }
+    
   }  # End of Access import
   
   
