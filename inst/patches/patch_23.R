@@ -342,6 +342,7 @@ tryCatch({
     
     # Deal with elevations. We'll extract elevation from a web service as they're all shit
     rlang::check_installed("elevatr", "for fetching elevations from a web service")
+    rlang::check_installed("sf", "for handling spatial data")
     for (i in 1:nrow(boreholes)) {
       pts <- data.frame(x = boreholes$longitude[i], y = boreholes$latitude[i])
       # If x or y is NA, skip this point

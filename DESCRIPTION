@@ -31,7 +31,6 @@ Imports:
     data.table,
     dataRetrieval,
     DBI,
-    digest,
     dplyr,
     ecmwfr,
     httr,

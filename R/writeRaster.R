@@ -33,14 +33,18 @@
 #' @keywords internal
 #' @return A list with TRUE for successful import and the rid(s) of the appended entries.
 
-writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, blocks = NULL,
+writeRaster <- function(con, 
+                        raster, 
+                        rast_table = "rasters", 
+                        bit.depth = NULL, 
+                        blocks = NULL, 
                         constraints = TRUE) {
 
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {
     stop("PostGIS is not enabled on this database.")
   }
 
-  if (!inherits(raster, "SpatRaster")){
+  if (!inherits(raster, "SpatRaster")) {
     stop("Raster must be a terra SpatRaster object.")
   }
   
