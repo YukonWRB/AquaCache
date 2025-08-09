@@ -438,7 +438,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   feb_29[feb_29$date == l, c("percent_historic_range", "max", "min", "q90", "q75", "q50", "q25", "q10", "mean", "doy_count")] <- suppressWarnings(c(mean(c(before$percent_historic_range, after$percent_historic_range)), mean(c(before$max, after$max)), mean(c(before$min, after$min)), mean(c(before$q90, after$q90)), mean(c(before$q75, after$q75)), mean(c(before$q50, after$q50)), mean(c(before$q25, after$q25)), mean(c(before$q10, after$q10)), mean(c(before$mean, after$mean)), min(c(before$doy_count, after$doy_count)))) # warnings suppressed because of the possibility of NA values
                 }
               }
-              feb_29 <- hablar::rationalize(feb_29)
+              feb_29 <- inf_to_narationalize(feb_29)
               missing_stats <- rbind(missing_stats, feb_29, fill = TRUE)
             }
             missing_stats$timeseries_id <- i
@@ -460,7 +460,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     if (nrow(missing_stats) > 0) { #This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.
       tryCatch({
         missing_stats <- missing_stats[order(missing_stats$date), ]
-        missing_stats <- hablar::rationalize(missing_stats)  # Occasionally % historic range is dividing by zero (snowpack), so this replaces Inf, -Inf with NAs
+        missing_stats <- inf_to_narationalize(missing_stats)  # Occasionally % historic range is dividing by zero (snowpack), so this replaces Inf, -Inf with NAs
         # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no calculated stats even if they are between the start and end date of missing_stats.
         delete_query <- paste0("DELETE FROM measurements_calculated_daily WHERE timeseries_id = ", i, " AND date BETWEEN '", min(missing_stats$date), "' AND '", max(missing_stats$date), "'")
         remaining_dates <- as.Date(setdiff(seq.Date(min(as.Date(missing_stats$date)), max(as.Date(missing_stats$date)), by = "day"), as.Date(missing_stats$date)), origin = "1970-01-01")

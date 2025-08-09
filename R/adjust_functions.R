@@ -250,10 +250,22 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
     data$qualifier[is.na(data$qualifier)] <- unknown_qualifier
     
     # Split the 'qualifier' column into separate rows if it contains multiple values separated by commas
+    
     data$qualifier <- as.character(data$qualifier)
-    data <- data %>% dplyr::mutate(qualifier = strsplit(.data$qualifier, "\\s*,\\s*"),
-                                   rank = lapply(.data$qualifier, seq_along)) %>%
-      tidyr::unnest(cols = c("qualifier", "rank"))
+    # tidyr::unnest is not used anymore to remove a dependency
+    # data <- data %>% 
+    #   dplyr::mutate(qualifier = strsplit(.data$qualifier, "\\s*,\\s*"),
+    #                                rank = lapply(.data$qualifier, seq_along))  %>%
+    #   tidyr::unnest(cols = c("qualifier", "rank"))
+    
+    data <- data %>%
+      dplyr::mutate(
+        qualifier = strsplit(.data$qualifier, "\\s*,\\s*"),
+        rank = lapply(.data$qualifier, seq_along)
+      ) %>%
+      { data.frame(qualifier = unlist(.$qualifier), rank = unlist(.$rank)) }
+    
+
     
     # Check if 'qualifier' column is now composed of numbers or strings
     if (!grepl("^[0-9]", data$qualifier[1])) {

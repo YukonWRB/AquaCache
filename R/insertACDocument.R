@@ -8,7 +8,7 @@
 #' ## Locations, lines, and polygons
 #' Any document can be associated with locations (points), lines, polygons, or any combination thereof. Please reference the table 'vectors' to give the correct geom_id(s) for your desired geoms.
 #'
-#' @param path Valid path including extension to the document to upload.
+#' @param path Valid path including extension to the document to upload. Set to 'choose' to open a file dialog.
 #' @param name A concise but descriptive name to give the document.
 #' @param type Type of document, which must exist in the database already. Currently one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'metadata', 'audit'.
 #' @param description A text description of what the document is. Please be detailed!
@@ -24,7 +24,7 @@
 #' @export
 
 insertACDocument <- function(path, name, type, description, tags = NULL, authors = NULL, publish_date = NULL, url = NULL, share_with = "public_reader", geoms = NULL, con = NULL) {
-
+  
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
@@ -60,7 +60,7 @@ insertACDocument <- function(path, name, type, description, tags = NULL, authors
   if (nrow(name_check) != 0) {
     stop("There is already a document with this name in the database.")
   }
-
+  
   if (!is.null(geoms)) {
     #Check to make sure the geom_ids exist, report back to the user what actually got associated.
     exist_geoms <- DBI::dbGetQuery(con, paste0("SELECT geom_id, geom_type, layer_name, feature_name, description FROM vectors WHERE geom_id IN (", paste(geoms, collapse = ", "), ")"))
@@ -76,14 +76,22 @@ insertACDocument <- function(path, name, type, description, tags = NULL, authors
       stop("publish_date must be a Date object.")
     }
   }
-
+  
+  if (path == "choose") {
+    path <- rstudioapi::selectFile(
+      caption = "Select a document to upload",
+      filter = list("All files" = c("*.*"))
+    )
+  } else if (!file.exists(path)) {
+    stop("The file you specified does not exist. Please check the path and try again.")
+  }
   extension <- tools::file_ext(path)
-  file <- hexView::readRaw(path)$fileRaw
-
+  file2 <- readBin(path, what = "raw", n = file.info(path)$size)
+  
   assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
   DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, share_with) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "', ARRAY[", paste(sprintf("'%s'", share_with), collapse = ","), "]);"))
   id <- DBI::dbGetQuery(con, paste0("SELECT document_id FROM documents WHERE name = '", name, "';"))
-
+  
   if (!is.null(authors)) {
     DBI::dbExecute(con, paste0("UPDATE documents SET authors = '{", paste(authors, collapse = ", "), "}' WHERE document_id = ", id, ";"))
   }
@@ -96,13 +104,13 @@ insertACDocument <- function(path, name, type, description, tags = NULL, authors
   if (!is.null(tags)) {
     DBI::dbExecute(con, paste0("UPDATE documents SET tags = '{", paste(tags, collapse = ", "), "}' WHERE document_id = ", id, ";"))
   }
-
+  
   if (!is.null(geoms)) {
     docs_spat <- data.frame("document_id" = id,
                             "geom_id" = exist_geoms$geom_id)
-
+    
     DBI::dbAppendTable(con, "documents_spatial", docs_spat)
-
+    
     return(list("success" = TRUE, "new_document_id" =  id, "associated_geoms" = exist_geoms))
   }
   return(list("success" = TRUE, "new_document_id" =  id))

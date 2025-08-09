@@ -34,8 +34,6 @@ Imports:
     digest,
     dplyr,
     ecmwfr,
-    hablar,
-    hexView,
     httr,
     jsonlite,
     lifecycle,
@@ -52,13 +50,11 @@ Imports:
     stats,
     terra,
     tidyhydat,
-    tidyr,
     tools,
     weathercan,
     zoo
 Suggests:
     YGwater,
-    DT,
     doSNOW,
     foreach,
     knitr,

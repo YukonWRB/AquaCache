@@ -45,7 +45,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
   }
   
   # Make sure raster is in WGS84 (EPSG:4326) before writing to the database
-  rast <- terra::project(rast, "epsg:4326")
+  rast <- terra::project(raster, "epsg:4326")
   # Ensure a CRS is present to avoid SRID 0 in the database
   if (is.na(terra::crs(raster)) || terra::crs(raster) == "") {
     warning("Raster has no CRS. Defaulting to EPSG:4326.")
@@ -113,7 +113,7 @@ writeRaster <- function(con, raster, rast_table = "rasters", bit.depth = NULL, b
 
   # figure out block size
   if (!is.null(blocks)) {
-    bs <- bs(r1, blocks)
+    bs <- rpostgis::bs(r1, blocks)
     tr <- bs$tr
     cr <- bs$cr
   } else {
