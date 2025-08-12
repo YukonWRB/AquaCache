@@ -86,7 +86,7 @@ insertACDocument <- function(path, name, type, description, tags = NULL, authors
     stop("The file you specified does not exist. Please check the path and try again.")
   }
   extension <- tools::file_ext(path)
-  file2 <- readBin(path, what = "raw", n = file.info(path)$size)
+  file <- readBin(path, what = "raw", n = file.info(path)$size)
   
   assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
   DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, share_with) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "', ARRAY[", paste(sprintf("'%s'", share_with), collapse = ","), "]);"))

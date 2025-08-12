@@ -91,7 +91,6 @@ tryCatch({
   DBI::dbExecute(con, "SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;")
   
   
-  
   # Create the 'drillers' table in schema 'boreholes'
   DBI::dbExecute(con, "
     CREATE TABLE IF NOT EXISTS boreholes.drillers (
@@ -100,9 +99,15 @@ tryCatch({
       address TEXT,
       phone TEXT,
       email TEXT,
-      created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
     );")
+  
+  # Triggers
+  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.drillers for each row execute function user_modified()")
+  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.drillers for each row execute function update_modified()")
   
   # Create the boreholes table
   DBI::dbExecute(con, "
@@ -121,9 +126,45 @@ tryCatch({
       elevation_source TEXT,
       depth_m NUMERIC,
       import_borehole_id TEXT,
-      created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      share_with TEXT[] DEFAULT '{public_reader}'::text[] NOT NULL,
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
     );")
+  
+  # Triggers
+  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.boreholes for each row execute function user_modified()")
+  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.boreholes for each row execute function update_modified()")
+  # Create RLS policy
+  DBI::dbExecute(con, "ALTER TABLE boreholes.boreholes ENABLE ROW LEVEL SECURITY;")
+  DBI::dbExecute(con, paste0("CREATE POLICY rls ON  boreholes.boreholes
+                              FOR ALL
+                              USING (
+                                ('public_reader' = ANY(share_with))
+                                OR EXISTS (
+                                  SELECT 1
+                                  FROM unnest(share_with) g
+                                  WHERE user_in_group(g)
+                                )
+                              )
+                              WITH CHECK (
+                                ('public_reader' = ANY(share_with))
+                                OR EXISTS (
+                                  SELECT 1
+                                  FROM unnest(share_with) g
+                                  WHERE user_in_group(g)
+                                )
+                              );
+                 "))
+  # Create trigger for existing function validate_share_with to ensure that all users in share_with column exist in the database
+  DBI::dbExecute(con, "
+  CREATE TRIGGER validate_share_with_trigger
+  BEFORE INSERT OR UPDATE ON boreholes.boreholes
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_share_with();
+  ")
+  
   # Create an index on the borehole_name column for faster searches
   DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_name ON boreholes.boreholes(borehole_name);")
   # Create an index on latitude and longitude for faster spatial queries
@@ -145,9 +186,15 @@ tryCatch({
       depth_from_m NUMERIC,
       depth_to_m NUMERIC,
       ice_description TEXT,
-      created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
     );")
+  
+  # Triggers
+  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.permafrost for each row execute function user_modified()")
+  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.permafrost for each row execute function update_modified()")
   
   # Create function and trigger to prevent overlapping permafrost records
   DBI::dbExecute(con, "
@@ -197,9 +244,15 @@ tryCatch({
       secondary_material TEXT,
       texture TEXT,
       description TEXT,
-      created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
     );")
+  
+  # Triggers
+  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.geology for each row execute function user_modified()")
+  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.geology for each row execute function update_modified()")
   
   # Create function and trigger to prevent overlapping geology records
   DBI::dbExecute(con, "
@@ -242,9 +295,15 @@ tryCatch({
       casing_material_id SERIAL PRIMARY KEY,
       material_name TEXT NOT NULL,
       material_name_fr TEXT,
-      created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
     );")
+  
+  # Triggers
+  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.casing_materials for each row execute function user_modified()")
+  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.casing_materials for each row execute function update_modified()")
   
   casings <- data.frame(material_name = c("none", "ABS", "PVC", "steel", "other plastic", "concrete", "other", "unknown"),
                         material_name_fr = c("aucun", "ABS", "PVC", "acier", "autre plastique", "béton", "autre", "inconnu"))
@@ -265,14 +324,52 @@ tryCatch({
       screen_comment TEXT,
       static_water_level_m NUMERIC,
       estimated_yield_lps NUMERIC,
-      created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      share_with TEXT[] DEFAULT '{public_reader}'::text[] NOT NULL,
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
     );")
+  
+  # Triggers
+  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.wells for each row execute function user_modified()")
+  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.wells for each row execute function update_modified()")
+  
+  # Create RLS policy
+  DBI::dbExecute(con, "ALTER TABLE boreholes.wells ENABLE ROW LEVEL SECURITY;")
+  DBI::dbExecute(con, paste0("CREATE POLICY rls ON  boreholes.wells
+                              FOR ALL
+                              USING (
+                                ('public_reader' = ANY(share_with))
+                                OR EXISTS (
+                                  SELECT 1
+                                  FROM unnest(share_with) g
+                                  WHERE user_in_group(g)
+                                )
+                              )
+                              WITH CHECK (
+                                ('public_reader' = ANY(share_with))
+                                OR EXISTS (
+                                  SELECT 1
+                                  FROM unnest(share_with) g
+                                  WHERE user_in_group(g)
+                                )
+                              );
+                 "))
+  
+  
+  # Create trigger for existing function validate_share_with to ensure that all users in share_with column exist in the database
+  DBI::dbExecute(con, "
+  CREATE TRIGGER validate_share_with_trigger
+  BEFORE INSERT OR UPDATE ON boreholes.wells
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_share_with();
+  ")
   
   
   # Add new document types
   new_types <- data.frame(document_type_en = c("borehole log", "pumping test", "water quality test", "geological profile", "water well record"),
-                          document_type_fr = c("journal de forage", "essai de pompage", "test de qualité de l'eau", "profil géologique", "enregistrement de puits d'eau"))
+                          document_type_fr = c("journal de forage", "essai de pompage", "test de qualité de l''eau", "profil géologique", "enregistrement de puits d''eau"))
   
   # The document types might exist already, so only insert if they don't
   for (i in 1:nrow(new_types)) {
@@ -294,11 +391,56 @@ tryCatch({
     if (nrow(col_exists) == 0) {
       # Add the new column 'private_expiry' to the table
       DBI::dbExecute(con, paste0("ALTER TABLE ", tbl, " ADD COLUMN private_expiry DATE;"))
-      message("Added column 'private_expiry' to table ", tbl)
-    } else {
-      message("Column 'private_expiry' already exists in table ", tbl)
     }
   }
+  
+  
+  # Add columns where missing for 
+  # 'created_by' (default CURRENT_USER), 
+  # 'modified_by' (trigger on function public.user_modified), 
+  # 'created' (datetime with tz default now), 
+  # 'modified' (datetime with tz by trigger on function public.update_modified())
+  # Some of the columns may already exist
+  # If column 'updated' exists drop it, along with the associated trigger.
+  
+  # Find all tables in all schemas
+  tbls <- DBI::dbGetQuery(con, "SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema', 'boreholes');")
+  
+  for (i in 1:nrow(tbls)) {
+    tbl <- tbls$table_name[i]
+    schema <- tbls$table_schema[i]
+    
+    # Check if the table already has the columns
+    col_exists <- DBI::dbGetQuery(con, paste0("SELECT column_name FROM information_schema.columns WHERE table_schema = '", schema, "' AND table_name = '", tbl, "' AND column_name IN ('created_by', 'modified_by', 'created', 'modified');"))
+    
+    # If any of the columns are missing, add them
+    if (!all(c("created_by", "modified_by", "created", "modified") %in% col_exists$column_name)) {
+      # Drop the trigger if it exists
+      DBI::dbExecute(con, paste0("DROP TRIGGER IF EXISTS trg_user_audit ON ", schema, ".", tbl, ";"))
+      DBI::dbExecute(con, paste0("DROP TRIGGER IF EXISTS update_modify_time ON ", schema, ".", tbl, ";"))
+      
+      # Add the missing columns
+      if (!"created_by" %in% col_exists$column_name) {
+        DBI::dbExecute(con, paste0("ALTER TABLE ", schema, ".", tbl, " ADD COLUMN created_by TEXT DEFAULT CURRENT_USER NOT NULL;"))
+      }
+      if (!"modified_by" %in% col_exists$column_name) {
+        DBI::dbExecute(con, paste0("ALTER TABLE ", schema, ".", tbl, " ADD COLUMN modified_by TEXT;"))
+      }
+      if (!"created" %in% col_exists$column_name) {
+        DBI::dbExecute(con, paste0("ALTER TABLE ", schema, ".", tbl, " ADD COLUMN created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;"))
+      }
+      if (!"modified" %in% col_exists$column_name) {
+        DBI::dbExecute(con, paste0("ALTER TABLE ", schema, ".", tbl, " ADD COLUMN modified TIMESTAMP WITH TIME ZONE;"))
+      }
+      
+      # Recreate the triggers
+      DBI::dbExecute(con, paste0("CREATE TRIGGER trg_user_audit BEFORE UPDATE ON ", schema, ".", tbl, " FOR EACH ROW EXECUTE FUNCTION user_modified();"))
+      DBI::dbExecute(con, paste0("CREATE TRIGGER update_modify_time BEFORE UPDATE ON ", schema, ".", tbl, " FOR EACH ROW EXECUTE FUNCTION update_modified();"))
+    }
+  }
+  
+  # Commit the transaction
+  DBI::dbExecute(con, "COMMIT;")
   
   # Add new data if Access and SQL Server connections are available   #############
   # Bring in data from the 'R_Driller' Access table
@@ -322,6 +464,8 @@ tryCatch({
     boreholes_acc <- DBI::dbGetQuery(acc, "SELECT BoreholeID AS _import_borehole_id_Access, Permafrost, PFDepthFrm, PFDepthTo, Depth, DrillerCode, DrillerNames FROM 1_BOREHOLE;")
     boreholes_sql <- DBI::dbGetQuery(sql, "SELECT BoreholeId AS _import_borehole_id_SQL, WellName, UTMZone, Easting, Northing, LocationSource, Purpose, DepthToBedrock, DrillYear, DrillMonth, DrillDay, WellDepth, StaticWaterLevel, EstimatedYield, TopOfScreen, BottomOfScreen, WellHeadStickUp FROM WellRecords;")
     boreholes <- merge(boreholes_sql, boreholes_acc, by.y = "_import_borehole_id_Access", by.x = "_import_borehole_id_SQL", all.x = TRUE) # We are purposely dropping any boreholes that are only in Access as these don't have a water well associated and are 'orphan' records
+    
+    DBI::dbDisconnect(sql) # Close connection, it'll auto-close anyways by the time it's needed again.
     
     
     # convert the easting and northing (plus UTM zones) to latitude and longitude
@@ -367,7 +511,7 @@ tryCatch({
       new_id <- NA
       new_id <- new_drillers[new_drillers$Driller_code == boreholes$DrillerCode[i], "driller_id"]
       if (is.na(new_id[1]))  { # Also check for a match on column 'DrillerNames'
-        new_id <- new_drillers[new_drillers$Driller_code == boreholes$DrillerNames[i], "driller_id"]
+        new_id <- new_drillers[new_drillers$Driller_code == "Ukwn", "driller_id"]
       }
       if (!is.na(new_id[1])) {
         boreholes$drilled_by[i] <- new_id
@@ -415,13 +559,13 @@ tryCatch({
             elevation_source TEXT,
             depth_m NUMERIC,
             import_borehole_id TEXT,
-            created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            modified TIMESTAMP WITH TIME ZONE
           );")
     # Create an index on the borehole_name column for faster searches
-    DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_name ON boreholes.boreholes(borehole_name);")
+    DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_no_coords_name ON boreholes.boreholes_no_coords(borehole_name);")
     # Create an index on latitude and longitude for faster spatial queries
-    DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_lat_lon ON boreholes.boreholes(latitude, longitude);")
+    DBI::dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_borehole_no_coords_lat_lon ON boreholes.boreholes_no_coords(latitude, longitude);")
     
     
     # Create a join table for documents
@@ -439,6 +583,11 @@ tryCatch({
     
     # For each borehole, fetch the document .ftp link (from SQL Server), fetch the document(s), append them to the files.documents table, and link them to the borehole in the boreholes.boreholes table.
     new_boreholes <- DBI::dbGetQuery(con, "SELECT borehole_id, import_borehole_id, borehole_name FROM boreholes.boreholes;")
+    
+    # By now the connection to SQL server might have been closed, so reconnect
+    sql <- DBI::dbConnect(odbc::odbc(), Driver = "SQL Server", Server = "sql-apps2-prd", 
+                          Database = "YWWR", Trusted_Connection = "True")
+    
     for (i in 1:nrow(new_boreholes)) {
       ftp <- DBI::dbGetQuery(sql, paste0("SELECT WellLog FROM WellRecords WHERE BoreholeId = ", new_boreholes$import_borehole_id[i], ";"))[1,1]
       additional_ftp <- DBI::dbGetQuery(sql, paste0("SELECT DocumentLinks FROM WellRecords WHERE BoreholeId = ", new_boreholes$import_borehole_id[i], ";"))[1,1]
@@ -875,36 +1024,41 @@ tryCatch({
       }
     }
     
-    
     # Now let's see if we can associate boreholes with existing locations in the database, using the borehole latitude and longitude and a 200m buffer around the locations table latitude/longitude
     locations <- DBI::dbGetQuery(con, "SELECT location_id, name, latitude, longitude FROM locations WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND location LIKE 'YOWN%';")
-    bohole_locs <- DBI::dbGetQuery(con, "SELECT borehole_id, borehole_name, latitude, longitude FROM boreholes.boreholes;")
+    borehole_locs <- DBI::dbGetQuery(con, "SELECT borehole_id, borehole_name, latitude, longitude FROM boreholes.boreholes;")
     
     # Ensure geosphere package is installed
     rlang::check_installed("geosphere", "calculate distances between points")
-    for (i in 1:nrow(bohole_locs)) {
+    for (i in 1:nrow(borehole_locs)) {
       # Calculate the distance from this borehole to all locations
-      dists <- geosphere::distHaversine(matrix(c(bohole_locs$longitude[i], bohole_locs$latitude[i]), ncol = 2),
+      dists <- geosphere::distHaversine(matrix(c(borehole_locs$longitude[i], borehole_locs$latitude[i]), ncol = 2),
                                         matrix(c(locations$longitude, locations$latitude), ncol = 2))
       # Find the minimum distance
       min_dist <- min(dists, na.rm = TRUE)
-      if (min_dist <= 200) { # If the minimum distance is less than or equal to 200m, associate the borehole with that location
+      if (min_dist <= 50) { # If the minimum distance is less than or equal to 50m, associate the borehole with that location
         loc_id <- locations$location_id[which.min(dists)]
         # Ask the user if they want to associate the borehole with this location
-        borehole_name <- bohole_locs$borehole_name[i]
+        borehole_name <- borehole_locs$borehole_name[i]
         location_name <- locations$name[which.min(dists)]
         response <- readline(prompt = paste0("Borehole '", borehole_name, "' is ", round(min_dist), "m from location '", location_name, "'. Associate with this location? (y/n): "))
         if (tolower(response) == "y") {
-          DBI::dbExecute(con, paste0("UPDATE boreholes.boreholes SET location_id = ", loc_id, " WHERE borehole_id = ", bohole_locs$borehole_id[i], ";"))
+          DBI::dbExecute(con, paste0("UPDATE boreholes.boreholes SET location_id = ", loc_id, " WHERE borehole_id = ", borehole_locs$borehole_id[i], ";"))
           message("Associated borehole '", borehole_name, "' with location '", location_name, "'.")
         } else {
           message("Did not associate borehole '", borehole_name, "' with any location.")
         }
       }
     }
-    
+    DBI::dbDisconnect(acc)
+    DBI::dbDisconnect(sql)
   }  # End of Access import
   
+  
+  # Allow the boreholes schema to be used by all users
+  DBI::dbExecute(con, "GRANT USAGE ON SCHEMA boreholes TO PUBLIC;")
+  # Allow all users to see records in every table in the boreholes schema
+  DBI::dbExecute(con, "GRANT SELECT ON ALL TABLES IN SCHEMA boreholes TO PUBLIC;")
   
   
   # Update the version_info table
@@ -915,7 +1069,6 @@ tryCatch({
   message("Patch 23 applied successfully.")
   
 }, error = function(e) {
-  
   # Rollback the transaction
   DBI::dbExecute(con, "ROLLBACK;")
   stop("Patch 23 failed and the DB has been rolled back to its earlier state. ", e$message)
