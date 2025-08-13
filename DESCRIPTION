@@ -28,6 +28,7 @@ License: AGPL (>= 3) + file LICENSE
 Depends: 
     R (>= 4.1.0)
 Imports:
+    cli,
     data.table,
     dataRetrieval,
     DBI,
