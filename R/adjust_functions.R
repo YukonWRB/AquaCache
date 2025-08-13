@@ -252,18 +252,13 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
     # Split the 'qualifier' column into separate rows if it contains multiple values separated by commas
     
     data$qualifier <- as.character(data$qualifier)
-    # tidyr::unnest is not used anymore to remove a dependency
-    # data <- data %>% 
-    #   dplyr::mutate(qualifier = strsplit(.data$qualifier, "\\s*,\\s*"),
-    #                                rank = lapply(.data$qualifier, seq_along))  %>%
-    #   tidyr::unnest(cols = c("qualifier", "rank"))
     
     data <- data %>%
       dplyr::mutate(
         qualifier = strsplit(.data$qualifier, "\\s*,\\s*"),
         rank = lapply(.data$qualifier, seq_along)
-      ) %>%
-      { data.frame(qualifier = unlist(.$qualifier), rank = unlist(.$rank)) }
+      )
+      data <- data.frame(qualifier = unlist(data$qualifier), rank = unlist(data$rank))
     
 
     
