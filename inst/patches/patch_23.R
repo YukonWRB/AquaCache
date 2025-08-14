@@ -126,6 +126,7 @@ tryCatch({
       elevation_source TEXT,
       depth_m NUMERIC,
       import_borehole_id TEXT,
+      notes TEXT,
       share_with TEXT[] DEFAULT '{public_reader}'::text[] NOT NULL,
       created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       created_by TEXT DEFAULT CURRENT_USER NOT NULL,
@@ -318,12 +319,11 @@ tryCatch({
       casing_diameter_mm NUMERIC,
       casing_depth_to_m NUMERIC,
       stick_up_height_m NUMERIC,
-      casing_comment TEXT,
       screen_top_depth_m NUMERIC,
       screen_bottom_depth_m NUMERIC,
-      screen_comment TEXT,
       static_water_level_m NUMERIC,
       estimated_yield_lps NUMERIC,
+      notes TEXT,
       share_with TEXT[] DEFAULT '{public_reader}'::text[] NOT NULL,
       created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       created_by TEXT DEFAULT CURRENT_USER NOT NULL,
@@ -1005,6 +1005,7 @@ tryCatch({
         screen_comment <- retry(DBI::dbGetQuery(acc, paste0("SELECT ScreenComm FROM 2_WELL WHERE BoreholeID = ", boreholes$`_import_borehole_id_SQL`[i], ";"))[1,1])
         static_wl <- DBI::dbGetQuery(sql, paste0("SELECT StaticWaterLevel FROM WellRecords WHERE BoreholeID = ", boreholes$`_import_borehole_id_SQL`[i], ";"))[1,1]
         est_yield <- DBI::dbGetQuery(sql, paste0("SELECT EstimatedYield FROM WellRecords WHERE BoreholeID = ", boreholes$`_import_borehole_id_SQL`[i], ";"))[1,1]
+        comment <- paste0(if (!is.na(casing_comment)) casing_comment else NULL, if (!is.na(screen_comment)) screen_comment else NULL)
         
         df <- data.frame(
           borehole_id = new_borehole_id,
@@ -1012,10 +1013,9 @@ tryCatch({
           casing_diameter_mm = if (!is.na(casing_diameter_mm)) casing_diameter_mm else if (!is.na(casing_diameter_in)) casing_diameter_in * 25.4 else NA, # Convert inches to mm
           casing_depth_to_m = if (!is.na(casing_depth_to)) casing_depth_to else NA,
           stick_up_height_m = if (!is.na(stick_up_height)) stick_up_height * 0.3048 else NA, # Convert feet to meters
-          casing_comment = if (!is.na(casing_comment)) casing_comment else NA,
+          notes = if (!nchar(comment) > 0) comment else NA,
           screen_top_depth_m = if (!is.na(screen_top)) screen_top * 0.3048 else NA, # Convert feet to meters
           screen_bottom_depth_m = if (!is.na(screen_bottom)) screen_bottom * 0.3048 else NA, # Convert feet to meters
-          screen_comment = if (!is.na(screen_comment)) screen_comment else NA,
           static_water_level_m = if (!is.na(static_wl)) static_wl * 0.3048 else NA, # Convert feet to meters
           estimated_yield_lps = if (!is.na(est_yield)) est_yield * 0.0630902 else NA # Convert gallons per minute to liters per second
         )
