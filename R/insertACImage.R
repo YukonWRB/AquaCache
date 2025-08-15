@@ -178,8 +178,7 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
     if (!extension %in% c("jpg", "jpeg", "png", "gif", "bmp", "tiff")) {
       stop("The file extension is not recognized as an image. Please provide a valid image file.")
     }
-    file <- hexView::readRaw(object)$fileRaw
-  }
+    file <- readBin(object, "raw", n = file.size(object))  }
   
   
   

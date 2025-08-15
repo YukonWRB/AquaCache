@@ -104,7 +104,7 @@ updateHydrometDocument <- function(id, new_path = NULL, new_name = NULL, new_typ
   
   if (!is.null(new_path)) {
     extension <- tools::file_ext(new_path)
-    file <- hexView::readRaw(new_path)$fileRaw
+    file <- readBin(new_path, "raw", n = file.size(new_path))
     DBI::dbExecute(con, paste0("UPDATE documents SET document = '\\x", paste0(file, collapse = ""), "' WHERE document_id = ", id, ";"))
   }
   
