@@ -494,4 +494,4 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
       }) #End of tryCatch for removing/adding to DB
     }
   } # End of for loop calculating means and stats for each station in timeseries table
-}
+} # End of calculate_stats function
