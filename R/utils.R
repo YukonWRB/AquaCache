@@ -60,13 +60,13 @@ dbTransCheck <- function(con) {
   return(active)
 }
 
-#' Replace infinite of NaN values with NA
+#' Replace infinite or NaN values with NA
 #'
 #' Utility function to replace `Inf`, `-Inf`, and `NaN` values with `NA`.
 #'
 #' @param x Numeric vector, data.frame, or data.table. If data.frame or data.table, will only work on 'numeric' class columns.
 #' @return Numeric vector with infinite values converted to `NA`.
-#' @keywords internal
+#' @export
 inf_to_na <- function(x) {
   
   # data.table
