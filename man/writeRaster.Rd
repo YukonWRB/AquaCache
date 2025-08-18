@@ -16,7 +16,7 @@ writeRaster(
 \arguments{
 \item{con}{A connection object to a PostgreSQL database.}
 
-\item{raster}{A terra \code{SpatRaster}; objects from the raster package.}
+\item{raster}{A terra \code{SpatRaster}.}
 
 \item{rast_table}{A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{c("schema","table")}).}
 

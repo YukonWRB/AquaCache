@@ -9,6 +9,7 @@ addACTimeseries(
   data = NULL,
   start_datetime = NA,
   location = NA,
+  sub_location = NA,
   z = NA,
   parameter = NA,
   media = NA,
@@ -30,7 +31,9 @@ addACTimeseries(
 
 \item{start_datetime}{A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.}
 
-\item{location}{A numeric vector corresponding to column 'location' of table 'locations'.}
+\item{location}{A character vector corresponding to column 'location' of table 'locations' OR a numeric vector corresponding to column 'location_id' of table 'locations'.}
+
+\item{sub_location}{A character vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.}
 
 \item{z}{A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.}
 

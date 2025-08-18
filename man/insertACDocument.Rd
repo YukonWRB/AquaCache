@@ -19,7 +19,7 @@ insertACDocument(
 )
 }
 \arguments{
-\item{path}{Valid path including extension to the document to upload.}
+\item{path}{Valid path including extension to the document to upload. Set to 'choose' to open a file dialog.}
 
 \item{name}{A concise but descriptive name to give the document.}
 

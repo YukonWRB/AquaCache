@@ -348,31 +348,31 @@ imputeMissing <- function(tsid, radius, start, end, extra_params = NULL, imputed
                                    value = NA)
           if (entry$aggregation_type == "instantaneous") {
             for (j in 1:nrow(full_dt)) {
-              calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+              calculated[j, "value"] <- inf_to_na(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
           } else if (entry$aggregation_type == "sum") {
             for (j in 1:nrow(full_dt)) {
-              calculated[j, "value"] <- hablar::rationalize(sum(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+              calculated[j, "value"] <- inf_to_na(sum(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
           } else if (entry$aggregation_type == "min") {
             for (j in 1:nrow(full_dt)) {
-              calculated[j, "value"] <- hablar::rationalize(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+              calculated[j, "value"] <- inf_to_na(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
           } else if (entry$aggregation_type == "max") {
             for (j in 1:nrow(full_dt)) {
-              calculated[j, "value"] <- hablar::rationalize(max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+              calculated[j, "value"] <- inf_to_na(max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
           } else if (entry$aggregation_type == "mean") {
             for (j in 1:nrow(full_dt)) {
-              calculated[j, "value"] <- hablar::rationalize(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+              calculated[j, "value"] <- inf_to_na(mean(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
           } else if (entry$aggregation_type == "median") {
             for (j in 1:nrow(full_dt)) {
-              calculated[j, "value"] <- hablar::rationalize(stats::median(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
+              calculated[j, "value"] <- inf_to_na(stats::median(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))
             }
           } else if (entry$aggregation_type == "(min+max)/2") {
             for (j in 1:nrow(full_dt)) {
-              calculated[j, "value"] <- hablar::rationalize(mean(c(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE), max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))))
+              calculated[j, "value"] <- inf_to_na(mean(c(min(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE), max(df[df$datetime > (full_dt[j, "datetime"] - period) & df$datetime <= full_dt[j, "datetime"] , "value"], na.rm = TRUE))))
             }
           }
           
