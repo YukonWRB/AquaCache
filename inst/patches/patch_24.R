@@ -269,11 +269,14 @@ WHERE pg_stat_activity.usename = '", i, "'
   
   # connect to snow database and drop privileges on public.circuits table
   try({
-    snowcon <- snowConnect(username = "postgres", silent = TRUE)
+    dets <-  DBI::dbGetQuery(con, "SELECT inet_server_addr() AS ip, inet_server_port() AS port")
+    snowcon <- snowConnect(username = "postgres", host = as.character(dets$ip), port = as.numeric(dets$port), silent = TRUE)
+    
     DBI::dbExecute(snowcon, paste0("REVOKE ALL ON TABLE public.circuits FROM ", i, ";"))
     DBI::dbExecute(snowcon, paste0("ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM ", i, ";"))
     DBI::dbExecute(snowcon, paste0("REASSIGN OWNED BY ", i, " TO postgres;"))
     DBI::dbExecute(snowcon, paste0("DROP OWNED BY ", i, ";"))
+    
     DBI::dbDisconnect(snowcon)
   })
   
