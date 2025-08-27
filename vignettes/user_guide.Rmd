@@ -3,8 +3,11 @@ title: "User's guide to WRB databases"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{User's guide to WRB databases}
-  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r, include = FALSE}
@@ -24,50 +27,267 @@ library(AquaCache)
 # file.copy(from = paste0(dirname(getwd()), "/doc/AquaCache_guide.html"), to = "//env-fs/env-data/corp/water/Common_GW_SW/R-packages/AquaCache/documentation/AquaCache user guide.html", overwrite = TRUE)
 ```
 
-This guide describes the initial set-up of the snow and aquacache databases as well as their ongoing operation. A function workflow is provided for both databases.
+This guide describes the initial set-up of the snow and aquacache
+databases as well as their ongoing operation. A function workflow is
+provided for both databases.
 
 # General database notes
-## Database type
-Both databases are created as postgreSQL databases. PostgreSQL is a free and open-source relational database software with a commercial backer called Enterprise DB; this company provides add-on services that may facilitate the upkeep, backup, and restore of the database, but their services are not necesasry. The Department of Environment uses Microsoft SQL Server databases and does not directly support postgreSQL databases. Their support is limited to providing a virtual machine for running the database server on, and backing up the network drives to which the databases should be backed up.
 
-The initial reason to use postgreSQL rather than SQL Server was due to its open-source nature, which allowed for bypassing the time consuming (and potentially project-ending) step of convincing ENV-IT to let us do this project. Now however, it has become apparent that PostgreSQL is in fact more suited to this type of database due to it's more flexible data types: the text and datetime with time zone data types are easier to use than the SQL Server equivalents, and there is no equivalent for period (duration) data type at all. 
+## Database type and reason for selection
 
-We also retain complete control of our databases by forgoing the departmental standard, allowing us to add/remove users and change privileges, perform backups/restores at will, and upgrading software as we see fit. The draw-back is that we have to perform our own database maintenance and backups with no support. That said, migration to SQL Server is possible but would require careful review of scripts to align with the SQL Server data types, and an entirely different workflow to handle data periodicity.
+Both databases are created as postgreSQL databases. PostgreSQL is a free
+and open-source relational database software with a commercial backer
+called Enterprise DB; this company provides add-on services that may
+facilitate the upkeep, backup, and restore of the database, but their
+services are not necesasry. The Department of Environment uses Microsoft
+SQL Server databases and does not directly support postgreSQL databases.
+Their support is limited to providing a virtual machine for running the
+database server on, and backing up the network drives to which the
+databases should be backed up.
+
+The initial reason to use postgreSQL rather than SQL Server was due to
+its open-source nature, which allowed for bypassing the time consuming
+(and potentially project-ending) step of getting an officially supported
+(by Yukon Government) instance of Oracle or SQL Server created for us,
+and permits the use of database-native authentication to restrict row
+and table visibility from our Shiny application. It has also become
+apparent that PostgreSQL is in fact more suited to this type of database
+due to it's more flexible data types: the text and datetime with time
+zone data types are easier to use than the SQL Server equivalents, and
+there is no equivalent for period (duration) data type at all. An added
+bonus is the depth of user community support for PostGIS (spatial
+extension to postgreSQL) which is used in the storage and retrieval of
+vector and raster data.
+
+We also retain complete control of our databases by forgoing the
+departmental standard, allowing us to add/remove users and change
+privileges ourselves, perform backups/restores at will, and upgrading
+software as we see fit. The draw-back is that we have to perform our own
+database maintenance and backups with no support.
 
 ## Setting up a postgreSQL instance
-The first step to initializing our databases is to determine the computer which will run the database. This machine needs to be running 24/7 with little to no downtime, be able to schedule tasks and run R (RStudio is optional), and have sufficient storage for both databases for the foreseeable future. It also needs to be connected to the Yukon Government networks, able to have port 5432 open (or another port if specified in the PostgreSQL settings), and able to connect to the internet without the corporate firewall being restrictive.
 
-Installing PostgreSQL on Windows is easy: go to https://www.postgresql.org/download/ and find the most recent version, then download and install it. You'll also want to run the Stack Builder software (installed along with the database) and install the pgAdmin and PostGIS add-ons. Installations to Linux with a GUI can also be done from this page, but you'll have to find instructions online for command-line Linux if that's ever necessary.
+The first step to initializing our databases is to determine the
+computer which will run the database. This machine needs to be running
+24/7 with little to no downtime, be able to schedule tasks and run R
+(RStudio is optional), and have sufficient storage for both databases
+for the foreseeable future. It also needs to be connected to the Yukon
+Government networks, able to have port 5432 open (or another port if
+specified in the PostgreSQL settings), and able to connect to the
+internet without the corporate firewall being restrictive.
 
-Once PostgreSQL is installed, open the pgAdmin software. You'll be prompted to create a password for the "postgres" user: this is the username with the highest privileges, so make sure that you use a memorable password and write it down somewhere save. Once pgAdmin loads you should see a server instance for the latest database version you installed, plus any previous server versions also installed on your machine. There should be a single database in that server called "postgres"; leave it, this is a critical piece.
+Installing PostgreSQL on Windows is easy: go to
+<https://www.postgresql.org/download/> and find the most recent version,
+then download and install it. You'll also want to run the Stack Builder
+software (installed along with the database) and install the pgAdmin and
+PostGIS add-ons. Installations to Linux with a GUI can also be done from
+this page, but you'll have to find instructions online for command-line
+Linux if that's ever necessary.
 
-The rest of the database setup depends on whether you're recovering from a server or virtual machine break-down, migrating to a new version of PostgreSQL, or performing an initial setup.
+Once PostgreSQL is installed, open the pgAdmin software. You'll be
+prompted to create a password for the "postgres" user: this is the
+username with the highest privileges, so make sure that you use a
+memorable password and write it down somewhere save. Once pgAdmin loads
+you should see a server instance for the latest database version you
+installed, plus any previous server versions also installed on your
+machine. There should be a single database in that server called
+"postgres"; leave it, this is a critical piece.
+
+The rest of the database setup depends on whether you're recovering from
+a server or virtual machine break-down, migrating to a new version of
+PostgreSQL, or performing an initial setup.
 
 ## Initial database setup
-If you need to start from scratch, that is, databases without any information in them, this R package contains R scripts to initialize both the snow and hydromet database (functions [snowInit()] and [hydrometInit()] respectively). After that, refer to the information below for either database to set up the proper scheduled workflows for the day-to-day database operation.
+
+If you need to start from scratch, that is, databases without any
+information in them, this R package contains R scripts to initialize
+both the snow and hydromet database (functions [snowInit()] and
+[hydrometInit()] respectively). After that, refer to the information
+below for either database to set up the proper scheduled workflows for
+the day-to-day database operation.
 
 ## Backing up the database cluster
-The database cluster is currently (2024-01-16) set to be backed up once a week to the corporate G drive, which is itself backed up in multiple locations. Scripts have been designed to automate this backup and delete old backup versions: see "G:\water\Data\postgres_backups". The backup script (DB_backup.bat) is written to work from the machine on which the database is running, while the restore scripts are written to run from any other machine with access to the G drive. You MUST read the READMEs provided to avoid critical issues.
+
+The database cluster is currently (2024-01-16) set to be backed up once
+a week to the corporate G drive, which is itself backed up in multiple
+locations. Scripts have been designed to automate this backup and delete
+old backup versions: see "G:\water\Data\postgres\_backups". The backup
+script (DB_backup.bat) is written to work from the machine on which the
+database is running, while the restore scripts are written to run from
+any other machine with access to the G drive. You MUST read the READMEs
+provided to avoid critical issues.
 
 ## Restoring the cluster, databases, or tables
-Database recovery scripts have been created and live here: "G:\water\Data\postgres_backups\scripts\restore_scripts". You mustt read the file restore_instructions.txt before doing anything, and I highly recommend also reading the PostgreSQL help files for the database restore utilities **psql** and **pg_restore**. The as-provided restore scripts allow you to restore "global level" database parameters such as usernames, passwords, and permissions, and then to restore any database that was running on the server at the time of the backup. Sometimes however you'll want to only restore a part of a database: you can adapt the DB_restore.bat script to restore only a targeted subset of information. Again, the help files for pg_restore outline all of the different otpions and also provide examples of how to do this.
+
+Database recovery scripts have been created and live here:
+"G:\water\Data\postgres\_backups\scripts\restore\_scripts". You mustt
+read the file restore_instructions.txt before doing anything, and I
+highly recommend also reading the PostgreSQL help files for the database
+restore utilities **psql** and **pg_restore**. The as-provided restore
+scripts allow you to restore "global level" database parameters such as
+usernames, passwords, and permissions, and then to restore any database
+that was running on the server at the time of the backup. Sometimes
+however you'll want to only restore a part of a database: you can adapt
+the DB_restore.bat script to restore only a targeted subset of
+information. Again, the help files for pg_restore outline all of the
+different otpions and also provide examples of how to do this.
 
 ## Installing R and RStudio
-The hydromet database relies on a series of R scripts (described below) to ingest and process information, while the snow database relies on R scripts to process and insert snow survey measurements. You'll need to provision a machine with an R instance to run these scripts (RStudio is optional but makes life easy): this could be the same machine running the database or another "always on" machine. After that, credentials need to be made available in the .Renviron file. See the following file for a snapshot of those: ""G:\water\Data\postgres_backups\.Renviron credentials.txt"".
 
+The hydromet database relies on a series of R scripts (described below)
+to ingest and process information, while the snow database relies on R
+scripts to process and insert snow survey measurements. You'll need to
+provision a machine with an R instance to run these scripts (RStudio is
+optional but makes life easy): this could be the same machine running
+the database or another "always on" machine. After that, credentials
+need to be made available in the .Renviron file. See the following file
+for a snapshot of those: ""G:\water\Data\postgres\_backups.Renviron
+credentials.txt"".
 
 # Hydromet Database
+
 ## Folder access permissions
-The aquacache database requires some additional folder access permissions for the "\\carver\infosys\EQWin" folder if EQWin (water quality) data is to be updated. It'll also need access to "//env-fs/env-data/corp/water/data" in order to run database backups using the pre-created scripts.
+
+The aquacache database requires some additional folder access
+permissions for the "\\carver\infosys\EQWin" folder if EQWin (water
+quality) data is to be updated. It'll also need access to
+"//env-fs/env-data/corp/water/data" in order to run database backups
+using the pre-created scripts.
 
 ## R settings
-Many aquacache database functions access information stored in password-protected URLs or require credentials to interact with an API. To avoid storing credentials online with the AquaCache code on GitHub, these settings are stored in an .Renviron file on the machine which will run R scripts. These credentials are kept here as a backup: ""G:\water\Data\postgres_backups\.Renviron credentials.txt"".
+
+Many aquacache database functions access information stored in
+password-protected URLs or require credentials to interact with an API.
+To avoid storing credentials online with the AquaCache code on GitHub,
+these settings are stored in an .Renviron file on the machine which will
+run R scripts. These credentials are kept here as a backup:
+""G:\water\Data\postgres\_backups.Renviron credentials.txt"".
 
 ## Hydromet-related R functions and their purposes
 
-
 ## Suggested scheduling of R functions
 
+## Other routine operations
 
+### Creating new users, groups
+
+PostgreSQL make a thin distinction between users and groups: a group is
+simply a user with the ability to have other users as members, and it
+usually can't log in on its own. Users can be members of multiple
+groups, and groups can be members of other groups. Privileges are
+assigned to groups or directly to users, and users inherit the
+privileges of all groups they are members of. AquaCache makes use of
+user groups (with one exception) to enforce row-level security (which
+restricts which rows of a table a user can see) and to simplify the
+assignment of privileges. The exception to this is the public_reader
+user, which is a user that can log in and see a restricted set of tables
+and rows, but cannot make any changes to the database. This user is used
+by the Shiny application to allow public access to a limited set of
+data, and is the default login used for the YGwater package
+AquaConnect() function.
+
+Row level security (RLS) is implemented on any database tables (and by
+extension views) that contain sensitive information. These tables have a
+column called share_with which is a text array containing the names of
+all groups (plus public_reader) that are allowed to see that row;
+public_reader is the default. If not logged in as public_reader,
+back-end functions check a user's group memberships and add a filter to
+any queries to only return rows that have at least one of the user's
+groups in the share_with column. This means it's necessary to keep track
+(and sometimes create/delete) both users and groups, and to assign users
+to their correct groups so ensure they see the appropriate records.
+
+#### Example 1: YG's internal user groups
+
+We have two groups, group_yg_reader and group_yg_editor. The former can
+only read from tables while the later has higher privileges on many
+tables.
+
+To create a new user who should be able to only read records which are
+labelled as public_reader or yg_reader, we need to:
+
+1.  Create a new user with a password
+
+2.  Add that user to group_yg_editor.
+
+To create a new user who should be able to read AND edit records
+labelled as public_reader, yg_reader, and yg_editor, we need to:
+
+1.  Create a new user with a password
+
+2.  Add that user to both group_yg_reader and group_yg_editor
+
+If we need a user who can see **all** records regardless of user group
+(as we might want for ourselves since we store the data) we would give
+that user a special privilege: bypassrls. This privilege allows a user
+to see all rows in a table regardless of the share_with column contents.
+This privilege should be given out sparingly, as it effectively bypasses
+all row-level security.
+
+#### Example 2: Creating a new user for a partner organization
+
+We have a new partner organization, called "Partner Org", who will be
+contributing data to the aquacache database. Some of this data should be
+public, but they'd like to keep some of it private to their own
+organization. We need to create a new user for them, and a new group to
+which that user will belong. We'll create an editor group for them so
+that they can add and edit their own data, but not see any of ours or
+other private partner data.
+
+1.  Create a new group called "group_partner_org_editor"
+
+2.  Define (judiciously) which tables this groups should see (SELECT
+    privileges) and edit (INSERT, UPDATE, DELETE privileges) on. This is
+    done by granting the appropriate privileges to the group on the
+    relevant tables.
+
+3.  Create a new user with a password
+
+4.  Add that user to group_partner_org_editor
+
+If this partner also wants to share viewing only privileges with, say,
+community members, we should also create a reader group for them:
+
+1.  Create a new group called "group_partner_org_reader"
+
+2.  Define (judiciously) which tables this groups should see (SELECT
+    privileges). The most likely best course of action here is to give
+    this group the same privileges as group yg_reader.
+
+3.  Create one or more new users with passwords for community members.
+
+4.  Add those users to group_partner_org_reader
+
+#### Creating users and groups
+To create a new user or group, you can use the CREATE USER and CREATE GROUP commands (programmatically) or use a tool such as DBeaver to make these changes in a GUI. For a programmatic example, to create the group group_partner_org_editor, you would run:
+
+`CREATE GROUP group_partner_org_editor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;;`
+
+There is also a Shiny application module designed to facilitate the creation of users and groups. It will appear if you log in to the application as a user with the CREATEROLE privilege (such as admin or postgres).
+
+### Changing privileges
+
+To change the privileges of a user or group, you can use the REVOKE and
+GRANT commands (programmatically) or use a tool such as DBeaver to make
+these change in a GUI. For example, to give group_partner_org_editor the
+ability to insert and update records in the measurements_continuous
+table, you would run:
+
+`GRANT INSERT, UPDATE ON TABLE measurements_continuous TO group_partner_org_editor;`
+
+Or just use DBeaver to do this by navigating to the user's definition
+and changing the privileges there.
+
+
+### Checking which groups have privileges on which tables
+A postgres function was create to facilitate checking which groups (plus public_reader) have which privileges on which tables. This function is called public.get_shareable_principals_for() and can be run as follows:
+
+`SELECT * FROM public.get_shareable_principals_for('public.locations');`
+
+This function is primarily used by the Shiny application to populate drop-downs
+when a user is creating or editing a record, but it can also be used to check privileges in other contexts.
+
+
+## Maintenance tasks
 
 # Snow Database
