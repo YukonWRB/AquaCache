@@ -44,7 +44,7 @@ tryCatch({
   DBI::dbExecute(con, "create trigger trg_user_audit before update on discrete.guidelines for each row execute function public.user_modified()")
   DBI::dbExecute(con, "create trigger update_modify_time before update on discrete.guidelines for each row execute function public.update_modified()")
   
-  # Safety functions to ensure that only SELECT statements are used in the guideline_sql column
+  # Safety functions to validate guideline SQL
   DBI::dbExecute(con, "
   CREATE OR REPLACE FUNCTION discrete.guidelines_validate_trg()
     RETURNS trigger
@@ -52,55 +52,55 @@ tryCatch({
     LANGUAGE plpgsql
     AS $fn$
     DECLARE
-      expr          text := NEW.guideline_sql;
-      needs_sample  boolean;
-      v             numeric;
-      trimmed       text;
-      scan          text;  -- expr with quoted strings removed (heuristic)
-      k             text;
-      forbidden     text[] := ARRAY[
-        'insert','update','delete','merge','alter','drop','truncate','create',
-        'grant','revoke','call','do','copy','vacuum','analyze','refresh','cluster',
-        'reindex','security','execute','commit','rollback','savepoint','lock','unlock'
-      ];
+      expr           text := NEW.guideline_sql;
+      needs_sample   boolean;
+      scan           text;
+      ast            jsonb;
+      schema_name    text;
+      allowed_schemas text[] := ARRAY['discrete','public'];
     BEGIN
       -- Basic presence
       IF expr IS NULL OR btrim(expr) = '' THEN
         RAISE EXCEPTION 'guideline_sql cannot be empty';
       END IF;
     
-      -- One statement (no semicolons)
-      IF position(';' in expr) > 0 THEN
-        RAISE EXCEPTION 'guideline_sql must be a single statement (no semicolons)';
+      -- Parse using PostgreSQL parser to ensure single SELECT statement
+      SELECT pg_parse_query(expr)::jsonb INTO ast;
+      IF jsonb_array_length(ast) <> 1 OR NOT ((ast->0) ? 'SelectStmt') THEN
+        RAISE EXCEPTION 'guideline_sql must be a single SELECT statement';
       END IF;
     
-      -- Must be SELECT or WITH…SELECT
-      trimmed := ltrim(expr);
-      IF NOT (trimmed ~* '^\\s*select\\b' OR trimmed ~* '^\\s*with\\b.*\\bselect\\b') THEN
-        RAISE EXCEPTION 'guideline_sql must be a SELECT (optionally WITH … SELECT)';
-      END IF;
-    
-      -- Remove single-quoted and dollar-quoted strings (dot matches newlines)
-      scan := regexp_replace(expr, $$'(?:''|[^'])*'$$, '', 'g');
+      -- Remove quoted strings and comments for further checks
       scan := regexp_replace(scan, '(?s)\\$[^$]*\\$.*?\\$[^$]*\\$', '', 'g');
-    
-      -- Block write/DDL/control keywords outside of quoted strings
-      FOREACH k IN ARRAY forbidden LOOP
-        IF scan ~* ('\\m' || k || '\\M') THEN
-          RAISE EXCEPTION 'guideline_sql contains forbidden keyword: %', k;
+      scan := regexp_replace(scan, '--.*?(\\n|$)', '', 'g');
+      scan := regexp_replace(scan, '/\\*.*?\\*/', '', 'gs');
+
+      -- Placeholder handling: only optional $1 allowed
+      IF scan ~ '\\$[2-9]' THEN
+        RAISE EXCEPTION 'Only $1 parameter placeholder is permitted';
+      END IF;
+      
+      needs_sample := scan ~ '\\$1';
+
+      -- Reject references to schemas outside whitelist
+      FOR schema_name IN
+        SELECT DISTINCT lower(m[1])
+        FROM regexp_matches(scan, '\\b([a-z_][a-z0-9_]*)\\.', 'gi') AS m
+      LOOP
+        IF NOT schema_name = ANY(allowed_schemas) THEN
+          RAISE EXCEPTION 'guideline_sql references disallowed schema: %', schema_name;
         END IF;
       END LOOP;
     
-      -- Must yield a single numeric scalar (≤1 row, 1 column)
-      needs_sample := position('$1' in expr) > 0;
+      -- Validate result shape without executing the query
       IF needs_sample THEN
-        EXECUTE format('WITH q AS (%s) SELECT (SELECT * FROM q)::numeric', expr)
-          INTO v USING NULL::integer;  -- compile check for $1
+          EXECUTE format('PREPARE __guideline(integer) AS WITH q AS (%s) SELECT (SELECT * FROM q)::numeric', expr);
       ELSE
-        EXECUTE format('WITH q AS (%s) SELECT (SELECT * FROM q)::numeric', expr)
-          INTO v;
+          EXECUTE format('PREPARE __guideline AS WITH q AS (%s) SELECT (SELECT * FROM q)::numeric', expr);
       END IF;
     
+    DEALLOCATE __guideline;
+
       RETURN NEW;
     END;
     $fn$;
@@ -140,6 +140,10 @@ tryCatch({
         RAISE EXCEPTION 'No guideline found with guideline_id %', in_guideline_id;
       END IF;
     
+    IF expr ~ '\\$[2-9]' THEN
+        RAISE EXCEPTION 'Guideline SQL may only use $1 parameter';
+      END IF;
+
       -- Templates that need a sample must use $1
       needs_sample := position('$1' in expr) > 0;
     
@@ -165,7 +169,6 @@ tryCatch({
   ")
   
   DBI::dbExecute(con, "GRANT EXECUTE ON FUNCTION discrete.get_guideline_value(INTEGER, INTEGER) TO PUBLIC;")
-  
   
   
   
