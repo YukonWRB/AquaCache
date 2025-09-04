@@ -12,7 +12,8 @@ insertACBorehole(
   longitude = NULL,
   location_source = NULL,
   surveyed_ground_level_elevation = NULL,
-  purpose_of_well = NULL,
+  purpose_of_borehole = NULL,
+  purpose_borehole_inferred = FALSE,
   depth_to_bedrock = NULL,
   permafrost_present = FALSE,
   permafrost_top_depth = NULL,
@@ -30,7 +31,9 @@ insertACBorehole(
   notes = NULL,
   share_with = "yg_reader",
   drilled_by = NULL,
-  drill_method = NULL
+  drill_method = NULL,
+  purpose_of_well = purpose_of_borehole,
+  purpose_well_inferred = purpose_borehole_inferred
 )
 }
 \arguments{
@@ -48,7 +51,9 @@ insertACBorehole(
 
 \item{surveyed_ground_level_elevation}{Ground elevation from survey in meters.}
 
-\item{purpose_of_well}{Purpose of the well (e.g., "Monitoring", "Production").}
+\item{purpose_of_borehole}{Purpose of the borehole as integer matching the database's borehole_well_purpose column.}
+
+\item{purpose_borehole_inferred}{Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is FALSE.}
 
 \item{depth_to_bedrock}{Depth to bedrock in meters.}
 
@@ -85,6 +90,10 @@ insertACBorehole(
 \item{drilled_by}{Company or individual who drilled the borehole.}
 
 \item{drill_method}{Method used for drilling.}
+
+\item{purpose_of_well}{Purpose of the borehole as integer matching the database's borehole_well_purpose column. Default is \code{purpose_of_borehole}.}
+
+\item{purpose_well_inferred}{Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is \code{purpose_borehole_inferred}.}
 }
 \value{
 The borehole_id of the newly inserted record.
