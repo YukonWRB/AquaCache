@@ -23,87 +23,183 @@ tryCatch({
   
   message("Creating infrastructure to handle water quality guideline values...")
   
+  
+  # Rename two columns in table 'discrete.results' for clarity. This requires modifying two trigger function as well
+  DBI::dbExecute(con, "ALTER TABLE discrete.results RENAME COLUMN sample_fraction TO sample_fraction_id;")
+  DBI::dbExecute(con, "ALTER TABLE discrete.results RENAME COLUMN result_speciation TO result_speciation_id;")
+  
+  # Edit two functions that reference these columns
+  DBI::dbExecute(con, "
+        CREATE OR REPLACE FUNCTION discrete.enforce_result_speciation()
+       RETURNS trigger
+       LANGUAGE plpgsql
+      AS $function$
+      BEGIN
+          -- Check if the associated parameter_id requires result_speciation
+          IF EXISTS (
+              SELECT 1
+              FROM parameters
+              WHERE parameter_id = NEW.parameter_id
+                AND result_speciation = TRUE
+                AND NEW.result_speciation_id IS NULL
+          ) THEN
+              RAISE EXCEPTION 'result_speciation_id must be populated for parameter_id % as defined in the parameters table.', NEW.parameter_id;
+          END IF;
+          RETURN NEW;
+      END;
+      $function$
+      ;"
+                 )
+  
+  DBI::dbExecute(con, "
+                CREATE OR REPLACE FUNCTION discrete.enforce_sample_fraction()
+                 RETURNS trigger
+                 LANGUAGE plpgsql
+                AS $function$
+                BEGIN
+                    -- Check if the associated parameter_id requires a sample fraction
+                    IF EXISTS (
+                        SELECT 1
+                        FROM parameters
+                        WHERE parameter_id = NEW.parameter_id
+                          AND sample_fraction = TRUE
+                          AND NEW.sample_fraction_id IS NULL
+                    ) THEN
+                        RAISE EXCEPTION 'sample_fraction_id must be populated for parameter_id % as defined in the parameters table.', NEW.parameter_id;
+                    END IF;
+                    RETURN NEW;
+                END;
+                $function$
+                ; 
+                 ")
+  
+  
   # create a new table called discrete.guidelines
   DBI::dbExecute(con, "
   CREATE TABLE IF NOT EXISTS discrete.guidelines (
       guideline_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      publisher TEXT NOT NULL,
       guideline_name TEXT NOT NULL,
-      organization TEXT NOT NULL,
-      description TEXT,
-      parameter_id INTEGER NOT NULL REFERENCES public.parameters(parameter_id),
-      sample_fraction_id INTEGER NOT NULL REFERENCES discrete.sample_fractions(sample_fraction_id),
+      reference TEXT,
+      note TEXT,
+      parameter_id INTEGER NOT NULL REFERENCES public.parameters(parameter_id) ON UPDATE CASCADE ON DELETE CASCADE,
+      sample_fraction_id INTEGER REFERENCES discrete.sample_fractions(sample_fraction_id) ON UPDATE CASCADE ON DELETE SET NULL,
+      result_speciation_id INTEGER REFERENCES discrete.result_speciations(result_speciation_id) ON UPDATE CASCADE ON DELETE SET NULL,
       guideline_sql TEXT NOT NULL,
       created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       created_by TEXT DEFAULT CURRENT_USER NOT NULL,
       modified TIMESTAMP WITH TIME ZONE,
       modified_by TEXT,
-      UNIQUE (guideline_name, organization)
+      UNIQUE (guideline_name, publisher)
   );")
   
   # Triggers to track who created/modified records and when
   DBI::dbExecute(con, "create trigger trg_user_audit before update on discrete.guidelines for each row execute function public.user_modified()")
   DBI::dbExecute(con, "create trigger update_modify_time before update on discrete.guidelines for each row execute function public.update_modified()")
   
+  # sample_fraction_id and result_speciation_id may need to be NOT NULL depending on what's entered in table 'parameters'. For any parameter, if result_speciation is TRUE, then result_speciation_id must be NOT NULL, and if sample_fraction is TRUE, then sample_fraction_id must be NOT NULL.
+  # Use existing functions to enforce this; discrete.enforce_result_speciation and discrete.enforce_sample_fraction
+  DBI::dbExecute(con, "DROP TRIGGER IF EXISTS trg_enforce_result_speciation ON discrete.guidelines;")
+  DBI::dbExecute(con, "create trigger trg_enforce_result_speciation before insert or update on discrete.guidelines for each row execute function enforce_result_speciation();")
+  DBI::dbExecute(con, "DROP TRIGGER IF EXISTS trg_enforce_sample_fraction ON discrete.guidelines;")
+  DBI::dbExecute(con, "create trigger trg_enforce_sample_fraction before insert or update on discrete.guidelines for each row execute function enforce_sample_fraction();")
+  
+  
   # Safety functions to validate guideline SQL
   DBI::dbExecute(con, "
   CREATE OR REPLACE FUNCTION discrete.guidelines_validate_trg()
-    RETURNS trigger
-    SET search_path = discrete, public
-    LANGUAGE plpgsql
-    AS $fn$
-    DECLARE
-      expr           text := NEW.guideline_sql;
-      needs_sample   boolean;
-      scan           text;
-      ast            jsonb;
-      schema_name    text;
-      allowed_schemas text[] := ARRAY['discrete','public'];
-    BEGIN
-      -- Basic presence
-      IF expr IS NULL OR btrim(expr) = '' THEN
-        RAISE EXCEPTION 'guideline_sql cannot be empty';
-      END IF;
-    
-      -- Parse using PostgreSQL parser to ensure single SELECT statement
-      SELECT pg_parse_query(expr)::jsonb INTO ast;
-      IF jsonb_array_length(ast) <> 1 OR NOT ((ast->0) ? 'SelectStmt') THEN
-        RAISE EXCEPTION 'guideline_sql must be a single SELECT statement';
-      END IF;
-    
-      -- Remove quoted strings and comments for further checks
-      scan := regexp_replace(scan, '(?s)\\$[^$]*\\$.*?\\$[^$]*\\$', '', 'g');
-      scan := regexp_replace(scan, '--.*?(\\n|$)', '', 'g');
-      scan := regexp_replace(scan, '/\\*.*?\\*/', '', 'gs');
+RETURNS trigger
+SET search_path = discrete, public
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+  expr            text := NEW.guideline_sql;
+  scan            text;
+  needs_sample    boolean;
+  explain_json    jsonb;
+  allowed_schemas text[] := ARRAY['discrete','public'];
+  bad_schema      text;
+  cmdtype         text;
+BEGIN
+  -- presence
+  IF expr IS NULL OR btrim(expr) = '' THEN
+    RAISE EXCEPTION 'Guideline SQL cannot be empty';
+  END IF;
 
-      -- Placeholder handling: only optional $1 allowed
-      IF scan ~ '\\$[2-9]' THEN
-        RAISE EXCEPTION 'Only $1 parameter placeholder is permitted';
-      END IF;
-      
-      needs_sample := scan ~ '\\$1';
+  -- quick lexical guards (blocks multiple statements / DDL)
+  scan := expr;
+  -- strip dollar-quoted strings
+  scan := regexp_replace(scan, '(?s)\\$[^$]*\\$.*?\\$[^$]*\\$', '', 'g');
+  -- strip single-quoted strings
+  scan := regexp_replace(scan, '''([^''\\\\]|\\\\.)*''', '', 'g');
+  -- strip comments
+  scan := regexp_replace(scan, '--.*?(\\n|$)', '', 'g');
+  scan := regexp_replace(scan, '/\\*.*?\\*/', '', 'gs');
 
-      -- Reject references to schemas outside whitelist
-      FOR schema_name IN
-        SELECT DISTINCT lower(m[1])
-        FROM regexp_matches(scan, '\\b([a-z_][a-z0-9_]*)\\.', 'gi') AS m
-      LOOP
-        IF NOT schema_name = ANY(allowed_schemas) THEN
-          RAISE EXCEPTION 'guideline_sql references disallowed schema: %', schema_name;
-        END IF;
-      END LOOP;
-    
-      -- Validate result shape without executing the query
-      IF needs_sample THEN
-          EXECUTE format('PREPARE __guideline(integer) AS WITH q AS (%s) SELECT (SELECT * FROM q)::numeric', expr);
-      ELSE
-          EXECUTE format('PREPARE __guideline AS WITH q AS (%s) SELECT (SELECT * FROM q)::numeric', expr);
-      END IF;
-    
-    DEALLOCATE __guideline;
+  -- must not contain semicolons
+  IF scan ~ ';' THEN
+    RAISE EXCEPTION 'Guideline SQL must be a single statement (no semicolons)';
+  END IF;
 
-      RETURN NEW;
-    END;
-    $fn$;
+  -- must be a SELECT (allow WITH … SELECT)
+  IF scan !~* '^[[:space:]]*\\(*[[:space:]]*(with[[:space:]]+.*select|select)([[:space:]]|\\()' THEN
+    RAISE EXCEPTION 'Guideline SQL must begin with SELECT (optionally WITH … SELECT)';
+  END IF;
+
+  -- placeholder policy: only $1 allowed
+  IF scan ~ '\\$[2-9]' THEN
+    RAISE EXCEPTION 'Only $1 parameter placeholder is permitted';
+  END IF;
+  needs_sample := scan ~ '\\$1';
+
+  -- Build a wrapper that enforces: single scalar numeric row
+  -- If expr returns more than one row/col or non-numeric => error at EXPLAIN time (shape is checked)
+  -- NOTE: we do EXPLAIN to *parse/plan only*, not execute.
+  IF needs_sample THEN
+    EXECUTE format($$
+      EXPLAIN (VERBOSE, FORMAT JSON)
+      WITH q AS (%s)
+      SELECT (SELECT * FROM q)::numeric
+    $$, expr)
+    INTO explain_json
+    USING NULL;  -- e.g., user must write $1::numeric in expr
+  ELSE
+    EXECUTE format($$
+      EXPLAIN (VERBOSE, FORMAT JSON)
+      WITH q AS (%s)
+      SELECT (SELECT * FROM q)::numeric
+    $$, expr)
+    INTO explain_json;
+  END IF;
+
+  -- Schema whitelist using recursive walk of the plan tree
+  WITH RECURSIVE plan_nodes AS (
+    SELECT (explain_json->0->'Plan') AS n
+    UNION ALL
+    SELECT child
+    FROM plan_nodes p
+    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(p.n->'Plans','[]')) AS children(child)
+  ),
+  schemas AS (
+    SELECT DISTINCT lower(n->>'Schema') AS schem
+    FROM plan_nodes
+    WHERE n ? 'Schema'
+  )
+  SELECT schem
+  INTO bad_schema
+  FROM schemas
+  WHERE schem IS NOT NULL
+    AND schem <> ALL(allowed_schemas)
+  LIMIT 1;
+
+  IF bad_schema IS NOT NULL THEN
+    RAISE EXCEPTION 'Guideline SQL references disallowed schema: %', bad_schema;
+  END IF;
+
+  -- If we got here, it parses, plans, is a SELECT, produces a single numeric scalar, and only touches allowed schemas.
+  RETURN NEW;
+END;
+$fn$;
   ")
   
   suppressMessages(DBI::dbExecute(con, "DROP TRIGGER IF EXISTS trg_check_sql ON discrete.guidelines;"))
@@ -237,6 +333,55 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 ")
+  
+  
+  
+  # Make additions to water well tables so we can track installation purpose
+  # Create a new table boreholes.borehole_well_purposes
+  DBI::dbExecute(con, "
+  CREATE TABLE IF NOT EXISTS boreholes.borehole_well_purposes (
+      borehole_well_purpose_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      purpose_name TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL,
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
+  );")
+  
+  # Triggers
+  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.borehole_well_purposes for each row execute function user_modified()")
+  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.borehole_well_purposes for each row execute function update_modified()")
+  
+  # Populate with some common purposes
+  df <- data.frame(purpose_name = c("monitoring", 
+                                    "drinking water, residential", 
+                                    "drinking water, municipal/commercial", 
+                                    "irrigation", 
+                                    "observation", 
+                                    "dewatering", 
+                                    "injection",
+                                    "mineral exploration"),
+                   description = c("Well installed for monitoring purposes, typically with a small diameter and screen.",
+                                   "Well installed for private residence drinking water supply.",
+                                   "Well installed for municipal or commercial drinking water supply.",
+                                   "Well installed to provide water for agricultural irrigation.",
+                                   "Well installed to observe groundwater levels or quality changes over time.",
+                                   "Well installed to lower the groundwater table temporarily or permanently.",
+                                   "Well installed to inject water or other fluids into the ground.",
+                                   "Borehole installed as part of mineral exploration activities.")
+  )
+  
+  DBI::dbAppendTable(con, "borehole_well_purposes", df)
+  
+  # Add a new column to boreholes and wells to reference the purpose
+  DBI::dbExecute(con, "ALTER TABLE boreholes.boreholes ADD COLUMN borehole_well_purpose_id INTEGER REFERENCES boreholes.borehole_well_purposes(borehole_well_purpose_id) ON UPDATE CASCADE ON DELETE SET NULL;")
+  DBI::dbExecute(con, "ALTER TABLE boreholes.wells ADD COLUMN borehole_well_purpose_id INTEGER REFERENCES boreholes.borehole_well_purposes(borehole_well_purpose_id) ON UPDATE CASCADE ON DELETE SET NULL;")
+  
+  # Also add columns inferred_purpose (boolean)
+  DBI::dbExecute(con, "ALTER TABLE boreholes.boreholes ADD COLUMN inferred_purpose BOOLEAN DEFAULT TRUE;")
+  DBI::dbExecute(con, "ALTER TABLE boreholes.wells ADD COLUMN inferred_purpose BOOLEAN DEFAULT TRUE;")
+  
   
   
   # Update the version_info table

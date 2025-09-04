@@ -28,8 +28,8 @@
 #' - 'result': a numeric specifying the sample's results, matched to the parameters
 #' - 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
 #' - 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
-#' - 'sample_fraction': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
-#' - 'result_speciation': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+#' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
+#' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 #' 
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 #' 
@@ -66,9 +66,9 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
   
   if (is.null(location_id)) {
     if (is.null(sample_series_id)) {
-      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to < now())")
+      all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to >= now())")
     } else {
-      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE sample_series_id IN (", paste(sample_series_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to >= now())"))
       if (length(unique(sample_series_id)) != nrow(all_series)) {
         fail <- sample_series_id[!sample_series_id %in% all_series$sample_series_id]
         ifelse((length(fail) == 1),
@@ -79,9 +79,9 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
     }
   } else {
     if (is.null(sub_location_id)) {
-      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id IN (", paste(location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id IN (", paste(location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to >= now())"))
     } else {
-      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id IN (", paste(location_id, collapse = ", "), ") AND sub_location_id IN (", paste(sub_location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to < now())"))
+      all_series <- DBI::dbGetQuery(con, paste0("SELECT * FROM sample_series WHERE location_id IN (", paste(location_id, collapse = ", "), ") AND sub_location_id IN (", paste(sub_location_id, collapse = ", "), ") AND (synch_to IS NULL OR synch_to >= now())"))
     }
     if (length(unique(location_id)) != nrow(all_series)) {
       fail <- location_id[!location_id %in% all_series$location_id]
@@ -108,8 +108,21 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
     # Insert the sample data
     DBI::dbAppendTable(con, "samples", sample)
     
-    # Get the sample_id
-    sample_id <- DBI::dbGetQuery(con, paste0("SELECT sample_id FROM samples WHERE location_id = ", sample$location_id, " AND datetime = '", sample$datetime, " UTC';"))[1,1]
+    # Get the sample_id using all fields that define a unique sample
+    sample_id <- DBI::dbGetQuery(con, paste0(
+      "SELECT sample_id FROM samples WHERE location_id = ", sample$location_id,
+      " AND datetime = '", sample$datetime, " UTC'",
+      " AND media_id = ", sample$media_id,
+      " AND sample_type = ", sample$sample_type,
+      " AND collection_method = ", sample$collection_method,
+      ifelse(is.null(sample$sub_location_id) || is.na(sample$sub_location_id),
+             " AND sub_location_id IS NULL",
+             paste0(" AND sub_location_id = ", sample$sub_location_id)),
+      ifelse(is.null(sample$z) || is.na(sample$z),
+             " AND z IS NULL",
+             paste0(" AND z = ", sample$z)),
+      " AND import_source = '", sample$import_source, "';"
+    ))[1,1]
     
     # Insert the results data
     results$sample_id <- sample_id
@@ -133,14 +146,28 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
     range_start <- all_series$synch_from[i]
     range_end <- all_series$synch_to[i]
     
-    # Find the last data point
-    query <- paste0("SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id)
-    if (!is.na(sub_loc_id)) query <- paste0(query, " AND sub_location_id = ", sub_loc_id)
-    if (!is.na(range_start)) query <- paste0(query, " AND datetime > '", as.character(range_start), " UTC'")
-    last_data_point <- DBI::dbGetQuery(con, paste0(query, ";"))[1, 1] + 1
-    
-    if (is.na(last_data_point)) { # Means we're dealing with a location that has no samples in yet - probably just created
+    # Find the last data point for this series
+    query <- paste0(
+      "SELECT MAX(datetime) FROM samples WHERE location_id = ", loc_id,
+      " AND import_source = '", source_fx, "'"
+    )
+    if (!is.na(sub_loc_id)) {
+      query <- paste0(query, " AND sub_location_id = ", sub_loc_id)
+    } else {
+      query <- paste0(query, " AND sub_location_id IS NULL")
+    }
+    if (!is.na(range_start)) {
+      query <- paste0(query, " AND datetime >= '", as.character(range_start), " UTC'")
+    }
+    if (!is.na(range_end)) {
+      query <- paste0(query, " AND datetime <= '", as.character(range_end), " UTC'")
+    }
+    last_data_point <- DBI::dbGetQuery(con, paste0(query, ";"))[1, 1]
+    if (is.na(last_data_point)) {
+      # Means we're dealing with a location that has no samples in yet - probably just created
       last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+    } else {
+      last_data_point <- last_data_point + 1
     }
     
     if (source_fx == "downloadEQWin" & is.null(EQCon)) {
@@ -221,6 +248,14 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
           
           sample$import_source <- source_fx
           
+          # Apply default owner/contributor if not provided
+          if (!("owner" %in% names_samp) || is.na(sample$owner)) {
+            sample$owner <- owner
+          }
+          if (!("contributor" %in% names_samp) || is.na(sample$contributor)) {
+            if (!is.na(contributor)) sample$contributor <- contributor
+          }
+          
           # Checks on sample results ############
           # Ensure the results have required minimum columns
           results <- data[[j]][["results"]]
@@ -275,33 +310,33 @@ getNewDiscrete <- function(con = NULL, location_id = NULL, sub_location_id = NUL
           } # End of additional checks fs any NA values in 'result' column are returned
           
           
-          # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction.
+          # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation_id and sample_fraction_id.
           result_speciation <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (", paste(unique(results$parameter_id), collapse = ", "), ");"))
           sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (", paste(unique(results$parameter_id), collapse = ", "), ");"))
           if (any(result_speciation$result_speciation_bool)) {
-            if (!("result_speciation" %in% names(data))) {
-              warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return a column 'result_speciation' but the database mandates this for at least one of the parameters. Skipping to next sample.")
+            if (!("result_speciation_id" %in% names_res)) {
+              warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return a column 'result_speciation_id' but the database mandates this for at least one of the parameters. Skipping to next sample.")
               next
-            } else { # Check that values in the result_speciation column are not NA where necessary
+            } else { # Check that values in the result_speciation_id column are not NA where necessary
               merge <- merge(results, result_speciation, by = "parameter_id")
-              # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation column is not NA
-              chk <- with(merge, result_speciation_bool & is.na(result_speciation))
+              # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation_id column is not NA
+              chk <- with(merge, result_speciation_bool & is.na(result_speciation_id))
               if (any(chk)) {
-                warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned NA values in the column 'result_speciation' for at least one parameter where the database mandates this value. Skipping to next sample.")
+                warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned NA values in the column 'result_speciation_id' for at least one parameter where the database mandates this value. Skipping to next sample.")
                 next
               }
             }
           }
           if (any(sample_fraction$sample_fraction_bool)) {
-            if (!("sample_fraction" %in% names(data))) {
-              warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return a column 'sample_fraction' but the database mandates this for at least one of the parameters. Skipping to next sample.")
+            if (!("sample_fraction_id" %in% names_res)) {
+              warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function did not return a column 'sample_fraction_id' but the database mandates this for at least one of the parameters. Skipping to next sample.")
               next
-            } else { # Check that all values in the sample_fraction column are not NA where necessary
+            } else { # Check that all values in the sample_fraction_id column are not NA where necessary
               merge <- merge(results, sample_fraction, by = "parameter_id")
               # For rows where sample_fraction_bool is TRUE, check that the corresponding sample_fraction column is not NA
-              chk <- with(merge, sample_fraction_bool & is.na(sample_fraction))
+              chk <- with(merge, sample_fraction_bool & is.na(sample_fraction_id))
               if (any(chk)) {
-                warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned NA values in the column 'sample_fraction' for at least one parameter where the database mandates this value. Skipping to next sample.")
+                warning("For sample_series_id ", sid, " element ", j, " (sample_datetime ", sample$datetime, ") the source function returned NA values in the column 'sample_fraction_id' for at least one parameter where the database mandates this value. Skipping to next sample.")
                 next
               }
             }

@@ -5,7 +5,7 @@
 #' @param x A date-time object (POSIXct).
 #' @return A string formatted as "YYYY-MM-DD HH:MM:SS" in UTC time zone.
 #' @export
-fmt <- function(x) format(x, tz = "UTC", "%Y-%m-%d %H:%M:%S")
+fmt <- function(x) format(x, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
 
 
 #' @title Begin a transaction
@@ -74,7 +74,8 @@ inf_to_na <- function(x) {
     num_cols <- names(x)[vapply(x, is.numeric, logical(1))]
     if (length(num_cols)) {
       x[, (num_cols) := lapply(.SD, function(col) {
-        col[!is.finite(col)] <- NA
+        idx <- which(!is.finite(col))
+        if (length(idx)) col[idx] <- NA
         col
       }), .SDcols = num_cols]
     }
@@ -85,7 +86,8 @@ inf_to_na <- function(x) {
   if (is.data.frame(x)) { # TRUE for tibbles or data.frames (and data.tables, but these are dealt with differently)
     numeric_cols <- sapply(x, is.numeric)
     x[numeric_cols] <- lapply(x[numeric_cols], function(col) {
-      col[!is.finite(col)] <- NA
+      idx <- which(!is.finite(col))
+      if (length(idx)) col[idx] <- NA
       col
     })
     return(x)
@@ -93,7 +95,8 @@ inf_to_na <- function(x) {
   
   # vector
   if (is.numeric(x)) {
-    x[!is.finite(x)] <- NA
+    idx <- which(!is.finite(x))
+    if (length(idx)) x[idx] <- NA
     return(x)
   }
   

@@ -161,14 +161,10 @@ synchronize_continuous <- function(con = NULL, timeseries_id = "all", start_date
     imputed <- inDB[inDB$imputed, ]
     imputed.remains <- data.frame()
     if (nrow(imputed) > 0) {
-      for (row in 1:nrow(imputed)) {
-        if (!(imputed[row, "datetime"] %in% inRemote$datetime)) {
-          imputed.remains <- rbind(imputed.remains, imputed[row, ])
-        }
-      }
+      imputed_remains <- imputed[!(imputed$datetime %in% inRemote$datetime), , drop = FALSE]
+      no_update <- rbind(no_update, imputed_remains)
     }
-    no_update <- rbind(no_update, imputed.remains)
-    
+
     # Adjust parameters
     if (!("approval" %in% names(inRemote))) {
       inRemote$approval <- approval_unknown

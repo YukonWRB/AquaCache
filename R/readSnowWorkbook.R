@@ -105,10 +105,13 @@ readSnowWorkbook <- function(workbook = "choose", overwrite = FALSE, con = NULL)
     survey_date <- survey[3, 2]
     sampler_name <- survey[4, 2]
     
-    # TODO: code below can wrongly assign 'average' when there's a bulk sample
-    if (is.na(estavg[2,2])) {
-      method <- survey[5,2]
-    } else {
+    # Determine sampling method. Using only the presence of estimated average
+    # values can wrongly assign "average" when the workbook indicates a bulk
+    # sample. Start with the method recorded in the workbook and only change to
+    # "average" if an estimated average exists and the method isn't a bulk
+    # sample.
+    method <- survey[5, 2]
+    if (!is.na(estavg[2, 2]) && tolower(method) != "bulk sample") {
       method <- "average"
     }
     
