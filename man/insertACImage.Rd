@@ -9,7 +9,7 @@ insertACImage(
   datetime,
   image_type,
   fetch_datetime = NULL,
-  img_meta_id = NULL,
+  img_series_id = NULL,
   description = NULL,
   tags = NULL,
   owner = NULL,
@@ -33,7 +33,7 @@ insertACImage(
 
 \item{fetch_datetime}{The datetime the image was retrieved (optional). If not POSIXct timezone is assumed to be UTC.}
 
-\item{img_meta_id}{The img_meta_id, from the table image_series, corresponding to the image location and type. Set NULL if the image is not linked to an image series - in that case you'll need to specify, at minimum, a latitude and longitude for the image OR associate it with a location.}
+\item{img_series_id}{The img_series_id, from the table image_series, corresponding to the image location and type. Set NULL if the image is not linked to an image series - in that case you'll need to specify, at minimum, a latitude and longitude for the image OR associate it with a location.}
 
 \item{description}{A description of the image. Pass as text, can be left NULL; consider also using the \code{tags} parameter.}
 
@@ -45,11 +45,11 @@ insertACImage(
 
 \item{share_with}{Which user groups should the image be shared with. Default is 'public_reader', the public group. Pass as a character vector, one element per group.}
 
-\item{location}{The location_id with which to associate the document (must be in the database). Pass a location_id as a numeric. If img_meta_id is specified, the location already associated is used. This parameter can also be left NULL if latitude and longitude are specified.}
+\item{location}{The location_id with which to associate the document (must be in the database). Pass a location_id as a numeric. If img_series_id is specified, the location already associated is used. This parameter can also be left NULL if latitude and longitude are specified.}
 
-\item{latitude}{If no img_meta_id exists yet AND not specifying a location: the latitude of the image. Pass as numeric.}
+\item{latitude}{If no img_series_id exists yet AND not specifying a location: the latitude of the image. Pass as numeric.}
 
-\item{longitude}{If no img_meta_id exists yet AND not specifying a location: the longitude of the image. Pass as numeric.}
+\item{longitude}{If no img_series_id exists yet AND not specifying a location: the longitude of the image. Pass as numeric.}
 
 \item{azimuth_true}{Optional: the true azimuth of the image (direction the image was taken in. Pass as numeric.}
 
