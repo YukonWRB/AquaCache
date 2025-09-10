@@ -82,9 +82,15 @@ tryCatch({
   DBI::dbExecute(con, "ALTER TABLE image_series DROP COLUMN IF EXISTS visibility_public;")
   DBI::dbExecute(con, "ALTER TABLE locations DROP COLUMN IF EXISTS visibility_public;")
   
-  # Find all columns 'share_with' in tables timeseries and images tables (text array) and change the entry for 'yg_reader' to 'yg_reader_group'
+  # Find all columns 'share_with' in tables timeseries, locations, and images tables (text array) and change the entry for 'yg_reader' to 'yg_reader_group'
   DBI::dbExecute(con, "UPDATE timeseries SET share_with = array_replace(share_with, 'yg_reader', 'yg_reader_group') WHERE share_with IS NOT NULL AND 'yg_reader' = ANY(share_with);")
   DBI::dbExecute(con, "UPDATE images SET share_with = array_replace(share_with, 'yg_reader', 'yg_reader_group') WHERE share_with IS NOT NULL AND 'yg_reader' = ANY(share_with);")
+  DBI::dbExecute(con, "UPDATE locations SET share_with = array_replace(share_with, 'yg_reader', 'yg_reader_group') WHERE share_with IS NOT NULL AND 'yg_reader' = ANY(share_with);")
+  
+  
+  # Rename columns img_meta_id to img_series_id in images and image_series tables
+  DBI::dbExecute(con, "ALTER TABLE images RENAME COLUMN img_meta_id TO img_series_id;")
+  DBI::dbExecute(con, "ALTER TABLE image_series RENAME COLUMN img_meta_id TO img_series_id;")
   
   # Update the version_info table
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '26' WHERE item = 'Last patch number';")
