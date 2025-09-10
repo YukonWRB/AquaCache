@@ -96,6 +96,35 @@ tryCatch({
   DBI::dbExecute(con, "UPDATE information.version_info SET version = '26' WHERE item = 'Last patch number';")
   DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))
   
+  DBI::dbExecute(con, "
+  CREATE OR REPLACE FUNCTION files.enforce_share_with_restriction()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  AS $function$
+    BEGIN
+  -- Skip check if img_series_id is NULL
+  IF NEW.img_series_id IS NULL THEN
+  RETURN NEW;
+  END IF;
+  
+  -- Check if images_index.share_with is NOT '{public_reader}'
+  IF NOT ('public_reader' = ANY(NEW.share_with)) THEN
+  -- Retrieve the corresponding share_with from images_index
+  PERFORM 1
+  FROM images_index
+  WHERE img_series_id = NEW.img_series_id
+  AND NOT ('public_reader' = ANY(share_with));
+  
+  -- If images_index.share_with is NOT {'public_reader'}, raise an exception
+  IF FOUND THEN
+  RAISE EXCEPTION 'images_index entry for img_series_id % has a restrictive share_with, images.share_with cannot be {public_reader}', NEW.img_series_id;
+  END IF;
+  END IF;
+  RETURN NEW;
+  END;
+  $function$
+    ;
+  ")
   
   # Commit the transaction
   DBI::dbExecute(con, "COMMIT;")

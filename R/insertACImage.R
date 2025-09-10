@@ -178,7 +178,8 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
     if (!extension %in% c("jpg", "jpeg", "png", "gif", "bmp", "tiff")) {
       stop("The file extension is not recognized as an image. Please provide a valid image file.")
     }
-    file <- readBin(object, "raw", n = file.size(object))  }
+    file <- readBin(object, "raw", n = file.size(object))
+    }
   
   
   
@@ -251,10 +252,10 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
       
       img_times <- DBI::dbGetQuery(con, paste0("SELECT first_img, last_img FROM image_series WHERE img_series_id = ", img_series_id, ";"))
       
-      if (img_times[1,1] > datetime) {
+      if (is.na(img_times[1,1]) || (img_times[1,1] > datetime)) {
         DBI::dbExecute(con, paste0("UPDATE image_series SET first_img = '", datetime, "' WHERE img_series_id = ", img_series_id, ";"))
       }
-      if (img_times[1,2] < datetime) {
+      if (is.na(img_times[1,2]) || (img_times[1,2] < datetime)) {
         DBI::dbExecute(con, paste0("UPDATE image_series SET last_img = '", datetime, "' WHERE img_series_id = ", img_series_id, ";"))
       }
       DBI::dbExecute(con, paste0("UPDATE image_series SET last_new_img = '", as.POSIXct(Sys.time(),tz = "UTC"), "' WHERE img_series_id = ", img_series_id, ";"))

@@ -79,7 +79,6 @@ downloadNupointImages <- function(location, start_datetime, username = Sys.geten
       files[i, "location"] <- tbl[i, "location"]
       if (delete) {
         sftp::sftp_delete(file, sftp_connection = nupoint, verbose = FALSE)
-        
       }
     }
   } else {

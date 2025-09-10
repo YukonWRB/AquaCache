@@ -105,7 +105,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
     close(pb)
   }
   
-  message(count, " out of ", nrow(meta_ids), " img_meta_ids were updated.")
+  message(count, " out of ", nrow(meta_ids), " img_series_ids were updated.")
   message(image_count, " images were added in total.")
   DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_new_images'"))
   return(success)
