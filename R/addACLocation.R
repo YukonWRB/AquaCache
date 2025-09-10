@@ -255,7 +255,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
                              latitude = latitude[i],
                              longitude = longitude[i],
                              visibility_public = visibility_public[i],
-                             share_with = paste0("{", share_with[i], "}"),
+                             share_with = paste0("{", paste(share_with, collapse = ", "), "}"),
                              data_sharing_agreement_id = data_sharing_agreement_id[i],
                              location_type = location_type[i],
                              note = note[i],

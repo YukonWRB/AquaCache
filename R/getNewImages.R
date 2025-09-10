@@ -29,9 +29,9 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
   
   # Create table of meta_ids
   if (image_meta_ids[1] == "all") {
-    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL;")
+    meta_ids <- DBI::dbGetQuery(con, "SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL;")
   } else {
-    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_meta_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL AND img_meta_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
+    meta_ids <- DBI::dbGetQuery(con, paste0("SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL AND img_series_id IN ('", paste(image_meta_ids, collapse = "', '"), "');"))
     if (length(image_meta_ids) != nrow(meta_ids)) {
       warning("At least one of the image_meta_ids you called for cannot be found in the database or has no function specified in column source_fx of table image_series.")
     }
@@ -56,7 +56,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
     pb <- utils::txtProgressBar(min = 0, max = nrow(meta_ids), style = 3)
   }
   for (i in 1:nrow(meta_ids)) {
-    id <- meta_ids[i, "img_meta_id"]
+    id <- meta_ids[i, "img_series_id"]
     location_id <- meta_ids[i, "location_id"]
     next_instant <- meta_ids[i, "last_img"] + 1 #one second after the last image
     source_fx <- meta_ids[i, "source_fx"]
@@ -78,12 +78,12 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
           for (j in 1:length(imgs)) {
             img <- imgs[[j]]
             # Get the image_type_id from the image_types table corresponding to 'Auto'
-            insertACImage(object = img, img_meta_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = "auto", location = location_id)  # update to the last_img and last_new_img datetime is already being done by insertACImage
+            insertACImage(object = img, img_series_id = id, datetime = img$timestamp, fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = "auto", location = location_id)  # update to the last_img and last_new_img datetime is already being done by insertACImage
             image_count <- image_count + 1
           }
         } else if (inherits(imgs, "data.frame")) {
           for (j in 1:nrow(imgs)) {
-            insertACImage(object = imgs[j, "file"], img_meta_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = 'auto', location = location_id)  # update to the last_img and last_new_img datetime is already being done by insertACImage
+            insertACImage(object = imgs[j, "file"], img_series_id = id, datetime = imgs[j, "datetime"], fetch_datetime = .POSIXct(Sys.time(), tz = "UTC"), con = con, description = "Auto-fetched.", image_type = image_type, tags = 'auto', location = location_id)  # update to the last_img and last_new_img datetime is already being done by insertACImage
             image_count <- image_count + 1
           }
         } else {
@@ -92,7 +92,7 @@ getNewImages <- function(image_meta_ids = "all", con = NULL, active = 'default')
       count <- count + 1
       success <- c(success, id)
     }, error = function(e) {
-      warning("getNewImages: Failed to get new images or to append new images for img_meta_id ", id, ".")
+      warning("getNewImages: Failed to get new images or to append new images for img_series_id ", id, ".")
     })    
     
     if (interactive()) {
