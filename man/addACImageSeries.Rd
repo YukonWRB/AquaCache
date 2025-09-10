@@ -21,9 +21,9 @@ addACImageSeries(
 
 \item{source_fx}{The function to use for fetching new images. Must be an existing function in this package.}
 
-\item{source_fx_args}{Additional arguments to pass to the function, in the form "\{param1 = arg1\}, \{param2 = 'arg2'\}". Each parameter = value pair needs to be enclosed in curly brackets, which might be missing here. Do not deviate from this format!}
+\item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.}
 
-\item{share_with}{Which user groups should the image series be shared with? Default is 'public_reader', the public group.}
+\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG"}
 
 \item{visibility_public}{How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'.}
 
@@ -34,4 +34,7 @@ TRUE if successful, and a new entry in the database with images fetched.
 }
 \description{
 Use this function to add a new image series, i.e. a continually updating time-series of images that can be accessed from the web or internal server location on a regular basis.
+}
+\details{
+#' Additional arguments to pass to the function specified in \code{source_fx} go in argument \code{source_fx_args} and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
 }

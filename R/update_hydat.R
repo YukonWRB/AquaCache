@@ -14,11 +14,11 @@
 #'
 
 update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all", force_update = FALSE) {
-
+  
   #Check if the local copy of HYDAT needs an update
   hydat_check(silent = FALSE)
   hydat_path <- tidyhydat::hy_downloaded_db()
-
+  
   #Check now if the DB should be updated
   local_hydat <- tidyhydat::hy_version(hydat_path)$Date
   DB_hydat <- DBI::dbGetQuery(con, "SELECT value FROM internal_status WHERE event = 'HYDAT_version'")[1,1]
@@ -34,7 +34,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
   if (!new_hydat & force_update ) {
     message("Local version of HYDAT is current, updating related timeseries because force_update is set to TRUE.")
   }
-
+  
   if (new_hydat | force_update) {
     #Get the required timeseries_ids
     if (timeseries_id[1] == "all") {
@@ -68,7 +68,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
     }
     
     qualifiers <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
-
+    
     #Now update historical HYDAT timeseries.
     
     qualifier_mapping <- c("B" = qualifiers[qualifiers$qualifier_type_code == "ICE", "qualifier_type_id"],
@@ -86,8 +86,8 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
         new_flow <- new_flow[!is.na(new_flow$value) , ]
         
         new_flow$qualifier <- ifelse(new_flow$qualifier %in% names(qualifier_mapping),
-                                 qualifier_mapping[new_flow$qualifier],
-                                 qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
+                                     qualifier_mapping[new_flow$qualifier],
+                                     qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
         new_flow$qualifier <- as.integer(new_flow$qualifier)
         
         new_flow$owner <- organization_id
@@ -106,8 +106,8 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
         new_level <- new_level[!is.na(new_level$value) , ]
         
         new_level$qualifier <- ifelse(new_level$qualifier %in% names(qualifier_mapping),
-                                     qualifier_mapping[new_level$qualifier],
-                                     qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
+                                      qualifier_mapping[new_level$qualifier],
+                                      qualifiers[qualifiers$qualifier_type_code == "UNK", "qualifier_type_id"])
         new_level$qualifier <- as.integer(new_level$qualifier)
         
         new_level$owner <- organization_id
@@ -119,7 +119,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
       }, error = function(e) {
         new_level <<- data.frame()
       })
-
+      
       if (nrow(new_flow) > 0) {
         tryCatch({
           parameter_id <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'water flow'")[1,1]
@@ -152,7 +152,7 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
             # Now adjust the other tables
             names(new_flow[names(new_flow) == "date"]) <- "datetime"
             new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
-          
+            
             adjust_approval(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "approval")])
             adjust_qualifier(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "qualifier")])
             adjust_owner(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "owner")])
@@ -191,10 +191,10 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               existing <- existing[order(existing$date), ]
               new_flow$key <- paste(new_flow$date, new_flow$value, sep = "|")
               existing$key <- paste(existing$date, existing$value, sep = "|")
-
+              
               # Check for mismatches using set operations
               mismatch_keys <- setdiff(new_flow$key, existing$key)
-
+              
               # Check if there are any discrepancies
               if (length(mismatch_keys) > 0) {
                 mismatch <- TRUE
@@ -279,14 +279,29 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               adjust_grade(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "grade")])
               adjust_contributor(con, tsid_flow, new_flow[!is.na(new_flow$value), c("datetime", "contributor")])
               
-              message("Found historical flow daily means for a location that only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
+              message("Found historical flow daily means for a location that had no data or only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
             }
           }
+          # Now find the earliest/last datetime between measurements_calculated_daily and measurements_realtime and update start_datetime in timeseries table if needed
+          cd <- DBI::dbGetQuery(con, paste0("SELECT MIN(date) AS start_datetime, MAX(date) AS end_datetime FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_flow))
+          rt <- DBI::dbGetQuery(con,paste0("SELECT MIN(datetime) AS start_datetime, MAX(datetime) AS end_datetime FROM measurements_continuous WHERE timeseries_id = ", tsid_flow))
+          if (is.na(cd$start_datetime) && !is.na(rt$start_datetime)) sdt <- rt$start_datetime
+          if (!is.na(cd$start_datetime) && is.na(rt$start_datetime)) sdt <- cd$start_datetime
+          if (!is.na(cd$start_datetime) && !is.na(rt$start_datetime)) sdt <- min(cd$start_datetime, rt$start_datetime)
+          
+          if (is.na(cd$end_datetime) && !is.na(rt$end_datetime)) edt <- rt$end_datetime
+          if (!is.na(cd$end_datetime) && is.na(rt$end_datetime)) edt <- cd$end_datetime
+          if (!is.na(cd$end_datetime) && !is.na(rt$end_datetime)) edt <- min(cd$end_datetime, rt$end_datetime)
+          
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", sdt, "' WHERE timeseries_id = ", tsid_flow))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", edt, "' WHERE timeseries_id = ", tsid_flow))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = ", tsid_flow))
+          
         }, error = function(e){
           warning("Something went wrong when trying to add new flow data for location ", i)
         })
       } #End of for flow loop
-
+      
       if (nrow(new_level) > 0) {
         tryCatch({
           parameter_id <- DBI::dbGetQuery(con, "SELECT parameter_id FROM parameters WHERE param_name = 'water level'")[1,1]
@@ -358,10 +373,10 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               existing <- existing[order(existing$date), ]
               new_level$key <- paste(new_level$date, new_level$value, sep = "|")
               existing$key <- paste(existing$date, existing$value, sep = "|")
-
+              
               # Check for mismatches using set operations
               mismatch_keys <- setdiff(new_level$key, existing$key)
-
+              
               # Check if there are any discrepancies
               if (length(mismatch_keys) > 0) {
                 mismatch <- TRUE
@@ -446,10 +461,25 @@ update_hydat <- function(con = AquaConnect(silent = TRUE), timeseries_id = "all"
               adjust_grade(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "grade")])
               adjust_contributor(con, tsid_level, new_level[!is.na(new_level$value), c("datetime", "contributor")])
               
-              message("Found historical level daily means for a location that only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
+              message("Found historical level daily means for a location that had no data or only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats.")
             }
           }
-
+          
+          # Now find the earliest/last datetime between measurements_calculated_daily and measurements_realtime and update start_datetime in timeseries table if needed
+          cd <- DBI::dbGetQuery(con, paste0("SELECT MIN(date) AS start_datetime, MAX(date) AS end_datetime FROM measurements_calculated_daily WHERE timeseries_id = ", tsid_level))
+          rt <- DBI::dbGetQuery(con,paste0("SELECT MIN(datetime) AS start_datetime, MAX(datetime) AS end_datetime FROM measurements_continuous WHERE timeseries_id = ", tsid_level))
+          if (is.na(cd$start_datetime) && !is.na(rt$start_datetime)) sdt <- rt$start_datetime
+          if (!is.na(cd$start_datetime) && is.na(rt$start_datetime)) sdt <- cd$start_datetime
+          if (!is.na(cd$start_datetime) && !is.na(rt$start_datetime)) sdt <- min(cd$start_datetime, rt$start_datetime)
+          
+          if (is.na(cd$end_datetime) && !is.na(rt$end_datetime)) edt <- rt$end_datetime
+          if (!is.na(cd$end_datetime) && is.na(rt$end_datetime)) edt <- cd$end_datetime
+          if (!is.na(cd$end_datetime) && !is.na(rt$end_datetime)) edt <- min(cd$end_datetime, rt$end_datetime)
+          
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", sdt, "' WHERE timeseries_id = ", tsid_level))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", edt, "' WHERE timeseries_id = ", tsid_level))
+          DBI::dbExecute(con, paste0("UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = ", tsid_level))
+          
         }, error = function(e){
           warning("Something went wrong when trying to add new level data for location ", i)
         })
