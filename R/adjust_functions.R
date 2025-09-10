@@ -103,7 +103,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
       stringsAsFactors  = FALSE
     )
     
-    current <- if (original_exist_rows > 1) exist$grade_type_id[1] else new_segments$grade_type_id[1]
+    current <- if (!is.na(exist$grade_type_id[1])) exist$grade_type_id[1] else new_segments$grade_type_id[1]
     
     index <- 1 # keeps track of the row we should be modifying in 'exist'
     
@@ -250,11 +250,22 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
     data$qualifier[is.na(data$qualifier)] <- unknown_qualifier
     
     # Split the 'qualifier' column into separate rows if it contains multiple values separated by commas
-    data$qualifier <- as.character(data$qualifier)
-    data <- data %>% dplyr::mutate(qualifier = strsplit(.data$qualifier, "\\s*,\\s*"),
-                                   rank = lapply(.data$qualifier, seq_along)) %>%
-      tidyr::unnest(cols = c("qualifier", "rank"))
     
+    data$qualifier <- as.character(data$qualifier)
+    
+    data <- data %>%
+      dplyr::mutate(
+        qualifier = strsplit(.data$qualifier, "\\s*,\\s*"),
+        rank = lapply(.data$qualifier, seq_along)
+      )
+    data <- data.frame(
+      datetime  = rep(data$datetime, lengths(data$qualifier)),
+      qualifier = unlist(data$qualifier),
+      rank      = unlist(data$rank),
+      stringsAsFactors = FALSE
+    )
+    
+
     # Check if 'qualifier' column is now composed of numbers or strings
     if (!grepl("^[0-9]", data$qualifier[1])) {
       # If it's a string, match it to the database numeric
@@ -339,7 +350,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         stringsAsFactors  = FALSE
       )
       
-      current <- if (original_exist_rows > 1) exist$qualifier_type_id[1] else new_segments$qualifier_type_id[1]
+      current <- if (!is.na(exist$qualifier_type_id[1])) exist$qualifier_type_id[1] else new_segments$qualifier_type_id[1]
       
       index <- 1 # keeps track of the row we should be modifying in 'exist'
       
@@ -558,7 +569,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
       stringsAsFactors  = FALSE
     )
     
-    current <- if (original_exist_rows > 1) exist$approval_type_id[1] else new_segments$approval_type_id[1]
+    current <- if (!is.na(exist$approval_type_id[1])) exist$approval_type_id[1] else new_segments$approval_type_id[1]
     
     index <- 1 # keeps track of the row we should be modifying in 'exist'
     
@@ -776,7 +787,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       stringsAsFactors  = FALSE
     )
     
-    current <- if (original_exist_rows > 1) exist$organization_id[1] else new_segments$organization_id[1]
+    current <- if (!is.na(exist$organization_id[1])) exist$organization_id[1] else new_segments$organization_id[1]
     
     index <- 1 # keeps track of the row we should be modifying in 'exist'
     
@@ -992,7 +1003,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
       stringsAsFactors  = FALSE
     )
     
-    current <- if (original_exist_rows > 1) exist$organization_id[1] else new_segments$organization_id[1]
+    current <- if (!is.na(exist$organization_id[1])) exist$organization_id[1] else new_segments$organization_id[1]
     
     index <- 1 # keeps track of the row we should be modifying in 'exist'
     

@@ -59,7 +59,7 @@ db_dump <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), port
   )
   
   # Execute the pg_dumpall command
-  result_dumpall <- system(dumpall_command, intern = TRUE, ignore.stderr = FALSE)
+  result_dumpall <- system(dumpall_command, ignore.stderr = FALSE)
   if (result_dumpall != 0) {
     stop("Error occurred while running pg_dumpall. Check your database connection and credentials.")
   }
@@ -79,7 +79,7 @@ db_dump <- function(name = "aquacache", host = Sys.getenv("aquacacheHost"), port
   )
   
   # Execute the pg_dump command
-  result_dump <- system(dump_command, intern = TRUE, ignore.stderr = FALSE)
+  result_dump <- system(dump_command, ignore.stderr = FALSE)
   if (result_dump != 0) {
     stop("Error occurred while running pg_dump. Check your database connection and credentials.")
   }

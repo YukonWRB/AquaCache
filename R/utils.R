@@ -5,7 +5,7 @@
 #' @param x A date-time object (POSIXct).
 #' @return A string formatted as "YYYY-MM-DD HH:MM:SS" in UTC time zone.
 #' @export
-fmt <- function(x) format(x, tz = "UTC", "%Y-%m-%d %H:%M:%S")
+fmt <- function(x) format(x, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
 
 
 #' @title Begin a transaction
@@ -59,3 +59,49 @@ dbTransCheck <- function(con) {
 
   return(active)
 }
+
+#' Replace infinite or NaN values with NA
+#'
+#' Utility function to replace `Inf`, `-Inf`, and `NaN` values with `NA`.
+#'
+#' @param x Numeric vector, data.frame, or data.table. If data.frame or data.table, will only work on 'numeric' class columns.
+#' @return Numeric vector with infinite values converted to `NA`.
+#' @export
+inf_to_na <- function(x) {
+  
+  # data.table
+  if (data.table::is.data.table(x)) {
+    num_cols <- names(x)[vapply(x, is.numeric, logical(1))]
+    if (length(num_cols)) {
+      x[, (num_cols) := lapply(.SD, function(col) {
+        idx <- which(!is.finite(col))
+        if (length(idx)) col[idx] <- NA
+        col
+      }), .SDcols = num_cols]
+    }
+    return(x)
+  }
+  
+  # data.frame / tibble
+  if (is.data.frame(x)) { # TRUE for tibbles or data.frames (and data.tables, but these are dealt with differently)
+    numeric_cols <- sapply(x, is.numeric)
+    x[numeric_cols] <- lapply(x[numeric_cols], function(col) {
+      idx <- which(!is.finite(col))
+      if (length(idx)) col[idx] <- NA
+      col
+    })
+    return(x)
+  }
+  
+  # vector
+  if (is.numeric(x)) {
+    idx <- which(!is.finite(x))
+    if (length(idx)) x[idx] <- NA
+    return(x)
+  }
+  
+  # If x is not numeric, return it unchanged
+  warning("Input is not numeric. Returning unchanged.")
+  return(x)
+}
+

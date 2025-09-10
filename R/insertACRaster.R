@@ -123,6 +123,8 @@ insertACRaster <- function(con = NULL, raster, description, flag = NA, units = N
       DBI::dbExecute(con, "COMMENT ON COLUMN public.rasters_reference.model IS 'If the raster is generated from a model such as a climate model enter the name here. This is more useful for one-off rasters, as model timeseries will also list the model in table raster_series_index.'")
     }
 
-    return (new_id)
+    return(new_id)
+  } else {
+    stop(paste0("Failed to write raster to database. Error: ", res$message))
   }
 }

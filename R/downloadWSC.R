@@ -97,9 +97,6 @@ downloadWSC <- function(location, parameter, start_datetime, end_datetime = Sys.
                             "6")
     data$approval <- as.integer(data$approval)
     
-    grade_DB <- DBI::dbGetQuery(con, "SELECT * FROM grade_types")
-    grade_mapping <- 
-    
     grade_DB <- DBI::dbGetQuery(con, "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'")[1,1]
     data$grade <- grade_DB
     

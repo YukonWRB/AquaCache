@@ -83,8 +83,21 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
     # Insert the sample data
     DBI::dbAppendTable(con, "samples", sample)
     
-    # Get the sample_id
-    sample_id <- DBI::dbGetQuery(con, paste0("SELECT sample_id FROM samples WHERE location_id = ", sample$location_id, " AND datetime = '", sample$datetime, " UTC';"))[1,1]
+    # Get the sample_id using all fields that define a unique sample
+    sample_id <- DBI::dbGetQuery(con, paste0(
+      "SELECT sample_id FROM samples WHERE location_id = ", sample$location_id,
+      " AND datetime = '", sample$datetime, " UTC'",
+      " AND media_id = ", sample$media_id,
+      " AND sample_type = ", sample$sample_type,
+      " AND collection_method = ", sample$collection_method,
+      ifelse(is.null(sample$sub_location_id) || is.na(sample$sub_location_id),
+             " AND sub_location_id IS NULL",
+             paste0(" AND sub_location_id = ", sample$sub_location_id)),
+      ifelse(is.null(sample$z) || is.na(sample$z),
+             " AND z IS NULL",
+             paste0(" AND z = ", sample$z)),
+      " AND import_source = '", sample$import_source, "';"
+    ))[1,1]
     
     # Insert the results data
     results$sample_id <- sample_id
@@ -206,36 +219,30 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             # Check existing DB sample and results ##################
             ## Check sample metadata ##############
             updated_samples_flag <- FALSE
-            for (k in names_inRemote_samp) {
-              # Ensure the name is a valid DB one
-              if (k %in% valid_sample_names) { # If TRUE, check for differences
-                inDB_k <- inDB_sample[[k]]
-                inRemote_k <- inRemote_sample[[k]]
-                # If the relevant columns in the two data.frames are all numbers, convert to numeric
-                if (!inherits(inDB_k, "numeric")) {
-                  if (grepl("^[-+]?[0-9]*\\.?[0-9]+$", inDB_k)) {
-                    inDB_k <- as.numeric(inDB_k)
-                  }
-                }
-                if (!inherits(inRemote_k, "numeric")) {
-                  if (grepl("^[-+]?[0-9]*\\.?[0-9]+$", inRemote_k)) {
-                    inRemote_k <- as.numeric(inRemote_k)
-                  }
-                }
-                if (isFALSE(all.equal(inDB_k, inRemote_k))) { # If TRUE, update the DB
-                  # message("discrepancy found in ", k)
-                  to_insert <- if (!is.na(inRemote_k)) inRemote_k else NULL
-                  if (is.null(to_insert)) {
-                    DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = NULL WHERE sample_id = ", inDB_sample$sample_id, ";"))
-                  } else {
-                    DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = '", to_insert, "' WHERE sample_id = ", inDB_sample$sample_id, ";"))
-                  }
-                  updated_samples_flag <- TRUE
-                }
+            for (k in intersect(names_inRemote_samp, valid_sample_names)) {
+              inDB_k <- inDB_sample[[k]]
+              inRemote_k <- inRemote_sample[[k]]
+              # Attempt numeric conversion where possible
+              if (!is.numeric(inDB_k)) {
+                conv <- suppressWarnings(as.numeric(inDB_k))
+                if (!is.na(conv)) inDB_k <- conv
               }
-              if (updated_samples_flag) {
-                updated_samples <- updated_samples + 1
+              if (!is.numeric(inRemote_k)) {
+                conv <- suppressWarnings(as.numeric(inRemote_k))
+                if (!is.na(conv)) inRemote_k <- conv
               }
+              if (isFALSE(all.equal(inDB_k, inRemote_k))) { # If TRUE, update the DB
+                to_insert <- if (!is.na(inRemote_k)) inRemote_k else NULL
+                if (is.null(to_insert)) {
+                  DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = NULL WHERE sample_id = ", inDB_sample$sample_id, ";"))
+                } else {
+                  DBI::dbExecute(con, paste0("UPDATE samples SET ", k, " = '", to_insert, "' WHERE sample_id = ", inDB_sample$sample_id, ";"))
+                }
+                updated_samples_flag <- TRUE
+              }
+            }
+            if (updated_samples_flag) {
+              updated_samples <- updated_samples + 1
             }
             
             # Get the results for the sample
@@ -246,18 +253,23 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             for (k in 1:nrow(inRemote_results)) {
               sub <- inRemote_results[k, ]
               names_inRemote_sub <- names(sub)
-              # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, sample_fraction, result_value_type, result_speciation, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
+              # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, sample_fraction_id, result_value_type, result_speciation_id, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
               
-              inDB_sub <- inDB_results[
-                inDB_results$result_type == sub$result_type & 
-                  inDB_results$parameter_id == sub$parameter_id & 
-                  inDB_results$result_value_type == if (!is.null(sub$result_value_type)) sub$result_value_type else NA & 
-                  inDB_results$result_speciation == if (!is.null(sub$result_speciation)) sub$result_speciation else NA & 
-                  inDB_results$protocol_method == if (!is.null(sub$protocol_method)) sub$protocol_method else NA & 
-                  inDB_results$laboratory == if (!is.null(sub$laboratory)) sub$laboratory else NA & 
-                  inDB_results$analysis_datetime == if (!is.null(sub$analysis_datetime)) sub$analysis_datetime else NA &
-                  inDB_results$sample_fraction == if (!is.null(sub$sample_fraction)) sub$sample_fraction else NA
-                , ]
+              idx <- inDB_results$result_type == sub$result_type &
+                inDB_results$parameter_id == sub$parameter_id
+              idx <- idx & (if ("result_value_type" %in% names_inRemote_sub && !is.na(sub$result_value_type))
+                inDB_results$result_value_type == sub$result_value_type else is.na(inDB_results$result_value_type))
+              idx <- idx & (if ("result_speciation_id" %in% names_inRemote_sub && !is.na(sub$result_speciation_id))
+                inDB_results$result_speciation_id == sub$result_speciation_id else is.na(inDB_results$result_speciation_id))
+              idx <- idx & (if ("protocol_method" %in% names_inRemote_sub && !is.na(sub$protocol_method))
+                inDB_results$protocol_method == sub$protocol_method else is.na(inDB_results$protocol_method))
+              idx <- idx & (if ("laboratory" %in% names_inRemote_sub && !is.na(sub$laboratory))
+                inDB_results$laboratory == sub$laboratory else is.na(inDB_results$laboratory))
+              idx <- idx & (if ("analysis_datetime" %in% names_inRemote_sub && !is.na(sub$analysis_datetime))
+                inDB_results$analysis_datetime == sub$analysis_datetime else is.na(inDB_results$analysis_datetime))
+              idx <- idx & (if ("sample_fraction_id" %in% names_inRemote_sub && !is.na(sub$sample_fraction_id))
+                inDB_results$sample_fraction_id == sub$sample_fraction_id else is.na(inDB_results$sample_fraction_id))
+              inDB_sub <- inDB_results[idx, ]
               
               if (nrow(inDB_sub) == 0) { # looks like a new result, add it (actually it might match an existing one but there's no way to know because some of the unique key columns were changed. If that's the case the 'old' one will be removed later)
                 ## Checks on results ###########
@@ -295,27 +307,27 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
                   }
                 } # End of additional checks if any NA values in 'result' column are returned
                 
-                # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction.
+                # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation_id and sample_fraction_id.
                 result_speciation <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id = ", sub$parameter_id, ");"))
                 sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id = ", sub$parameter_id, ");"))
                 if (result_speciation$result_speciation_bool) {
-                  if (!("result_speciation" %in% names_inRemote_sub)) {
-                    warning("The source function did not return a column 'result_speciation' but the database mandates this for parameter ", sub$parameter_id, ". Error occured on sample_series_id ", sid, ", returned sample ", j, "(sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
+                  if (!("result_speciation_id" %in% names_inRemote_sub)) {
+                    warning("The source function did not return a column 'result_speciation_id' but the database mandates this for parameter ", sub$parameter_id, ". Error occured on sample_series_id ", sid, ", returned sample ", j, "(sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
                     next
-                  } else { # Check that value in result_speciation column of sub are not NA where necessary
-                    if (is.na(sub$result_speciation)) {
-                      warning("For sample_series_id ", sid, " the source function returned NA for 'result_speciation' for parameter ", sub$parameter_id, " where the database mandates this value. Error occured on sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
+                  } else { # Check that value in result_speciation_id column of sub are not NA where necessary
+                    if (is.na(sub$result_speciation_id)) {
+                      warning("For sample_series_id ", sid, " the source function returned NA for 'result_speciation_id' for parameter ", sub$parameter_id, " where the database mandates this value. Error occured on sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
                       next
                     }
                   }
                 }
                 if (sample_fraction$sample_fraction_bool) {
-                  if (!("sample_fraction" %in% names_inRemote_sub)) {
-                    warning("The source function did not return a column 'sample_fraction' but the database mandates this for parameter ", sub$parameter_id, ". Error occured on sample_series_id ", sid, ", returned sample ", j, "(sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
+                  if (!("sample_fraction_id" %in% names_inRemote_sub)) {
+                    warning("The source function did not return a column 'sample_fraction_id' but the database mandates this for parameter ", sub$parameter_id, ". Error occured on sample_series_id ", sid, ", returned sample ", j, "(sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
                     next
-                  } else { # Check that value in sample_fraction column of sub are not NA where necessary
-                    if (is.na(sub$sample_fraction)) {
-                      warning("For sample_series_id ", sid, " the source function returned NA for 'sample_fraction' for parameter ", sub$parameter_id, " where the database mandates this value. Error occured on sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
+                  } else { # Check that value in sample_fraction_id column of sub are not NA where necessary
+                    if (is.na(sub$sample_fraction_id)) {
+                      warning("For sample_series_id ", sid, " the source function returned NA for 'sample_fraction_id' for parameter ", sub$parameter_id, " where the database mandates this value. Error occured on sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, "). Skipping this result.")
                       next
                     }
                   }
@@ -366,7 +378,7 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             }
             # Remove from the database any results that were not checked if delete is TRUE
             if (delete) {
-              to_delete <- inDB_results[!inDB_results$checked, "result_id"]
+              to_delete <- inDB_results[!inDB_results$checked & !inDB_results$no_update, "result_id"]
               if (length(to_delete) > 0) {
                 DBI::dbExecute(con, paste0("DELETE FROM results WHERE result_id IN (", paste(to_delete, collapse = ", "), ");"))
               }
@@ -398,6 +410,13 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
             
             inRemote_sample$import_source <- source_fx
             
+            # Apply default owner/contributor if not provided
+            if (!("owner" %in% names_inRemote_samp) || is.na(inRemote_sample$owner)) {
+              inRemote_sample$owner <- default_owner
+            }
+            if (!("contributor" %in% names_inRemote_samp) || is.na(inRemote_sample$contributor)) {
+              if (!is.na(default_contributor)) inRemote_sample$contributor <- default_contributor
+            }
             
             ## Checks on results ###########
             # Check that the results have the mandatory columns
@@ -449,33 +468,33 @@ synchronize_discrete <- function(con = NULL, sample_series_id = "all", start_dat
               }
             } # End of additional checks if any NA values in 'result' column are returned
             
-            # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction.
+            # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction_id.
             result_speciation <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (", paste(unique(inRemote_results$parameter_id), collapse = ", "), ");"))
             sample_fraction <- DBI::dbGetQuery(con, paste0("SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (", paste(unique(inRemote_results$parameter_id), collapse = ", "), ");"))
             if (any(result_speciation$result_speciation_bool)) {
-              if (!("result_speciation" %in% names(inRemote_results))) {
-                warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function did not return a column 'result_speciation' but the database mandates this for at least one of the parameters. Skipping to next sample.")
+              if (!("result_speciation_id" %in% names(inRemote_results))) {
+                warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function did not return a column 'result_speciation_id' but the database mandates this for at least one of the parameters. Skipping to next sample.")
                 next
-              } else { # Check that values in the result_speciation column are not NA where necessary
+              } else { # Check that values in the result_speciation_id column are not NA where necessary
                 merge <- merge(inRemote_results, result_speciation, by = "parameter_id")
-                # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation column is not NA
-                chk <- with(merge, result_speciation_bool & is.na(result_speciation))
+                # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation_id column is not NA
+                chk <- with(merge, result_speciation_bool & is.na(result_speciation_id))
                 if (any(chk)) {
-                  warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function returned NA values in the column 'result_speciation' for at least one parameter where the database mandates this value. Skipping to next sample.")
+                  warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function returned NA values in the column 'result_speciation_id' for at least one parameter where the database mandates this value. Skipping to next sample.")
                   next
                 }
               }
             }
             if (any(sample_fraction$sample_fraction_bool)) {
-              if (!("sample_fraction" %in% names(inRemote_results))) {
-                warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function did not return a column 'sample_fraction' but the database mandates this for at least one of the parameters. Skipping to next sample.")
+              if (!("sample_fraction_id" %in% names(inRemote_results))) {
+                warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, ") the source function did not return a column 'sample_fraction_id' but the database mandates this for at least one of the parameters. Skipping to next sample.")
                 next              
-              } else { # Check that all values in the sample_fraction column are not NA where necessary
+              } else { # Check that all values in the sample_fraction_id column are not NA where necessary
                 merge <- merge(inRemote_results, sample_fraction, by = "parameter_id")
-                # For rows where sample_fraction_bool is TRUE, check that the corresponding sample_fraction column is not NA
-                chk <- with(merge, sample_fraction_bool & is.na(sample_fraction))
+                # For rows where sample_fraction_bool is TRUE, check that the corresponding sample_fraction_id column is not NA
+                chk <- with(merge, sample_fraction_bool & is.na(sample_fraction_id))
                 if (any(chk)) {
-                  warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, "), the source function returned NA values in the column 'sample_fraction' for at least one parameter where the database mandates this value. Skipping to next sample.")
+                  warning("For sample_series_id ", sid, ", returned sample ", j, " (sample_datetime ", inRemote_sample$datetime, "), the source function returned NA values in the column 'sample_fraction_id' for at least one parameter where the database mandates this value. Skipping to next sample.")
                   next
                 }
               }

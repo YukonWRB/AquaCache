@@ -11,10 +11,11 @@
 #' @param replace If TRUE and a file of name testdb.sql.gz exists in `outpath` will attempt to replaced the file.
 #' @param pg_dump The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
 #' @param psql The path to the psql utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
-#' @param continuous_locations Character vector of location codes to retain in continuous tables.  Defaults to the first location found in the database when `NULL`.
+#' @param continuous_locations Character vector of location codes to retain in continuous tables. Defaults to the first location found in the database when `NULL`.
 #' @param discrete_locations Character vector of location codes to retain in discrete tables.  Defaults to `continuous_locations` when `NULL`.
 #' @param start_datetime The start datetime for the data to be copied.  If `NULL`, data is copied from the beginning of records to `end_datetime` for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records.
 #' @param end_datetime The end datetime for the data to be copied.  If `NULL`, all data is copied from `start_datetime` to the end of records for the affected locations. This **does** apply to the 'measurements_calculated_daily' table.
+#' @param delete If TRUE, will delete the test_temp database after the function is done. If FALSE, the database will remain for further testing.
 #'
 #' @returns An SQL file containing the schema definition saved to the 'outfile' path.
 #' @export
@@ -32,7 +33,8 @@ create_test_db <- function(name = "aquacache",
                            continuous_locations = NULL, 
                            discrete_locations = NULL, 
                            start_datetime = "2015-12-31 00:00",
-                           end_datetime = "2023-01-02 00:00") {
+                           end_datetime = "2023-01-02 00:00",
+                           delete = TRUE) {
   
   # Quick parameter setting for testing
   # name <- "aquacache"
@@ -81,9 +83,22 @@ create_test_db <- function(name = "aquacache",
   
   # Create an empty database on the connected PostgreSQL server
   tryCatch({
+    # Check if the test_temp database exists already
+    existing_dbs <- DBI::dbGetQuery(con, "SELECT datname FROM pg_database;")
+    if ("test_temp" %in% existing_dbs$datname) {
+      # Ask the user if they want to delete and replace the existing test_temp database
+      message("The test_temp database already exists. Do you want to delete it and create a new one? (yes/no)")
+      user_input <- readline(prompt = "Type 'yes' to delete the existing database: ")
+      if (tolower(user_input) != "yes") {
+        stop("Exiting without creating a new test_temp database. Please delete the existing database manually if you want to proceed.")
+      } else {
+        # Delete the existing test_temp database
+        DBI::dbExecute(con, "DROP DATABASE IF EXISTS test_temp;")
+      }
+    }
     DBI::dbExecute(con, "CREATE DATABASE test_temp;")
   }, error = function(e) {
-    stop("Failed to create test_temp database. Ensure you have the necessary permissions (likely logged in as postgres) and that the database does not already exist.")
+    stop("Failed to create test_temp database. Ensure you have the necessary permissions to create a new database on the server (likely logged in as postgres).")
   })
   
   # Connect to the newly created test database
@@ -92,7 +107,7 @@ create_test_db <- function(name = "aquacache",
   # delete the test_temp database after the function is done
   on.exit({
     DBI::dbDisconnect(test_con)
-    DBI::dbExecute(con, "DROP DATABASE IF EXISTS test_temp;")
+    if (delete) {DBI::dbExecute(con, "DROP DATABASE IF EXISTS test_temp;")} else NULL
     DBI::dbDisconnect(con)
   }, add = TRUE)
   
@@ -338,7 +353,7 @@ create_test_db <- function(name = "aquacache",
   if (replace && file.exists(outpath)) {
     file.remove(outpath)
   }
-    
+  
   dump_args <- c(
     "-U", username,
     "-h", host,
@@ -369,8 +384,8 @@ create_test_db <- function(name = "aquacache",
   if (!file.exists(outpath) || file.info(outpath)$size == 0) {
     stop("schema dump did not produce a valid file at ", outpath)
   }
-
-   # append statement to set search_path on restore
+  
+  # append statement to set search_path on restore
   alter_stmt <- paste(
     "-- ensure search_path is set when restoring the database",
     "DO $$",
@@ -387,8 +402,8 @@ create_test_db <- function(name = "aquacache",
     warning("The gzipped output file already exists at ", schema_outfile, ". It will be overwritten.")
     file.remove(schema_outfile)  # Remove the .gz file if it exists and replace is TRUE
   }
-
-    R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
+  
+  R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
   
   message("Test database .sql dump created successfully at ", schema_outfile)
   
