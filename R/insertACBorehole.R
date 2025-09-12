@@ -13,15 +13,15 @@
 #' @param latitude The latitude coordinate of the borehole location. Required.
 #' @param longitude The longitude coordinate of the borehole location. Required.
 #' @param location_source Source of the location information (e.g., "GPS", "Survey").
-#' @param surveyed_ground_level_elevation Ground elevation from survey in meters.
+#' @param surveyed_ground_elev Ground elevation from survey in meters.
 #' @param purpose_of_borehole Purpose of the borehole as integer matching the database's borehole_well_purpose column.
 #' @param purpose_borehole_inferred Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is FALSE.
 #' @param depth_to_bedrock Depth to bedrock in meters.
 #' @param permafrost_present Logical indicating if permafrost is present. Default is FALSE.
-#' @param permafrost_top_depth Depth to the top of permafrost in meters, if present.
-#' @param permafrost_bottom_depth Depth to the bottom of permafrost in meters, if present.
+#' @param permafrost_top Depth to the top of permafrost in meters, if present.
+#' @param permafrost_bot Depth to the bottom of permafrost in meters, if present.
 #' @param date_drilled Date when the borehole was drilled.
-#' @param casing_outside_diameter Outside diameter of the casing in centimeters.
+#' @param casing_od Outside diameter of the casing in centimeters.
 #' @param is_well Logical indicating if the borehole is also a well. Default is FALSE.
 #' @param well_depth Total depth of the well in meters.
 #' @param top_of_screen Depth to the top of the well screen in meters.
@@ -31,7 +31,7 @@
 #' @param estimated_yield Estimated yield of the well in liters per minute.
 #' @param ground_elev_m Ground elevation in meters.
 #' @param notes Additional notes about the borehole/well.
-#' @param share_with Which user groups should the record be shared with. Default is "yg_reader".
+#' @param share_with Which user groups should the record be shared with. Default is "public_reader".
 #' @param drilled_by Company or individual who drilled the borehole.
 #' @param drill_method Method used for drilling.
 #' @param purpose_of_well Purpose of the borehole as integer matching the database's borehole_well_purpose column. Default is `purpose_of_borehole`.
@@ -57,15 +57,15 @@ insertACBorehole <- function(
   latitude = NULL,
   longitude = NULL,
   location_source = NULL,
-  surveyed_ground_level_elevation = NULL,
+  surveyed_ground_elev = NULL,
   purpose_of_borehole = NULL,
   purpose_borehole_inferred = FALSE,
   depth_to_bedrock = NULL,
   permafrost_present = FALSE,
-  permafrost_top_depth = NULL,
-  permafrost_bottom_depth = NULL,
+  permafrost_top = NULL,
+  permafrost_bot = NULL,
   date_drilled = NULL,
-  casing_outside_diameter = NULL,
+  casing_od = NULL,
   is_well = FALSE,
   well_depth = NULL,
   top_of_screen = NULL,
@@ -75,7 +75,7 @@ insertACBorehole <- function(
   estimated_yield = NULL,
   ground_elev_m = NULL,
   notes = NULL,
-  share_with = "yg_reader",
+  share_with = "public_reader",
   drilled_by = NULL,
   drill_method = NULL,
   purpose_of_well = purpose_of_borehole,
@@ -133,10 +133,10 @@ insertACBorehole <- function(
   
   # Validate numeric fields
   numeric_fields <- c(
-    "depth_to_bedrock", "casing_outside_diameter", "well_depth", 
+    "depth_to_bedrock", "casing_od", "well_depth", 
     "top_of_screen", "bottom_of_screen", "well_head_stick_up", 
     "static_water_level", "estimated_yield", "ground_elev_m",
-    "latitude", "longitude", "surveyed_ground_level_elevation"
+    "latitude", "longitude", "surveyed_ground_elev"
   )
   for (field in numeric_fields) {
     value <- get(field)
@@ -182,8 +182,8 @@ insertACBorehole <- function(
       "INSERT INTO permafrost (borehole_id, depth_from_m, ",
       "depth_to_m) VALUES (",
       "'", borehole_id, "', ",
-      ifelse(is.na(permafrost_top_depth), "NULL", permafrost_top_depth), ", ",
-      ifelse(is.na(permafrost_bottom_depth), "NULL", permafrost_bottom_depth),
+      ifelse(is.na(permafrost_top), "NULL", permafrost_top), ", ",
+      ifelse(is.na(permafrost_bot), "NULL", permafrost_bot),
       ")"
     )
     DBI::dbExecute(con, query)
@@ -193,12 +193,12 @@ insertACBorehole <- function(
   # If borehole is a well, insert well-specific data
   if (is_well) {
     query <- paste0(
-      "INSERT INTO well (borehole_id, casing_outside_diameter, well_depth, ",
+      "INSERT INTO well (borehole_id, casing_od, well_depth, ",
       "top_of_screen, bottom_of_screen, well_head_stick_up, ",
       "static_water_level, estimated_yield, borehole_well_purpose_id, inferred_purpose) VALUES (",
       "'", borehole_id, "', ",
-      ifelse(is.null(casing_outside_diameter), "NULL", 
-             casing_outside_diameter), ", ",
+      ifelse(is.null(casing_od), "NULL", 
+             casing_od), ", ",
       ifelse(is.null(well_depth), "NULL", well_depth), ", ",
       ifelse(is.null(top_of_screen), "NULL", top_of_screen), ", ",
       ifelse(is.null(bottom_of_screen), "NULL", bottom_of_screen), ", ",
