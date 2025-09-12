@@ -11,8 +11,7 @@ addACLocation(
   name_fr = NA,
   latitude = NA,
   longitude = NA,
-  visibility_public = NA,
-  share_with = NA,
+  share_with = "public_reader",
   owner = NA,
   data_sharing_agreement_id = NA,
   location_type = NA,
@@ -28,7 +27,7 @@ addACLocation(
 )
 }
 \arguments{
-\item{df}{A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.}
+\item{df}{A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.}
 
 \item{location}{A character vector of the location code(s).}
 
@@ -40,9 +39,7 @@ addACLocation(
 
 \item{longitude}{A numeric vector of the longitude(s) as decimal degrees.}
 
-\item{visibility_public}{A character vector of the visibility of the location(s). One of 'exact', 'region', 'jitter'. Default is 'exact'.}
-
-\item{share_with}{A character vector of the user group(s) with which to share the location(s). Default is "public_reader".}
+\item{share_with}{A character vector of the user group(s) with which to share the location(s), separated by a comma. Default is "public_reader".}
 
 \item{owner}{A numeric vector of the owner(s) of the location(s).}
 

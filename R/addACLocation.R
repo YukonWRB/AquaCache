@@ -8,7 +8,7 @@
 #' @param name_fr A character vector of the location name(s) in French.
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
-#' @param share_with A character vector of the user group(s) with which to share the location(s). Default is "public_reader".
+#' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default is "public_reader".
 #' @param owner A numeric vector of the owner(s) of the location(s).
 #' @param data_sharing_agreement_id A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
@@ -25,7 +25,7 @@
 #' @return Success/error messages and new entries added to the database.
 #' @export
 
-addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, share_with = NA, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = NULL) {
+addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, share_with = "public_reader", owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = NULL) {
   
    
   # df = NULL

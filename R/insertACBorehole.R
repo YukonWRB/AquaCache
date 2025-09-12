@@ -30,12 +30,14 @@
 #' @param static_water_level Static water level measured from the top of the well in meters.
 #' @param estimated_yield Estimated yield of the well in liters per minute.
 #' @param ground_elev_m Ground elevation in meters.
-#' @param notes Additional notes about the borehole/well.
-#' @param share_with Which user groups should the record be shared with. Default is "public_reader".
+#' @param notes_borehole Additional notes about the borehole.
+#' @param notes_well Additional notes about the well.
+#' @param share_with_borehole A character vector of the user group(s) with which to share the borehole, separated by a comma. Default is "public_reader".
 #' @param drilled_by Company or individual who drilled the borehole.
 #' @param drill_method Method used for drilling.
 #' @param purpose_of_well Purpose of the borehole as integer matching the database's borehole_well_purpose column. Default is `purpose_of_borehole`.
 #' @param purpose_well_inferred Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is `purpose_borehole_inferred`.
+#' @param share_with_well A character vector of the user group(s) with which to share the well, separated by a comma. Default is `share_with_borehole`.
 #'
 #' @return The borehole_id of the newly inserted record.
 #' @export
@@ -74,12 +76,14 @@ insertACBorehole <- function(
   static_water_level = NULL,
   estimated_yield = NULL,
   ground_elev_m = NULL,
-  notes = NULL,
-  share_with = "public_reader",
+  notes_borehole = NULL,
+  notes_well = NULL,
+  share_with_borehole = "public_reader",
   drilled_by = NULL,
   drill_method = NULL,
   purpose_of_well = purpose_of_borehole,
-  purpose_well_inferred = purpose_borehole_inferred
+  purpose_well_inferred = purpose_borehole_inferred,
+  share_with_well = share_with_borehole
 ) {
   # Insert the new borehole data into the database
   
@@ -155,7 +159,7 @@ insertACBorehole <- function(
     "INSERT INTO boreholes (share_with, latitude, longitude, borehole_name,",
     "location_source, ground_elevation_m, depth_m, drilled_by, ",
     "drill_method, completion_date, notes, borehole_well_purpose_id, inferred_purpose) VALUES (",
-    "'{", paste(share_with, collapse = ","), "}', ",
+    "'{", paste(share_with_borehole, collapse = ","), "}', ",
     latitude, ", ",
     longitude, ", ",
     ifelse(is.null(well_name), "NULL", paste0("'", well_name, "'")), ", ",
@@ -168,7 +172,7 @@ insertACBorehole <- function(
            paste0("'", drill_method, "'")), ", ",
     ifelse(is.null(date_drilled), "NULL", 
            paste0("'", date_drilled, "'")), ", ",
-    ifelse(is.null(notes), "NULL", paste0("'", notes, "'")), ", ",
+    ifelse(is.null(notes_borehole), "NULL", paste0("'", notes_borehole, "'")), ", ",
     ifelse(is.null(purpose_of_borehole), "NULL", paste0("'", purpose_of_borehole, "'")), ", ",
     purpose_borehole_inferred
     , ") RETURNING borehole_id;"
@@ -195,7 +199,7 @@ insertACBorehole <- function(
     query <- paste0(
       "INSERT INTO well (borehole_id, casing_od, well_depth, ",
       "top_of_screen, bottom_of_screen, well_head_stick_up, ",
-      "static_water_level, estimated_yield, borehole_well_purpose_id, inferred_purpose) VALUES (",
+      "static_water_level, estimated_yield, borehole_well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
       "'", borehole_id, "', ",
       ifelse(is.null(casing_od), "NULL", 
              casing_od), ", ",
@@ -205,15 +209,17 @@ insertACBorehole <- function(
       ifelse(is.null(well_head_stick_up), "NULL", well_head_stick_up), ", ",
       ifelse(is.null(static_water_level), "NULL", static_water_level), ", ",
       ifelse(is.null(estimated_yield), "NULL", estimated_yield), ", ",
-      ifelse(is.null(purpose_ofwell), "NULL", paste0("'", purpose_of_well, "'")), ", ",
-      purpose_well_inferred,
+      ifelse(is.null(purpose_of_well), "NULL", paste0("'", purpose_of_well, "'")), ", ",
+      purpose_well_inferred, ", ",
+      ifelse(is.null(notes_well), "NULL", paste0("'", notes_well, "'")), ", ",
+      "'{", paste(share_with_well, collapse = ","), "}'",
       ")"
     )
     DBI::dbExecute(con, query)
   }
   
   # Determine document type based on is_well flag
-  document_type <- if(is_well) "well log" else "borehole log"
+  document_type <- if (is_well) "well log" else "borehole log"
   
   # Insert document metadata using insertACDocument
   insertACDocument(

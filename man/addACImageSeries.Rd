@@ -10,7 +10,6 @@ addACImageSeries(
   source_fx,
   source_fx_args = NA,
   share_with = "public_reader",
-  visibility_public = "exact",
   con = NULL
 )
 }
@@ -24,8 +23,6 @@ addACImageSeries(
 \item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.}
 
 \item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG"}
-
-\item{visibility_public}{How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
 }

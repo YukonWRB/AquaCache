@@ -126,6 +126,65 @@ tryCatch({
     ;
   ")
   
+  
+  # Add missing triggers to enforce share_with restrictions on boreholes schema tables
+  DBI::dbExecute(con, "
+  create or replace trigger validate_share_with_trigger before
+  insert
+  or
+  update
+  on
+  boreholes.boreholes for each row execute function validate_share_with()
+  ")
+  DBI::dbExecute(con, "
+  create or replace trigger validate_share_with_trigger before
+  insert
+  or
+  update
+  on
+  boreholes.wells for each row execute function validate_share_with()
+  ")
+  
+  
+  # Updaet get_sharable_principals_for so that pg_roles don't show up
+  DBI::dbExecute(con, "
+CREATE OR REPLACE FUNCTION public.get_shareable_principals_for(
+  _rel regclass,
+  _privs text[] DEFAULT ARRAY['SELECT'::text],
+  _always_include text[] DEFAULT ARRAY['public_reader'::text, 'admin'::text]
+)
+RETURNS TABLE(role_name text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_temp','pg_catalog'
+AS $function$
+  SELECT x.role_name
+  FROM (
+    SELECT r.rolname AS role_name
+    FROM pg_roles r
+    WHERE r.rolcanlogin = false
+      AND r.rolname <> 'public'
+      AND r.rolname <> 'pg_read_all_data'
+      AND r.rolname NOT LIKE 'pg\\_%'      -- hide system roles
+      AND r.rolname NOT LIKE 'rds\\_%'     -- (optional) hide AWS RDS roles
+      AND EXISTS (
+        SELECT 1 FROM unnest(_privs) p
+        WHERE has_table_privilege(r.oid, _rel, p)
+      )
+
+    UNION
+
+    SELECT r.rolname
+    FROM pg_roles r
+    WHERE r.rolname = ANY(_always_include)
+  ) AS x
+  ORDER BY
+    CASE WHEN x.role_name = ANY(_always_include) THEN 0 ELSE 1 END,
+    x.role_name;
+$function$;
+")
+  
   # Commit the transaction
   DBI::dbExecute(con, "COMMIT;")
   
