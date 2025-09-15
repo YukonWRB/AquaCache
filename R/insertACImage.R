@@ -125,7 +125,7 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
     }
   }
   
-  meta_id <- FALSE
+  series_id <- FALSE
   if (!is.null(img_series_id)) {
     img_series_id <- DBI::dbGetQuery(con, paste0("SELECT img_series_id FROM image_series WHERE img_series_id = ", img_series_id))[1,1]
     if (is.na(img_series_id)) {
@@ -142,9 +142,9 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
         stop("The img_series_id you specified does not have a location_id associated with it. Try again.")
       }
     }
-    meta_id <- TRUE
+    series_id <- TRUE
     
-  } else { # No image_meta_id, so we need to make sure a location is associated OR that a lat/long is provided
+  } else { # No image_series_id, so we need to make sure a location is associated OR that a lat/long is provided
     
     if (is.null(location)) {
       if (is.null(latitude) | is.null(longitude)) {
@@ -187,7 +187,7 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
   tryCatch({
     activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
     
-    if (meta_id) { # There's an associated meta_id
+    if (series_id) { # There's an associated series_id
       exist_img <- DBI::dbGetQuery(con, paste0("SELECT datetime FROM images WHERE datetime = '", datetime, "' AND img_series_id = ", img_series_id, ";"))[1,1]
       update <- FALSE
       if (!is.na(exist_img)) {
