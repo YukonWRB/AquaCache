@@ -74,7 +74,7 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
 
   DBI::dbAppendTable(con, "image_series", insert)
   res <- DBI::dbGetQuery(con, paste0("SELECT img_series_id FROM image_series WHERE location_id = ", location_id, ";"))[1,1]
-  added <- getNewImages(image_meta_ids = res, con = con)
+  added <- getNewImages(image_series_ids = res, con = con)
   if (length(added) == 0) {
     warning("Failed to find or add new images. The new entry to table image_series has been deleted.")
     DBI::dbExecute(con, paste0("DELETE FROM image_series WHERE img_series_id = ", res, ";"))
