@@ -4,10 +4,10 @@
 \alias{getNewImages}
 \title{Get new images}
 \usage{
-getNewImages(image_meta_ids = "all", con = NULL, active = "default")
+getNewImages(image_series_ids = "all", con = NULL, active = "default")
 }
 \arguments{
-\item{image_meta_ids}{A vector of image_meta_id's. Default 'all' fetches all ids in the table.}
+\item{image_series_ids}{A vector of image_series_id's. Default 'all' fetches all ids in the table.}
 
 \item{con}{A connection to the database. Leaving NULL will create a connection and close it automatically.}
 
