@@ -1,7 +1,6 @@
 #' Maintenance (vacuum) function for aquacache database.
 #'
 #' @description
-#' `r lifecycle::badge("stable")`
 #'
 #' Performs maintenance operations operation on the database, according to the parameters selected.
 #'
@@ -16,9 +15,14 @@
 #' @export
 #'
 
-maintain <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_check = FALSE, locations_check = FALSE, visibility_check = TRUE)
-  
-{
+maintain <- function(
+  con = NULL,
+  vacuum = TRUE,
+  vacuum_full = FALSE,
+  timeseries_check = FALSE,
+  locations_check = FALSE,
+  visibility_check = TRUE
+) {
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
@@ -29,42 +33,113 @@ maintain <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_
     } else {
       DBI::dbExecute(con, "VACUUM (ANALYZE)")
     }
-    DBI::dbExecute(con, paste0("UPDATE internal_status SET value = '", .POSIXct(Sys.time(), "UTC"), "' WHERE event = 'last_vacuum';"))
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE internal_status SET value = '",
+        .POSIXct(Sys.time(), "UTC"),
+        "' WHERE event = 'last_vacuum';"
+      )
+    )
     message("Database vacuum completed")
   }
-  
+
   if (timeseries_check) {
     ts_tbl <- DBI::dbGetQuery(con, "SELECT * FROM timeseries;")
     for (i in 1:nrow(ts_tbl)) {
       # Confirm start/end datetimes are correct
       tsid <- ts_tbl$timeseries_id[i]
-      start_rt <- DBI::dbGetQuery(con, paste0("SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[1,1]
-      start_dly <- DBI::dbGetQuery(con, paste0("SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[1,1]
+      start_rt <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+          tsid,
+          ";"
+        )
+      )[1, 1]
+      start_dly <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+          tsid,
+          ";"
+        )
+      )[1, 1]
       if (is.na(start_rt) && is.na(start_dly)) {
-        message("No data found associated with timeseries_id ", tsid, ". You should consider deleting this timeseries.")
+        message(
+          "No data found associated with timeseries_id ",
+          tsid,
+          ". You should consider deleting this timeseries."
+        )
         next
       }
-      start <- if (!is.na(start_rt) & !is.na(start_dly)) min(start_rt, as.POSIXct(start_dly, tz = "UTC")) else if (is.na(start_rt)) start_dly else start_rt
-      
-      end_rt <- DBI::dbGetQuery(con, paste0("SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ", tsid, ";"))[1,1]
-      end_dly <- DBI::dbGetQuery(con, paste0("SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ", tsid, ";"))[1,1]
-      end <- if (!is.na(end_rt) & !is.na(end_dly)) max(end_rt, as.POSIXct(end_dly, tz = "UTC")) else if (is.na(end_rt)) end_dly else end_rt
-      
+      start <- if (!is.na(start_rt) & !is.na(start_dly)) {
+        min(start_rt, as.POSIXct(start_dly, tz = "UTC"))
+      } else if (is.na(start_rt)) {
+        start_dly
+      } else {
+        start_rt
+      }
+
+      end_rt <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+          tsid,
+          ";"
+        )
+      )[1, 1]
+      end_dly <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+          tsid,
+          ";"
+        )
+      )[1, 1]
+      end <- if (!is.na(end_rt) & !is.na(end_dly)) {
+        max(end_rt, as.POSIXct(end_dly, tz = "UTC"))
+      } else if (is.na(end_rt)) {
+        end_dly
+      } else {
+        end_rt
+      }
+
       if (start != ts_tbl$start_datetime[i]) {
-        DBI::dbExecute(con, paste0("UPDATE timeseries SET start_datetime = '", start, "' WHERE timeseries_id = ", tsid, ";"))
+        DBI::dbExecute(
+          con,
+          paste0(
+            "UPDATE timeseries SET start_datetime = '",
+            start,
+            "' WHERE timeseries_id = ",
+            tsid,
+            ";"
+          )
+        )
       }
       if (end != ts_tbl$end_datetime[i]) {
-        DBI::dbExecute(con, paste0("UPDATE timeseries SET end_datetime = '", end, "' WHERE timeseries_id = ", tsid, ";"))
+        DBI::dbExecute(
+          con,
+          paste0(
+            "UPDATE timeseries SET end_datetime = '",
+            end,
+            "' WHERE timeseries_id = ",
+            tsid,
+            ";"
+          )
+        )
       }
     }
     message("Timeseries checks completed")
   }
-  
+
   if (locations_check) {
     loc_tbl <- DBI::dbGetQuery(con, "SELECT * FROM locations;")
-    
+
     # Get the foreign key references for the locations table
-    refs <- DBI::dbGetQuery(con, "WITH fk_deps AS (
+    refs <- DBI::dbGetQuery(
+      con,
+      "WITH fk_deps AS (
           SELECT
             con.oid AS constraint_oid,
             ns.nspname AS fk_schema,
@@ -84,45 +159,90 @@ maintain <- function(con = NULL, vacuum = TRUE, vacuum_full = FALSE, timeseries_
         )
         SELECT fk_schema, fk_table, fk_column
         FROM fk_deps;
-        ")
-    
+        "
+    )
+
     for (i in 1:nrow(loc_tbl)) {
       locid <- loc_tbl$location_id[i]
       loc_name <- loc_tbl$location[i]
-      
+
       # Check if location is used in any other table
       # Loop over all tables listed in 'refs' until a reference to 'locid' is found
       for (j in 1:nrow(refs)) {
         schema <- refs$fk_schema[j]
         tbl <- refs$fk_table[j]
         col <- refs$fk_column[j]
-        
+
         # Check if the location_id is used in the current table
-        check <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM ", schema, ".", tbl, " WHERE ", col, " = ", locid, ";"))[1,1]
+        check <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT COUNT(*) FROM ",
+            schema,
+            ".",
+            tbl,
+            " WHERE ",
+            col,
+            " = ",
+            locid,
+            ";"
+          )
+        )[1, 1]
         if (check > 0) {
           break
         }
         if (j == nrow(refs)) {
-          message("Location ", loc_name, " (", locid, ") is not used in any other table. You should consider deleting this location.")
+          message(
+            "Location ",
+            loc_name,
+            " (",
+            locid,
+            ") is not used in any other table. You should consider deleting this location."
+          )
         }
       }
-      
+
       # Check if location has a corresponding entry in the vectors table
-      vec_check <- DBI::dbGetQuery(con, paste0("SELECT COUNT(*) FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = '", tolower(loc_tbl$location[i]), "';"))
+      vec_check <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT COUNT(*) FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = '",
+          tolower(loc_tbl$location[i]),
+          "';"
+        )
+      )
       if (vec_check == 0) {
-        message("Location ", loc_name, " (", locid, ") does not have a corresponding entry in the vectors table, creating it.")
+        message(
+          "Location ",
+          loc_name,
+          " (",
+          locid,
+          ") does not have a corresponding entry in the vectors table, creating it."
+        )
         # Create a new entry in the vectors table
-        point <- data.frame("feature_name" = loc_tbl$location[i],
-                            "description" = loc_tbl$name[i],
-                            "latitude" = loc_tbl$latitude[i],
-                            "longitude" = loc_tbl$longitude[i])
-        point <- terra::vect(point, geom = c("longitude", "latitude"), crs = "epsg:4269")
-        insertACVector(geom = point, layer_name = "Locations", feature_name_col = "feature_name", description_col = "description", con = con)
+        point <- data.frame(
+          "feature_name" = loc_tbl$location[i],
+          "description" = loc_tbl$name[i],
+          "latitude" = loc_tbl$latitude[i],
+          "longitude" = loc_tbl$longitude[i]
+        )
+        point <- terra::vect(
+          point,
+          geom = c("longitude", "latitude"),
+          crs = "epsg:4269"
+        )
+        insertACVector(
+          geom = point,
+          layer_name = "Locations",
+          feature_name_col = "feature_name",
+          description_col = "description",
+          con = con
+        )
       }
     }
     message("Location checks completed")
   }
-  
+
   if (visibility_check) {
     # get tables that have BOTH share_with (text[]) and private_expiry (date)
     sql <- "
@@ -134,17 +254,34 @@ GROUP BY table_schema, table_name
 HAVING COUNT(DISTINCT column_name) = 2;
 "
     tbls <- DBI::dbGetQuery(con, sql)
-    
+
     for (k in seq_len(nrow(tbls))) {
       sch <- tbls$table_schema[k]
       tab <- tbls$table_name[k]
       # Update share_with to 'public_reader' and set private_expiry to NULL if private_expiry is before today
-      DBI::dbExecute(con, paste0("UPDATE ", sch, ".", tab, " SET share_with = ARRAY['public_reader']::text[] WHERE share_with IS DISTINCT FROM ARRAY['public_reader']::text[] AND private_expiry < CURRENT_DATE;"))
+      DBI::dbExecute(
+        con,
+        paste0(
+          "UPDATE ",
+          sch,
+          ".",
+          tab,
+          " SET share_with = ARRAY['public_reader']::text[] WHERE share_with IS DISTINCT FROM ARRAY['public_reader']::text[] AND private_expiry < CURRENT_DATE;"
+        )
+      )
       # Set private_expiry to NULL if share_with is 'public_reader'
-      DBI::dbExecute(con, paste0("UPDATE ", sch, ".", tab, " SET private_expiry = NULL WHERE share_with = ARRAY['public_reader']::text[];"))
-      
+      DBI::dbExecute(
+        con,
+        paste0(
+          "UPDATE ",
+          sch,
+          ".",
+          tab,
+          " SET private_expiry = NULL WHERE share_with = ARRAY['public_reader']::text[];"
+        )
+      )
     }
   }
-  
+
   return(TRUE)
 }

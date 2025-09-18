@@ -89,13 +89,20 @@ tryCatch(
       "DROP FUNCTION IF EXISTS public.check_instruments_reference();"
     )
 
-    # DRop the old UK
+    # Drop the old unique key
     DBI::dbExecute(
       con,
       "ALTER TABLE public.locations_metadata_instruments
       DROP CONSTRAINT IF EXISTS locations_metadata_instruments_location_id_sub_location_id_key;"
     )
-    # Make a new, better UK
+
+    # # Add new column for z (depth/height) in meters
+    # DBI::dbExecute(
+    #   con,
+    #   "ALTER TABLE public.locations_metadata_instruments
+    #   ADD COLUMN IF NOT EXISTS z_meters NUMERIC;"
+    # )
+    # Make a new, better unique key
     DBI::dbExecute(
       con,
       "ALTER TABLE public.locations_metadata_instruments
@@ -216,67 +223,84 @@ tryCatch(
       ADD COLUMN IF NOT EXISTS note TEXT;"
     )
 
-    # Add a new table for depth/height of monitoring locations, reference columns 'z' in timeseries and samples tables to this new table
+    # # Add a new table for depth/height of monitoring locations, reference columns 'z' in timeseries and samples tables to this new table
+    # DBI::dbExecute(
+    #   con,
+    #   "
+    # CREATE TABLE IF NOT EXISTS public.locations_z (
+    #   location_z_id SERIAL PRIMARY KEY,
+    #   location_id INTEGER NOT NULL REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    #   sub_location_id INTEGER,
+    #   z_meters NUMERIC NOT NULL,
+    #   note TEXT,
+    #   CONSTRAINT fk_loc_z_loc FOREIGN KEY (location_id, sub_location_id) REFERENCES public.sub_locations(location_id, sub_location_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    # );"
+    # )
+
+    # # Migrate existing data from timeseries.z to locations_z table
+    # ts_z <- DBI::dbGetQuery(
+    #   con,
+    #   "
+    #   SELECT DISTINCT timeseries_id, location_id, sub_location_id, z AS z_meters
+    #   FROM continuous.timeseries
+    #   WHERE z IS NOT NULL;
+    # "
+    # )
+    # if (nrow(ts_z) > 0) {
+    #   for (i in 1:nrow(ts_z)) {
+    #     row <- ts_z[i, ]
+    #     new_z_id <- DBI::dbGetQuery(
+    #       con,
+    #       "
+    #     INSERT INTO public.locations_z (location_id, sub_location_id, z_meters)
+    #     VALUES ($1, $2, $3) RETURNING location_z_id;
+    #   ",
+    #       params = as.list(row$c("location_id", "sub_location_id", "z_meters"))
+    #     )
+    #   }
+    #   # Use the timeseries_id to update the timeseries.z column to reference the new locations_z table
+    #   DBI::dbExecute(
+    #     con,
+    #     "UPDATE continuous.timeseries SET z = $1 WHERE timeseries_id = $2;",
+    #     params = list(new_z_id, row$timeseries_id)
+    #   )
+    # }
+
+    # # Convert timeseries.z to INTEGER and add FK constraint to locations_z table
+    # DBI::dbExecute(
+    #   con,
+    #   "ALTER TABLE continuous.timeseries ALTER COLUMN z TYPE INTEGER USING z::INTEGER;"
+    # )
+    # DBI::dbExecute(
+    #   con,
+    #   "ALTER TABLE continuous.timeseries
+    #   ADD CONSTRAINT fk_timeseries_z
+    #   FOREIGN KEY (z)
+    #   REFERENCES public.locations_z(location_z_id)
+    #   ON DELETE SET NULL ON UPDATE CASCADE;"
+    # )
+    # # rename the column to location_z_id for clarity
+    # DBI::dbExecute(
+    #   con,
+    #   "ALTER TABLE continuous.timeseries RENAME COLUMN z TO location_z_id;"
+    # )
+
+    # Create infrastructure to hold field visit metadata. Will allow linking instruments to a field visit. Samples will be linked to a field visit.
     DBI::dbExecute(
       con,
       "
-    CREATE TABLE IF NOT EXISTS public.locations_z (
-      location_z_id SERIAL PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS public.field_visits (
+      field_visit_id SERIAL PRIMARY KEY,
+      visit_datetime TIMESTAMPTZ NOT NULL,
       location_id INTEGER NOT NULL REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE,
       sub_location_id INTEGER,
-      z_meters NUMERIC NOT NULL,
+      instrument 
       note TEXT,
-      CONSTRAINT fk_loc_z_loc FOREIGN KEY (location_id, sub_location_id) REFERENCES public.sub_locations(location_id, sub_location_id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT fk_field_visit_subloc FOREIGN KEY (location_id, sub_location_id) REFERENCES public.sub_locations(location_id, sub_location_id) ON DELETE CASCADE ON UPDATE CASCADE
     );"
     )
 
-    # Migrate existing data from timeseries.z to locations_z table
-    ts_z <- DBI::dbGetQuery(
-      con,
-      "
-      SELECT DISTINCT timeseries_id, location_id, sub_location_id, z AS z_meters
-      FROM continuous.timeseries
-      WHERE z IS NOT NULL;
-    "
-    )
-    if (nrow(ts_z) > 0) {
-      for (i in 1:nrow(ts_z)) {
-        row <- ts_z[i, ]
-        new_z_id <- DBI::dbGetQuery(
-          con,
-          "
-        INSERT INTO public.locations_z (location_id, sub_location_id, z_meters)
-        VALUES ($1, $2, $3) RETURNING location_z_id;
-      ",
-          params = as.list(row$c("location_id", "sub_location_id", "z_meters"))
-        )
-      }
-      # Use the timeseries_id to update the timeseries.z column to reference the new locations_z table
-      DBI::dbExecute(
-        con,
-        "UPDATE continuous.timeseries SET z = $1 WHERE timeseries_id = $2;",
-        params = list(new_z_id, row$timeseries_id)
-      )
-    }
-
-    # Convert timeseries.z to INTEGER and add FK constraint to locations_z table
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.timeseries ALTER COLUMN z TYPE INTEGER USING z::INTEGER;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.timeseries
-      ADD CONSTRAINT fk_timeseries_z
-      FOREIGN KEY (z)
-      REFERENCES public.locations_z(location_z_id)
-      ON DELETE SET NULL ON UPDATE CASCADE;"
-    )
-    # rename the column to location_z_id for clarity
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.timeseries RENAME COLUMN z TO location_z_id;"
-    )
+    # Add a field for field_visit_id to samples table
 
     # Commit the transaction
     DBI::dbExecute(con, "COMMIT;")

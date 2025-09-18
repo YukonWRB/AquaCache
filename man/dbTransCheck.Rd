@@ -13,5 +13,5 @@ dbTransCheck(con)
 A boolean indicating whether a transaction is active (TRUE for active)
 }
 \description{
-Check if a database connection is in an active transaction.
+Check if a database connection is in an active transaction. Does not work on a transaction begun with \code{DBI::dbBegin} until some modification is made to the database; function \code{\link[=dbTransBegin]{dbTransBegin()}} should be used to start a transaction instead.
 }

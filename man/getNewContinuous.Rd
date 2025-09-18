@@ -17,8 +17,6 @@ getNewContinuous(con = NULL, timeseries_id = "all", active = "default")
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for how to add new stations. Does not work on any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified souce_fx will be ignored.
 \subsection{Default arguments passed to 'source_fx' functions:}{
 

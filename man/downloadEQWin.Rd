@@ -27,7 +27,5 @@ downloadEQWin(
 A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 Brings in water quality data from the EQWin database. <DL values are transformed to the negative of the detection limit, > instrument range is left as the value. A note is added in either case to the 'note' column.
 }

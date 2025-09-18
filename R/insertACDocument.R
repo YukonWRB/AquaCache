@@ -1,7 +1,6 @@
 #' Add document to aquacache database
 #'
 #'@description
-#'`r lifecycle::badge("stable")`
 #'
 #' This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See [YGwater::getDocument()] to get a document out again.
 #'
@@ -23,15 +22,26 @@
 #' @return TRUE if a document was properly added to the database.
 #' @export
 
-insertACDocument <- function(path, name, type, description, tags = NULL, authors = NULL, publish_date = NULL, url = NULL, share_with = "public_reader", geoms = NULL, con = NULL) {
-  
+insertACDocument <- function(
+  path,
+  name,
+  type,
+  description,
+  tags = NULL,
+  authors = NULL,
+  publish_date = NULL,
+  url = NULL,
+  share_with = "public_reader",
+  geoms = NULL,
+  con = NULL
+) {
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
-  
+
   DBI::dbExecute(con, "SET timezone = 'UTC'")
-  
+
   #Checks
   if (length(path) > 1) {
     stop("You can only specify one path at a time.")
@@ -40,7 +50,9 @@ insertACDocument <- function(path, name, type, description, tags = NULL, authors
     stop("Your description must be a character vector.")
   }
   if (length(description) > 1) {
-    stop("You can only enter the description as a character vector of length 1.")
+    stop(
+      "You can only enter the description as a character vector of length 1."
+    )
   }
   if (!is.null(tags)) {
     if (!is.character(tags)) {
@@ -51,24 +63,44 @@ insertACDocument <- function(path, name, type, description, tags = NULL, authors
     stop("Minimum character length for 'description' is 5. Try harder.")
   }
   type <- tolower(type)
-  db_types <- DBI::dbGetQuery(con, "SELECT document_type_id, document_type_en FROM document_types;")
+  db_types <- DBI::dbGetQuery(
+    con,
+    "SELECT document_type_id, document_type_en FROM document_types;"
+  )
   if (!(type %in% db_types$document_type_en)) {
-    stop("Your specified document type is not in the DB. This is what I see in there now:\n  ", paste(db_types$document_type_en, collapse = "\n  "))
+    stop(
+      "Your specified document type is not in the DB. This is what I see in there now:\n  ",
+      paste(db_types$document_type_en, collapse = "\n  ")
+    )
   }
   #Check that the name doesn't already exist
-  name_check <- DBI::dbGetQuery(con, paste0("SELECT name FROM documents WHERE name = '", name, "';"))
+  name_check <- DBI::dbGetQuery(
+    con,
+    paste0("SELECT name FROM documents WHERE name = '", name, "';")
+  )
   if (nrow(name_check) != 0) {
     stop("There is already a document with this name in the database.")
   }
-  
+
   if (!is.null(geoms)) {
     #Check to make sure the geom_ids exist, report back to the user what actually got associated.
-    exist_geoms <- DBI::dbGetQuery(con, paste0("SELECT geom_id, geom_type, layer_name, feature_name, description FROM vectors WHERE geom_id IN (", paste(geoms, collapse = ", "), ")"))
+    exist_geoms <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT geom_id, geom_type, layer_name, feature_name, description FROM vectors WHERE geom_id IN (",
+        paste(geoms, collapse = ", "),
+        ")"
+      )
+    )
     if (nrow(exist_geoms) == 0) {
-      stop("None of the geom_ids you specified for parameter geoms can be found in the table vectors. Try again.")
+      stop(
+        "None of the geom_ids you specified for parameter geoms can be found in the table vectors. Try again."
+      )
     }
     if (nrow(exist_geoms != length(geoms))) {
-      warning("At least one of the geom_ids you specified for parameter geoms could not be found in table vectors.")
+      warning(
+        "At least one of the geom_ids you specified for parameter geoms could not be found in table vectors."
+      )
     }
   }
   if (!is.null(publish_date)) {
@@ -76,43 +108,103 @@ insertACDocument <- function(path, name, type, description, tags = NULL, authors
       stop("publish_date must be a Date object.")
     }
   }
-  
+
   if (path == "choose") {
     path <- rstudioapi::selectFile(
       caption = "Select a document to upload",
       filter = list("All files" = c("*.*"))
     )
   } else if (!file.exists(path)) {
-    stop("The file you specified does not exist. Please check the path and try again.")
+    stop(
+      "The file you specified does not exist. Please check the path and try again."
+    )
   }
   extension <- tools::file_ext(path)
   file <- readBin(path, what = "raw", n = file.info(path)$size)
-  
+
   assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
-  DBI::dbExecute(con, paste0("INSERT INTO documents (name, type, description, format, document, share_with) VALUES ('", name, "', '", assigned_type, "', '", description, "', '", extension, "', '\\x", paste0(file, collapse = ""), "', ARRAY[", paste(sprintf("'%s'", share_with), collapse = ","), "]);"))
-  id <- DBI::dbGetQuery(con, paste0("SELECT document_id FROM documents WHERE name = '", name, "';"))
-  
+  DBI::dbExecute(
+    con,
+    paste0(
+      "INSERT INTO documents (name, type, description, format, document, share_with) VALUES ('",
+      name,
+      "', '",
+      assigned_type,
+      "', '",
+      description,
+      "', '",
+      extension,
+      "', '\\x",
+      paste0(file, collapse = ""),
+      "', ARRAY[",
+      paste(sprintf("'%s'", share_with), collapse = ","),
+      "]);"
+    )
+  )
+  id <- DBI::dbGetQuery(
+    con,
+    paste0("SELECT document_id FROM documents WHERE name = '", name, "';")
+  )
+
   if (!is.null(authors)) {
-    DBI::dbExecute(con, paste0("UPDATE documents SET authors = '{", paste(authors, collapse = ", "), "}' WHERE document_id = ", id, ";"))
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE documents SET authors = '{",
+        paste(authors, collapse = ", "),
+        "}' WHERE document_id = ",
+        id,
+        ";"
+      )
+    )
   }
   if (!is.null(url)) {
-    DBI::dbExecute(con, paste0("UPDATE documents SET url = '", url, "' WHERE document_id = ", id, ";"))
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE documents SET url = '",
+        url,
+        "' WHERE document_id = ",
+        id,
+        ";"
+      )
+    )
   }
   if (!is.null(publish_date)) {
-    DBI::dbExecute(con, paste0("UPDATE documents SET publish_date = '", publish_date, "' WHERE document_id = ", id, ";"))
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE documents SET publish_date = '",
+        publish_date,
+        "' WHERE document_id = ",
+        id,
+        ";"
+      )
+    )
   }
   if (!is.null(tags)) {
-    DBI::dbExecute(con, paste0("UPDATE documents SET tags = '{", paste(tags, collapse = ", "), "}' WHERE document_id = ", id, ";"))
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE documents SET tags = '{",
+        paste(tags, collapse = ", "),
+        "}' WHERE document_id = ",
+        id,
+        ";"
+      )
+    )
   }
-  
-  if (!is.null(geoms)) {
-    docs_spat <- data.frame("document_id" = id,
-                            "geom_id" = exist_geoms$geom_id)
-    
-    DBI::dbAppendTable(con, "documents_spatial", docs_spat)
-    
-    return(list("success" = TRUE, "new_document_id" =  id, "associated_geoms" = exist_geoms))
-  }
-  return(list("success" = TRUE, "new_document_id" =  id))
-}
 
+  if (!is.null(geoms)) {
+    docs_spat <- data.frame("document_id" = id, "geom_id" = exist_geoms$geom_id)
+
+    DBI::dbAppendTable(con, "documents_spatial", docs_spat)
+
+    return(list(
+      "success" = TRUE,
+      "new_document_id" = id,
+      "associated_geoms" = exist_geoms
+    ))
+  }
+  return(list("success" = TRUE, "new_document_id" = id))
+}

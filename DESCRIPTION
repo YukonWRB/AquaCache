@@ -36,7 +36,6 @@ Imports:
     ecmwfr,
     httr,
     jsonlite,
-    lifecycle,
     lubridate,
     magrittr,
     odbc,

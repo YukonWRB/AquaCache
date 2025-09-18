@@ -11,7 +11,6 @@
 #' @importFrom data.table .SD
 #' @importFrom data.table :=
 #' @importFrom data.table data.table
-#' @importFrom lifecycle deprecated
 #' @importFrom rlang .data
 ## usethis namespace: end
 NULL

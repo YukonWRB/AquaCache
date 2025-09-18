@@ -1,7 +1,6 @@
 #' Add a borehole record to the aquacache database
 #'
 #'@description
-#'`r lifecycle::badge("stable")`
 #'
 #' This function facilitates the addition of a borehole record to the database. If the borehole
 #' is also a well, additional well-specific information can be provided. The function can also
@@ -86,7 +85,7 @@ insertACBorehole <- function(
   share_with_well = share_with_borehole
 ) {
   # Insert the new borehole data into the database
-  
+
   # Establish database connection if not provided
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -94,16 +93,18 @@ insertACBorehole <- function(
   } else {
     con <- con
   }
-  
+
   # Set timezone to UTC for consistency
   DBI::dbExecute(con, "SET timezone = 'UTC'")
-  
+
   # Validate 'share_with' parameter type
   if (!inherits(share_with, "character")) {
-    stop("The 'share_with' parameter must be a character vector with one element ",
-         "per share with group.")
+    stop(
+      "The 'share_with' parameter must be a character vector with one element ",
+      "per share with group."
+    )
   }
-  
+
   # Validate required inputs
   if (is.null(well_name) || !is.character(well_name)) {
     stop("'well_name' must be a non-NULL character.")
@@ -111,36 +112,69 @@ insertACBorehole <- function(
   if (!is.null(location_source) && !is.character(location_source)) {
     stop("'location_source' must be character if provided.")
   }
-  
+
   # Validate purpose_of_borehole and purpose_of_well if provided
   if (!is.null(purpose_of_borehole)) {
     # Check if purpose of borehole exists in the database
-    exists <- DBI::dbGetQuery(con, paste0("SELECT borehole_well_purpose_id FROM borehole_well_purposes WHERE borehole_well_purpose_id = ", purpose_of_borehole, ";"))[1,1]
+    exists <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT borehole_well_purpose_id FROM borehole_well_purposes WHERE borehole_well_purpose_id = ",
+        purpose_of_borehole,
+        ";"
+      )
+    )[1, 1]
     if (is.na(exists)) {
-      stop("The specified 'purpose_of_borehole' does not exist in the database.")
+      stop(
+        "The specified 'purpose_of_borehole' does not exist in the database."
+      )
     }
   }
   if (!is.null(purpose_of_well)) {
     # Check if purpose of borehole exists in the database
-    exists <- DBI::dbGetQuery(con, paste0("SELECT borehole_well_purpose_id FROM borehole_well_purposes WHERE borehole_well_purpose_id = ", purpose_of_well, ";"))[1,1]
+    exists <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT borehole_well_purpose_id FROM borehole_well_purposes WHERE borehole_well_purpose_id = ",
+        purpose_of_well,
+        ";"
+      )
+    )[1, 1]
     if (is.na(exists)) {
       stop("The specified 'purpose_of_well' does not exist in the database.")
     }
   }
   # Validate inferred purpose flags
-  if (!is.logical(purpose_borehole_inferred) || length(purpose_borehole_inferred) != 1) {
-    stop("'purpose_borehole_inferred' must be a single logical value (TRUE or FALSE).")
+  if (
+    !is.logical(purpose_borehole_inferred) ||
+      length(purpose_borehole_inferred) != 1
+  ) {
+    stop(
+      "'purpose_borehole_inferred' must be a single logical value (TRUE or FALSE)."
+    )
   }
-  if (!is.logical(purpose_well_inferred) || length(purpose_well_inferred) != 1) {
-    stop("'purpose_well_inferred' must be a single logical value (TRUE or FALSE).")
+  if (
+    !is.logical(purpose_well_inferred) || length(purpose_well_inferred) != 1
+  ) {
+    stop(
+      "'purpose_well_inferred' must be a single logical value (TRUE or FALSE)."
+    )
   }
-  
+
   # Validate numeric fields
   numeric_fields <- c(
-    "depth_to_bedrock", "casing_od", "well_depth", 
-    "top_of_screen", "bottom_of_screen", "well_head_stick_up", 
-    "static_water_level", "estimated_yield", "ground_elev_m",
-    "latitude", "longitude", "surveyed_ground_elev"
+    "depth_to_bedrock",
+    "casing_od",
+    "well_depth",
+    "top_of_screen",
+    "bottom_of_screen",
+    "well_head_stick_up",
+    "static_water_level",
+    "estimated_yield",
+    "ground_elev_m",
+    "latitude",
+    "longitude",
+    "surveyed_ground_elev"
   )
   for (field in numeric_fields) {
     value <- get(field)
@@ -148,51 +182,67 @@ insertACBorehole <- function(
       stop(paste0("'", field, "' must be numeric if provided."))
     }
   }
-  
+
   # Validate DB connection object
   if (!is.null(con) && !inherits(con, "DBIConnection")) {
     stop("'con' must be a DBIConnection object if provided.")
   }
-  
+
   # Construct SQL query for borehole insertion
   query <- paste0(
     "INSERT INTO boreholes (share_with, latitude, longitude, borehole_name,",
     "location_source, ground_elevation_m, depth_m, drilled_by, ",
     "drill_method, completion_date, notes, borehole_well_purpose_id, inferred_purpose) VALUES (",
-    "'{", paste(share_with_borehole, collapse = ","), "}', ",
-    latitude, ", ",
-    longitude, ", ",
-    ifelse(is.null(well_name), "NULL", paste0("'", well_name, "'")), ", ",
-    ifelse(is.null(location_source), "NULL", 
-           paste0("'", location_source, "'")), ", ",
-    ifelse(is.null(ground_elev_m), "NULL", ground_elev_m), ", ",
-    ifelse(is.null(well_depth), "NULL", well_depth), ", ",
-    ifelse(is.null(drilled_by), "NULL", paste0("'", drilled_by, "'")), ", ",
-    ifelse(is.null(drill_method), "NULL", 
-           paste0("'", drill_method, "'")), ", ",
-    ifelse(is.null(date_drilled), "NULL", 
-           paste0("'", date_drilled, "'")), ", ",
-    ifelse(is.null(notes_borehole), "NULL", paste0("'", notes_borehole, "'")), ", ",
-    ifelse(is.null(purpose_of_borehole), "NULL", paste0("'", purpose_of_borehole, "'")), ", ",
-    purpose_borehole_inferred
-    , ") RETURNING borehole_id;"
+    "'{",
+    paste(share_with_borehole, collapse = ","),
+    "}', ",
+    latitude,
+    ", ",
+    longitude,
+    ", ",
+    ifelse(is.null(well_name), "NULL", paste0("'", well_name, "'")),
+    ", ",
+    ifelse(is.null(location_source), "NULL", paste0("'", location_source, "'")),
+    ", ",
+    ifelse(is.null(ground_elev_m), "NULL", ground_elev_m),
+    ", ",
+    ifelse(is.null(well_depth), "NULL", well_depth),
+    ", ",
+    ifelse(is.null(drilled_by), "NULL", paste0("'", drilled_by, "'")),
+    ", ",
+    ifelse(is.null(drill_method), "NULL", paste0("'", drill_method, "'")),
+    ", ",
+    ifelse(is.null(date_drilled), "NULL", paste0("'", date_drilled, "'")),
+    ", ",
+    ifelse(is.null(notes_borehole), "NULL", paste0("'", notes_borehole, "'")),
+    ", ",
+    ifelse(
+      is.null(purpose_of_borehole),
+      "NULL",
+      paste0("'", purpose_of_borehole, "'")
+    ),
+    ", ",
+    purpose_borehole_inferred,
+    ") RETURNING borehole_id;"
   )
   # Execute borehole insertion and retrieve new borehole_id
   borehole_id <- DBI::dbGetQuery(con, query)
-  
+
   # If permafrost is present, insert permafrost record
   if (permafrost_present) {
     query <- paste0(
       "INSERT INTO permafrost (borehole_id, depth_from_m, ",
       "depth_to_m) VALUES (",
-      "'", borehole_id, "', ",
-      ifelse(is.na(permafrost_top), "NULL", permafrost_top), ", ",
+      "'",
+      borehole_id,
+      "', ",
+      ifelse(is.na(permafrost_top), "NULL", permafrost_top),
+      ", ",
       ifelse(is.na(permafrost_bot), "NULL", permafrost_bot),
       ")"
     )
     DBI::dbExecute(con, query)
   }
-  
 
   # If borehole is a well, insert well-specific data
   if (is_well) {
@@ -200,27 +250,44 @@ insertACBorehole <- function(
       "INSERT INTO well (borehole_id, casing_od, well_depth, ",
       "top_of_screen, bottom_of_screen, well_head_stick_up, ",
       "static_water_level, estimated_yield, borehole_well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
-      "'", borehole_id, "', ",
-      ifelse(is.null(casing_od), "NULL", 
-             casing_od), ", ",
-      ifelse(is.null(well_depth), "NULL", well_depth), ", ",
-      ifelse(is.null(top_of_screen), "NULL", top_of_screen), ", ",
-      ifelse(is.null(bottom_of_screen), "NULL", bottom_of_screen), ", ",
-      ifelse(is.null(well_head_stick_up), "NULL", well_head_stick_up), ", ",
-      ifelse(is.null(static_water_level), "NULL", static_water_level), ", ",
-      ifelse(is.null(estimated_yield), "NULL", estimated_yield), ", ",
-      ifelse(is.null(purpose_of_well), "NULL", paste0("'", purpose_of_well, "'")), ", ",
-      purpose_well_inferred, ", ",
-      ifelse(is.null(notes_well), "NULL", paste0("'", notes_well, "'")), ", ",
-      "'{", paste(share_with_well, collapse = ","), "}'",
+      "'",
+      borehole_id,
+      "', ",
+      ifelse(is.null(casing_od), "NULL", casing_od),
+      ", ",
+      ifelse(is.null(well_depth), "NULL", well_depth),
+      ", ",
+      ifelse(is.null(top_of_screen), "NULL", top_of_screen),
+      ", ",
+      ifelse(is.null(bottom_of_screen), "NULL", bottom_of_screen),
+      ", ",
+      ifelse(is.null(well_head_stick_up), "NULL", well_head_stick_up),
+      ", ",
+      ifelse(is.null(static_water_level), "NULL", static_water_level),
+      ", ",
+      ifelse(is.null(estimated_yield), "NULL", estimated_yield),
+      ", ",
+      ifelse(
+        is.null(purpose_of_well),
+        "NULL",
+        paste0("'", purpose_of_well, "'")
+      ),
+      ", ",
+      purpose_well_inferred,
+      ", ",
+      ifelse(is.null(notes_well), "NULL", paste0("'", notes_well, "'")),
+      ", ",
+      "'{",
+      paste(share_with_well, collapse = ","),
+      "}'",
       ")"
     )
     DBI::dbExecute(con, query)
   }
-  
+
   # Determine document type based on is_well flag
   document_type <- if (is_well) "well log" else "borehole log"
-  
+
   # Insert document metadata using insertACDocument
   insertACDocument(
     path = path,
@@ -229,7 +296,7 @@ insertACBorehole <- function(
     description = paste0(document_type, " for ", well_name),
     tags = unlist(strsplit(document_type, " "))
   )
-  
+
   # Return the new borehole_id
   return(borehole_id)
 }

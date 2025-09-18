@@ -105,8 +105,6 @@ insertACBorehole(
 The borehole_id of the newly inserted record.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 This function facilitates the addition of a borehole record to the database. If the borehole
 is also a well, additional well-specific information can be provided. The function can also
 associate a document with the borehole and handle permafrost information if present.

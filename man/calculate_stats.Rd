@@ -17,8 +17,6 @@ calculate_stats(con = NULL, timeseries_id, start_recalc = NULL)
 Updated entries in the 'measurements_calculated_daily' table.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 Calculates daily means from data in the measurements_continuous table as well as derived statistics for each day (historical min, max, q10, q25, q50 (mean), q75, q90). Derived daily statistics are for each day of year \strong{prior} to the current date for historical context, with the exception of the first day of record for which only the min/max are populated with the day's value. Any data graded as 'unusable' is excluded from calculations. February 29 calculations are handled differently: see details.
 
 Some continuous measurement data may have a period of greater than 1 day. In these cases it would be impossible to calculate daily statistics, so this function explicitly excludes data points with a period greater than P1D.

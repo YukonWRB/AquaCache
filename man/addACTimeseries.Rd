@@ -63,8 +63,6 @@ addACTimeseries(
 One or more new entries are created in the table 'timeseries'
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function \code{\link[=addACLocation]{addACLocation()}} for adding a location to which timeseries must be attached. To add an image series see \code{\link[=addACImageSeries]{addACImageSeries()}}, for raster series see \code{\link[=addACRasterSeries]{addACRasterSeries()}}. For one-off images use \code{\link[=insertACImage]{insertACImage()}} and for rasters \code{\link[=insertACRaster]{insertACRaster()}}. For documents use \code{\link[=insertACDocument]{insertACDocument()}}.
 
 You will be prompted to add locations that don't exist yet if any fall into this category.
