@@ -31,6 +31,27 @@ tryCatch(
       "Modifying tables to better handle instrument data and location depth/height"
     )
 
+    # Modify unique key on sub_locations table
+    # delete the old one
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.sub_locations
+      DROP CONSTRAINT IF EXISTS sub_locations_location_id_sub_location_name_key;"
+    )
+    # Make a new one on sub_location_id and location_id
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.sub_locations
+      ADD CONSTRAINT unique_subloc_per_location UNIQUE(location_id, sub_location_id);"
+    )
+
+    # Add column to 'timeseries' table to hold the time zone used for daily mean and stats calculations
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE continuous.timeseries
+      ADD COLUMN IF NOT EXISTS timezone_daily_calc INTEGER DEFAULT 0 NOT NULL;"
+    )
+
     # Modify instruments.instruments table so that the 'owner' field is an FK to organizations table
     wrb_owner_id <- DBI::dbGetQuery(
       con,
@@ -223,16 +244,20 @@ tryCatch(
       ADD COLUMN IF NOT EXISTS note TEXT;"
     )
 
-    # # Add a new table for depth/height of monitoring locations, reference columns 'z' in timeseries and samples tables to this new table
+    # # Add a new table for depth/height of monitoring locations, reference columns 'z' in timeseries to this new table
     # DBI::dbExecute(
     #   con,
     #   "
     # CREATE TABLE IF NOT EXISTS public.locations_z (
-    #   location_z_id SERIAL PRIMARY KEY,
+    #   location_z_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     #   location_id INTEGER NOT NULL REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE,
     #   sub_location_id INTEGER,
     #   z_meters NUMERIC NOT NULL,
     #   note TEXT,
+    # created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    # created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+    # modified TIMESTAMP WITH TIME ZONE,
+    # modified_by TEXT,
     #   CONSTRAINT fk_loc_z_loc FOREIGN KEY (location_id, sub_location_id) REFERENCES public.sub_locations(location_id, sub_location_id) ON DELETE CASCADE ON UPDATE CASCADE,
     # );"
     # )
@@ -286,21 +311,148 @@ tryCatch(
     # )
 
     # Create infrastructure to hold field visit metadata. Will allow linking instruments to a field visit. Samples will be linked to a field visit.
+    DBI::dbExecute(con, "CREATE SCHEMA IF NOT EXISTS field;")
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA field TO public;")
+
     DBI::dbExecute(
       con,
       "
-    CREATE TABLE IF NOT EXISTS public.field_visits (
-      field_visit_id SERIAL PRIMARY KEY,
-      visit_datetime TIMESTAMPTZ NOT NULL,
+    CREATE TABLE IF NOT EXISTS field.field_visits (
+      field_visit_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      start_datetime TIMESTAMPTZ NOT NULL,
+      end_datetime TIMESTAMPTZ,
       location_id INTEGER NOT NULL REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE,
       sub_location_id INTEGER,
-      instrument 
+      purpose TEXT,
+      cloud_cover_percent NUMERIC CHECK (cloud_cover_percent >= 0 AND cloud_cover_percent <= 100),
+      current_precip TEXT, -- e.g., none, light, moderate, heavy
+      precip_24h_mm NUMERIC CHECK (precip_24h_mm >= 0),
+      precip_48h_mm NUMERIC CHECK (precip_48h_mm >= 0),
+      air_temp_c NUMERIC CHECK (air_temp_c >= -40 AND air_temp_c <= 40),
+      wind TEXT, -- e.g., calm, light, etc.
       note TEXT,
-      CONSTRAINT fk_field_visit_subloc FOREIGN KEY (location_id, sub_location_id) REFERENCES public.sub_locations(location_id, sub_location_id) ON DELETE CASCADE ON UPDATE CASCADE
+      share_with TEXT[] DEFAULT ARRAY['public_reader']::text[],
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT,
+      -- compound FK to sub_locations table to ensure sub_location_id always matches a valid sub_location_id for the given location_id
+      CONSTRAINT fk_field_visit_subloc FOREIGN KEY (location_id, sub_location_id) REFERENCES public.sub_locations(location_id, sub_location_id) ON DELETE CASCADE ON UPDATE CASCADE,
+      -- ensure that end_datetime is after start_datetime when end_datetime is present
+      CONSTRAINT field_visit_period_valid CHECK (end_datetime IS NULL OR end_datetime > start_datetime),
+      CONSTRAINT unique_visit UNIQUE NULLS NOT DISTINCT (location_id, sub_location_id, start_datetime)
     );"
     )
+    # Create GIN index on share_with column to speed up RLS queries
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX timeseries_share_with_gin_idx ON field.field_visits USING gin (share_with);"
+    )
+    # Create index on location_id for faster queries
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX field_visits_location_id_idx ON field.field_visits(location_id);"
+    )
+    # Create index on start_datetime for faster queries
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX field_visits_start_datetime_idx ON field.field_visits(start_datetime);"
+    )
 
-    # Add a field for field_visit_id to samples table
+    # Enanble RLS and create a policy to allow users to see only their own field visits or those shared with public_reader role
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE field.field_visits ENABLE ROW LEVEL SECURITY;"
+    )
+    # Create the new SELECT policy
+    DBI::dbExecute(
+      con,
+      "
+    CREATE POLICY rls ON field.field_visits
+      FOR SELECT
+      TO public
+    USING (
+      share_with @> ARRAY['public_reader']
+      OR share_with && public.current_user_roles()
+    );"
+    )
+    # Triggers to track who created/modified records and when
+    DBI::dbExecute(
+      con,
+      "create trigger trg_user_audit before update on field.field_visits for each row execute function public.user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create trigger update_modify_time before update on field.field_visits for each row execute function public.update_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE field.field_visits IS 'Table to hold metadata about field visits to monitoring locations. Samples can be linked to field visits and field visits to instruments used during the visit.';"
+    )
+
+    # Allow many-to-many relationship between field visits and instruments via a junction table
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE IF NOT EXISTS field.field_visit_instruments (
+      field_visit_id int NOT NULL REFERENCES field.field_visits(field_visit_id) ON DELETE CASCADE,
+      instrument_id  int NOT NULL REFERENCES instruments.instruments(instrument_id) ON DELETE SET NULL ON UPDATE CASCADE,
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT,
+      PRIMARY KEY (field_visit_id, instrument_id)
+    );"
+    )
+    # Triggers to track who created/modified records and when
+    DBI::dbExecute(
+      con,
+      "create trigger trg_user_audit before update on field.field_visit_instruments for each row execute function public.user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create trigger update_modify_time before update on field.field_visit_instruments for each row execute function public.update_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE field.field_visit_instruments IS 'Junction table to allow many-to-many relationship between field visits and instruments used during the visit.';"
+    )
+
+    # Allow many-to-many relationship between field visits and images via a junction table
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE IF NOT EXISTS field.field_visit_images (
+      field_visit_id int NOT NULL REFERENCES field.field_visits(field_visit_id) ON DELETE CASCADE,
+      image_id  int NOT NULL REFERENCES files.images(image_id) ON DELETE CASCADE,
+      created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT,
+      PRIMARY KEY (field_visit_id, image_id)
+    );"
+    )
+    # Triggers to track who created/modified records and when
+    DBI::dbExecute(
+      con,
+      "create trigger trg_user_audit before update on field.field_visit_images for each row execute function public.user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create trigger update_modify_time before update on field.field_visit_images for each row execute function public.update_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE field.field_visit_images IS 'Junction table to allow many-to-many relationship between field visits and images taken during the visit.';"
+    )
+
+    # Add a field for field_visit_id to discrete.samples table
+    DBI::dbExecute(
+      con,
+      "
+    ALTER TABLE discrete.samples
+      ADD COLUMN IF NOT EXISTS field_visit_id INTEGER 
+      REFERENCES public.field_visits(field_visit_id) ON DELETE SET NULL ON UPDATE CASCADE
+      ;"
+    )
 
     # Commit the transaction
     DBI::dbExecute(con, "COMMIT;")
