@@ -27,6 +27,110 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
+  # Check once whether the timeseries table contains the optional column that
+  # specifies the timezone offset (in hours) to use for daily calculations.
+  # Default to UTC when the column is absent or the value is missing.
+  has_daily_offset <- DBI::dbGetQuery(
+    con,
+    "SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'continuous'
+         AND table_name = 'timeseries'
+         AND column_name = 'timezone_daily_calc'
+     ) AS present;"
+  )[1, 1]
+  has_daily_offset <- isTRUE(as.logical(has_daily_offset))
+
+  resolve_daily_offset <- function(offset) {
+    if (is.null(offset) || length(offset) == 0) {
+      return(0)
+    }
+    offset <- suppressWarnings(as.numeric(offset[1]))
+    if (is.na(offset)) {
+      return(0)
+    }
+    if (offset < -12 || offset > 14) {
+      return(0)
+    }
+    offset
+  }
+
+  midnight_to_utc <- function(day, offset) {
+    if (is.null(day) || length(day) == 0 || is.na(day)) {
+      return(NA_character_)
+    }
+    offset <- resolve_daily_offset(offset)
+    utc_midnight <- as.POSIXct(paste0(as.character(day), " 00:00:00"), tz = "UTC")
+    if (is.na(utc_midnight)) {
+      return(paste0(as.character(day), " 00:00:00"))
+    }
+    format(utc_midnight - lubridate::dhours(offset), "%Y-%m-%d %H:%M:%S")
+  }
+
+  to_local_date <- function(datetime, offset) {
+    if (is.null(datetime) || length(datetime) == 0) {
+      return(as.Date(NA))
+    }
+    if (all(is.na(datetime))) {
+      return(rep(as.Date(NA), length(datetime)))
+    }
+    offset <- resolve_daily_offset(offset)
+    if (!inherits(datetime, "POSIXt")) {
+      datetime <- as.POSIXct(datetime, tz = "UTC")
+    }
+    as.Date(datetime + lubridate::dhours(offset))
+  }
+
+  calc_daily_value <- function(values, aggregation_type) {
+    if (aggregation_type == "sum") {
+      sum(values)
+    } else if (aggregation_type == "median") {
+      stats::median(values)
+    } else if (aggregation_type == "min") {
+      min(values)
+    } else if (aggregation_type == "max") {
+      max(values)
+    } else if (aggregation_type == "mean") {
+      mean(values)
+    } else if (aggregation_type == "(min+max)/2") {
+      mean(c(min(values), max(values)))
+    } else if (aggregation_type == "instantaneous") {
+      mean(values)
+    } else {
+      mean(values)
+    }
+  }
+
+  summarize_measurements <- function(measurements, aggregation_type, offset) {
+    if (nrow(measurements) == 0) {
+      return(data.frame(
+        date = as.Date(character()),
+        value = numeric(),
+        imputed = logical()
+      ))
+    }
+    offset <- resolve_daily_offset(offset)
+    localised <- measurements %>%
+      dplyr::mutate(
+        datetime = as.POSIXct(.data$datetime, tz = "UTC"),
+        .local_datetime = .data$datetime + lubridate::dhours(offset),
+        .local_date = as.Date(.data$.local_datetime)
+      )
+    aggregated <- localised %>%
+      dplyr::group_by(.data$.local_date) %>%
+      dplyr::summarize(
+        date = dplyr::first(.data$.local_date),
+        value = calc_daily_value(.data$value, aggregation_type),
+        imputed = any(.data$imputed, na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      dplyr::select("date", "value", "imputed") %>%
+      dplyr::arrange(.data$date)
+    aggregated$imputed[is.na(aggregated$imputed)] <- FALSE
+    as.data.frame(aggregated)
+  }
+
   # helper to determine the last date available in HYDAT for a station
   get_last_hydat_date <- function(hcon, station, param) {
     if (param == "flow") {
@@ -143,6 +247,28 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     skip <- FALSE
     tryCatch(
       {
+        select_clause <- "at.aggregation_type, t.source_fx"
+        if (has_daily_offset) {
+          select_clause <- paste0(select_clause, ", t.timezone_daily_calc")
+        }
+        tmp <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT ",
+            select_clause,
+            " FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ",
+            i,
+            ";"
+          )
+        )
+        aggregation_type <- tmp[1, 1] # Daily values are calculated differently depending on the period type
+        source_fx <- tmp[1, 2] #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
+        daily_offset <- if (has_daily_offset && ncol(tmp) >= 3) {
+          resolve_daily_offset(tmp[1, 3])
+        } else {
+          0
+        }
+
         #error catching for calculating stats; another one later for appending to the DB
         last_day_historic <- DBI::dbGetQuery(
           con,
@@ -187,16 +313,22 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             i,
             exclusions
           )
-          earliest_day_measurements <- as.Date(DBI::dbGetQuery(con, query)[1, ])
+          earliest_day_measurements <- to_local_date(
+            DBI::dbGetQuery(con, query)[1, 1],
+            daily_offset
+          )
         } else {
-          earliest_day_measurements <- as.Date(DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-              i,
-              " AND period <= 'P1D';"
-            )
-          )[1, ])
+          earliest_day_measurements <- to_local_date(
+            DBI::dbGetQuery(
+              con,
+              paste0(
+                "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+                i,
+                " AND period <= 'P1D';"
+              )
+            )[1, 1],
+            daily_offset
+          )
         }
 
         # Below lines deal with timeseries that don't have daily values but should, or don't have them far enough in the past. We check if it's necessary to calculate further back in time than start_recalc_i.
@@ -217,17 +349,6 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           # If we got to here there are measurements and daily values. Check if measurements start earlier than daily values.
           start_recalc_i <- earliest_day_measurements
         }
-
-        tmp <- DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT at.aggregation_type, t.source_fx FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ",
-            i,
-            ";"
-          )
-        )
-        aggregation_type <- tmp[1, 1] # Daily values are calculated differently depending on the period type
-        source_fx <- tmp[1, 2] #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
 
         if (!is.null(start_recalc_i)) {
           #start_recalc_i is specified (not NULL)
@@ -274,13 +395,17 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
 
         if (!skip) {
           # Check if any corrections have been made to the timeseries during the computation time. If not, save time and computations by getting values straight from measurements_continuous instead of the corrected tables.
+          correction_cutoff <- midnight_to_utc(last_day_historic, daily_offset)
+          if (is.na(correction_cutoff)) {
+            correction_cutoff <- paste0(last_day_historic, " 00:00:00")
+          }
           corrections_apply <- DBI::dbGetQuery(
             con,
             paste0(
               "SELECT correction_id FROM corrections WHERE timeseries_id = ",
               i,
               " AND end_dt > '",
-              last_day_historic,
+              correction_cutoff,
               "' LIMIT 1;"
             )
           )
@@ -331,14 +456,20 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             DBI::dbDisconnect(hydat_con)
 
             if (!flag) {
+              start_hydat_date <- last_hydat + 1
+              start_hydat_ts <- midnight_to_utc(start_hydat_date, daily_offset)
+              if (is.na(start_hydat_ts)) {
+                start_hydat_ts <- paste0(start_hydat_date, " 00:00:00")
+              }
+
               if (corrections_apply) {
                 if (unusable) {
                   query <- paste0(
                     "SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ",
                     i,
                     " AND datetime >= '",
-                    last_hydat + 1,
-                    " 00:00:00' AND period <= 'P1D' AND ",
+                    start_hydat_ts,
+                    "' AND period <= 'P1D' AND ",
                     exclusions,
                     ";"
                   )
@@ -350,8 +481,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       "SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ",
                       i,
                       " AND datetime >= '",
-                      last_hydat + 1,
-                      " 00:00:00' AND period <= 'P1D'"
+                      start_hydat_ts,
+                      "' AND period <= 'P1D'"
                     )
                   )
                 }
@@ -361,8 +492,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     "SELECT datetime, value AS value, imputed FROM measurements_continuous WHERE timeseries_id = ",
                     i,
                     " AND datetime >= '",
-                    last_hydat + 1,
-                    " 00:00:00' AND period <= 'P1D' AND ",
+                    start_hydat_ts,
+                    "' AND period <= 'P1D' AND ",
                     exclusions,
                     ";"
                   )
@@ -374,8 +505,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
                       i,
                       " AND datetime >= '",
-                      last_hydat + 1,
-                      " 00:00:00' AND period <= 'P1D'"
+                      start_hydat_ts,
+                      "' AND period <= 'P1D'"
                     )
                   )
                 }
@@ -383,33 +514,11 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
 
               if (nrow(gap_measurements) > 0) {
                 #Then there is new measurements data, or we're force-recalculating from an earlier date
-                gap_measurements <- gap_measurements %>%
-                  dplyr::group_by(
-                    lubridate::year(.data$datetime),
-                    lubridate::yday(.data$datetime)
-                  ) %>%
-                  dplyr::summarize(
-                    date = mean(lubridate::date(.data$datetime)),
-                    value = if (aggregation_type == "sum") {
-                      sum(.data$value)
-                    } else if (aggregation_type == "median") {
-                      stats::median(.data$value)
-                    } else if (aggregation_type == "min") {
-                      min(.data$value)
-                    } else if (aggregation_type == "max") {
-                      max(.data$value)
-                    } else if (aggregation_type == "mean") {
-                      mean(.data$value)
-                    } else if (aggregation_type == "(min+max)/2") {
-                      mean(c(min(.data$value), max(.data$value)))
-                    } else if (aggregation_type == "instantaneous") {
-                      mean(.data$value)
-                    },
-                    imputed = sort(.data$imputed, decreasing = TRUE)[1],
-                    .groups = "drop"
-                  )
-                gap_measurements <- gap_measurements[, c(3:5)]
-                names(gap_measurements) <- c("date", "value", "imputed")
+                gap_measurements <- summarize_measurements(
+                  gap_measurements,
+                  aggregation_type,
+                  daily_offset
+                )
 
                 if (!((last_hydat + 1) %in% gap_measurements$date)) {
                   #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
@@ -555,14 +664,19 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
 
           if (!(source_fx == "downloadWSC") || flag) {
             #All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
+            recalc_start_ts <- midnight_to_utc(last_day_historic, daily_offset)
+            if (is.na(recalc_start_ts)) {
+              recalc_start_ts <- paste0(last_day_historic, " 00:00:00")
+            }
+
             if (corrections_apply) {
               if (unusable) {
                 query <- paste0(
                   "SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ",
                   i,
                   " AND datetime >= '",
-                  last_day_historic,
-                  " 00:00:00' AND period <= 'P1D' AND ",
+                  recalc_start_ts,
+                  "' AND period <= 'P1D' AND ",
                   exclusions,
                   ";"
                 )
@@ -574,8 +688,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     "SELECT datetime, value_corrected AS value, imputed FROM measurements_continuous_corrected WHERE timeseries_id = ",
                     i,
                     " AND datetime >= '",
-                    last_day_historic,
-                    " 00:00:00' AND period <= 'P1D'"
+                    recalc_start_ts,
+                    "' AND period <= 'P1D'"
                   )
                 )
               }
@@ -585,8 +699,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   "SELECT datetime, value AS value, imputed FROM measurements_continuous WHERE timeseries_id = ",
                   i,
                   " AND datetime >= '",
-                  last_day_historic,
-                  " 00:00:00' AND period <= 'P1D' AND ",
+                  recalc_start_ts,
+                  "' AND period <= 'P1D' AND ",
                   exclusions,
                   ";"
                 )
@@ -598,8 +712,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
                     i,
                     " AND datetime >= '",
-                    last_day_historic,
-                    " 00:00:00' AND period <= 'P1D'"
+                    recalc_start_ts,
+                    "' AND period <= 'P1D'"
                   )
                 )
               }
@@ -607,33 +721,11 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
 
             if (nrow(gap_measurements) > 0) {
               #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
-              gap_measurements <- gap_measurements %>%
-                dplyr::group_by(
-                  lubridate::year(.data$datetime),
-                  lubridate::yday(.data$datetime)
-                ) %>%
-                dplyr::summarize(
-                  date = mean(lubridate::date(.data$datetime)),
-                  value = if (aggregation_type == "sum") {
-                    sum(.data$value)
-                  } else if (aggregation_type == "median") {
-                    stats::median(.data$value)
-                  } else if (aggregation_type == "min") {
-                    min(.data$value)
-                  } else if (aggregation_type == "max") {
-                    max(.data$value)
-                  } else if (aggregation_type == "mean") {
-                    mean(.data$value)
-                  } else if (aggregation_type == "(min+max)/2") {
-                    mean(c(min(.data$value), max(.data$value)))
-                  } else if (aggregation_type == "instantaneous") {
-                    mean(.data$value)
-                  },
-                  imputed = sort(.data$imputed, decreasing = TRUE)[1], # Ensures that if there is even 1 imputed point in a day, the whole day is marked as imputed
-                  .groups = "drop"
-                )
-              gap_measurements <- gap_measurements[, c(3:5)]
-              names(gap_measurements) <- c("date", "value", "imputed")
+              gap_measurements <- summarize_measurements(
+                gap_measurements,
+                aggregation_type,
+                daily_offset
+              )
 
               if (!((last_day_historic + 1) %in% gap_measurements$date)) {
                 #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
@@ -942,7 +1034,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     6,
                     10
                   ) %in%
-                    c("02-29", "03-01,", "03-02"))
+                    c("02-29", "03-01", "03-02"))
               ) {
                 for (l in feb_29$date) {
                   before <- missing_stats[missing_stats$date == l - 1, ]
