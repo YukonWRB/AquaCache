@@ -41,7 +41,7 @@ insertACBorehole(
 \arguments{
 \item{con}{A connection to the database. Default NULL uses AquaConnect() and closes the connection afterwards.}
 
-\item{path}{Path to a document file to attach to the borehole record.}
+\item{path}{Path to a document/file to attach to the borehole record. If NULL, no document is attached.}
 
 \item{well_name}{Name of the borehole/well. Required.}
 
@@ -89,7 +89,7 @@ insertACBorehole(
 
 \item{notes_well}{Additional notes about the well.}
 
-\item{share_with_borehole}{A character vector of the user group(s) with which to share the borehole, separated by a comma. Default is "public_reader".}
+\item{share_with_borehole}{A character vector of the user group(s) with which to share the borehole, one element per group. Default is "public_reader".}
 
 \item{drilled_by}{Company or individual who drilled the borehole.}
 
@@ -99,7 +99,7 @@ insertACBorehole(
 
 \item{purpose_well_inferred}{Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is \code{purpose_borehole_inferred}.}
 
-\item{share_with_well}{A character vector of the user group(s) with which to share the well, separated by a comma. Default is \code{share_with_borehole}.}
+\item{share_with_well}{A character vector of the user group(s) with which to share the well, one elemtn per group. Default is \code{share_with_borehole}.}
 }
 \value{
 The borehole_id of the newly inserted record.

@@ -42,7 +42,7 @@ insertACDocument(
 \item{con}{A connection to the database. Leave NULL to create a new connection using AquaConnect() and have it closed automatically.}
 }
 \value{
-TRUE if a document was properly added to the database.
+A list with success = TRUE, the new document_id, and any associated geoms.
 }
 \description{
 This function facilitates the addition of one document at a time to the database in the 'documents' table. Each document must be linked to a specific location. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See \code{\link[YGwater:getDocument]{YGwater::getDocument()}} to get a document out again.

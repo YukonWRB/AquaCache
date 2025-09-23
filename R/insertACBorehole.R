@@ -7,7 +7,7 @@
 #' associate a document with the borehole and handle permafrost information if present.
 #'
 #' @param con A connection to the database. Default NULL uses AquaConnect() and closes the connection afterwards.
-#' @param path Path to a document file to attach to the borehole record.
+#' @param path Path to a document/file to attach to the borehole record. If NULL, no document is attached.
 #' @param well_name Name of the borehole/well. Required.
 #' @param latitude The latitude coordinate of the borehole location. Required.
 #' @param longitude The longitude coordinate of the borehole location. Required.
@@ -31,12 +31,12 @@
 #' @param ground_elev_m Ground elevation in meters.
 #' @param notes_borehole Additional notes about the borehole.
 #' @param notes_well Additional notes about the well.
-#' @param share_with_borehole A character vector of the user group(s) with which to share the borehole, separated by a comma. Default is "public_reader".
+#' @param share_with_borehole A character vector of the user group(s) with which to share the borehole, one element per group. Default is "public_reader".
 #' @param drilled_by Company or individual who drilled the borehole.
 #' @param drill_method Method used for drilling.
 #' @param purpose_of_well Purpose of the borehole as integer matching the database's borehole_well_purpose column. Default is `purpose_of_borehole`.
 #' @param purpose_well_inferred Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is `purpose_borehole_inferred`.
-#' @param share_with_well A character vector of the user group(s) with which to share the well, separated by a comma. Default is `share_with_borehole`.
+#' @param share_with_well A character vector of the user group(s) with which to share the well, one elemtn per group. Default is `share_with_borehole`.
 #'
 #' @return The borehole_id of the newly inserted record.
 #' @export
@@ -98,10 +98,14 @@ insertACBorehole <- function(
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
   # Validate 'share_with' parameter type
-  if (!inherits(share_with, "character")) {
+  if (!inherits(share_with_borehole, "character")) {
     stop(
-      "The 'share_with' parameter must be a character vector with one element ",
-      "per share with group."
+      "The 'share_with_borehole' parameter must be a character vector with one element per share with group."
+    )
+  }
+  if (!inherits(share_with_well, "character")) {
+    stop(
+      "The 'share_with_well' parameter must be a character vector with one element per share with group."
     )
   }
 
@@ -174,7 +178,9 @@ insertACBorehole <- function(
     "ground_elev_m",
     "latitude",
     "longitude",
-    "surveyed_ground_elev"
+    "surveyed_ground_elev",
+    "permafrost_top",
+    "permafrost_bot"
   )
   for (field in numeric_fields) {
     value <- get(field)
@@ -247,7 +253,7 @@ insertACBorehole <- function(
   # If borehole is a well, insert well-specific data
   if (is_well) {
     query <- paste0(
-      "INSERT INTO well (borehole_id, casing_od, well_depth, ",
+      "INSERT INTO wells (borehole_id, casing_od, well_depth, ",
       "top_of_screen, bottom_of_screen, well_head_stick_up, ",
       "static_water_level, estimated_yield, borehole_well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
       "'",
@@ -289,14 +295,21 @@ insertACBorehole <- function(
   document_type <- if (is_well) "well log" else "borehole log"
 
   # Insert document metadata using insertACDocument
-  insertACDocument(
-    path = path,
-    type = document_type,
-    name = paste0("Document for ", well_name),
-    description = paste0(document_type, " for ", well_name),
-    tags = unlist(strsplit(document_type, " "))
-  )
-
+  if (!is.null(path)) {
+    res <- insertACDocument(
+      path = path,
+      type = document_type,
+      name = paste0("Document for ", well_name),
+      description = paste0(document_type, " for ", well_name),
+      tags = unlist(strsplit(document_type, " "))
+    )
+    # use res$new_document_id to link document to borehole
+    DBI::dbExecute(
+      con,
+      "INSERT INTO boreholes.boreholes_documents (borehole_id, document_id) VALUES ($1, $2);",
+      params = list(borehole_id, res$new_document_id)
+    )
+  }
   # Return the new borehole_id
   return(borehole_id)
 }

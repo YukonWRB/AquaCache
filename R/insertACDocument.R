@@ -19,7 +19,7 @@
 #' @param geoms The geom_id(s) with which to associate the document (must be in the database table 'vectors'). Leave NULL for a document with no spatial context.
 #' @param con A connection to the database. Leave NULL to create a new connection using AquaConnect() and have it closed automatically.
 #'
-#' @return TRUE if a document was properly added to the database.
+#' @return A list with success = TRUE, the new document_id, and any associated geoms.
 #' @export
 
 insertACDocument <- function(
