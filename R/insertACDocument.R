@@ -138,13 +138,15 @@ insertACDocument <- function(
       paste0(file, collapse = ""),
       "', ARRAY[",
       paste(sprintf("'%s'", share_with), collapse = ","),
-      "]);"
+      "]) ON CONFLICT (file_hash) DO NOTHING "
     )
   )
+
+  # Get the document_id of the newly added (or existing) document
   id <- DBI::dbGetQuery(
     con,
-    paste0("SELECT document_id FROM documents WHERE name = '", name, "';")
-  )
+    paste0("SELECT MAX(document_id) FROM documents WHERE name = '", name, "';")
+  )[1, 1]
 
   if (!is.null(authors)) {
     DBI::dbExecute(

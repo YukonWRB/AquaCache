@@ -79,23 +79,6 @@ addACTimeseries <- function(
   note = NA,
   con = NULL
 ) {
-  # df = NULL
-  # data = NULL
-  # start_datetime = "1940-01-01"
-  # location = 323
-  # sub_location = NA
-  # parameter = 1150
-  # z = NA
-  # media = 1
-  # sensor_priority = 1
-  # aggregation_type = 'instantaneous'
-  # record_rate = '1 hour'
-  # share_with = "public_reader"
-  # owner = 4
-  # source_fx = "downloadNWIS"
-  # source_fx_args = "location: 15056500, parameter: 00060"
-  # note = NA
-
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
@@ -487,11 +470,41 @@ addACTimeseries <- function(
           )
         )[1, 1]
 
+        zi <- z[i]
+        # If not NA, create a new entry in public.locations_z
+        if (!is.na(zi)) {
+          z_df <- data.frame(
+            location_id = loc_id,
+            z_meters = zi,
+            sub_location_id = sub_location[i]
+          )
+          try({
+            # This may fail if the z value already exists for this location/sub_location combo
+            DBI::dbAppendTable(con, "locations_z", z_df)
+          })
+          zi <- DBI::dbGetQuery(
+            con,
+            paste0(
+              "SELECT location_z_id FROM locations_z WHERE location_id = ",
+              loc_id,
+              " AND z_meters = ",
+              zi,
+              " AND sub_location_id ",
+              if (is.na(sub_location[i])) {
+                "IS NULL"
+              } else {
+                paste0("= '", sub_location[i], "'")
+              },
+              ";"
+            )
+          )[1, 1]
+        }
+
         add <- data.frame(
           location = loc_code,
           sub_location_id = sub_location[i],
           location_id = loc_id,
-          z = z[i],
+          z = zi,
           parameter_id = parameter[i],
           media_id = media[i],
           sensor_priority = sensor_priority[i],
