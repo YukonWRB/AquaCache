@@ -31,8 +31,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
 
   # Date/datetime conversion functions
   # Convert a date at local midnight to UTC datetime string
-  #' @param day A Date object.
-  #' @param offset The timezone offset in hours from UTC.
+  # @param day A Date object.
+  # @param offset The timezone offset in hours from UTC.
   midnight_to_utc <- function(day, offset) {
     if (is.null(day) || length(day) == 0 || is.na(day)) {
       return(NA_character_)
@@ -48,8 +48,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
   }
 
   # Convert a UTC datetime to a local date
-  #' @param datetime A POSIXct or POSIXlt object.
-  #' @param offset The timezone offset in hours from UTC.
+  # @param datetime A POSIXct or POSIXlt object.
+  # @param offset The timezone offset in hours from UTC.
   to_local_date <- function(datetime, offset) {
     if (is.null(datetime) || length(datetime) == 0) {
       return(as.Date(NA))
