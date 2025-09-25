@@ -47,7 +47,8 @@ if (skip_test) {
 }
 
 test_that("downloadWSC fetches data", {
-  con <- create_test_con()
+  con <- AquaConnect(silent = TRUE)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   res <- downloadWSC(
     location = "09EA004",
@@ -71,5 +72,4 @@ test_that("downloadWSC fetches data", {
       "contributor"
     )
   )
-  DBI::dbDisconnect(con)
 })
