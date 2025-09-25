@@ -16,6 +16,9 @@ test_that("downloadAquarius fetches data", {
   )
 
   expect_equal(nrow(res), 25)
+  # res$datetime is POSIXct
   expect_s3_class(res$datetime, "POSIXct")
+  # res$datetime is in UTC timezone
+  expect_equal(attr(res$datetime, "tzone"), "UTC")
   expect_named(res, c("datetime", "value", "approval", "grade", "qualifier"))
 })

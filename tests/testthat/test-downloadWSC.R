@@ -59,7 +59,10 @@ test_that("downloadWSC fetches data", {
   )
 
   expect_gt(nrow(res), 0)
+  # res$datetime is POSIXct
   expect_s3_class(res$datetime, "POSIXct")
+  # res$datetime is in UTC timezone
+  expect_equal(attr(res$datetime, "tzone"), "UTC")
   expect_named(
     res,
     c(

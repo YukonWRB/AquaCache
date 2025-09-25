@@ -10,7 +10,10 @@ test_that("downloadECCCwx fetches hourly data", {
   res <- downloadECCCwx(location, "temp", start_dt, end_dt, interval, con)
 
   expect_equal(nrow(res), 25)
+  # res$datetime is POSIXct
   expect_s3_class(res$datetime, "POSIXct")
+  # res$datetime is in UTC timezone
+  expect_equal(attr(res$datetime, "tzone"), "UTC")
   expect_named(
     res,
     c(
