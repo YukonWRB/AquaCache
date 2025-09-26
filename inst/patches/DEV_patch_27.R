@@ -308,6 +308,25 @@ tryCatch(
     ;"
     )
 
+    DBI::dbExecute(
+      con,
+      '
+  ALTER TABLE public.locations_z OWNER TO "admin";
+  '
+    )
+    DBI::dbExecute(
+      con,
+      '
+  GRANT ALL ON TABLE public.locations_z TO "admin";
+    '
+    )
+    DBI::dbExecute(
+      con,
+      '
+  GRANT SELECT ON TABLE public.locations_z TO PUBLIC;
+    '
+    )
+
     # Migrate existing data from timeseries.z to locations_z table
     ts_z <- DBI::dbGetQuery(
       con,
@@ -428,6 +447,42 @@ tryCatch(
     LEFT JOIN public.locations_z lz ON ts.z_id = lz.z_id
     ORDER BY ts.timeseries_id;
     "
+    )
+    DBI::dbExecute(
+      con,
+      '
+  ALTER TABLE continuous.timeseries_metadata_fr OWNER TO "admin";
+  '
+    )
+    DBI::dbExecute(
+      con,
+      '
+  GRANT ALL ON TABLE continuous.timeseries_metadata_fr TO "admin";
+    '
+    )
+    DBI::dbExecute(
+      con,
+      '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_fr TO PUBLIC;
+    '
+    )
+    DBI::dbExecute(
+      con,
+      '
+  ALTER TABLE continuous.timeseries_metadata_en OWNER TO "admin";
+  '
+    )
+    DBI::dbExecute(
+      con,
+      '
+  GRANT ALL ON TABLE continuous.timeseries_metadata_en TO "admin";
+    '
+    )
+    DBI::dbExecute(
+      con,
+      '
+  GRANT SELECT ON TABLE continuous.timeseries_metadata_en TO PUBLiC;
+    '
     )
 
     # Field visit infrastructure ##################

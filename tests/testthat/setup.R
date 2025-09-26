@@ -1,5 +1,6 @@
 # If on CI, set environment variables which would otherwise be found in the user's .Renviron file.
-# We're working with a micro postgres database here installed on the CI environment!
+# We're working with a micro postgres database here installed on the CI environment; see the .github/workflows/R-CMD-check.yaml file.
+# This DB is created with AquaCache::create_test_db() and default parameters, expect for the username which uses 'postgres'
 if (Sys.getenv("CI") == "true") {
   Sys.setenv(
     aquacacheName = "testdb",
