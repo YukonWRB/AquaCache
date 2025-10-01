@@ -16,8 +16,8 @@ create_test_db(
   psql = NULL,
   continuous_locations = NULL,
   discrete_locations = NULL,
-  start_datetime = "2015-12-31 00:00",
-  end_datetime = "2023-01-02 00:00",
+  start_datetime = "2020-01-01 00:00",
+  end_datetime = "2024-01-01 00:00",
   delete = TRUE
 )
 }
