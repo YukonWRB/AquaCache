@@ -1,7 +1,6 @@
 #' Add images to aquacache database
 #'
 #'@description
-#'`r lifecycle::badge("stable")`
 #'
 #' Images auto-generated on a regular basis should be updated in the database using function [getNewImages()] instead of this function. For one-off images, read on.
 #'
@@ -28,36 +27,67 @@
 #' @return TRUE if an image was properly added to the database.
 #' @export
 
-insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, img_series_id = NULL, description = NULL, tags = NULL,  owner = NULL, contributor = NULL, share_with = "public_reader", location = NULL, latitude = NULL, longitude = NULL, azimuth_true = NULL, elevation_agl = NULL, elevation_msl = NULL, con = NULL) {
-  
+insertACImage <- function(
+  object,
+  datetime,
+  image_type,
+  fetch_datetime = NULL,
+  img_series_id = NULL,
+  description = NULL,
+  tags = NULL,
+  owner = NULL,
+  contributor = NULL,
+  share_with = "public_reader",
+  location = NULL,
+  latitude = NULL,
+  longitude = NULL,
+  azimuth_true = NULL,
+  elevation_agl = NULL,
+  elevation_msl = NULL,
+  con = NULL
+) {
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
-  
+
   DBI::dbExecute(con, "SET timezone = 'UTC'")
-  
+
   #Checks
   if (!inherits(share_with, "character")) {
-    stop("The 'share_with' parameter must be a character vector with one element per share with group.")
+    stop(
+      "The 'share_with' parameter must be a character vector with one element per share with group."
+    )
   }
-  
+
   if (!is.null(owner)) {
     # Make sure it exists in the database table 'organizations'
-    owner <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id = ", owner))[1,1]
+    owner <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT organization_id FROM organizations WHERE organization_id = ",
+        owner
+      )
+    )[1, 1]
     if (is.na(owner)) {
       stop("The owner you specified does not exist. Try again.")
     }
   }
-  
+
   if (!is.null(contributor)) {
     # Make sure it exists in the database table 'organizations'
-    contributor <- DBI::dbGetQuery(con, paste0("SELECT organization_id FROM organizations WHERE organization_id = ", contributor))[1,1]
+    contributor <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT organization_id FROM organizations WHERE organization_id = ",
+        contributor
+      )
+    )[1, 1]
     if (is.na(contributor)) {
       stop("The contributor you specified does not exist. Try again.")
     }
   }
-  
+
   if (!is.null(description)) {
     if (!inherits(description, "character")) {
       stop("The 'description' parameter must be a character vector.")
@@ -72,102 +102,167 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
     }
   }
   # Make sure it exists in the database table 'image_types'
-  image_type <- DBI::dbGetQuery(con, paste0("SELECT image_type_id FROM image_types WHERE image_type_id = ", image_type))[1,1]
+  image_type <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT image_type_id FROM image_types WHERE image_type_id = ",
+      image_type
+    )
+  )[1, 1]
   if (is.na(image_type)) {
     stop("The image_type you specified does not exist. Try again.")
   }
-  
+
   if (!is.null(latitude)) {
     if (!is.numeric(latitude)) {
       stop("The 'latitude' parameter must be a numeric value.")
     }
   }
-  
+
   if (!is.null(longitude)) {
     if (!is.numeric(longitude)) {
       stop("The 'longitude' parameter must be a numeric value.")
     }
   }
-  
+
   if (!is.null(azimuth_true)) {
     if (!is.numeric(azimuth_true)) {
       stop("The 'azimuth_true' parameter must be a numeric value.")
     }
   }
-  
+
   if (!is.null(elevation_agl)) {
     if (!is.numeric(elevation_agl)) {
       stop("The 'elevation_agl' parameter must be a numeric value.")
     }
   }
-  
+
   if (!is.null(elevation_msl)) {
     if (!is.numeric(elevation_msl)) {
       stop("The 'elevation_msl' parameter must be a numeric value.")
     }
   }
-  
-  
+
   if (inherits(datetime, "character")) {
     as.POSIXct(datetime, tz = "UTC")
   }
   if (!inherits(datetime, "POSIXct")) {
-    stop("Datetime must be a POSIXct object or something that can be coerced to one.")
+    stop(
+      "Datetime must be a POSIXct object or something that can be coerced to one."
+    )
   }
   datetime <- lubridate::floor_date(datetime, "second")
-  
+
   if (!is.null(fetch_datetime)) {
     if (inherits(fetch_datetime, "character")) {
       as.POSIXct(fetch_datetime, tz = "UTC")
     }
     if (!inherits(fetch_datetime, "POSIXct")) {
-      stop("fetch_datetime must be a POSIXct object or something that can be coerced to one.")
+      stop(
+        "fetch_datetime must be a POSIXct object or something that can be coerced to one."
+      )
     }
   }
-  
-  meta_id <- FALSE
+
+  series_id <- FALSE
   if (!is.null(img_series_id)) {
-    img_series_id <- DBI::dbGetQuery(con, paste0("SELECT img_series_id FROM image_series WHERE img_series_id = ", img_series_id))[1,1]
+    img_series_id <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT img_series_id FROM image_series WHERE img_series_id = ",
+        img_series_id
+      )
+    )[1, 1]
     if (is.na(img_series_id)) {
-      stop("The img_series_id you specified does not exist. Try again. If you need to create a new entry see the help file.")
+      stop(
+        "The img_series_id you specified does not exist. Try again. If you need to create a new entry see the help file."
+      )
     } else {
-      location <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM image_series WHERE img_series_id = ", img_series_id))[1,1]
-      latitude <- DBI::dbGetQuery(con, paste0("SELECT latitude FROM locations WHERE location_id = ", location))[1,1]
-      longitude <- DBI::dbGetQuery(con, paste0("SELECT longitude FROM locations WHERE location_id = ", location))[1,1]
-      elevation_msl <- DBI::dbGetQuery(con, paste0("SELECT conversion_m FROM datum_conversions WHERE location_id = ", location, " AND current IS TRUE"))[1,1]
+      location <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT location_id FROM image_series WHERE img_series_id = ",
+          img_series_id
+        )
+      )[1, 1]
+      latitude <- DBI::dbGetQuery(
+        con,
+        paste0("SELECT latitude FROM locations WHERE location_id = ", location)
+      )[1, 1]
+      longitude <- DBI::dbGetQuery(
+        con,
+        paste0("SELECT longitude FROM locations WHERE location_id = ", location)
+      )[1, 1]
+      elevation_msl <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT conversion_m FROM datum_conversions WHERE location_id = ",
+          location,
+          " AND current IS TRUE"
+        )
+      )[1, 1]
       if (is.na(elevation_msl)) {
         elevation_msl <- NULL
       }
       if (is.na(location)) {
-        stop("The img_series_id you specified does not have a location_id associated with it. Try again.")
+        stop(
+          "The img_series_id you specified does not have a location_id associated with it. Try again."
+        )
       }
     }
-    meta_id <- TRUE
-    
-  } else { # No image_meta_id, so we need to make sure a location is associated OR that a lat/long is provided
-    
+    series_id <- TRUE
+  } else {
+    # No image_series_id, so we need to make sure a location is associated OR that a lat/long is provided
+
     if (is.null(location)) {
       if (is.null(latitude) | is.null(longitude)) {
-        stop("You didn't specify an img_series_id. Parameter 'location' was set to NULL, but you didn't specify a latitude and/or longitude. Refer to the help file to fix the problem.")
+        stop(
+          "You didn't specify an img_series_id. Parameter 'location' was set to NULL, but you didn't specify a latitude and/or longitude. Refer to the help file to fix the problem."
+        )
       }
-    } else {  # Make sure the location_id exists in the database
+    } else {
+      # Make sure the location_id exists in the database
       if (length(location) > 1) {
         stop("You can only specify one location at a time.")
       }
-      location_id <- DBI::dbGetQuery(con, paste0("SELECT location_id FROM locations WHERE location_id = ", location))[1,1]
+      location_id <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT location_id FROM locations WHERE location_id = ",
+          location
+        )
+      )[1, 1]
       if (is.na(location_id)) {
         stop("The location_id you specified does not exist.")
       } else {
-        latitude <- DBI::dbGetQuery(con, paste0("SELECT latitude FROM locations WHERE location_id = ", location))[1,1]
-        longitude <- DBI::dbGetQuery(con, paste0("SELECT longitude FROM locations WHERE location_id = ", location))[1,1]
+        latitude <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT latitude FROM locations WHERE location_id = ",
+            location
+          )
+        )[1, 1]
+        longitude <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT longitude FROM locations WHERE location_id = ",
+            location
+          )
+        )[1, 1]
         if (is.null(elevation_msl)) {
-          elevation_msl <- DBI::dbGetQuery(con, paste0("SELECT conversion_m FROM datum_conversions WHERE location_id = ", location, " AND current IS TRUE"))[1,1]
+          elevation_msl <- DBI::dbGetQuery(
+            con,
+            paste0(
+              "SELECT conversion_m FROM datum_conversions WHERE location_id = ",
+              location,
+              " AND current IS TRUE"
+            )
+          )[1, 1]
         }
       }
     }
   }
-  
-  
+
   # get the extension, and also the file itself as RAW #####
   if (inherits(object, "response")) {
     extension <- tolower(tools::file_ext(object$url))
@@ -176,48 +271,277 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
     extension <- tolower(tools::file_ext(object))
     # Make sure the extension is some sort of image
     if (!extension %in% c("jpg", "jpeg", "png", "gif", "bmp", "tiff")) {
-      stop("The file extension is not recognized as an image. Please provide a valid image file.")
+      stop(
+        "The file extension is not recognized as an image. Please provide a valid image file."
+      )
     }
-    file <- readBin(object, "raw", n = file.size(object))  }
-  
-  
-  
+    file <- readBin(object, "raw", n = file.size(object))
+  }
+
   # Add the image in a transaction
-  tryCatch({
-    activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
-    
-    if (meta_id) { # There's an associated meta_id
-      exist_img <- DBI::dbGetQuery(con, paste0("SELECT datetime FROM images WHERE datetime = '", datetime, "' AND img_series_id = ", img_series_id, ";"))[1,1]
-      update <- FALSE
-      if (!is.na(exist_img)) {
-        warning("There is already an image in the database for this img_series_id and datetime ", datetime, ". Updating the image, keeping the same img_id.")
-        update <- TRUE
-      }
-      if (update) {
-        new_id <- DBI::dbGetQuery(con, paste0("SELECT image_id FROM images WHERE datetime = '", datetime, "' AND img_series_id = ", img_series_id, ";"))[1,1]
-        DBI::dbExecute(con, paste0("UPDATE images SET ", if (!is.null(fetch_datetime)) paste0("fetch_datetime = '", fetch_datetime, "', "), if (!is.null(description)) paste0("description = '", description, "', "), if (!is.null(owner)) paste0("owner = '", owner, "', "), if (!is.null(contributor)) paste0("contributor = '", contributor, "', "), "share_with = '{", paste(share_with, collapse = ","), "}', format = '", extension, "', file = '\\x", paste0(file, collapse = ""), "' WHERE image_id = ", new_id, ";"))
+  tryCatch(
+    {
+      activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+
+      if (series_id) {
+        # There's an associated series_id
+        exist_img <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT datetime FROM images WHERE datetime = '",
+            datetime,
+            "' AND img_series_id = ",
+            img_series_id,
+            ";"
+          )
+        )[1, 1]
+        update <- FALSE
+        if (!is.na(exist_img)) {
+          warning(
+            "There is already an image in the database for this img_series_id and datetime ",
+            datetime,
+            ". Updating the image, keeping the same img_id."
+          )
+          update <- TRUE
+        }
+        if (update) {
+          new_id <- DBI::dbGetQuery(
+            con,
+            paste0(
+              "SELECT image_id FROM images WHERE datetime = '",
+              datetime,
+              "' AND img_series_id = ",
+              img_series_id,
+              ";"
+            )
+          )[1, 1]
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET ",
+              if (!is.null(fetch_datetime)) {
+                paste0("fetch_datetime = '", fetch_datetime, "', ")
+              },
+              if (!is.null(description)) {
+                paste0("description = '", description, "', ")
+              },
+              if (!is.null(owner)) paste0("owner = '", owner, "', "),
+              if (!is.null(contributor)) {
+                paste0("contributor = '", contributor, "', ")
+              },
+              "share_with = '{",
+              paste(share_with, collapse = ","),
+              "}', format = '",
+              extension,
+              "', file = '\\x",
+              paste0(file, collapse = ""),
+              "' WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        } else {
+          new_id <- DBI::dbGetQuery(
+            con,
+            paste0(
+              "INSERT INTO images (img_series_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file, image_type) VALUES (",
+              img_series_id,
+              ", '",
+              datetime,
+              "', ",
+              if (!is.null(fetch_datetime)) {
+                paste0("'", fetch_datetime, "'")
+              } else {
+                "NULL"
+              },
+              ", ",
+              if (!is.null(description)) {
+                paste0("'", description, "'")
+              } else {
+                "NULL"
+              },
+              ", ",
+              "'{",
+              paste(share_with, collapse = ","),
+              "}', ",
+              location,
+              ", ",
+              latitude,
+              ", ",
+              longitude,
+              ", '",
+              extension,
+              "', '\\x",
+              paste0(file, collapse = ""),
+              "', ",
+              image_type,
+              ") ON CONFLICT (file_hash) DO UPDATE SET ",
+              "img_series_id = EXCLUDED.img_series_id, ",
+              "datetime = EXCLUDED.datetime, ",
+              "fetch_datetime = EXCLUDED.fetch_datetime, ",
+              "description = EXCLUDED.description, ",
+              "share_with = EXCLUDED.share_with, ",
+              "location_id = EXCLUDED.location_id, ",
+              "latitude = EXCLUDED.latitude, ",
+              "longitude = EXCLUDED.longitude, ",
+              "format = EXCLUDED.format, ",
+              "image_type = EXCLUDED.image_type ",
+              "RETURNING image_id;"
+            )
+          )
+          if (!is.null(owner)) {
+            DBI::dbExecute(
+              con,
+              paste0(
+                "UPDATE images SET owner = ",
+                owner,
+                " WHERE image_id = ",
+                new_id,
+                ";"
+              )
+            )
+          }
+          if (!is.null(contributor)) {
+            DBI::dbExecute(
+              con,
+              paste0(
+                "UPDATE images SET contributor = ",
+                contributor,
+                " WHERE image_id = ",
+                new_id,
+                ";"
+              )
+            )
+          }
+          if (!is.null(fetch_datetime)) {
+            DBI::dbExecute(
+              con,
+              paste0(
+                "UPDATE images SET fetch_datetime = '",
+                fetch_datetime,
+                "' WHERE image_id = ",
+                new_id,
+                ";"
+              )
+            )
+          }
+        }
+        if (!is.null(tags)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET tags = '{",
+              paste(tags, collapse = ","),
+              "}' WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+
+        if (!is.null(azimuth_true)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET azimuth_true = ",
+              azimuth_true,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+        if (!is.null(elevation_agl)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET elevation_agl_m = ",
+              elevation_agl,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+        if (!is.null(elevation_msl)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET elevation_msl_m = ",
+              elevation_msl,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+
+        img_times <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT first_img, last_img FROM image_series WHERE img_series_id = ",
+            img_series_id,
+            ";"
+          )
+        )
+
+        if (is.na(img_times[1, 1]) || (img_times[1, 1] > datetime)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE image_series SET first_img = '",
+              datetime,
+              "' WHERE img_series_id = ",
+              img_series_id,
+              ";"
+            )
+          )
+        }
+        if (is.na(img_times[1, 2]) || (img_times[1, 2] < datetime)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE image_series SET last_img = '",
+              datetime,
+              "' WHERE img_series_id = ",
+              img_series_id,
+              ";"
+            )
+          )
+        }
+        DBI::dbExecute(
+          con,
+          paste0(
+            "UPDATE image_series SET last_new_img = '",
+            as.POSIXct(Sys.time(), tz = "UTC"),
+            "' WHERE img_series_id = ",
+            img_series_id,
+            ";"
+          )
+        )
       } else {
+        # Not working with an img_series_id
+
         new_id <- DBI::dbGetQuery(
           con,
           paste0(
-            "INSERT INTO images (img_series_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file, image_type) VALUES (",
-            img_series_id, ", '", datetime, "', ",
-            if (!is.null(fetch_datetime)) paste0("'", fetch_datetime, "'") else "NULL", ", ",
-            if (!is.null(description)) paste0("'", description, "'") else "NULL", ", ",
-            "'{", paste(share_with, collapse = ","), "}', ",
-            location, ", ",
-            latitude, ", ",
-            longitude, ", '",
-            extension, "', '\\x",
-            paste0(file, collapse = ""), "', ",
+            "INSERT INTO images (datetime, share_with, latitude, longitude, format, file, image_type) VALUES ('",
+            datetime,
+            "', '{",
+            paste(share_with, collapse = ","),
+            "}', ",
+            latitude,
+            ", ",
+            longitude,
+            ", '",
+            extension,
+            "', '\\x",
+            paste0(file, collapse = ""),
+            "', ",
             image_type,
             ") ON CONFLICT (file_hash) DO UPDATE SET ",
-            "img_series_id = EXCLUDED.img_series_id, ",
             "datetime = EXCLUDED.datetime, ",
-            "fetch_datetime = EXCLUDED.fetch_datetime, ",
-            "description = EXCLUDED.description, ",
             "share_with = EXCLUDED.share_with, ",
-            "location_id = EXCLUDED.location_id, ",
             "latitude = EXCLUDED.latitude, ",
             "longitude = EXCLUDED.longitude, ",
             "format = EXCLUDED.format, ",
@@ -225,97 +549,127 @@ insertACImage <- function(object, datetime, image_type, fetch_datetime = NULL, i
             "RETURNING image_id;"
           )
         )
+        if (!is.null(description)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET description = '",
+              description,
+              "' WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
         if (!is.null(owner)) {
-          DBI::dbExecute(con, paste0("UPDATE images SET owner = ", owner, " WHERE image_id = ", new_id, ";"))
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET owner = ",
+              owner,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
         }
         if (!is.null(contributor)) {
-          DBI::dbExecute(con, paste0("UPDATE images SET contributor = ", contributor, " WHERE image_id = ", new_id, ";"))
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET contributor = ",
+              contributor,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
         }
         if (!is.null(fetch_datetime)) {
-          DBI::dbExecute(con, paste0("UPDATE images SET fetch_datetime = '", fetch_datetime, "' WHERE image_id = ", new_id, ";"))
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET fetch_datetime = '",
+              fetch_datetime,
+              "' WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+        if (!is.null(tags)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET tags = '{",
+              paste(tags, collapse = ","),
+              "}' WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+
+        if (!is.null(azimuth_true)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET azimuth_true = ",
+              azimuth_true,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+        if (!is.null(elevation_agl)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET elevation_agl_m = ",
+              elevation_agl,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+        if (!is.null(elevation_msl)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET elevation_msl_m = ",
+              elevation_msl,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
+        }
+        if (!is.null(location)) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE images SET location_id = ",
+              location,
+              " WHERE image_id = ",
+              new_id,
+              ";"
+            )
+          )
         }
       }
-      if (!is.null(tags)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET tags = '{", paste(tags, collapse = ","), "}' WHERE image_id = ", new_id, ";"))
-      }
-      
-      if (!is.null(azimuth_true)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET azimuth_true = ", azimuth_true, " WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(elevation_agl)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET elevation_agl_m = ", elevation_agl, " WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(elevation_msl)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET elevation_msl_m = ", elevation_msl, " WHERE image_id = ", new_id, ";"))
-      }
-      
-      img_times <- DBI::dbGetQuery(con, paste0("SELECT first_img, last_img FROM image_series WHERE img_series_id = ", img_series_id, ";"))
-      
-      if (img_times[1,1] > datetime) {
-        DBI::dbExecute(con, paste0("UPDATE image_series SET first_img = '", datetime, "' WHERE img_series_id = ", img_series_id, ";"))
-      }
-      if (img_times[1,2] < datetime) {
-        DBI::dbExecute(con, paste0("UPDATE image_series SET last_img = '", datetime, "' WHERE img_series_id = ", img_series_id, ";"))
-      }
-      DBI::dbExecute(con, paste0("UPDATE image_series SET last_new_img = '", as.POSIXct(Sys.time(),tz = "UTC"), "' WHERE img_series_id = ", img_series_id, ";"))
-      
-      
-    } else {  # Not working with an img_series_id
-      
-      new_id <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "INSERT INTO images (datetime, share_with, latitude, longitude, format, file, image_type) VALUES ('",
-          datetime, "', '{", paste(share_with, collapse = ","), "}', ", latitude, ", ", longitude, ", '", extension, "', '\\x", paste0(file, collapse = ""), "', ", image_type, 
-          ") ON CONFLICT (file_hash) DO UPDATE SET ",
-          "datetime = EXCLUDED.datetime, ",
-          "share_with = EXCLUDED.share_with, ",
-          "latitude = EXCLUDED.latitude, ",
-          "longitude = EXCLUDED.longitude, ",
-          "format = EXCLUDED.format, ",
-          "image_type = EXCLUDED.image_type ",
-          "RETURNING image_id;"
-        )
-      )
-      if (!is.null(description)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET description = '", description, "' WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(owner)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET owner = ", owner, " WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(contributor)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET contributor = ", contributor, " WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(fetch_datetime)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET fetch_datetime = '", fetch_datetime, "' WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(tags)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET tags = '{", paste(tags, collapse = ","), "}' WHERE image_id = ", new_id, ";"))
-      }
-      
-      if (!is.null(azimuth_true)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET azimuth_true = ", azimuth_true, " WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(elevation_agl)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET elevation_agl_m = ", elevation_agl, " WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(elevation_msl)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET elevation_msl_m = ", elevation_msl, " WHERE image_id = ", new_id, ";"))
-      }
-      if (!is.null(location)) {
-        DBI::dbExecute(con, paste0("UPDATE images SET location_id = ", location, " WHERE image_id = ", new_id, ";"))
-      }
-    }
-    
-    if (activeTrans) {
-      DBI::dbExecute(con, "COMMIT;")
-    }
-    return(TRUE)
-  }, error = function(e) {
-    if (activeTrans) {
-      DBI::dbExecute(con, "ROLLBACK")
-    }
-    stop("An error occurred while inserting the image: ", e$message)
-  })
-}
 
+      if (activeTrans) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
+      return(TRUE)
+    },
+    error = function(e) {
+      if (activeTrans) {
+        DBI::dbExecute(con, "ROLLBACK")
+      }
+      stop("An error occurred while inserting the image: ", e$message)
+    }
+  )
+}

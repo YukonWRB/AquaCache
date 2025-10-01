@@ -17,7 +17,5 @@ readSnowWorkbook(workbook = "choose", overwrite = FALSE, con = NULL)
 Does not return any object. The function is designed to import data into the snow database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 Reads snow workbooks created with \code{\link[YGwater:createSnowTemplate]{YGwater::createSnowTemplate()}}, performs QA/QC checks, and imports the data to the snow database. Designed with significant error catching and logging. As the function works through the workbook it may fail on any single sheet but will continue to the next sheet until all have been processed. Warning messages will be shown alerting the user explaining the issue and the workbook sheet involved. These warning messages are designed primarily for error catching when this function is run programmatically, but are nevertheless useful for manual use.
 }

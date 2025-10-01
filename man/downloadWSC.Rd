@@ -27,7 +27,5 @@ downloadWSC(
 A data.table object of hydrometric data, with datetimes in UTC-0.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat and tidyhydat.ws options). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
 }

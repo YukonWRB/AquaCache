@@ -15,5 +15,5 @@ dbTransBegin(con, silent = TRUE)
 A boolean indicating whether a transaction was started
 }
 \description{
-Begin a transaction on a database connection. This function creates a temporary table to ensure the transaction is active.
+Begin a transaction on a database connection. This function creates a temporary table to ensure the transaction is active, which DBI::dbBegin does not do. The transaction must be committed or rolled back using \code{DBI::dbExecute(con, "COMMIT;")} or \code{DBI::dbExecute(con, "ROLLBACK;")}. Note that you should not use DBI's built-in transaction functions to commit or rollback a transaction started with this function.
 }

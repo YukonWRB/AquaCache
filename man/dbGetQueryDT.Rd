@@ -19,7 +19,5 @@ dbGetQueryDT(con, statement, sqlite_date_convert = TRUE, ...)
 A data.table object.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 A simple wrapper function around \code{\link[DBI:dbGetQuery]{DBI::dbGetQuery()}} that returns a data.table object instead of a data.frame. Can be used as a direct replacement for \code{\link[DBI:dbGetQuery]{DBI::dbGetQuery()}}, but be aware of the downstream effects of using a data.table object instead of a data.frame.
 }

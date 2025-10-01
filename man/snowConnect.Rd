@@ -30,7 +30,5 @@ snowConnect(
 A connection to the database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 This function exists to facilitate connecting to the snow database, especially if the database type and connection method changes in the future. This function is different from the \code{\link[YGwater:snowConnect]{YGwater::snowConnect()}} function in that it defaults to an account with write privileges.
 }

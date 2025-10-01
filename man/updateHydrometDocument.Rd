@@ -48,8 +48,6 @@ updateHydrometDocument(
 TRUE if a document was properly added to the database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 This function facilitates the updating of one document at a time to the database in the 'documents' table. Adding a document directly to the database is not possible, since the file must be converted to a binary object before loading. See \code{\link[YGwater:getDocument]{YGwater::getDocument()}} to get a document out again.
 \subsection{Locations, lines, and polygons}{
 

@@ -33,12 +33,10 @@ getNewDiscrete(
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 Retrieves new discrete data starting from the last data point in the local database, using the function specified in the sample_series table column "source_fx". Each sample series can also have a specified time range, allowing a certain location/sub-location to have multiple sample_series with different source functions and time ranges. The function will update the database in-place with the new data.
 \subsection{Making functions called by getNewDiscrete:}{
 
-Each sample_series_id in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return list of lists, with each list element containing two data.frames: one for sample metadata and one for associated results. The sample metadata data.frame must contain the following columns:
+Each sample_series_id in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return a list of lists, with each list element containing two data.frames: one named 'sample' with sample metadata and one named 'results' for associated results. The 'sample' data.frame must contain the following columns:
 \itemize{
 \item 'location_id': a numeric specifying the location_id of the data point from table 'locations'.
 \item 'media_id': a numeric specifying the media_id of the data point from table 'medias'.
@@ -56,7 +54,7 @@ Optional columns are:
 \item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 }
 
-The results data.frame must contain the following columns:
+The 'results' data.frame must contain the following columns:
 \itemize{
 \item 'parameter_id': a numeric specifying the parameter_id of the data point from table 'parameters'.
 \item 'result': a numeric specifying the sample's results, matched to the parameters

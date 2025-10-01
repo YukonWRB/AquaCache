@@ -11,15 +11,15 @@ insertACBorehole(
   latitude = NULL,
   longitude = NULL,
   location_source = NULL,
-  surveyed_ground_level_elevation = NULL,
+  surveyed_ground_elev = NULL,
   purpose_of_borehole = NULL,
   purpose_borehole_inferred = FALSE,
   depth_to_bedrock = NULL,
   permafrost_present = FALSE,
-  permafrost_top_depth = NULL,
-  permafrost_bottom_depth = NULL,
+  permafrost_top = NULL,
+  permafrost_bot = NULL,
   date_drilled = NULL,
-  casing_outside_diameter = NULL,
+  casing_od = NULL,
   is_well = FALSE,
   well_depth = NULL,
   top_of_screen = NULL,
@@ -28,18 +28,20 @@ insertACBorehole(
   static_water_level = NULL,
   estimated_yield = NULL,
   ground_elev_m = NULL,
-  notes = NULL,
-  share_with = "yg_reader",
+  notes_borehole = NULL,
+  notes_well = NULL,
+  share_with_borehole = "public_reader",
   drilled_by = NULL,
   drill_method = NULL,
   purpose_of_well = purpose_of_borehole,
-  purpose_well_inferred = purpose_borehole_inferred
+  purpose_well_inferred = purpose_borehole_inferred,
+  share_with_well = share_with_borehole
 )
 }
 \arguments{
 \item{con}{A connection to the database. Default NULL uses AquaConnect() and closes the connection afterwards.}
 
-\item{path}{Path to a document file to attach to the borehole record.}
+\item{path}{Path to a document/file to attach to the borehole record. If NULL, no document is attached.}
 
 \item{well_name}{Name of the borehole/well. Required.}
 
@@ -49,7 +51,7 @@ insertACBorehole(
 
 \item{location_source}{Source of the location information (e.g., "GPS", "Survey").}
 
-\item{surveyed_ground_level_elevation}{Ground elevation from survey in meters.}
+\item{surveyed_ground_elev}{Ground elevation from survey in meters.}
 
 \item{purpose_of_borehole}{Purpose of the borehole as integer matching the database's borehole_well_purpose column.}
 
@@ -59,13 +61,13 @@ insertACBorehole(
 
 \item{permafrost_present}{Logical indicating if permafrost is present. Default is FALSE.}
 
-\item{permafrost_top_depth}{Depth to the top of permafrost in meters, if present.}
+\item{permafrost_top}{Depth to the top of permafrost in meters, if present.}
 
-\item{permafrost_bottom_depth}{Depth to the bottom of permafrost in meters, if present.}
+\item{permafrost_bot}{Depth to the bottom of permafrost in meters, if present.}
 
 \item{date_drilled}{Date when the borehole was drilled.}
 
-\item{casing_outside_diameter}{Outside diameter of the casing in centimeters.}
+\item{casing_od}{Outside diameter of the casing in centimeters.}
 
 \item{is_well}{Logical indicating if the borehole is also a well. Default is FALSE.}
 
@@ -83,9 +85,11 @@ insertACBorehole(
 
 \item{ground_elev_m}{Ground elevation in meters.}
 
-\item{notes}{Additional notes about the borehole/well.}
+\item{notes_borehole}{Additional notes about the borehole.}
 
-\item{share_with}{Which user groups should the record be shared with. Default is "yg_reader".}
+\item{notes_well}{Additional notes about the well.}
+
+\item{share_with_borehole}{A character vector of the user group(s) with which to share the borehole, one element per group. Default is "public_reader".}
 
 \item{drilled_by}{Company or individual who drilled the borehole.}
 
@@ -94,13 +98,13 @@ insertACBorehole(
 \item{purpose_of_well}{Purpose of the borehole as integer matching the database's borehole_well_purpose column. Default is \code{purpose_of_borehole}.}
 
 \item{purpose_well_inferred}{Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is \code{purpose_borehole_inferred}.}
+
+\item{share_with_well}{A character vector of the user group(s) with which to share the well, one elemtn per group. Default is \code{share_with_borehole}.}
 }
 \value{
 The borehole_id of the newly inserted record.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 This function facilitates the addition of a borehole record to the database. If the borehole
 is also a well, additional well-specific information can be provided. The function can also
 associate a document with the borehole and handle permafrost information if present.

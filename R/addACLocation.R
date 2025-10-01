@@ -2,14 +2,13 @@
 #' 
 #' Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
-#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.
+#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.
 #' @param location A character vector of the location code(s).
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French.
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
-#' @param visibility_public A character vector of the visibility of the location(s). One of 'exact', 'region', 'jitter'. Default is 'exact'.
-#' @param share_with A character vector of the user group(s) with which to share the location(s). Default is "public_reader".
+#' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default is "public_reader".
 #' @param owner A numeric vector of the owner(s) of the location(s).
 #' @param data_sharing_agreement_id A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
@@ -26,7 +25,7 @@
 #' @return Success/error messages and new entries added to the database.
 #' @export
 
-addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, visibility_public = NA, share_with = NA, owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = NULL) {
+addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, latitude = NA, longitude = NA, share_with = "public_reader", owner = NA, data_sharing_agreement_id = NA, location_type = NA, note = NA, contact = NA, datum_id_from = NA, datum_id_to = NA, conversion_m = NA, current = NA, network = NA, project = NA, con = NULL) {
   
    
   # df = NULL
@@ -35,7 +34,6 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   # name_fr = "Parcours nivométrique de la montagne Old Crow"
   # latitude = 67.60114
   # longitude = -139.85132
-  # visibility_public = 'exact'
   # share_with = 'public_reader'
   # owner = 2
   # location_type = 15
@@ -56,12 +54,12 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   
   if (!is.null(df)) {
     # Check that all other parameters are NA
-    if (!all(is.na(c(location, name, name_fr, latitude, longitude, visibility_public, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current)))) {
+    if (!all(is.na(c(location, name, name_fr, latitude, longitude, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current)))) {
       stop("You cannot provide a data.frame and other parameters at the same time.")
     }
     
     # Check that there is a column name for each function parameter that is not 'df'
-    if (!all(c("location", "name", "name_fr", "latitude", "longitude", "visibility_public", "share_with", "owner", "data_sharing_agreement_id", "location_type", "note", "contact", "datum_id_from", "datum_id_to", "conversion_m", "current") %in% colnames(df))) {
+    if (!all(c("location", "name", "name_fr", "latitude", "longitude", "share_with", "owner", "data_sharing_agreement_id", "location_type", "note", "contact", "datum_id_from", "datum_id_to", "conversion_m", "current") %in% colnames(df))) {
       stop("The data.frame provided does not contain all the necessary columns.")
     }
     # Check that the data.frame is not empty
@@ -74,7 +72,6 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
     name_fr <- df$name_fr
     latitude <- df$latitude
     longitude <- df$longitude
-    visibility_public <- df$visibility_public
     share_with <- df$share_with
     owner <- df$owner
     data_sharing_agreement_id <- df$data_sharing_agreement_id
@@ -94,7 +91,7 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   longitude <- as.numeric(longitude)
   
   # Begin checks ############################
-  lengths <- c(length(location), length(name), length(name_fr), length(latitude), length(longitude), length(visibility_public), length(share_with), length(owner), length(data_sharing_agreement_id), length(location_type), length(note), length(contact), length(datum_id_from), length(datum_id_to), length(conversion_m), length(current), length(network), length(project))
+  lengths <- c(length(location), length(name), length(name_fr), length(latitude), length(longitude), length(share_with), length(owner), length(data_sharing_agreement_id), length(location_type), length(note), length(contact), length(datum_id_from), length(datum_id_to), length(conversion_m), length(current), length(network), length(project))
   
   # Check that the length of each parameter vector is equal, if not stop
   if (!all(lengths == lengths[1])) {
@@ -104,9 +101,6 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
   # Some parameters can be NA, in which case they get default values
   if (any(is.na(share_with))) {
     share_with[is.na(share_with)] <- "public_reader"
-  }
-  if (any(is.na(visibility_public))) {
-    visibility_public[is.na(visibility_public)] <- "exact"
   }
   if (any(is.na(datum_id_from))) {
     datum_id_from[is.na(datum_id_from)] <- 10
@@ -254,7 +248,6 @@ addACLocation <- function(df = NULL, location = NA, name = NA, name_fr = NA, lat
                              name_fr = name_fr[i],
                              latitude = latitude[i],
                              longitude = longitude[i],
-                             visibility_public = visibility_public[i],
                              share_with = paste0("{", paste(share_with, collapse = ", "), "}"),
                              data_sharing_agreement_id = data_sharing_agreement_id[i],
                              location_type = location_type[i],

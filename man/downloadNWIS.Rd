@@ -30,7 +30,5 @@ downloadNWIS(
 A data.frame object of hydrometric data, with datetimes in UTC-0.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 A function used to fetch NWIS data from their REST API. See details \href{https://waterservices.usgs.gov/rest/IV-Service.html}{here}. Unit conversions are performed to metric for common parameters like level, flow, temperature.
 }

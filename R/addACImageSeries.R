@@ -10,14 +10,13 @@
 #' @param source_fx The function to use for fetching new images. Must be an existing function in this package.
 #' @param source_fx_args Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.
 #' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG"
-#' @param visibility_public How should the image location be publicly visible? Options are 'exact', 'region', 'jitter'. 
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #'
 #' @return TRUE if successful, and a new entry in the database with images fetched.
 #' @export
 #'
 
-addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = "public_reader", visibility_public = 'exact', con = NULL) {
+addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args = NA, share_with = "public_reader", con = NULL) {
   # function will add entry to image_series, then trigger getNewImages from the user-specified start_datetime
 
   if (is.null(con)) {
@@ -40,9 +39,6 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
     stop("Parameter 'location' must be either a character or numeric vector of length 1.")
   }
 
-  if (!visibility_public %in% c('exact', 'region', 'jitter')) {
-    stop("The 'visibility_public' parameter must be either 'exact', 'region', or 'jitter'.")
-  }
   if (!inherits(share_with, "character")) {
     stop("The 'share_with' parameter must be a character vector.")
   }
@@ -73,13 +69,12 @@ addACImageSeries <- function(location, start_datetime, source_fx, source_fx_args
                        source_fx = source_fx,
                        source_fx_args = args,
                        share_with = paste0("{", paste(share_with, collapse = ","), "}"),
-                       visibility_public = visibility_public,
                        active = TRUE,
                        description = "Image series automatically taken from a web or server location.")
 
   DBI::dbAppendTable(con, "image_series", insert)
   res <- DBI::dbGetQuery(con, paste0("SELECT img_series_id FROM image_series WHERE location_id = ", location_id, ";"))[1,1]
-  added <- getNewImages(image_meta_ids = res, con = con)
+  added <- getNewImages(image_series_ids = res, con = con)
   if (length(added) == 0) {
     warning("Failed to find or add new images. The new entry to table image_series has been deleted.")
     DBI::dbExecute(con, paste0("DELETE FROM image_series WHERE img_series_id = ", res, ";"))

@@ -30,7 +30,5 @@ maintain(
 TRUE if completed successfully, possibly with messages printed to the console.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 Performs maintenance operations operation on the database, according to the parameters selected.
 }

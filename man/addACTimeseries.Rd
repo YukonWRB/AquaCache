@@ -47,7 +47,7 @@ addACTimeseries(
 
 \item{record_rate}{A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'; set to NA for discrete timeseries.}
 
-\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or strings.}
+\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or multiple such strings if specifying multiple timeseries in one go.}
 
 \item{owner}{A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!}
 
@@ -63,8 +63,6 @@ addACTimeseries(
 One or more new entries are created in the table 'timeseries'
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 This function facilitates the addition of one or multiple timeseries to the database by adding entries to the timeseries and settings tables. See related function \code{\link[=addACLocation]{addACLocation()}} for adding a location to which timeseries must be attached. To add an image series see \code{\link[=addACImageSeries]{addACImageSeries()}}, for raster series see \code{\link[=addACRasterSeries]{addACRasterSeries()}}. For one-off images use \code{\link[=insertACImage]{insertACImage()}} and for rasters \code{\link[=insertACRaster]{insertACRaster()}}. For documents use \code{\link[=insertACDocument]{insertACDocument()}}.
 
 You will be prompted to add locations that don't exist yet if any fall into this category.
@@ -72,13 +70,13 @@ You will be prompted to add locations that don't exist yet if any fall into this
 \details{
 You can add the new timeseries by directly editing the database, but this function ensures that database constraints are respected and will immediately seek to populate the measurements and calculated tables with new information for each timeseries. For Water Survey of Canada data, this function will also seek out level and flow data from the HYDAT database, downloading or checking for updates to it before use.
 
-If specifying a data.frame for argument 'data', different criteria applies depending on if the timeseries is categorized as continuous or discrete.
+If specifying a data.frame for argument \code{data}, different criteria applies depending on if the timeseries is categorized as continuous or discrete.
 For continuous data:
 The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered directly to the 'measurements_calculated_daily' table with no entry to measurements_continuous. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function \code{\link[=addNewContinuous]{addNewContinuous()}} will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
 For discrete data:
 This is not supported yet.
 
-Additional arguments to pass to the function specified in source_fx go in argument 'source_fx_args' (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
+Additional arguments to pass to the function specified in \code{source_fx} go in argument \code{source_fx_args} (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
 }
 \examples{
 \dontrun{

@@ -33,8 +33,6 @@ downloadAquarius(
 A data.frame of timeseries data with columns for datetime, value, grade, approval.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 Pared-down and modified version of YGWater::aq_download.
 \subsection{Passwords and server credentials:}{
 

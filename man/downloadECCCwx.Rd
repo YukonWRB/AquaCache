@@ -30,7 +30,5 @@ downloadECCCwx(
 A data.frame of hydrometric data, with datetimes in UTC-0.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 A function used to fetch weather data from ECCC, using the weathercan package for speed and simplicity. Since ECCC weather data comes in as a tibble with ~36 rows (all parameters)and there is no way to tailor the request to a single parameter, this function will save the output of the first download as an .rdata file to the session temporary folder. Subsequent runs of the function will search the temporary folder for a suitable file and attempt to use it, downloading again only if no suitable file is found. Temporary folder contents are deleted when the R session is closed.
 }

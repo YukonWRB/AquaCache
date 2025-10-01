@@ -39,8 +39,6 @@ synchronize_continuous(
 A data.frame showing the status of synchronization for each timeseries as well as the error or warning message, if any, plus updated entries in the hydro database.
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-
 This synchronize function pulls and replaces data referenced in table 'timeseries' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence. New data is also brought in, if any exists on the remote. Daily means and statistics are recalculated for any potentially affected days in the daily tables, except for daily means provided in HYDAT historical tables (Water Survey of Canada).
 
 If you leave the 'con' object as NULL the function will try to run in parallel, which dramatically speeds things up. You can pass connection parameters to the function if you want to run it in parallel, but you must leave 'con' as NULL. If you don't want to run in parallel, you can pass a connection object to the function and it will run in sequence.
