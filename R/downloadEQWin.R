@@ -15,7 +15,6 @@
 
 downloadEQWin <- function(
   location,
-  sub_location,
   start_datetime,
   end_datetime = Sys.time(),
   EQpath = NULL,
@@ -94,7 +93,7 @@ downloadEQWin <- function(
       stop("The specified key file path does not appear to be a .csv file.")
     }
   }
-  key <- read.csv(key, stringsAsFactors = FALSE)
+  key <- utils::read.csv(key, stringsAsFactors = FALSE)
 
   # Get the data ##############
   # Find the StnId

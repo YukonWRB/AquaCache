@@ -5,7 +5,7 @@
 \title{Connect to the aquacache database}
 \usage{
 AquaConnect(
-  name = "aquacache",
+  name = Sys.getenv("aquacacheName"),
   host = Sys.getenv("aquacacheHost"),
   port = Sys.getenv("aquacachePort"),
   username = Sys.getenv("aquacacheAdminUser"),
@@ -14,7 +14,7 @@ AquaConnect(
 )
 }
 \arguments{
-\item{name}{Database name.}
+\item{name}{Database name. By default searches the .Renviron file for parameter=value pair of form aquacacheName="name". If you want to connect to a different database, pass the name of that database here.}
 
 \item{host}{Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost:"hostname".}
 

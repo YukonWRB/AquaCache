@@ -10,7 +10,7 @@
 #' - To facilitate development, a dev database can be connected to by setting the dev parameter to TRUE. This will append "_dev" to the database name.
 #' - An attribute is added to the connection object to track if a transaction is active. This can be used by functions to determine if a transaction is already open, in which case functions can forgo opening a new transaction and instead use the existing one.
 #'
-#' @param name Database name.
+#' @param name Database name. By default searches the .Renviron file for parameter=value pair of form aquacacheName="name". If you want to connect to a different database, pass the name of that database here.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost:"hostname".
 #' @param port Connection port. By default searches the .Renviron file for parameter:value pair of form aquacachePort:"1234".
 #' @param username Username. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminUser:"username".
@@ -22,7 +22,7 @@
 #' @export
 
 AquaConnect <- function(
-  name = "aquacache",
+  name = Sys.getenv("aquacacheName"),
   host = Sys.getenv("aquacacheHost"),
   port = Sys.getenv("aquacachePort"),
   username = Sys.getenv("aquacacheAdminUser"),

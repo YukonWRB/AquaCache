@@ -6,7 +6,6 @@
 \usage{
 downloadEQWin(
   location,
-  sub_location,
   start_datetime,
   end_datetime = Sys.time(),
   EQpath = NULL,
