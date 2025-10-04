@@ -68,12 +68,6 @@ tryCatch(
       "UPDATE continuous.timeseries SET timezone_daily_calc = -8;"
     )
 
-    # Recalculate all daily means and stats for all timeseries
-    message(
-      "Recalculating all daily means and stats for all timeseries. Be patient, this will take a while."
-    )
-    calculate_stats(con, timeseries_id = "all", start_recalc = "1900-01-01")
-
     message(
       "Please review the timezone associated with daily calculations on each timeseries. They've all been set to -8 to align with the WSC's defaults, but you may want to change some of them."
     )
@@ -674,6 +668,40 @@ tryCatch(
       DROP COLUMN IF EXISTS has_polygons;"
     )
 
+    # Move table 'correction_types' from schema 'public' to 'continuous'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.correction_types SET SCHEMA continuous;"
+    )
+    DBI::dbExecute(
+      con,
+      'ALTER TABLE continuous.correction_types OWNER TO "admin";'
+    )
+    DBI::dbExecute(
+      con,
+      'GRANT ALL ON TABLE continuous.correction_types TO PUBLIC;'
+    )
+
+    # Redo the measurmements_continuous_corrected view to stop filling in NULL values with raw values
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE VIEW continuous.measurements_continuous_corrected
+      WITH (security_barrier = true)
+      AS
+      SELECT
+          mc.timeseries_id,
+          mc.datetime,
+          mc.value AS value_raw,
+          ac.value_corrected,
+          mc.period,
+          mc.imputed
+      FROM measurements_continuous mc
+      CROSS JOIN LATERAL (
+          SELECT continuous.apply_corrections(mc.timeseries_id, mc.datetime, mc.value) AS value_corrected
+      ) ac;
+      "
+    )
+
     # Wrap things up ##################
     # Update the version_info table
     DBI::dbExecute(
@@ -691,7 +719,13 @@ tryCatch(
     # Commit the transaction
     DBI::dbExecute(con, "COMMIT;")
 
-    message("Patch 27 applied successfully.")
+    message("Patch 27 applied successfully, transaction closed.")
+
+    # Recalculate all daily means and stats for all timeseries because of the new timezone field and redos of the views
+    message(
+      "Recalculating all daily means and stats for all timeseries. Be patient, this will take a while. You can use the database as normal while this is happening."
+    )
+    calculate_stats(con, timeseries_id = "all", start_recalc = "1900-01-01")
   },
   error = function(e) {
     # Rollback the transaction

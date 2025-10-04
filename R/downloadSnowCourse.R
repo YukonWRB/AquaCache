@@ -103,7 +103,7 @@ downloadSnowCourse <- function(
   )[1, 1]
   sample_owner <- DBI::dbGetQuery(
     con,
-    "SELECT sample_type_id FROM sample_types WHERE LOWER(sample_type) = 'sample-field msr/obs - no lab results expected'"
+    "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';"
   )[1, 1]
   sample_contributor <- DBI::dbGetQuery(
     con,
