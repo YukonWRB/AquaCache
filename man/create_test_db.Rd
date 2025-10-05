@@ -56,3 +56,6 @@ An SQL file containing the schema definition saved to the 'outfile' path.
 \description{
 This function uses the \code{pg_dump} utility to create a dump of the schema and a subset of the data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes a command to set the database \code{search_path} on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
 }
+\seealso{
+\code{\link[=db_dump]{db_dump()}}
+}
