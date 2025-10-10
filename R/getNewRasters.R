@@ -1,7 +1,6 @@
 #' Get new rasters
 #'
 #' @description
-#'
 #' Retrieves new data corresponding to entries in the table "raster_series_index" for which the column 'public' is TRUE. You can add a new raster series with [addACRasterSeries()]. As with the timeseries and images table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addACTimeseries()] for a description of how to formulate these arguments.
 #'
 #' @param raster_series_ids A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.
