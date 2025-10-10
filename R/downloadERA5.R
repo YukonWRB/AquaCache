@@ -409,8 +409,8 @@ downloadERA5 <- function(
 
       file <- list()
       file[["rast"]] <- raster
-      file[["valid_from"]] <- from_date
-      file[["valid_to"]] <- from_date + 60 * 60
+      file[["valid_from"]] <- from_date - 60 * 60
+      file[["valid_to"]] <- from_date
       file[["flag"]] <- NA
       file[["source"]] <- "ECMWF API"
       file[["model"]] <- model

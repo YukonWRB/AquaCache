@@ -34,33 +34,34 @@
 #' @return A list with TRUE for successful import and the rid(s) of the appended entries.
 
 writeRaster <- function(
-  con,
-  raster,
-  rast_table = "rasters",
-  bit.depth = NULL,
-  blocks = NULL,
-  constraints = TRUE
+    con,
+    raster,
+    rast_table = "rasters",
+    bit.depth = NULL,
+    blocks = NULL,
+    constraints = TRUE
 ) {
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {
     stop("PostGIS is not enabled on this database.")
   }
-
+  
   if (!inherits(raster, "SpatRaster")) {
     stop("Raster must be a terra SpatRaster object.")
   }
-
+  
   # Make sure raster is in WGS84 (EPSG:4326) before writing to the database
-  rast <- terra::project(raster, "epsg:4326")
   # Ensure a CRS is present to avoid SRID 0 in the database
   if (is.na(terra::crs(raster)) || terra::crs(raster) == "") {
     warning("Raster has no CRS. Defaulting to EPSG:4326.")
     terra::crs(raster) <- "EPSG:4326"
+  } else {
+    raster <- terra::project(raster, "epsg:4326")
   }
-
+  
   # class and crs
   r_class <- DBI::dbQuoteString(con, class(raster)[1])
   r_crs <- DBI::dbQuoteString(con, terra::crs(raster))
-
+  
   if (!any(rast_table %in% DBI::dbListTables(con))) {
     rast_table <- if (length(rast_table) == 2) {
       paste0(rast_table[1], ".", rast_table[2])
@@ -94,18 +95,20 @@ writeRaster <- function(
         "This script is designed to work with either postgreSQL or SQL server databases."
       )
     }
-
+    
     ## If the execute fails, postgis.raster extension is not installed?
     tryCatch(
       {
         DBI::dbExecute(con, rast.tmp.query)
         DBI::dbExecute(
           con,
-          "COMMENT ON TABLE spatial.rasters IS 'Holds raster tiles. Rasters may be broken up in multiple tiles, so refer to table rasters_reference to find the reference_ID for each raster. Otherwise this table is designed for extracting rasters using R, hence the r_class and r_proj4 columns.'"
+          paste0("COMMENT ON TABLE ", rast_table, " IS 'Holds raster tiles. Rasters may be broken up in multiple tiles, so refer to table rasters_reference to find the reference_ID for each raster. Otherwise this table is designed for extracting rasters using R, hence the r_class and r_proj4 columns.'"
+          )
         )
         DBI::dbExecute(
           con,
-          "COMMENT ON COLUMN spatial.rasters.reference_id IS 'Matches a unique entry in table rasters_reference. If a raster is broken up into tiles, each tile will have the same reference_id; this number is what identifies them as being tiles of the same raster.'"
+          paste0("COMMENT ON COLUMN ", rast_table, ".reference_id IS 'Matches a unique entry in table rasters_reference. If a raster is broken up into tiles, each tile will have the same reference_id; this number is what identifies them as being tiles of the same raster.'"
+          )
         )
       },
       error = function(e) {
@@ -124,16 +127,18 @@ writeRaster <- function(
     message(
       "Appending to existing table. Dropping any existing raster constraints..."
     )
-    try(DBI::dbExecute(
-      con,
-      paste0(
-        "SELECT DropRasterConstraints('",
-        sub(".*\\.", "", rast_table),
-        "','rast',",
-        paste(rep("TRUE", 12), collapse = ","),
-        ");"
-      )
-    ))
+    if (constraints) {
+      try(DBI::dbExecute(
+        con,
+        paste0(
+          "SELECT DropRasterConstraints('",
+          sub(".*\\.", "", rast_table),
+          "','rast',",
+          paste(rep("TRUE", 12), collapse = ","),
+          ");"
+        )
+      ))
+    }
     n.base <- DBI::dbGetQuery(
       con,
       paste0("SELECT max(rid) r from ", rast_table, ";")
@@ -151,10 +156,10 @@ writeRaster <- function(
       new <- FALSE
     }
   }
-
+  
   r1 <- raster
   res <- round(terra::res(r1), 10)
-
+  
   # figure out block size
   if (!is.null(blocks)) {
     # Define a function basically straight from the 'bs' unexported function from rpostgis
@@ -170,16 +175,16 @@ writeRaster <- function(
         blocks <- c(blocks, blocks)
       }
       r1 <- r1[[1]]
-
+      
       cr <- list()
       tr <- list()
-
+      
       # Manage RasterLayer
       r1 <- terra::rast(r1)
-
+      
       n.c <- terra::ncol(r1)
       n.r1 <- terra::nrow(r1)
-
+      
       # cr
       b <- blocks[1]
       if (b == 1) {
@@ -202,7 +207,7 @@ writeRaster <- function(
           cr$n <- length(cr$row)
         }
       }
-
+      
       # tr
       b <- blocks[2]
       if (b == 1) {
@@ -227,14 +232,14 @@ writeRaster <- function(
       }
     }
     bs <- bs(r1, blocks)
-
+    
     tr <- bs$tr
     cr <- bs$cr
   } else {
     tr <- terra::blocks(r1[[1]], 100)
     cr <- terra::blocks(terra::t(r1[[1]]), 100)
   }
-
+  
   message(
     "Splitting ",
     length(names(r1)),
@@ -244,7 +249,7 @@ writeRaster <- function(
     tr$n,
     " blocks..."
   )
-
+  
   # figure out bit depth
   if (is.null(bit.depth)) {
     if (is.integer(terra::values(r1))) {
@@ -259,7 +264,7 @@ writeRaster <- function(
   }
   bit.depth <- DBI::dbQuoteString(con, bit.depth)
   ndval <- -99999
-
+  
   srid <- tryCatch(
     suppressMessages(rpostgis::pgSRID(
       con,
@@ -268,7 +273,7 @@ writeRaster <- function(
     )[[1]]),
     error = function(e) 0
   )
-
+  
   # Default to EPSG:4326 when CRS is missing or unrecognized
   if (length(srid) != 1 || srid == 0) {
     warning(
@@ -276,30 +281,30 @@ writeRaster <- function(
     )
     srid <- 4326
   }
-
+  
   # Grid with all band/block combinations
   crossed_df <- expand.grid(
     trn = 1:tr$n,
     crn = 1:cr$n,
     band = 1:terra::nlyr(r1)
   )
-
+  
   n <- unlist(tapply(crossed_df$band, crossed_df$band, function(x) {
     seq(from = n.base + 1, by = 1, length.out = length(x))
   }))
-
+  
   rgrid <- cbind(crossed_df, n = n)
-
+  
   # Function to export a block
   export_block <- function(band, trn, crn, n) {
     # Get band b
     rb <- r1[[band]]
-
+    
     # Handle empty data rasters by setting ndval (-99999) to all values
     if (all(is.na(terra::values(rb)))) {
       terra::values(rb) <- ndval
     }
-
+    
     # Get raster tile
     suppressWarnings(
       r <- rb[
@@ -308,11 +313,11 @@ writeRaster <- function(
         drop = FALSE
       ]
     )
-
+    
     # Get extent and dimensions of tile
     ex <- terra::ext(r)
     d <- dim(r)
-
+    
     # Only ST_MakeEmptyRaster/ST_AddBand during first band loop
     if (band == 1) {
       # Create empty raster
@@ -342,7 +347,7 @@ writeRaster <- function(
         ") );"
       )
       DBI::dbExecute(con, tmp.query)
-
+      
       # Upper left x/y for alignment snapping
       # if (trn == 1 & crn == 1) {
       tmp.query <- paste0(
@@ -362,7 +367,7 @@ writeRaster <- function(
       )
       upy <- DBI::dbGetQuery(con, tmp.query)$y
       # }
-
+      
       # New band
       if (res[1] != res[2]) {
         s2g <- paste0(", ", res[1], ", ", -res[2])
@@ -395,7 +400,7 @@ writeRaster <- function(
       )
       DBI::dbExecute(con, tmp.query)
     }
-
+    
     mr <- terra::as.matrix(r, wide = TRUE)
     mr[is.na(mr)] <- ndval
     r2 <- paste(
@@ -404,7 +409,7 @@ writeRaster <- function(
       }),
       collapse = ","
     )
-
+    
     tmp.query <- paste0(
       "UPDATE ",
       rast_table,
@@ -419,40 +424,44 @@ writeRaster <- function(
     )
     DBI::dbExecute(con, tmp.query)
   }
-
+  
   purrr::pmap(list(rgrid$band, rgrid$trn, rgrid$crn, rgrid$n), export_block)
-
+  
   # Get rid of the rows just appended. Done as a query here in case any rows in object rgrid failed to append
   new_rids <- DBI::dbGetQuery(
     con,
     paste0("SELECT rid FROM ", rast_table, " WHERE rid > ", n.base, ";")
   )[, 1]
-
-  # Create index
-  if (!new) {
+  
+  # Create index if new table, else reindex
+  if (new) {
     tmp.query <- paste0(
-      "DROP INDEX IF EXISTS ",
-      gsub("\"", "", rast_table),
-      "_rast_st_conhull_idx"
+      "CREATE INDEX ",
+      gsub("\"", "", sub(".*\\.", "", rast_table)),
+      "_rast_st_conhull_idx ON ",
+      rast_table,
+      " USING gist( ST_ConvexHull(rast) );"
+    )
+    DBI::dbExecute(con, tmp.query)
+  } else { 
+    try({
+      # re-index existing table for performance
+      tmp.query <- paste0("REINDEX INDEX CONCURRENTLY ",  gsub("\"", "", rast_table),
+                          "_rast_st_conhull_idx;")
+      DBI::dbExecute(con, tmp.query)
+    })
+  }
+  
+  # 5. add raster constraints
+  if (constraints) {
+    tmp.query <- paste0(
+      "SELECT AddRasterConstraints('spatial'::name,",
+      DBI::dbQuoteString(con, sub(".*\\.", "", rast_table)),
+      "::name, 'rast'::name);"
     )
     DBI::dbExecute(con, tmp.query)
   }
-  tmp.query <- paste0(
-    "CREATE INDEX ",
-    gsub("\"", "", sub(".*\\.", "", rast_table)),
-    "_rast_st_conhull_idx ON ",
-    rast_table,
-    " USING gist( ST_ConvexHull(rast) );"
-  )
-  DBI::dbExecute(con, tmp.query)
-
-  # 5. add raster constraints
-  tmp.query <- paste0(
-    "SELECT AddRasterConstraints('spatial'::name,",
-    DBI::dbQuoteString(con, sub(".*\\.", "", rast_table)),
-    "::name, 'rast'::name);"
-  )
-  DBI::dbExecute(con, tmp.query)
-
+  
   return(list(status = TRUE, appended_rids = new_rids))
 }
+
