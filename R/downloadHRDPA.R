@@ -9,7 +9,6 @@
 #'
 
 downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
-
   # check parameter 'clip'
   if (!is.null(clip)) {
     if (!inherits(clip, "character")) {
@@ -18,7 +17,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       stop("Parameter clip must be a character vector of 2 characters.")
     }
   }
-  
+
   if (!inherits(start_datetime, "POSIXct")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
   } else {
@@ -30,12 +29,20 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
   if (length(saved_files) == 0) {
     file_exists <- FALSE
   } else {
-    saved_files <- data.frame(file = saved_files,
-                              datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds"))
-    ok <- saved_files[saved_files$datetime > Sys.time() - 10*60, ]
+    saved_files <- data.frame(
+      file = saved_files,
+      datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds")
+    )
+    ok <- saved_files[saved_files$datetime > Sys.time() - 10 * 60, ]
     if (nrow(ok) > 0) {
-      target_file <- saved_files[order(saved_files$datetime, decreasing = TRUE) , ][1,]
-      available <- readRDS(paste0(tempdir(), "/downloadHRDPA/", target_file$file))
+      target_file <- saved_files[
+        order(saved_files$datetime, decreasing = TRUE),
+      ][1, ]
+      available <- readRDS(paste0(
+        tempdir(),
+        "/downloadHRDPA/",
+        target_file$file
+      ))
       file_exists <- TRUE
     } else {
       file_exists <- FALSE
@@ -43,24 +50,56 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
   }
   # If there is no file that matches necessary use, download and save for later
   if (!file_exists) {
-    seq_days <- seq.Date(as.Date(start_datetime), as.Date(.POSIXct(Sys.time(), tz = "UTC")), by = "day")
+    seq_days <- seq.Date(
+      as.Date(start_datetime),
+      as.Date(.POSIXct(Sys.time(), tz = "UTC")),
+      by = "day"
+    )
     available <- data.frame()
     for (i in 1:length(seq_days)) {
       day <- seq_days[i]
       for (j in c("00", "06", "12", "18")) {
-        tryCatch({
-          files <- suppressWarnings(rvest::session(paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/"))) |>
-            rvest::html_elements(xpath ='//*[contains(@href, ".grib2")]') |>
-            rvest::html_attr("href")
-          files <- files[grep(parameter, files)] # only retain the files we're interested in
-          tmp <- data.frame(file = files,
-                            datetime = as.POSIXct(substr(files, 1, 11), format = "%Y%m%dT%H", tz = "UTC"),
-                            prelim = FALSE,
-                            path = paste0("https://dd.weather.gc.ca/", gsub("-", "", day), "/WXO-DD/model_hrdpa/2.5km/", j, "/", files))
-          available <- rbind(available, tmp)
-        }, error = function(e) {
-          message(paste0("No HRDPA raster available for ", day, " at ", j, " UTC"))
-        })
+        tryCatch(
+          {
+            files <- suppressWarnings(rvest::session(paste0(
+              "https://dd.weather.gc.ca/",
+              gsub("-", "", day),
+              "/WXO-DD/model_hrdpa/2.5km/",
+              j,
+              "/"
+            ))) |>
+              rvest::html_elements(xpath = '//*[contains(@href, ".grib2")]') |>
+              rvest::html_attr("href")
+            files <- files[grep(parameter, files)] # only retain the files we're interested in
+            tmp <- data.frame(
+              file = files,
+              datetime = as.POSIXct(
+                substr(files, 1, 11),
+                format = "%Y%m%dT%H",
+                tz = "UTC"
+              ),
+              prelim = FALSE,
+              path = paste0(
+                "https://dd.weather.gc.ca/",
+                gsub("-", "", day),
+                "/WXO-DD/model_hrdpa/2.5km/",
+                j,
+                "/",
+                files
+              )
+            )
+            available <- rbind(available, tmp)
+          },
+          error = function(e) {
+            message(paste0(
+              "No HRDPA raster available for ",
+              day,
+              " at ",
+              j,
+              " UTC"
+            ))
+          }
+        )
       }
     }
 
@@ -68,14 +107,15 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
     suppressWarnings(dir.create(paste0(tempdir(), "/downloadHRDPA")))
     name <- gsub(" ", "", Sys.time())
     name <- gsub("-", "", name)
-    name <- substr(gsub(":", "", name), 1,12)
+    name <- substr(gsub(":", "", name), 1, 12)
     saveRDS(available, paste0(tempdir(), "/downloadHRDPA/", name, ".rds"))
   }
 
   #Now filter by start_datetime, discard prelim rasters if non-prelim exists
-  available <- available[available$datetime >= start_datetime , ]
+  available <- available[available$datetime >= start_datetime, ]
   available <- available[order(available$datetime), ]
-  duplicates <- duplicated(available$datetime, fromLast = TRUE) | duplicated(available$datetime)
+  duplicates <- duplicated(available$datetime, fromLast = TRUE) |
+    duplicated(available$datetime)
   available <- available[!(available$prelim & duplicates) | !duplicates, ]
 
   #Make clip polygon
@@ -107,7 +147,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
         rast <- terra::trim(rast) #Trims the NA values
       }
       file[["rast"]] <- rast
-      file[["valid_from"]] <- available[i, "datetime"] + 60*60*6
+      file[["valid_from"]] <- available[i, "datetime"] + 60 * 60 * 6
       file[["valid_to"]] <- available[i, "datetime"]
       file[["flag"]] <- if (available[i, "prelim"]) "PRELIMINARY" else NA
       file[["source"]] <- download_url
