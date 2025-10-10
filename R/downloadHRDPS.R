@@ -122,6 +122,6 @@ downloadHRDPS <- function(parameter, start_datetime, url = "https://dd.weather.g
     files <- NULL
   }
   
-  message("downloadHRDPS: finished downloading new rasters, returning.")
+  message("downloadHRDPS: finished downloading new rasters.")
   return(files)
 }
