@@ -419,7 +419,7 @@ downloadERA5 <- function(
       file[["issued"]] <- as.POSIXct(as.numeric(gsub(
         "sd_valid_time=",
         "",
-        names(rasters[[ii]])
+        names(raster)
       ))) +
         5 * 60 * 60 * 24
 
