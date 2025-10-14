@@ -2,7 +2,6 @@
 #'
 #' @param parameter The parameter to fetch.
 #' @param start_datetime Not a true start_datetime in the sense used in fetching other data, but rather the datetime of the last issued forecast in the database. This is compared to what's on the remote and, if different, the new forecast is fetched.
-#' @param url The url from which to get new rasters.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
@@ -11,7 +10,6 @@
 downloadHRDPS <- function(
   parameter,
   start_datetime,
-  url = "https://dd.weather.gc.ca/model_hrdps/continental/2.5km/",
   clip = NULL
 ) {
   # check parameter 'clip'
