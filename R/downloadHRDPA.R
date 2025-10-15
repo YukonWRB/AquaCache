@@ -1,6 +1,6 @@
 #' Get HRDPA rasters
 #'
-#' @param parameter The parameter for which to get new rasters. Currently only "APCP_Sfc" are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.
+#' @param parameter The parameter for which to get new rasters. Currently only "APCP_Sfc" (accumulation at surface) are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.
 #' @param start_datetime The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #'
@@ -134,20 +134,22 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       file <- list()
       download_url <- available$path[i]
       rast <- terra::rast(download_url)[[1]]
-      rast <- terra::project(rast, "epsg:4326") #Project to WGS84 (EPSG:4326)
-      file[["units"]] <- terra::units(rast) #Units is fetched now because the clip operation seems to remove them.
+      rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
+      file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
+      if (is.null(file[["units"]])) units <- "kg/(m^2)"
       if (!clipped) {
         if (!is.null(clip)) {
-          clip <- terra::project(clip, rast) #project clip vector to crs of the raster
+          clip <- terra::project(clip, rast) # project clip vector to crs of the raster
         }
-        clipped <- TRUE #So that project doesn't happen after the first iteration
+        clipped <- TRUE # So that project doesn't happen after the first iteration
       }
       if (!is.null(clip)) {
-        rast <- terra::mask(rast, clip) #Makes NA values beyond the boundary of clip
-        rast <- terra::trim(rast) #Trims the NA values
+        rast <- terra::mask(rast, clip) # Makes NA values beyond the boundary of clip
+        rast <- terra::trim(rast) # Trims the NA values
       }
       file[["rast"]] <- rast
-      file[["valid_from"]] <- available[i, "datetime"] + 60 * 60 * 6
+      # Check which parameter we're dealing with: 6h or 24h, based on if 'parameter' contains 6h or 24h
+      file[["valid_from"]] <- if (grepl("6h", parameter)) available[i, "datetime"] - 60 * 60 * 6 else available[i, "datetime"] - 60 * 60 * 24
       file[["valid_to"]] <- available[i, "datetime"]
       file[["flag"]] <- if (available[i, "prelim"]) "PRELIMINARY" else NA
       file[["source"]] <- download_url

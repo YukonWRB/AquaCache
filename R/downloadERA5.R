@@ -39,9 +39,12 @@ downloadERA5 <- function(
   }
 
   # ERA5-Land data are only available up to five days prior to the current time
-  max_end <- as.POSIXct(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC")
+  max_end <- as.Date(Sys.time() - 5 * 24 * 60 * 60, tz = "UTC")
   if (end_datetime > max_end) {
     end_datetime <- max_end
+  }
+  if (start_datetime > max_end) {
+    return(list()) # No data can be returned
   }
   if (start_datetime > end_datetime) {
     stop("Parameter 'start_datetime' must be before 'end_datetime'.")

@@ -134,7 +134,7 @@ getNewRasters <- function(
         if (!is.null(start_datetime_i)) {
           next_instant <- start_datetime_i
         } else { # start_datetime was null, find the last raster in table rasters_reference
-          next_instant <- DBI::dbGetQuery(con, paste0("SELECT MAX(valid_to) FROM rasters_reference WHERE raster_series_id = ", id))[1,1] # one second after the last raster end_datetime
+          next_instant <- DBI::dbGetQuery(con, paste0("SELECT MAX(valid_to) FROM rasters_reference WHERE raster_series_id = ", id))[1,1] + 1 # one second after the last raster end_datetime
         }
       }
     } else if (type == "forecast") {
@@ -147,8 +147,8 @@ getNewRasters <- function(
       }
       next_instant <- meta_ids[i, "last_issue"]
       if (is.na(next_instant)) {
-        #If there is no last_issue, we fetch from the last raster end_datetime. This could happen when creating a new series.
-        next_instant <- meta_ids[i, "end_datetime"] + 1 #one second after the last raster end_datetime
+        # If there is no last_issue, we fetch from the last raster end_datetime. This could happen when creating a new series.
+        next_instant <- meta_ids[i, "end_datetime"] + 1 # one second after the last raster end_datetime
       }
     }
     
@@ -165,6 +165,16 @@ getNewRasters <- function(
         }
         
         rasters <- do.call(source_fx, args_list) #Get the data using the args_list
+        
+        if (!inherits(rasters, "list")) {
+          warning(
+            "The function specified in source_fx for raser_series_id ", id, " did not return a list. See documentation for details."
+          )
+          next
+        }
+        if (length(list) == 0) { # No new rasters found
+          next
+        }
         
         # Extract forecast and issued_datetime from the list
         forecast <- rasters[["forecast"]]

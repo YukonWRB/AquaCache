@@ -7,7 +7,7 @@
 downloadHRDPA(parameter, start_datetime, clip = NULL)
 }
 \arguments{
-\item{parameter}{The parameter for which to get new rasters. Currently only "APCP_Sfc" are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.}
+\item{parameter}{The parameter for which to get new rasters. Currently only "APCP_Sfc" (accumulation at surface) are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.}
 
 \item{start_datetime}{The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC.}
 
