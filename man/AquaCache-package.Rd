@@ -6,6 +6,8 @@
 \alias{AquaCache-package}
 \title{AquaCache: Hydrometeorological database creation and maintenance}
 \description{
+\if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
+
 Set of functions for the creation and ongoing maintenance of the Yukon Government's hydrometeorological databases in postgreSQL format. Contains functions to create two databases, the 'snow' and 'aquacache' databases. The former is designed to hold discrete snowpack measurements and detailled snow survey data, while the later is designed to hold hydrometric, meteorological and water quality data along with images, spatial files and documents. Currently includes adapters to import data from the Water Survey of Canada real-time and historical data, date held in Aquarius, USGS data, discrete snow survey data from the snow database created with this package, water quality data, images from NuPoint, and meteorological data in the form of point observations and rasters (forecast rasters are handled with special workflows). Supports any number of timeseries unique by their location, parameter, data type, and period (for sum, mean, etc. measurements). Disparate data sources are handled via import scripts specified for each timeseries, allowing for expansion of data sources.
 }
 \author{

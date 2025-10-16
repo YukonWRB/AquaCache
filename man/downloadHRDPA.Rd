@@ -7,9 +7,9 @@
 downloadHRDPA(parameter, start_datetime, clip = NULL)
 }
 \arguments{
-\item{parameter}{The parameter for which to get new rasters. Currently only "APCP_Sfc" are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.}
+\item{parameter}{The parameter for which to get new rasters. Currently only "APCP_Sfc" (accumulation at surface) are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.}
 
-\item{start_datetime}{The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC.}
+\item{start_datetime}{The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC. At present, HRDPA rasters are only available for 30 days in the past, so earlier start datetimes will be adjusted to 30 days ago for speed.}
 
 \item{clip}{The two-digit abbreviation(s) as per \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census} for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.}
 }

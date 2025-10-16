@@ -4,19 +4,12 @@
 \alias{downloadHRDPS}
 \title{Get HRDPS rasters}
 \usage{
-downloadHRDPS(
-  parameter,
-  start_datetime,
-  url = "https://dd.weather.gc.ca/model_hrdps/continental/2.5km/",
-  clip = NULL
-)
+downloadHRDPS(parameter, start_datetime, clip = NULL)
 }
 \arguments{
 \item{parameter}{The parameter to fetch.}
 
 \item{start_datetime}{Not a true start_datetime in the sense used in fetching other data, but rather the datetime of the last issued forecast in the database. This is compared to what's on the remote and, if different, the new forecast is fetched.}
-
-\item{url}{The url from which to get new rasters.}
 
 \item{clip}{The two-digit abbreviation(s) as per \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census} for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.}
 }

@@ -67,7 +67,7 @@ insertACBorehole(
 
 \item{date_drilled}{Date when the borehole was drilled.}
 
-\item{casing_od}{Outside diameter of the casing in centimeters.}
+\item{casing_od}{Outside diameter of the casing in milimeters}
 
 \item{is_well}{Logical indicating if the borehole is also a well. Default is FALSE.}
 

@@ -41,3 +41,6 @@ An SQL file containing the schema definition saved to the 'outfile' path.
 \description{
 This function uses the \code{pg_dump} and \code{pg_dumpall} utilities to create a dump of the schema and global objects in a PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. You must call this function from a machine with the PostgreSQL utilities installed.
 }
+\seealso{
+\code{\link[=create_test_db]{create_test_db()}}
+}
