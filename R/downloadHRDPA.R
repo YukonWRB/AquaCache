@@ -1,7 +1,7 @@
 #' Get HRDPA rasters
 #'
 #' @param parameter The parameter for which to get new rasters. Currently only "APCP_Sfc" (accumulation at surface) are output by ECCC; you can specify either 'APCP-Accum6h_Sfc' or 'APCP_Accum24h_Sfc'.
-#' @param start_datetime The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC.
+#' @param start_datetime The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC. At present, HRDPA rasters are only available for 30 days in the past, so earlier start datetimes will be adjusted to 30 days ago for speed.
 #' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
@@ -22,6 +22,13 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
   } else {
     attr(start_datetime, "tzone") <- "UTC"
+  }
+
+  if (start_datetime < (Sys.time() - 30 * 24 * 60 * 60)) {
+    warning(
+      "HRDPA rasters are only available for the past 30 days; adjusting start_datetime accordingly."
+    )
+    start_datetime <- Sys.time() - 30 * 24 * 60 * 60
   }
 
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
@@ -136,7 +143,9 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       rast <- terra::rast(download_url)[[1]]
       rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
       file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
-      if (is.null(file[["units"]])) units <- "kg/(m^2)"
+      if (is.null(file[["units"]])) {
+        units <- "kg/(m^2)"
+      }
       if (!clipped) {
         if (!is.null(clip)) {
           clip <- terra::project(clip, rast) # project clip vector to crs of the raster
@@ -149,7 +158,11 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       }
       file[["rast"]] <- rast
       # Check which parameter we're dealing with: 6h or 24h, based on if 'parameter' contains 6h or 24h
-      file[["valid_from"]] <- if (grepl("6h", parameter)) available[i, "datetime"] - 60 * 60 * 6 else available[i, "datetime"] - 60 * 60 * 24
+      file[["valid_from"]] <- if (grepl("6h", parameter)) {
+        available[i, "datetime"] - 60 * 60 * 6
+      } else {
+        available[i, "datetime"] - 60 * 60 * 24
+      }
       file[["valid_to"]] <- available[i, "datetime"]
       file[["flag"]] <- if (available[i, "prelim"]) "PRELIMINARY" else NA
       file[["source"]] <- download_url
