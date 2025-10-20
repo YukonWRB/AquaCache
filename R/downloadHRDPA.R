@@ -25,7 +25,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
   }
 
   if (start_datetime < (Sys.time() - 30 * 24 * 60 * 60)) {
-    warning(
+    message(
       "HRDPA rasters are only available for the past 30 days; adjusting start_datetime accordingly."
     )
     start_datetime <- Sys.time() - 30 * 24 * 60 * 60
@@ -118,15 +118,14 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
     saveRDS(available, paste0(tempdir(), "/downloadHRDPA/", name, ".rds"))
   }
 
-  #Now filter by start_datetime, discard prelim rasters if non-prelim exists
+  # Now filter by start_datetime, discard prelim rasters if non-prelim exists
   available <- available[available$datetime >= start_datetime, ]
   available <- available[order(available$datetime), ]
   duplicates <- duplicated(available$datetime, fromLast = TRUE) |
     duplicated(available$datetime)
   available <- available[!(available$prelim & duplicates) | !duplicates, ]
 
-  #Make clip polygon
-  extent <- paste(clip, collapse = "_")
+  # Make clip polygon
   if (!is.null(clip)) {
     clip <- prov_buff[prov_buff$PREABBR %in% clip, ] #This is package data living as shapefile in inst/extdata, loaded using file data_load.R
     if (nrow(clip) == 0) {
@@ -135,14 +134,15 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
   }
 
   if (nrow(available) > 0) {
+    message("downloadHRDPA: new rasters available. Downloading...")
     files <- list()
     clipped <- FALSE
     for (i in 1:nrow(available)) {
       file <- list()
       download_url <- available$path[i]
       rast <- terra::rast(download_url)[[1]]
-      rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
       file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
+      rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
       if (is.null(file[["units"]])) {
         units <- "kg/(m^2)"
       }
@@ -171,9 +171,10 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       files[[i]] <- file
     }
     files[["forecast"]] <- FALSE
+    message("downloadHRDPA: finished downloading new rasters.")
   } else {
+    message("downloadHRDPA: no new rasters found.")
     files <- NULL
   }
-
   return(files)
 }
