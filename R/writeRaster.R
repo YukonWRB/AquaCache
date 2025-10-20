@@ -1,4 +1,4 @@
-#' Write raster to PostGIS database table.
+#' Write raster to PostGIS database (psql version)
 #'
 #' @description
 #' This function is not meant to be used by itself: in most cases use [insertACModelRaster()] or [insertACRaster()] which will populate reference tables so that your raster can be easily found later.
@@ -44,34 +44,38 @@
 #' @return A list with TRUE for successful import and the rid(s) of the appended entries.
 
 writeRaster <- function(
-    con,
-    raster,
-    rast_table = c("spatial", "rasters"),
-    bit.depth = NULL,
-    blocks = NULL,
-    constraints = FALSE
+  con,
+  raster,
+  rast_table = c("spatial", "rasters"),
+  bit.depth = NULL,
+  blocks = NULL,
+  constraints = FALSE
 ) {
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {
     stop("PostGIS is not enabled on this database.")
   }
-  
+
   if (!inherits(raster, "SpatRaster")) {
     stop("Raster must be a terra SpatRaster object.")
   }
-  
+
   raster2pgsql_path <- Sys.which("raster2pgsql")
   psql_path <- Sys.which("psql")
   if (!nzchar(raster2pgsql_path) || !nzchar(psql_path)) {
-    warning("Either raster2pgsql or psql utilities were not found on the system PATH. Defaulting to the (slow) R only method.")
-    res <- writeRaster_old(con = con,
-                           raster = raster,
-                           rast_table = rast_table,
-                           blocks = blocks,
-                           bit.depth = bit.depth,
-                           constraints = FALSE)
+    warning(
+      "Either raster2pgsql or psql utilities were not found on the system PATH. Defaulting to the (slow) R only method."
+    )
+    res <- writeRaster_old(
+      con = con,
+      raster = raster,
+      rast_table = rast_table,
+      blocks = blocks,
+      bit.depth = bit.depth,
+      constraints = FALSE
+    )
     return(res)
   }
-  
+
   # Make sure raster is in WGS84 (EPSG:4326) before writing to the database
   # Ensure a CRS is present to avoid SRID 0 in the database
   if (is.na(terra::crs(raster)) || terra::crs(raster) == "") {
@@ -85,13 +89,12 @@ writeRaster <- function(
     } else if (!grepl("EPSG\\s*:?\\s*4326", crs_str, ignore.case = TRUE)) {
       raster <- terra::project(raster, "EPSG:4326")
     }
-    
   }
-  
+
   # Prepare table identifiers -------------------------------------------------
   r_class <- class(raster)[1]
   r_crs <- terra::crs(raster)
-  
+
   if (length(rast_table) == 1 && grepl(".", rast_table[1], fixed = TRUE)) {
     table_parts <- strsplit(rast_table[1], ".", fixed = TRUE)[[1]]
     if (length(table_parts) != 2) {
@@ -109,7 +112,7 @@ writeRaster <- function(
     table_name <- rast_table
     rast_table_id <- DBI::Id(table = table_name)
   }
-  
+
   rast_table_sql <- DBI::dbQuoteIdentifier(con, rast_table_id)
   table_plain <- table_name
   if (is.null(schema_name)) {
@@ -125,16 +128,16 @@ writeRaster <- function(
   } else {
     schema_for_constraints <- schema_name
   }
-  
+
   if (!DBI::dbExistsTable(con, rast_table_id)) {
     cli::cli_abort(
       "Raster table '{if (is.null(schema_name)) table_plain else paste0(schema_name, '.', table_plain)}' must exist before calling writeRaster()."
     )
   }
-  
+
   if (constraints) {
     message("Resetting raster constraints (keeping SRID constraint)...")
-    
+
     # Drop all raster constraints except SRID in case they already exist
     DBI::dbExecute(
       con,
@@ -183,7 +186,7 @@ writeRaster <- function(
       )
     )
   }
-  
+
   # Determine srid ------------------------------------------------------------
   srid <- tryCatch(
     suppressMessages(rpostgis::pgSRID(
@@ -193,16 +196,16 @@ writeRaster <- function(
     )[[1]]),
     error = function(e) 0
   )
-  
+
   if (length(srid) != 1 || srid == 0) {
     warning(
       "The raster CRS was missing or unrecognized. Defaulting to EPSG:4326."
     )
     srid <- 4326
   }
-  
+
   r1 <- raster
-  
+
   # Determine tiling strategy -------------------------------------------------
   tile_cols <- terra::ncol(r1)
   tile_rows <- terra::nrow(r1)
@@ -222,7 +225,7 @@ writeRaster <- function(
     tile_rows <- max(1L, ceiling(terra::nrow(r1) / blocks[2]))
     tile_option <- paste0(tile_cols, "x", tile_rows)
   }
-  
+
   if (is.null(tile_option)) {
     message(
       "Uploading ",
@@ -238,7 +241,7 @@ writeRaster <- function(
       " pixels"
     )
   }
-  
+
   # Determine terra datatype if a bit depth was provided ----------------------
   terra_datatype <- NULL
   if (!is.null(bit.depth)) {
@@ -250,21 +253,21 @@ writeRaster <- function(
       cli::cli_abort("Unsupported bit.depth '{bit.depth}'.")
     )
   }
-  
+
   tmp_file <- tempfile(fileext = ".tif")
   on.exit(unlink(tmp_file), add = TRUE)
-  
+
   write_args <- list(r1, filename = tmp_file, overwrite = TRUE)
   if (!is.null(terra_datatype)) {
     write_args$datatype <- terra_datatype
   }
   do.call(terra::writeRaster, write_args)
-  
+
   file_size <- file.info(tmp_file)$size
   if (is.na(file_size) || file_size == 0) {
     stop("Failed to serialise raster to temporary GeoTIFF for upload.")
   }
-  
+
   max_before <- DBI::dbGetQuery(
     con,
     paste0("SELECT COALESCE(max(rid), 0) AS max_rid FROM ", rast_table_sql, ";")
@@ -272,32 +275,32 @@ writeRaster <- function(
   if (length(max_before) != 1 || is.na(max_before)) {
     max_before <- 0L
   }
-  
+
   tmp_sql <- tempfile(fileext = ".sql")
   tmp_r2p_err <- tempfile(fileext = ".log")
   on.exit(unlink(tmp_sql), add = TRUE)
   on.exit(unlink(tmp_r2p_err), add = TRUE)
-  
+
   qualified_table <- if (is.null(schema_name)) {
     table_plain
   } else {
     paste0(schema_name, ".", table_plain)
   }
-  
+
   # Call raster2pgsql to generate SQL ----------------------------------------
   r2p_args <- c("-a", "-s", as.character(srid), "-f", "rast")
   if (!is.null(tile_option)) {
     r2p_args <- c(r2p_args, "-t", tile_option)
   }
   r2p_args <- c(r2p_args, tmp_file, qualified_table)
-  
+
   r2p_status <- system2(
     command = raster2pgsql_path,
     args = r2p_args,
     stdout = tmp_sql,
     stderr = tmp_r2p_err
   )
-  
+
   if (!identical(r2p_status, 0L)) {
     r2p_err <- readLines(tmp_r2p_err, warn = FALSE)
     if (length(r2p_err) == 0) {
@@ -305,41 +308,79 @@ writeRaster <- function(
     }
     stop(paste0("raster2pgsql failed: ", paste(r2p_err, collapse = "\n")))
   }
-  
-  qt <- as.character(rast_table_sql)          # e.g. "\"spatial\".\"rasters\"" or "\"rasters\""
-  qt_rx <- gsub("([][\\^$.|?*+(){}\\\\])", "\\\\\\1", qt, perl = TRUE)  
+
+  qt <- as.character(rast_table_sql) # e.g. "\"spatial\".\"rasters\"" or "\"rasters\""
+  qt_rx <- gsub("([][\\^$.|?*+(){}\\\\])", "\\\\\\1", qt, perl = TRUE)
   sql_lines <- readLines(tmp_sql, warn = FALSE)
-  idx <- grepl(sprintf("^\\s*INSERT\\s+INTO\\s+%s\\s*\\(\"rast\"\\)\\s*VALUES\\s*\\(", qt_rx),
-               sql_lines, perl = TRUE)
-  sql_lines[idx] <- sub(";\\s*$", " RETURNING rid;", sql_lines[idx], perl = TRUE)
+  idx <- grepl(
+    sprintf(
+      "^\\s*INSERT\\s+INTO\\s+%s\\s*\\(\"rast\"\\)\\s*VALUES\\s*\\(",
+      qt_rx
+    ),
+    sql_lines,
+    perl = TRUE
+  )
+  sql_lines[idx] <- sub(
+    ";\\s*$",
+    " RETURNING rid;",
+    sql_lines[idx],
+    perl = TRUE
+  )
   writeLines(sql_lines, tmp_sql)
-  
-  
+
   # Prepare and run psql command to execute the SQL ------------------------------
   psql_args <- c(
-    "-X",                 # no .psqlrc variables
-    "--no-password",      # never prompt (fail fast)
-    "--no-psqlrc",        # ignore ~/.psqlrc entirely
+    "-X", # no .psqlrc variables
+    "--no-password", # never prompt (fail fast)
+    "--no-psqlrc", # ignore ~/.psqlrc entirely
     "--echo-errors",
-    "-v","ON_ERROR_STOP=1",
-    "-v","VERBOSITY=verbose",
-    "-tA",                # tuples only, unaligned (cleaner to parse)
-    "-f", tmp_sql         # then run your raster2pgsql SQL
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-v",
+    "VERBOSITY=verbose",
+    "-tA", # tuples only, unaligned (cleaner to parse)
+    "-f",
+    tmp_sql # then run your raster2pgsql SQL
   )
-  
+
   conn_info <- tryCatch(DBI::dbGetInfo(con), error = function(e) list())
-  
+
   # Save/restore env
-  old_env <- Sys.getenv(c("PGHOST","PGPORT","PGDATABASE","PGUSER","PGPASSWORD","PGCONNECT_TIMEOUT","PSQLRC"), unset = NA)
-  on.exit(invisible(mapply(function(k,v) if (is.na(v)) Sys.unsetenv(k) else Sys.setenv(k=v),
-                           names(old_env), old_env)), add = TRUE)
-  
+  old_env <- Sys.getenv(
+    c(
+      "PGHOST",
+      "PGPORT",
+      "PGDATABASE",
+      "PGUSER",
+      "PGPASSWORD",
+      "PGCONNECT_TIMEOUT",
+      "PSQLRC"
+    ),
+    unset = NA
+  )
+  on.exit(
+    invisible(mapply(
+      function(k, v) if (is.na(v)) Sys.unsetenv(k) else Sys.setenv(k = v),
+      names(old_env),
+      old_env
+    )),
+    add = TRUE
+  )
+
   # Export connection vars for psql
-  if (!is.null(conn_info$host) && nzchar(conn_info$host)) Sys.setenv(PGHOST = conn_info$host)
-  if (!is.null(conn_info$port) && nzchar(as.character(conn_info$port))) Sys.setenv(PGPORT = as.character(conn_info$port))
-  if (!is.null(conn_info$dbname) && nzchar(conn_info$dbname)) Sys.setenv(PGDATABASE = conn_info$dbname)
-  if (!is.null(conn_info$user) && nzchar(conn_info$user)) Sys.setenv(PGUSER = conn_info$user)
-  
+  if (!is.null(conn_info$host) && nzchar(conn_info$host)) {
+    Sys.setenv(PGHOST = conn_info$host)
+  }
+  if (!is.null(conn_info$port) && nzchar(as.character(conn_info$port))) {
+    Sys.setenv(PGPORT = as.character(conn_info$port))
+  }
+  if (!is.null(conn_info$dbname) && nzchar(conn_info$dbname)) {
+    Sys.setenv(PGDATABASE = conn_info$dbname)
+  }
+  if (!is.null(conn_info$user) && nzchar(conn_info$user)) {
+    Sys.setenv(PGUSER = conn_info$user)
+  }
+
   # Password from .Renviron (correct key)
   pg_pass <- Sys.getenv("aquacacheAdminPass", unset = NA_character_)
   # Only set password if found
@@ -347,48 +388,55 @@ writeRaster <- function(
     Sys.setenv(PGPASSWORD = pg_pass)
     on.exit(Sys.unsetenv("PGPASSWORD"), add = TRUE)
   } else {
-    warning("No password found in .Renviron under 'aquacacheAdminPass'. Can't add a raster without this variable.")
+    warning(
+      "No password found in .Renviron under 'aquacacheAdminPass'. Can't add a raster without this variable."
+    )
   }
-  
+
   # Make failures obvious & fast
-  Sys.setenv(PSQLRC = if (.Platform$OS.type == "windows") "NUL" else "/dev/null")
-  
+  Sys.setenv(
+    PSQLRC = if (.Platform$OS.type == "windows") "NUL" else "/dev/null"
+  )
+
   tmp_psql_err <- tempfile(fileext = ".log")
   tmp_psql_out <- tempfile(fileext = ".log")
   on.exit(unlink(tmp_psql_err), add = TRUE)
   on.exit(unlink(tmp_psql_out), add = TRUE)
-  
+
   psql_status <- system2(
     command = psql_path,
     args = psql_args,
     stdout = tmp_psql_out,
     stderr = tmp_psql_err
   )
-  
+
   out <- readLines(tmp_psql_out, warn = FALSE)
   new_rids <- suppressWarnings(as.integer(out[grepl("^[0-9]+$", out)]))
   new_rids <- new_rids[!is.na(new_rids)]
-  
+
   if (!identical(psql_status, 0L)) {
     err_msg <- readLines(tmp_psql_err, warn = FALSE)
     if (length(err_msg) == 0) {
       err_msg <- "psql exited with a non-zero status but produced no error output."
     }
-    stop(paste0("psql failed while loading raster tiles: ", paste(err_msg, collapse = "\n")))
+    stop(paste0(
+      "psql failed while loading raster tiles: ",
+      paste(err_msg, collapse = "\n")
+    ))
   }
-  
+
   if (!length(new_rids)) {
-    msg_out <- paste(readLines(tmp_psql_out, warn=FALSE), collapse="\n")
-    msg_err <- paste(readLines(tmp_psql_err, warn=FALSE), collapse="\n")
+    msg_out <- paste(readLines(tmp_psql_out, warn = FALSE), collapse = "\n")
+    msg_err <- paste(readLines(tmp_psql_err, warn = FALSE), collapse = "\n")
     message("psql stdout:\n", msg_out, "\npsql stderr:\n", msg_err)
   }
-  
-  
+
   if (length(new_rids) == 0) {
-    stop("No raster tiles were appended by raster2pgsql. Check the raster input and table definition.")
+    stop(
+      "No raster tiles were appended by raster2pgsql. Check the raster input and table definition."
+    )
   }
-  
-  
+
   rid_list <- paste(new_rids, collapse = ",")
   DBI::dbExecute(
     con,
@@ -425,7 +473,11 @@ writeRaster <- function(
   if (!isTRUE(index_exists)) {
     index_sql <- paste0(
       "CREATE INDEX ",
-      if (!is.null(schema_name)) paste0(DBI::dbQuoteIdentifier(con, schema_name), ".") else "",
+      if (!is.null(schema_name)) {
+        paste0(DBI::dbQuoteIdentifier(con, schema_name), ".")
+      } else {
+        ""
+      },
       DBI::dbQuoteIdentifier(con, index_name),
       " ON ",
       rast_table_sql,
@@ -433,7 +485,6 @@ writeRaster <- function(
     )
     DBI::dbExecute(con, index_sql)
   }
-  
+
   return(list(status = TRUE, appended_rids = new_rids))
 }
-

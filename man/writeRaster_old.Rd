@@ -2,7 +2,7 @@
 % Please edit documentation in R/writeRaster_old.R
 \name{writeRaster_old}
 \alias{writeRaster_old}
-\title{Write raster to PostGIS database table.}
+\title{Write raster to PostGIS database (R only method).}
 \usage{
 writeRaster_old(
   con,
@@ -32,7 +32,7 @@ A list with TRUE for successful import and the rid(s) of the appended entries.
 \description{
 This function is not meant to be used by itself: in most cases use \code{\link[=insertACModelRaster]{insertACModelRaster()}} or \code{\link[=insertACRaster]{insertACRaster()}} which will populate reference tables so that your raster can be easily found later.
 
-Sends R raster to a PostGIS database table, allowing it to be fetched later into an R environment. This function is an adaptation of \code{\link[rpostgis:pgWriteRast]{rpostgis::pgWriteRast()}}. Will create the raster table if necessary.
+Sends R raster to a PostGIS database table using an R-only workflow rather than relying on PostgreSQL utilities. This function is much slower than \code{\link[=writeRaster]{writeRaster()}} but can be used without have the Postgres utilities 'psql' and 'raster2psql' installed. This function is an adaptation of \code{\link[rpostgis:pgWriteRast]{rpostgis::pgWriteRast()}}.
 }
 \details{
 SpatRaster band names will be stored in an array in the column
