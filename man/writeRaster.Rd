@@ -2,7 +2,7 @@
 % Please edit documentation in R/writeRaster.R
 \name{writeRaster}
 \alias{writeRaster}
-\title{Write raster to PostGIS database table.}
+\title{Write raster to PostGIS database (psql version)}
 \usage{
 writeRaster(
   con,
