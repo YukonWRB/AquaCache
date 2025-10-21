@@ -135,7 +135,7 @@ writeRaster <- function(
     paste0(schema_name, ".", table_plain)
   }
 
-    if (!DBI::dbExistsTable(con, rast_table_id)) {
+  if (!DBI::dbExistsTable(con, rast_table_id)) {
     cli::cli_abort(
       "Raster table '{if (is.null(schema_name)) table_plain else paste0(schema_name, '.', table_plain)}' must exist before calling writeRaster()."
     )
@@ -154,27 +154,29 @@ writeRaster <- function(
         DBI::dbQuoteString(con, table_plain),
         ", 'rast',",
         "FALSE, ", # srid
-       "TRUE, ", # scale_x
-       "TRUE, ", # scale_y
-       "TRUE, ", # blocksize_x
-       "TRUE, ", # blocksize_y
-       "TRUE, ", # same_alignment
-       "TRUE, ", # nodata
-       "TRUE, ", # out_db
-       "TRUE, ", # extent
-       "TRUE, ", # num_bands
-       "TRUE, ", # pixel_types
-       "TRUE", # spatial extent
-      ");"
+        "TRUE, ", # scale_x
+        "TRUE, ", # scale_y
+        "TRUE, ", # blocksize_x
+        "TRUE, ", # blocksize_y
+        "TRUE, ", # same_alignment
+        "TRUE, ", # nodata
+        "TRUE, ", # out_db
+        "TRUE, ", # extent
+        "TRUE, ", # num_bands
+        "TRUE, ", # pixel_types
+        "TRUE", # spatial extent
+        ");"
       )
     )
-    
+
     # fix rows that might violate SRID=4326
     # Adjust based on r_proj4 column if available
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE ", rast_table_sql, " ",
+        "UPDATE ",
+        rast_table_sql,
+        " ",
         "SET rast = ST_SetSRID(rast, 4326) ",
         "WHERE ST_SRID(rast) = 0 ",
         "  AND (COALESCE(r_proj4,'') ILIKE '%4326%' ",
@@ -185,22 +187,26 @@ writeRaster <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE ", rast_table_sql, " ",
+        "UPDATE ",
+        rast_table_sql,
+        " ",
         "SET rast = ST_Transform(rast, 4326) ",
         "WHERE ST_SRID(rast) NOT IN (0, 4326);"
       )
     )
-    
+
     # Adjust the r_proj4 column accordingly
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE ", rast_table_sql, " ",
+        "UPDATE ",
+        rast_table_sql,
+        " ",
         "SET r_proj4 = 'EPSG:4326' ",
         "WHERE ST_SRID(rast) = 4326;"
       )
     )
-    
+
     # Re-add SRID constraint only in case it wasn't there
     DBI::dbExecute(
       con,
@@ -211,18 +217,18 @@ writeRaster <- function(
         DBI::dbQuoteString(con, table_plain),
         ", 'rast',",
         "TRUE, ", # srid
-       "FALSE, ", # scale_x
-       "FALSE, ", # scale_y
-       "FALSE, ", # blocksize_x
-       "FALSE, ", # blocksize_y
-       "FALSE, ", # same_alignment
-       "FALSE, ", # regular blocking
-       "FALSE, ", # num bands
-       "FALSE, ", # pixel types
-       "FALSE, ", # nodata values
-       "FALSE, ", # out_db
-       "FALSE", # spatial extent
-      ");"
+        "FALSE, ", # scale_x
+        "FALSE, ", # scale_y
+        "FALSE, ", # blocksize_x
+        "FALSE, ", # blocksize_y
+        "FALSE, ", # same_alignment
+        "FALSE, ", # regular blocking
+        "FALSE, ", # num bands
+        "FALSE, ", # pixel types
+        "FALSE, ", # nodata values
+        "FALSE, ", # out_db
+        "FALSE", # spatial extent
+        ");"
       )
     )
   }
@@ -315,12 +321,7 @@ writeRaster <- function(
   if (length(max_before) != 1 || is.na(max_before)) {
     max_before <- 0L
   }
-  
-  
-  
-  
-  
-  
+
   # Synchronise sequence before appending new rasters ------------------------
   is_identity <- tryCatch(
     {
@@ -347,7 +348,7 @@ writeRaster <- function(
       NA
     }
   )
-  
+
   identity_reset_ok <- FALSE
   if (isTRUE(is_identity)) {
     restart_with <- if (max_before <= 0) 1L else max_before + 1L
@@ -379,7 +380,7 @@ writeRaster <- function(
       }
     )
   }
-  
+
   if (!isTRUE(identity_reset_ok)) {
     seq_name <- tryCatch(
       DBI::dbGetQuery(
@@ -409,8 +410,6 @@ writeRaster <- function(
       )
     }
   }
-  
-  
 
   tmp_sql <- tempfile(fileext = ".sql")
   tmp_r2p_err <- tempfile(fileext = ".log")
@@ -582,7 +581,7 @@ writeRaster <- function(
       ");"
     )
   )
-  
+
   # Ensure a spatial index exists ---------------------------------------------
   index_name <- paste0(table_plain, "_rast_st_conhull_idx")
   index_regclass <- if (is.null(schema_name)) {

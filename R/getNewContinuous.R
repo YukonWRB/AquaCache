@@ -125,13 +125,13 @@ getNewContinuous <- function(
         tsid,
         ";"
       )
-    )[1, 1] + 1 # one second after the last data point
-    
+    )[1, 1] +
+      1 # one second after the last data point
+
     # Some timeseries only have data in calculated_daily table (HYDAT timeseries), but let's do a cursory check of them in case they're ever reactivated.
     if (is.na(last_data_point)) {
       last_data_point <- as.POSIXct("1970-01-01 00:00:00", "UTC")
     }
-      
 
     tryCatch(
       {

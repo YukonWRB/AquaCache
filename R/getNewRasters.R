@@ -12,23 +12,23 @@
 #' @export
 
 getNewRasters <- function(
-    raster_series_ids = "all",
-    con = NULL,
-    keep_forecasts = 'selective',
-    active = 'default',
-    start_datetime = NULL,
-    end_datetime = NULL
+  raster_series_ids = "all",
+  con = NULL,
+  keep_forecasts = 'selective',
+  active = 'default',
+  start_datetime = NULL,
+  end_datetime = NULL
 ) {
   if (!keep_forecasts %in% c('selective', 'all', 'none')) {
     stop(
       "The 'keep_forecasts' parameter must be either 'selective', 'all', or 'none'."
     )
   }
-  
+
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
-  
+
   # Checks and conversions for datetimes
   if (!is.null(start_datetime)) {
     if (!inherits(start_datetime, "POSIXct")) {
@@ -37,7 +37,7 @@ getNewRasters <- function(
       attr(start_datetime, "tzone") <- "UTC"
     }
   }
-  
+
   if (!is.null(end_datetime)) {
     if (!inherits(end_datetime, "POSIXct")) {
       end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
@@ -45,14 +45,14 @@ getNewRasters <- function(
       attr(end_datetime, "tzone") <- "UTC"
     }
   }
-  
+
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
-  
+
   DBI::dbExecute(con, "SET timezone = 'UTC'")
-  
+
   # Create table of meta_ids
   if (raster_series_ids[1] == "all") {
     meta_ids <- DBI::dbGetQuery(
@@ -74,18 +74,18 @@ getNewRasters <- function(
       )
     }
   }
-  
+
   if (active == 'default') {
     meta_ids <- meta_ids[meta_ids$active, ]
   }
-  
+
   if (nrow(meta_ids) == 0) {
     message("No raster_series_id's found to update based on input parameters.")
     return(NULL)
   }
-  
+
   message("Fetching new rasters with getNewRasters")
-  
+
   count <- 0 #counter for number of successful new pulls
   raster_count <- 0
   success <- character(0)
@@ -133,8 +133,16 @@ getNewRasters <- function(
       } else {
         if (!is.null(start_datetime_i)) {
           next_instant <- start_datetime_i
-        } else { # start_datetime was null, find the last raster in table rasters_reference
-          next_instant <- DBI::dbGetQuery(con, paste0("SELECT MAX(valid_to) FROM rasters_reference WHERE raster_series_id = ", id))[1,1] + 1 # one second after the last raster end_datetime
+        } else {
+          # start_datetime was null, find the last raster in table rasters_reference
+          next_instant <- DBI::dbGetQuery(
+            con,
+            paste0(
+              "SELECT MAX(valid_to) FROM rasters_reference WHERE raster_series_id = ",
+              id
+            )
+          )[1, 1] +
+            1 # one second after the last raster end_datetime
         }
       }
     } else if (type == "forecast") {
@@ -151,7 +159,7 @@ getNewRasters <- function(
         next_instant <- meta_ids[i, "end_datetime"] + 1 # one second after the last raster end_datetime
       }
     }
-    
+
     tryCatch(
       {
         args_list <- list(start_datetime = next_instant)
@@ -163,19 +171,22 @@ getNewRasters <- function(
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
         }
-        
+
         rasters <- suppressWarnings(do.call(source_fx, args_list)) # Get the data using the args_list
-        
-        if (length(rasters) == 0) { # No new rasters found
+
+        if (length(rasters) == 0) {
+          # No new rasters found
           next
         }
         if (!inherits(rasters, "list")) {
           warning(
-            "The function specified in source_fx for raser_series_id ", id, " did not return a list. See documentation for details."
+            "The function specified in source_fx for raser_series_id ",
+            id,
+            " did not return a list. See documentation for details."
           )
           next
         }
-        
+
         # Extract forecast and issued_datetime from the list
         forecast <- rasters[["forecast"]]
         if (is.null(forecast)) {
@@ -188,29 +199,54 @@ getNewRasters <- function(
         }
         rasters[["forecast"]] <- NULL # Remove the list element to simplify code below
         rasters[["issued"]] <- NULL
-        
+
         if (!is.null(rasters)) {
           for (j in 1:length(rasters)) {
             rast <- rasters[[j]]
             if (is.null(rast)) {
               next
             }
-            
+
             # Append rasters one by one in transactions
             # tryCatch({
-              # activeTrans <- dbTransBegin(con)
-              valid_from <- rast[["valid_from"]]
-              valid_to <- rast[["valid_to"]]
-              issued <- rast[["issued"]]
-              source <- rast[["source"]]
-              flag <- rast[["flag"]]
-              if (is.null(flag)) {
-                flag <- NA
-              }
-              units <- rast[["units"]]
-              model <- rast[["model"]]
-              rast <- rast[["rast"]]
-              # Check if the raster already exists. If it does but flag is PRELIMINARY AND the new one is not, delete the prelim one and replace.
+            # activeTrans <- dbTransBegin(con)
+            valid_from <- rast[["valid_from"]]
+            valid_to <- rast[["valid_to"]]
+            issued <- rast[["issued"]]
+            source <- rast[["source"]]
+            flag <- rast[["flag"]]
+            if (is.null(flag)) {
+              flag <- NA
+            }
+            units <- rast[["units"]]
+            model <- rast[["model"]]
+            rast <- rast[["rast"]]
+            # Check if the raster already exists. If it does but flag is PRELIMINARY AND the new one is not, delete the prelim one and replace.
+            exists <- DBI::dbGetQuery(
+              con,
+              paste0(
+                "SELECT reference_id FROM rasters_reference WHERE valid_from = '",
+                valid_from,
+                "' AND raster_series_id = ",
+                id,
+                " AND flag = 'PRELIMINARY';"
+              )
+            )[1, 1]
+            if (!is.na(exists) & is.na(flag)) {
+              # If the raster already exists and the new one is not a prelim, delete the prelim one and replace.
+              DBI::dbExecute(
+                con,
+                paste0(
+                  "DELETE FROM rasters_reference WHERE reference_id = ",
+                  exists,
+                  ";"
+                )
+              ) # This should cascade to the rasters table
+            } else if (!is.na(exists) & !is.na(flag)) {
+              # If the raster already exists and the new one is a prelim, skip to to the next one
+              next
+            } else if (is.na(exists)) {
+              # Check if the raster already exists in non-preliminary format
               exists <- DBI::dbGetQuery(
                 con,
                 paste0(
@@ -218,11 +254,11 @@ getNewRasters <- function(
                   valid_from,
                   "' AND raster_series_id = ",
                   id,
-                  " AND flag = 'PRELIMINARY';"
+                  " AND flag IS NULL;"
                 )
               )[1, 1]
-              if (!is.na(exists) & is.na(flag)) {
-                # If the raster already exists and the new one is not a prelim, delete the prelim one and replace.
+              # Delete the old raster if it exists
+              if (!is.na(exists)) {
                 DBI::dbExecute(
                   con,
                   paste0(
@@ -230,68 +266,43 @@ getNewRasters <- function(
                     exists,
                     ";"
                   )
-                ) # This should cascade to the rasters table
-              } else if (!is.na(exists) & !is.na(flag)) {
-                # If the raster already exists and the new one is a prelim, skip to to the next one
-                next
-              } else if (is.na(exists)) {
-                # Check if the raster already exists in non-preliminary format
-                exists <- DBI::dbGetQuery(
-                  con,
-                  paste0(
-                    "SELECT reference_id FROM rasters_reference WHERE valid_from = '",
-                    valid_from,
-                    "' AND raster_series_id = ",
-                    id,
-                    " AND flag IS NULL;"
-                  )
-                )[1, 1]
-                # Delete the old raster if it exists
-                if (!is.na(exists)) {
-                  DBI::dbExecute(
-                    con,
-                    paste0(
-                      "DELETE FROM rasters_reference WHERE reference_id = ",
-                      exists,
-                      ";"
-                    )
-                  ) # This will cascade to the rasters table
-                }
-              } # else continue along and insert the new raster
-              suppressMessages(insertACModelRaster(
-                raster = rast,
-                raster_series_id = id,
-                valid_from = valid_from,
-                valid_to = valid_to,
-                issued = issued,
-                flag = flag,
-                source = source,
-                units = units,
-                model = model,
-                con = con
-              ))
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE raster_series_index SET last_new_raster = '",
-                  .POSIXct(Sys.time(), tz = "UTC"),
-                  "' WHERE raster_series_id = ",
-                  id,
-                  ";"
-                )
+                ) # This will cascade to the rasters table
+              }
+            } # else continue along and insert the new raster
+            suppressMessages(insertACModelRaster(
+              raster = rast,
+              raster_series_id = id,
+              valid_from = valid_from,
+              valid_to = valid_to,
+              issued = issued,
+              flag = flag,
+              source = source,
+              units = units,
+              model = model,
+              con = con
+            ))
+            DBI::dbExecute(
+              con,
+              paste0(
+                "UPDATE raster_series_index SET last_new_raster = '",
+                .POSIXct(Sys.time(), tz = "UTC"),
+                "' WHERE raster_series_id = ",
+                id,
+                ";"
               )
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE raster_series_index SET end_datetime = '",
-                  valid_to,
-                  "' WHERE raster_series_id = ",
-                  id,
-                  ";"
-                )
+            )
+            DBI::dbExecute(
+              con,
+              paste0(
+                "UPDATE raster_series_index SET end_datetime = '",
+                valid_to,
+                "' WHERE raster_series_id = ",
+                id,
+                ";"
               )
-              raster_count <- raster_count + 1
-              
+            )
+            raster_count <- raster_count + 1
+
             #   # On success, commit the transaction
             #   DBI::dbExecute(con, "COMMIT")
             # }, error = function(e) {
@@ -299,11 +310,13 @@ getNewRasters <- function(
             #   DBI::dbExecute(con, "ROLLBACK")
             # })
           }
-          
+
           if (forecast) {
             # Delete the old forecast rasters as per input parameters, adjust raster_series_index.last_issue
             valid_from <- as.POSIXct(
-              sapply(rasters, function(x)  if (is.null(x$valid_from)) NA else x$valid_from),
+              sapply(rasters, function(x) {
+                if (is.null(x$valid_from)) NA else x$valid_from
+              }),
               tz = "UTC"
             )
             valid_from <- valid_from[!is.na(valid_from)]
@@ -338,8 +351,15 @@ getNewRasters <- function(
                 )
               )
             } # else keep_forecasts == 'all', so delete nothing
-            
-            earliest <- DBI::dbGetQuery(con, paste0("SELECT MIN(valid_from) FROM rasters_reference WHERE raster_series_id = ", id, ";"))[1,1]
+
+            earliest <- DBI::dbGetQuery(
+              con,
+              paste0(
+                "SELECT MIN(valid_from) FROM rasters_reference WHERE raster_series_id = ",
+                id,
+                ";"
+              )
+            )[1, 1]
             # Update issued_datetime
             DBI::dbExecute(
               con,
@@ -354,7 +374,7 @@ getNewRasters <- function(
               )
             )
           }
-          
+
           count <- count + 1
           success <- c(success, id)
         } else {
@@ -382,16 +402,16 @@ getNewRasters <- function(
         )
       }
     )
-    
+
     if (interactive()) {
       utils::setTxtProgressBar(pb, i)
     }
   } # End of for loop
-  
+
   if (interactive()) {
     close(pb)
   }
-  
+
   message(
     count,
     " out of ",

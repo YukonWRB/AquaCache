@@ -2,7 +2,7 @@
 % Please edit documentation in R/maintain.R
 \name{maintain}
 \alias{maintain}
-\title{Maintenance (vacuum) function for aquacache database.}
+\title{Maintenance function for aquacache database.}
 \usage{
 maintain(
   con = NULL,

@@ -1,4 +1,4 @@
-#' Maintenance (vacuum) function for aquacache database.
+#' Maintenance function for aquacache database.
 #'
 #' @description
 #'

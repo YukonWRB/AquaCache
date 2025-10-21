@@ -1,21 +1,32 @@
 # Add column to timeseries table called 'compound' to indicate if the timeseries is a compound timeseries, and another column to indicate which timeseries are used to create the compound timeseries
-DBI::dbExecute(con, "ALTER TABLE timeseries ADD COLUMN derived BOOLEAN DEFAULT FALSE;")
+DBI::dbExecute(
+  con,
+  "ALTER TABLE timeseries ADD COLUMN derived BOOLEAN DEFAULT FALSE;"
+)
 # Comment on the column
-DBI::dbExecute(con, "COMMENT ON COLUMN timeseries.derived IS 'Flag to indicate if the timeseries is a derived (calculated or compound) timeseries';")
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN timeseries.derived IS 'Flag to indicate if the timeseries is a derived (calculated or compound) timeseries';"
+)
 
 # Add a table to hold the child timeseries, the formulas to apply, and the time ranges to apply them in
 # The column 'child_timeseries' is a JSONB column that holds timeseries_id values in the form of a: timeseries_id, b: timeseries_id, etc.
-DBI::dbExecute(con, "CREATE TABLE derived_timeseries (
+DBI::dbExecute(
+  con,
+  "CREATE TABLE derived_timeseries (
     derived_timeseries_id SERIAL PRIMARY KEY,
     timeseries_id INTEGER NOT NULL REFERENCES timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
     child_timeseries JSONB NOT NULL,
     formula TEXT NOT NULL,
     start_datetime TIMESTAMP WITH TIME ZONE, # Nullable to allow for calculations to apply to all past data
     end_datetime TIMESTAMP WITH TIME ZONE, # Nullable to allow for calculations to apply to all future data
-  );")
+  );"
+)
 
 # Make a function to check the child_timeseries JSONB column
-DBI::dbExecute(con, "
+DBI::dbExecute(
+  con,
+  "
                  CREATE OR REPLACE FUNCTION check_child_timeseries_json()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -54,19 +65,24 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-")
+"
+)
 
-DBI::dbExecute(con, "
+DBI::dbExecute(
+  con,
+  "
   CREATE TRIGGER check_child_timeseries_trg
 BEFORE INSERT OR UPDATE ON derived_timeseries
 FOR EACH ROW
 EXECUTE PROCEDURE check_child_timeseries_json();
-")
-
+"
+)
 
 
 # Validate the formula
-DBI::dbExecute(con, "
+DBI::dbExecute(
+  con,
+  "
   CREATE OR REPLACE FUNCTION validate_derived_timeseries()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -158,11 +174,15 @@ SELECT regexp_split_to_array(
   RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
-                 ")
+                 "
+)
 
-DBI::dbExecute(con, "
+DBI::dbExecute(
+  con,
+  "
   CREATE TRIGGER validate_derived_timeseries_trg
   BEFORE INSERT OR UPDATE ON derived_timeseries
   FOR EACH ROW
   EXECUTE PROCEDURE validate_derived_timeseries();
-  ")
+  "
+)
