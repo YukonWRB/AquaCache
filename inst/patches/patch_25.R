@@ -5,31 +5,46 @@
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 
 if (check$session_user != "postgres") {
-  stop("You do not have the necessary privileges for this patch. Connect as postgres user to make this work.")
+  stop(
+    "You do not have the necessary privileges for this patch. Connect as postgres user to make this work."
+  )
 }
 
-message("Working on Patch 25. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?).")
+message(
+  "Working on Patch 25. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?)."
+)
 
 # Begin a transaction
 message("Starting transaction...")
 
 check <- dbTransCheck(con) # Check if a transaction is already in progress
 if (check) {
-  stop("A transaction is already in progress. Please commit or rollback the current transaction before applying this patch.")
+  stop(
+    "A transaction is already in progress. Please commit or rollback the current transaction before applying this patch."
+  )
 }
 active <- dbTransBegin(con)
 
-tryCatch({
-  
-  message("Creating infrastructure to handle water quality guideline values...")
-  
-  
-  # Rename two columns in table 'discrete.results' for clarity. This requires modifying two trigger function as well
-  DBI::dbExecute(con, "ALTER TABLE discrete.results RENAME COLUMN sample_fraction TO sample_fraction_id;")
-  DBI::dbExecute(con, "ALTER TABLE discrete.results RENAME COLUMN result_speciation TO result_speciation_id;")
-  
-  # Edit two functions that reference these columns
-  DBI::dbExecute(con, "
+tryCatch(
+  {
+    message(
+      "Creating infrastructure to handle water quality guideline values..."
+    )
+
+    # Rename two columns in table 'discrete.results' for clarity. This requires modifying two trigger function as well
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE discrete.results RENAME COLUMN sample_fraction TO sample_fraction_id;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE discrete.results RENAME COLUMN result_speciation TO result_speciation_id;"
+    )
+
+    # Edit two functions that reference these columns
+    DBI::dbExecute(
+      con,
+      "
         CREATE OR REPLACE FUNCTION discrete.enforce_result_speciation()
        RETURNS trigger
        LANGUAGE plpgsql
@@ -49,9 +64,11 @@ tryCatch({
       END;
       $function$
       ;"
-                 )
-  
-  DBI::dbExecute(con, "
+    )
+
+    DBI::dbExecute(
+      con,
+      "
                 CREATE OR REPLACE FUNCTION discrete.enforce_sample_fraction()
                  RETURNS trigger
                  LANGUAGE plpgsql
@@ -71,11 +88,13 @@ tryCatch({
                 END;
                 $function$
                 ; 
-                 ")
-  
-  
-  # create a new table called discrete.guidelines
-  DBI::dbExecute(con, "
+                 "
+    )
+
+    # create a new table called discrete.guidelines
+    DBI::dbExecute(
+      con,
+      "
   CREATE TABLE IF NOT EXISTS discrete.guidelines (
       guideline_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       publisher TEXT NOT NULL,
@@ -91,22 +110,42 @@ tryCatch({
       modified TIMESTAMP WITH TIME ZONE,
       modified_by TEXT,
       UNIQUE (guideline_name, publisher)
-  );")
-  
-  # Triggers to track who created/modified records and when
-  DBI::dbExecute(con, "create trigger trg_user_audit before update on discrete.guidelines for each row execute function public.user_modified()")
-  DBI::dbExecute(con, "create trigger update_modify_time before update on discrete.guidelines for each row execute function public.update_modified()")
-  
-  # sample_fraction_id and result_speciation_id may need to be NOT NULL depending on what's entered in table 'parameters'. For any parameter, if result_speciation is TRUE, then result_speciation_id must be NOT NULL, and if sample_fraction is TRUE, then sample_fraction_id must be NOT NULL.
-  # Use existing functions to enforce this; discrete.enforce_result_speciation and discrete.enforce_sample_fraction
-  DBI::dbExecute(con, "DROP TRIGGER IF EXISTS trg_enforce_result_speciation ON discrete.guidelines;")
-  DBI::dbExecute(con, "create trigger trg_enforce_result_speciation before insert or update on discrete.guidelines for each row execute function enforce_result_speciation();")
-  DBI::dbExecute(con, "DROP TRIGGER IF EXISTS trg_enforce_sample_fraction ON discrete.guidelines;")
-  DBI::dbExecute(con, "create trigger trg_enforce_sample_fraction before insert or update on discrete.guidelines for each row execute function enforce_sample_fraction();")
-  
-  
-  # Safety functions to validate guideline SQL
-  DBI::dbExecute(con, "
+  );"
+    )
+
+    # Triggers to track who created/modified records and when
+    DBI::dbExecute(
+      con,
+      "create trigger trg_user_audit before update on discrete.guidelines for each row execute function public.user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create trigger update_modify_time before update on discrete.guidelines for each row execute function public.update_modified()"
+    )
+
+    # sample_fraction_id and result_speciation_id may need to be NOT NULL depending on what's entered in table 'parameters'. For any parameter, if result_speciation is TRUE, then result_speciation_id must be NOT NULL, and if sample_fraction is TRUE, then sample_fraction_id must be NOT NULL.
+    # Use existing functions to enforce this; discrete.enforce_result_speciation and discrete.enforce_sample_fraction
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS trg_enforce_result_speciation ON discrete.guidelines;"
+    )
+    DBI::dbExecute(
+      con,
+      "create trigger trg_enforce_result_speciation before insert or update on discrete.guidelines for each row execute function enforce_result_speciation();"
+    )
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS trg_enforce_sample_fraction ON discrete.guidelines;"
+    )
+    DBI::dbExecute(
+      con,
+      "create trigger trg_enforce_sample_fraction before insert or update on discrete.guidelines for each row execute function enforce_sample_fraction();"
+    )
+
+    # Safety functions to validate guideline SQL
+    DBI::dbExecute(
+      con,
+      "
   CREATE OR REPLACE FUNCTION discrete.guidelines_validate_trg()
 RETURNS trigger
 SET search_path = discrete, public
@@ -200,21 +239,29 @@ BEGIN
   RETURN NEW;
 END;
 $fn$;
-  ")
-  
-  suppressMessages(DBI::dbExecute(con, "DROP TRIGGER IF EXISTS trg_check_sql ON discrete.guidelines;"))
-  
-  DBI::dbExecute(con, "
+  "
+    )
+
+    suppressMessages(DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS trg_check_sql ON discrete.guidelines;"
+    ))
+
+    DBI::dbExecute(
+      con,
+      "
     CREATE TRIGGER trg_check_sql
     BEFORE INSERT OR UPDATE OF guideline_sql ON discrete.guidelines
     FOR EACH ROW
     EXECUTE FUNCTION discrete.guidelines_validate_trg();
-  ")
-  
-  
-  # Create a function that will take values from guideline_sql column and execute the SQL to return the guideline value
-  
-  DBI::dbExecute(con, "
+  "
+    )
+
+    # Create a function that will take values from guideline_sql column and execute the SQL to return the guideline value
+
+    DBI::dbExecute(
+      con,
+      "
     CREATE OR REPLACE FUNCTION discrete.get_guideline_value(
       in_guideline_id INTEGER,
       in_sample_id    INTEGER DEFAULT NULL
@@ -262,15 +309,19 @@ $fn$;
         RAISE EXCEPTION 'Guideline % SQL returned more than one value', in_guideline_id;
     END;
     $fn$;
-  ")
-  
-  DBI::dbExecute(con, "GRANT EXECUTE ON FUNCTION discrete.get_guideline_value(INTEGER, INTEGER) TO PUBLIC;")
-  
-  
-  
-  # Now migrate old SERIAL primary key columns to IDENTITY columns #################
-  
-  DBI::dbExecute(con, "
+  "
+    )
+
+    DBI::dbExecute(
+      con,
+      "GRANT EXECUTE ON FUNCTION discrete.get_guideline_value(INTEGER, INTEGER) TO PUBLIC;"
+    )
+
+    # Now migrate old SERIAL primary key columns to IDENTITY columns #################
+
+    DBI::dbExecute(
+      con,
+      "
 DO $$
 DECLARE
   r record;
@@ -332,13 +383,14 @@ BEGIN
   END LOOP;
 END
 $$ LANGUAGE plpgsql;
-")
-  
-  
-  
-  # Make additions to water well tables so we can track installation purpose
-  # Create a new table boreholes.borehole_well_purposes
-  DBI::dbExecute(con, "
+"
+    )
+
+    # Make additions to water well tables so we can track installation purpose
+    # Create a new table boreholes.borehole_well_purposes
+    DBI::dbExecute(
+      con,
+      "
   CREATE TABLE IF NOT EXISTS boreholes.borehole_well_purposes (
       borehole_well_purpose_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       purpose_name TEXT NOT NULL UNIQUE,
@@ -347,55 +399,90 @@ $$ LANGUAGE plpgsql;
       created_by TEXT DEFAULT CURRENT_USER NOT NULL,
       modified TIMESTAMP WITH TIME ZONE,
       modified_by TEXT
-  );")
-  
-  # Triggers
-  DBI::dbExecute(con, "create trigger trg_user_audit before update on boreholes.borehole_well_purposes for each row execute function user_modified()")
-  DBI::dbExecute(con, "create trigger update_modify_time before update on boreholes.borehole_well_purposes for each row execute function update_modified()")
-  
-  # Populate with some common purposes
-  df <- data.frame(purpose_name = c("monitoring", 
-                                    "drinking water, residential", 
-                                    "drinking water, municipal/commercial", 
-                                    "irrigation", 
-                                    "observation", 
-                                    "dewatering", 
-                                    "injection",
-                                    "mineral exploration"),
-                   description = c("Well installed for monitoring purposes, typically with a small diameter and screen.",
-                                   "Well installed for private residence drinking water supply.",
-                                   "Well installed for municipal or commercial drinking water supply.",
-                                   "Well installed to provide water for agricultural irrigation.",
-                                   "Well installed to observe groundwater levels or quality changes over time.",
-                                   "Well installed to lower the groundwater table temporarily or permanently.",
-                                   "Well installed to inject water or other fluids into the ground.",
-                                   "Borehole installed as part of mineral exploration activities.")
-  )
-  
-  DBI::dbAppendTable(con, "borehole_well_purposes", df)
-  
-  # Add a new column to boreholes and wells to reference the purpose
-  DBI::dbExecute(con, "ALTER TABLE boreholes.boreholes ADD COLUMN borehole_well_purpose_id INTEGER REFERENCES boreholes.borehole_well_purposes(borehole_well_purpose_id) ON UPDATE CASCADE ON DELETE SET NULL;")
-  DBI::dbExecute(con, "ALTER TABLE boreholes.wells ADD COLUMN borehole_well_purpose_id INTEGER REFERENCES boreholes.borehole_well_purposes(borehole_well_purpose_id) ON UPDATE CASCADE ON DELETE SET NULL;")
-  
-  # Also add columns inferred_purpose (boolean)
-  DBI::dbExecute(con, "ALTER TABLE boreholes.boreholes ADD COLUMN inferred_purpose BOOLEAN DEFAULT TRUE;")
-  DBI::dbExecute(con, "ALTER TABLE boreholes.wells ADD COLUMN inferred_purpose BOOLEAN DEFAULT TRUE;")
-  
-  
-  
-  # Update the version_info table
-  DBI::dbExecute(con, "UPDATE information.version_info SET version = '25' WHERE item = 'Last patch number';")
-  DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))
-  
-  
-  # Commit the transaction
-  DBI::dbExecute(con, "COMMIT;")
-  
-  message("Patch 25 applied successfully.")
-  
-}, error = function(e) {
-  # Rollback the transaction
-  DBI::dbExecute(con, "ROLLBACK;")
-  stop("Patch 25 failed and the DB has been rolled back to its earlier state. ", e$message)
-})
+  );"
+    )
+
+    # Triggers
+    DBI::dbExecute(
+      con,
+      "create trigger trg_user_audit before update on boreholes.borehole_well_purposes for each row execute function user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create trigger update_modify_time before update on boreholes.borehole_well_purposes for each row execute function update_modified()"
+    )
+
+    # Populate with some common purposes
+    df <- data.frame(
+      purpose_name = c(
+        "monitoring",
+        "drinking water, residential",
+        "drinking water, municipal/commercial",
+        "irrigation",
+        "observation",
+        "dewatering",
+        "injection",
+        "mineral exploration"
+      ),
+      description = c(
+        "Well installed for monitoring purposes, typically with a small diameter and screen.",
+        "Well installed for private residence drinking water supply.",
+        "Well installed for municipal or commercial drinking water supply.",
+        "Well installed to provide water for agricultural irrigation.",
+        "Well installed to observe groundwater levels or quality changes over time.",
+        "Well installed to lower the groundwater table temporarily or permanently.",
+        "Well installed to inject water or other fluids into the ground.",
+        "Borehole installed as part of mineral exploration activities."
+      )
+    )
+
+    DBI::dbAppendTable(con, "borehole_well_purposes", df)
+
+    # Add a new column to boreholes and wells to reference the purpose
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.boreholes ADD COLUMN borehole_well_purpose_id INTEGER REFERENCES boreholes.borehole_well_purposes(borehole_well_purpose_id) ON UPDATE CASCADE ON DELETE SET NULL;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.wells ADD COLUMN borehole_well_purpose_id INTEGER REFERENCES boreholes.borehole_well_purposes(borehole_well_purpose_id) ON UPDATE CASCADE ON DELETE SET NULL;"
+    )
+
+    # Also add columns inferred_purpose (boolean)
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.boreholes ADD COLUMN inferred_purpose BOOLEAN DEFAULT TRUE;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.wells ADD COLUMN inferred_purpose BOOLEAN DEFAULT TRUE;"
+    )
+
+    # Update the version_info table
+    DBI::dbExecute(
+      con,
+      "UPDATE information.version_info SET version = '25' WHERE item = 'Last patch number';"
+    )
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE information.version_info SET version = '",
+        as.character(packageVersion("AquaCache")),
+        "' WHERE item = 'AquaCache R package used for last patch';"
+      )
+    )
+
+    # Commit the transaction
+    DBI::dbExecute(con, "COMMIT;")
+
+    message("Patch 25 applied successfully.")
+  },
+  error = function(e) {
+    # Rollback the transaction
+    DBI::dbExecute(con, "ROLLBACK;")
+    stop(
+      "Patch 25 failed and the DB has been rolled back to its earlier state. ",
+      e$message
+    )
+  }
+)

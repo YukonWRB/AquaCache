@@ -17,6 +17,8 @@
 #' @param end_datetime The end datetime for the data to be copied.  If `NULL`, all data is copied from `start_datetime` to the end of records for the affected locations. This **does** apply to the 'measurements_calculated_daily' table.
 #' @param delete If TRUE, will delete the test_temp database after the function is done. If FALSE, the database will remain for further testing.
 #'
+#' @seealso [db_dump()]
+#'
 #' @returns An SQL file containing the schema definition saved to the 'outfile' path.
 #' @export
 #'

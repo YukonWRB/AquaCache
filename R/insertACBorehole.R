@@ -20,7 +20,7 @@
 #' @param permafrost_top Depth to the top of permafrost in meters, if present.
 #' @param permafrost_bot Depth to the bottom of permafrost in meters, if present.
 #' @param date_drilled Date when the borehole was drilled.
-#' @param casing_od Outside diameter of the casing in centimeters.
+#' @param casing_od Outside diameter of the casing in milimeters
 #' @param is_well Logical indicating if the borehole is also a well. Default is FALSE.
 #' @param well_depth Total depth of the well in meters.
 #' @param top_of_screen Depth to the top of the well screen in meters.
@@ -84,14 +84,10 @@ insertACBorehole <- function(
   purpose_well_inferred = purpose_borehole_inferred,
   share_with_well = share_with_borehole
 ) {
-  # Insert the new borehole data into the database
-
   # Establish database connection if not provided
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
-  } else {
-    con <- con
   }
 
   # Set timezone to UTC for consistency
@@ -189,11 +185,6 @@ insertACBorehole <- function(
     }
   }
 
-  # Validate DB connection object
-  if (!is.null(con) && !inherits(con, "DBIConnection")) {
-    stop("'con' must be a DBIConnection object if provided.")
-  }
-
   # Construct SQL query for borehole insertion
   query <- paste0(
     "INSERT INTO boreholes (share_with, latitude, longitude, borehole_name,",
@@ -232,7 +223,7 @@ insertACBorehole <- function(
     ") RETURNING borehole_id;"
   )
   # Execute borehole insertion and retrieve new borehole_id
-  borehole_id <- DBI::dbGetQuery(con, query)
+  borehole_id <- DBI::dbGetQuery(con, query)[1, 1]
 
   # If permafrost is present, insert permafrost record
   if (permafrost_present) {
@@ -253,15 +244,13 @@ insertACBorehole <- function(
   # If borehole is a well, insert well-specific data
   if (is_well) {
     query <- paste0(
-      "INSERT INTO wells (borehole_id, casing_od, well_depth, ",
-      "top_of_screen, bottom_of_screen, well_head_stick_up, ",
-      "static_water_level, estimated_yield, borehole_well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
-      "'",
+      "INSERT INTO wells (borehole_id, casing_diameter_mm, ",
+      "screen_top_depth_m, screen_bottom_depth_m, stick_up_height_m, ",
+      "static_water_level_m, estimated_yield_lps, borehole_well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
+      "",
       borehole_id,
-      "', ",
-      ifelse(is.null(casing_od), "NULL", casing_od),
       ", ",
-      ifelse(is.null(well_depth), "NULL", well_depth),
+      ifelse(is.null(casing_od), "NULL", casing_od),
       ", ",
       ifelse(is.null(top_of_screen), "NULL", top_of_screen),
       ", ",
@@ -291,16 +280,15 @@ insertACBorehole <- function(
     DBI::dbExecute(con, query)
   }
 
-  # Determine document type based on is_well flag
-  document_type <- if (is_well) "well log" else "borehole log"
-
   # Insert document metadata using insertACDocument
   if (!is.null(path)) {
+    # Determine document type based on is_well flag
+    document_type <- if (is_well) "well log" else "borehole log"
     res <- insertACDocument(
       path = path,
       type = document_type,
-      name = paste0("Document for ", well_name),
-      description = paste0(document_type, " for ", well_name),
+      name = paste0("Document for borehole/well", well_name),
+      description = paste0(document_type, " for borehole/well ", well_name),
       tags = unlist(strsplit(document_type, " "))
     )
     # use res$new_document_id to link document to borehole

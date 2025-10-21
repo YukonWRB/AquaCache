@@ -1,6 +1,6 @@
 Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
-Version: 2.5.2
+Version: 2.5.3
 Authors@R: c(
     person("Ghislain", "de Laplante", , email = "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -26,7 +26,7 @@ Description: Set of functions for the creation and ongoing maintenance of
     timeseries, allowing for expansion of data sources.
 License: AGPL (>= 3) + file LICENSE
 Depends: 
-    R (>= 4.1.0)
+    R (>= 4.2.0)
 Imports:
     cli,
     data.table,

@@ -213,7 +213,6 @@ downloadNWIS <- function(
       }
     },
     error = function(e) {
-      message("Error fetching NWIS data: ", e$message)
       data <- data.frame()
       return(data)
     }

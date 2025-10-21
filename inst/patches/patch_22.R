@@ -5,26 +5,35 @@
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 
 if (check$session_user != "postgres") {
-  stop("You do not have the necessary privileges for this patch. Connect as postgres user to make this work.")
+  stop(
+    "You do not have the necessary privileges for this patch. Connect as postgres user to make this work."
+  )
 }
 
-message("Working on Patch 22. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?).")
+message(
+  "Working on Patch 22. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?)."
+)
 
-message("This patch updates several back-end functions to add checks and improve processes.")
+message(
+  "This patch updates several back-end functions to add checks and improve processes."
+)
 
 # Begin a transaction
 message("Starting transaction...")
 
 check <- dbTransCheck(con) # Check if a transaction is already in progress
 if (check) {
-  stop("A transaction is already in progress. Please commit or rollback the current transaction before applying this patch.")
+  stop(
+    "A transaction is already in progress. Please commit or rollback the current transaction before applying this patch."
+  )
 }
 active <- dbTransBegin(con)
 
-tryCatch({
-  
-  
-  DBI::dbExecute(con, "
+tryCatch(
+  {
+    DBI::dbExecute(
+      con,
+      "
                  CREATE OR REPLACE FUNCTION continuous.apply_corrections(p_timeseries_id integer, p_datetime timestamp with time zone, p_value numeric)
  RETURNS numeric
  LANGUAGE plpgsql
@@ -122,9 +131,12 @@ BEGIN
 END;
 $function$
 ;
-                 ")
-  
-  DBI::dbExecute(con, "
+                 "
+    )
+
+    DBI::dbExecute(
+      con,
+      "
                  CREATE OR REPLACE VIEW continuous.measurements_continuous_corrected
 AS SELECT mc.timeseries_id,
       mc.datetime,
@@ -145,11 +157,13 @@ AS SELECT mc.timeseries_id,
            FROM unnest(ts.share_with) role(role)
           WHERE pg_has_role(CURRENT_USER, role.role::name, 'MEMBER'::text) AND (role.role::name IN ( SELECT pg_roles.rolname
                    FROM pg_roles))));
-                 ")
-  
-  
-  # Modify validate_corrections()
-  DBI::dbExecute(con, "
+                 "
+    )
+
+    # Modify validate_corrections()
+    DBI::dbExecute(
+      con,
+      "
                  CREATE OR REPLACE FUNCTION continuous.validate_corrections()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -197,43 +211,83 @@ BEGIN
   RETURN NEW;
 END;
 $function$
-;")
-  
-  
-  DBI::dbExecute(con, "
+;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "
                  ALTER TABLE continuous.corrections
     ADD CONSTRAINT corrections_date_range_check CHECK (start_dt < end_dt);
-                 ")
-  
-DBI::dbExecute(con, "ALTER TABLE ONLY public.correction_types
-    ADD CONSTRAINT correction_types_type_key UNIQUE (correction_type);")
-  
-  
- # Update foreign keys in locations_networks and locations_projects tables
-  DBI::dbExecute(con, "ALTER TABLE public.locations_networks DROP CONSTRAINT networks_locations_network_id_fkey;")
-  DBI::dbExecute(con, "ALTER TABLE public.locations_networks ADD CONSTRAINT networks_locations_network_id_fkey FOREIGN KEY (network_id) REFERENCES public.networks(network_id) ON DELETE CASCADE ON UPDATE CASCADE;")
-  DBI::dbExecute(con, "ALTER TABLE public.locations_networks DROP CONSTRAINT networks_locations_location_id_fkey;")
-  DBI::dbExecute(con, "ALTER TABLE public.locations_networks ADD CONSTRAINT networks_locations_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE;")
+                 "
+    )
 
-  DBI::dbExecute(con, "ALTER TABLE public.locations_projects DROP CONSTRAINT projects_locations_location_id_fkey;")
-  DBI::dbExecute(con, "ALTER TABLE public.locations_projects ADD CONSTRAINT projects_locations_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE;")
-  DBI::dbExecute(con, "ALTER TABLE public.locations_projects DROP CONSTRAINT projects_locations_project_id_fkey;")
-  DBI::dbExecute(con, "ALTER TABLE public.locations_projects ADD CONSTRAINT projects_locations_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE ON UPDATE CASCADE;")
-  
-  
-  # Update the version_info table
-  DBI::dbExecute(con, "UPDATE information.version_info SET version = '22' WHERE item = 'Last patch number';")
-  DBI::dbExecute(con, paste0("UPDATE information.version_info SET version = '", as.character(packageVersion("AquaCache")), "' WHERE item = 'AquaCache R package used for last patch';"))
-  
-  
-  # Commit the transaction
-  DBI::dbExecute(con, "COMMIT;")
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE ONLY public.correction_types
+    ADD CONSTRAINT correction_types_type_key UNIQUE (correction_type);"
+    )
 
-  message("Patch 22 applied successfully.")
-  
-}, error = function(e) {
-  
-  # Rollback the transaction
-  DBI::dbExecute(con, "ROLLBACK;")
-  stop("Patch 22 failed and the DB has been rolled back to its earlier state. ", e$message)
-})
+    # Update foreign keys in locations_networks and locations_projects tables
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_networks DROP CONSTRAINT networks_locations_network_id_fkey;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_networks ADD CONSTRAINT networks_locations_network_id_fkey FOREIGN KEY (network_id) REFERENCES public.networks(network_id) ON DELETE CASCADE ON UPDATE CASCADE;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_networks DROP CONSTRAINT networks_locations_location_id_fkey;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_networks ADD CONSTRAINT networks_locations_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_projects DROP CONSTRAINT projects_locations_location_id_fkey;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_projects ADD CONSTRAINT projects_locations_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(location_id) ON DELETE CASCADE ON UPDATE CASCADE;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_projects DROP CONSTRAINT projects_locations_project_id_fkey;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_projects ADD CONSTRAINT projects_locations_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE ON UPDATE CASCADE;"
+    )
+
+    # Update the version_info table
+    DBI::dbExecute(
+      con,
+      "UPDATE information.version_info SET version = '22' WHERE item = 'Last patch number';"
+    )
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE information.version_info SET version = '",
+        as.character(packageVersion("AquaCache")),
+        "' WHERE item = 'AquaCache R package used for last patch';"
+      )
+    )
+
+    # Commit the transaction
+    DBI::dbExecute(con, "COMMIT;")
+
+    message("Patch 22 applied successfully.")
+  },
+  error = function(e) {
+    # Rollback the transaction
+    DBI::dbExecute(con, "ROLLBACK;")
+    stop(
+      "Patch 22 failed and the DB has been rolled back to its earlier state. ",
+      e$message
+    )
+  }
+)
