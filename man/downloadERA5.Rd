@@ -28,7 +28,7 @@ downloadERA5(
 
 \item{key}{The key to use for EMCWF authentication.}
 
-\item{hrs}{ERA5 data is provided in hourly chunks. Specify a vector of hours from 0 to 23 specifying the hourly rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at midnight/00:00 UTC.}
+\item{hrs}{ERA5 data is provided in hourly chunks. Specify a vector of hours from 0 to 23 specifying the hourly rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at 00:00 UTC.}
 
 \item{batch}{Should a batch request be used or should downloads be sequential? Batch request can be much quicker but will fail if any of the requests fail. Sequential runs each request one by one from the earliest possible raster so that if one fails rasters are returned up to the last successful download.}
 }
