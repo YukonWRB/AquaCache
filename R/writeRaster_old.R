@@ -134,16 +134,27 @@ writeRaster_old <- function(
       "Appending to existing table. Dropping any existing raster constraints..."
     )
     if (constraints) {
-      try(DBI::dbExecute(
+      DBI::dbExecute(
         con,
         paste0(
-          "SELECT DropRasterConstraints('",
+          "SELECT DropRasterConstraints(",
           sub(".*\\.", "", rast_table),
-          "','rast',",
-          paste(rep("TRUE", 12), collapse = ","),
+          ", 'rast',",
+          "FALSE, ", # srid
+          "TRUE, ", # scale_x
+          "TRUE, ", # scale_y
+          "TRUE, ", # blocksize_x
+          "TRUE, ", # blocksize_y
+          "TRUE, ", # same_alignment
+          "TRUE, ", # nodata
+          "TRUE, ", # out_db
+          "TRUE, ", # extent
+          "TRUE, ", # num_bands
+          "TRUE, ", # pixel_types
+          "TRUE", # spatial extent
           ");"
         )
-      ))
+      )
     }
     n.base <- DBI::dbGetQuery(
       con,
@@ -463,12 +474,28 @@ writeRaster_old <- function(
 
   # 5. add raster constraints
   if (constraints) {
-    tmp.query <- paste0(
-      "SELECT AddRasterConstraints('spatial'::name,",
-      DBI::dbQuoteString(con, sub(".*\\.", "", rast_table)),
-      "::name, 'rast'::name);"
+    # Re-add SRID constraint only in case it wasn't there
+    DBI::dbExecute(
+      con,
+      paste0(
+        "SELECT AddRasterConstraints(",
+        DBI::dbQuoteString(con, sub(".*\\.", "", rast_table)),
+        ", 'rast',",
+        "TRUE, ", # srid
+        "FALSE, ", # scale_x
+        "FALSE, ", # scale_y
+        "FALSE, ", # blocksize_x
+        "FALSE, ", # blocksize_y
+        "FALSE, ", # same_alignment
+        "FALSE, ", # regular blocking
+        "FALSE, ", # num bands
+        "FALSE, ", # pixel types
+        "FALSE, ", # nodata values
+        "FALSE, ", # out_db
+        "FALSE", # spatial extent
+        ");"
+      )
     )
-    DBI::dbExecute(con, tmp.query)
   }
 
   return(list(status = TRUE, appended_rids = new_rids))

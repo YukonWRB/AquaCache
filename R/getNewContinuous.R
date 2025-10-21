@@ -42,13 +42,13 @@ getNewContinuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.end_datetime, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL;"
+      "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL;"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.end_datetime, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
+        "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
         paste(timeseries_id, collapse = "', '"),
         "') AND source_fx IS NOT NULL;"
       )
@@ -116,8 +116,22 @@ getNewContinuous <- function(
     source_fx <- all_timeseries$source_fx[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
     owner <- all_timeseries$default_owner[i]
-
-    last_data_point <- all_timeseries$end_datetime[i] + 1 #one second after the last data point
+    # Find the last data point in measurements_continuous
+    # Not using column in 'timeseries' table in case it's out of sync
+    last_data_point <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT MAX(datetime) AS last_datetime FROM measurements_continuous WHERE timeseries_id = ",
+        tsid,
+        ";"
+      )
+    )[1, 1] + 1 # one second after the last data point
+    
+    # Some timeseries only have data in calculated_daily table (HYDAT timeseries), but let's do a cursory check of them in case they're ever reactivated.
+    if (is.na(last_data_point)) {
+      last_data_point <- as.POSIXct("1970-01-01 00:00:00", "UTC")
+    }
+      
 
     tryCatch(
       {

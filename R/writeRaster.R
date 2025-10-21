@@ -152,7 +152,7 @@ writeRaster <- function(
         DBI::dbQuoteString(con, schema_for_constraints),
         ", ",
         DBI::dbQuoteString(con, table_plain),
-        ",'rast',",
+        ", 'rast',",
         "FALSE, ", # srid
        "TRUE, ", # scale_x
        "TRUE, ", # scale_y
@@ -209,7 +209,7 @@ writeRaster <- function(
         DBI::dbQuoteString(con, schema_for_constraints),
         ", ",
         DBI::dbQuoteString(con, table_plain),
-        ",'rast',",
+        ", 'rast',",
         "TRUE, ", # srid
        "FALSE, ", # scale_x
        "FALSE, ", # scale_y
@@ -315,6 +315,102 @@ writeRaster <- function(
   if (length(max_before) != 1 || is.na(max_before)) {
     max_before <- 0L
   }
+  
+  
+  
+  
+  
+  
+  # Synchronise sequence before appending new rasters ------------------------
+  is_identity <- tryCatch(
+    {
+      info <- DBI::dbGetQuery(
+        con,
+        "SELECT is_identity = 'YES' AS is_identity\n           FROM information_schema.columns\n          WHERE table_schema = $1\n            AND table_name = $2\n            AND column_name = 'rid';",
+        params = list(schema_for_constraints, table_plain)
+      )
+      if (nrow(info) == 0) {
+        FALSE
+      } else {
+        isTRUE(info$is_identity[1])
+      }
+    },
+    error = function(e) {
+      warning(
+        paste0(
+          "Unable to determine identity status for raster table '",
+          qualified_table,
+          "': ",
+          conditionMessage(e)
+        )
+      )
+      NA
+    }
+  )
+  
+  identity_reset_ok <- FALSE
+  if (isTRUE(is_identity)) {
+    restart_with <- if (max_before <= 0) 1L else max_before + 1L
+    identity_reset_ok <- tryCatch(
+      {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "ALTER TABLE ",
+            rast_table_sql,
+            " ALTER COLUMN rid RESTART WITH ",
+            restart_with,
+            ";"
+          )
+        )
+        TRUE
+      },
+      error = function(e) {
+        warning(
+          paste0(
+            "Failed to realign identity for raster table '",
+            qualified_table,
+            "': ",
+            conditionMessage(e),
+            ". Falling back to sequence realignment."
+          )
+        )
+        FALSE
+      }
+    )
+  }
+  
+  if (!isTRUE(identity_reset_ok)) {
+    seq_name <- tryCatch(
+      DBI::dbGetQuery(
+        con,
+        "SELECT pg_get_serial_sequence($1, 'rid') AS seqname;",
+        params = list(qualified_table)
+      )$seqname,
+      error = function(e) NA_character_
+    )
+    if (!is.na(seq_name) && nzchar(seq_name)) {
+      tryCatch(
+        DBI::dbExecute(
+          con,
+          "SELECT setval($1::regclass, $2, $3);",
+          params = list(seq_name, max_before, max_before > 0)
+        ),
+        error = function(e) {
+          warning(
+            paste0(
+              "Failed to synchronise sequence for raster table '",
+              qualified_table,
+              "': ",
+              conditionMessage(e)
+            )
+          )
+        }
+      )
+    }
+  }
+  
+  
 
   tmp_sql <- tempfile(fileext = ".sql")
   tmp_r2p_err <- tempfile(fileext = ".log")
