@@ -70,6 +70,20 @@ downloadERA5 <- function(
       "Parameter 'hrs' must be a numeric vector of integers between 0 and 23."
     )
   }
+  
+  # Set keyring backend to 'file' in headless Linux environments to avoid issues with keyring prompts
+  if (.Platform$OS.type == "unix") {
+    # Detect headless environment (no GUI / display)
+    headless <- Sys.getenv("DISPLAY") == "" || !nzchar(Sys.getenv("DISPLAY"))
+    
+    # Also check if running in a non-interactive context (cron, Rscript, Shiny Server)
+    noninteractive <- !interactive() || grepl("shiny", commandArgs(), ignore.case = TRUE)
+    
+    if (headless || noninteractive) {
+      options(keyring_backend = "file")
+    }
+  }
+  
 
   suppressMessages(ecmwfr::wf_set_key(key = key, user = user))
 
