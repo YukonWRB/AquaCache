@@ -71,20 +71,6 @@ downloadERA5 <- function(
     )
   }
   
-  # Set keyring backend to 'file' in headless Linux environments to avoid issues with keyring prompts
-  if (.Platform$OS.type == "unix") {
-    # Detect headless environment (no GUI / display)
-    headless <- Sys.getenv("DISPLAY") == "" || !nzchar(Sys.getenv("DISPLAY"))
-    
-    # Also check if running in a non-interactive context (cron, Rscript, Shiny Server)
-    noninteractive <- !interactive() || grepl("shiny", commandArgs(), ignore.case = TRUE)
-    
-    if (headless || noninteractive) {
-      options(keyring_backend = "file")
-    }
-  }
-  
-
   suppressMessages(ecmwfr::wf_set_key(key = key, user = user))
 
   # Get that param is valid and fetch short form
