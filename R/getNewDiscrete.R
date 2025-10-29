@@ -341,14 +341,13 @@ getNewDiscrete <- function(
             sample$sub_location <- NULL
             names_samp <- names(sample)
           }
-          # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "owner", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
+          # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
           mandatory_samp <- c(
             "location_id",
             "media_id",
             "datetime",
             "collection_method",
             "sample_type",
-            "owner",
             "import_source_id"
           )
           if (!all(c(mandatory_samp) %in% names_samp)) {
@@ -373,6 +372,19 @@ getNewDiscrete <- function(
           # Apply default owner/contributor if not provided
           if (!("owner" %in% names_samp) || is.na(sample$owner)) {
             sample$owner <- owner
+            names_samp <- names(sample)
+          }
+          if (is.null(sample$owner) || is.na(sample$owner)) {
+            warning(
+              "For sample_series_id ",
+              sid,
+              " element ",
+              j,
+              " (sample_datetime ",
+              sample$datetime,
+              ") the source function did not provide an owner and there is no default owner for the sample series. Skipping to next sample."
+            )
+            next
           }
           if (!("contributor" %in% names_samp) || is.na(sample$contributor)) {
             if (!is.na(contributor)) sample$contributor <- contributor
