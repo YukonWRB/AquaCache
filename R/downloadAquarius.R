@@ -16,6 +16,9 @@
 #' @param start_datetime The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.
 #' @param end_datetime The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.
 #' @param difference Logical. If TRUE, the difference between consecutive values will be returned rather than the values themselves. Default is FALSE. Relies on function [compute_increments()], see details.
+#' @param reset_drop Numeric. The threshold for a large drop that indicates a true reset. This can be used for example to process standpipe precipitation data where the standpipe is emptied when full or during regular maintenance. Passed to [compute_increments()].
+#' @param min_pos Numeric. Thereshold below which to ignore positive noise in increments. For example, if min_pos is 2, only increments of 2 or more units will be recorded; smaller positive differences will be treated as zero increments. Passed to [compute_increments()].
+#' @param max_gap Numeric. Maximum allowed gap in number of data points above which an increment is not computed. Passed to [compute_increments()].
 #' @param login Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.
 #' @param server The URL for your organization's Aquarius web server. Default pulls from your .renviron file; see details.
 #' @param con A connection to the aquacache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.
@@ -28,8 +31,11 @@ downloadAquarius <- function(
   location,
   parameter,
   start_datetime,
-  end_datetime = Sys.Date(),
+  end_datetime = Sys.time(),
   difference = FALSE,
+  reset_drop = 20,
+  min_pos = 0,
+  max_gap = 0,
   login = Sys.getenv(c("AQUSER", "AQPASS")),
   server = Sys.getenv("AQSERVER"),
   con = NULL
@@ -144,7 +150,12 @@ downloadAquarius <- function(
 
     # Calculate differences if requested
     if (difference) {
-      ts <- compute_increments(ts)
+      ts <- compute_increments(
+        ts,
+        reset_drop = reset_drop,
+        min_pos = min_pos,
+        max_gap = max_gap
+      )
     }
 
     # format approvals, grade, qualifiers times

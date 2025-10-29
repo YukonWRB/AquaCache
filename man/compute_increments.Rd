@@ -4,14 +4,16 @@
 \alias{compute_increments}
 \title{Compute increments from cumulative data}
 \usage{
-compute_increments(ts, reset_drop = 20, min_pos = 0)
+compute_increments(ts, reset_drop = 20, min_pos = 0, max_gap = 0)
 }
 \arguments{
 \item{ts}{data.frame with datetime and value columns}
 
 \item{reset_drop}{Threshold for a large drop that indicates a true reset. This can be used for example to process standpipe precipitation data where the standpipe is emptied when full or during regular maintenance.}
 
-\item{min_pos}{Thereshold below which to ignore positive noise in increments}
+\item{min_pos}{Thereshold below which to ignore positive noise in increments. For example, if min_pos is 2, only increments of 2 or more units will be recorded; smaller positive differences will be treated as zero increments.}
+
+\item{max_gap}{Maximum allowed gap in number of data points above which an increment is not computed.}
 }
 \value{
 A data.frame with datetime and value columns. The value column contains the computed increments.
