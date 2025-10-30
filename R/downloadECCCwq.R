@@ -32,6 +32,14 @@ downloadECCCwq <- function(
   # start_datetime <- "2020-01-01"
   # end_datetime <- Sys.time()
   # tz = "MST"
+  
+  # Set system encoding to UTF-8 to avoid issues with special characters
+  # Different process depend on OS
+  if (.Platform$OS.type == "windows") {
+    Sys.setlocale("LC_ALL", "English_United States")
+  } else {
+    Sys.setlocale("LC_ALL", "en_US.UTF-8")
+  }
 
   # Load the file and key
   keypath <- system.file(
@@ -143,7 +151,8 @@ downloadECCCwq <- function(
   }
 
   # Read the cached/local file
-  file <- data.table::fread(file_path_to_read)
+  # encoding should be UTF-8
+  file <- data.table::fread(file_path_to_read, encoding = "UTF-8")
   # ---- end cached download block ----
 
   # file <- data.table::fread(file)
@@ -287,7 +296,7 @@ downloadECCCwq <- function(
       owner = owner_contributor,
       contributor = owner_contributor,
       import_source_id = paste(
-        unique(subset$SAMPLE_ID_ÉCHANTILLON),
+        unique(subset$`SAMPLE_ID_ÉCHANTILLON`),
         collapse = ","
       )
       # import_source is added in by getNewDiscrete
@@ -300,14 +309,14 @@ downloadECCCwq <- function(
       }
       param_row <- key[
         key$input_param == var &
-          key$input_unit == subset$UNIT_UNITÉ[j],
+          key$input_unit == subset$`UNIT_UNITÉ`[j],
       ]
       if (nrow(param_row) == 0) {
         warning(paste0(
           "No parameter mapping found for variable '",
           var,
           "' with unit '",
-          subset$UNIT_UNITÉ[j],
+          subset$`UNIT_UNITÉ`[j],
           "'. Skipping this result."
         ))
         next
@@ -318,7 +327,7 @@ downloadECCCwq <- function(
             "Parameter mapping for variable '",
             var,
             "' with unit '",
-            subset$UNIT_UNITÉ[j],
+            subset$`UNIT_UNITÉ`[j],
             "' has no parameter_id assigned. Skipping this result."
           ))
         }

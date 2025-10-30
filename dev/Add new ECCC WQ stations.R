@@ -93,7 +93,7 @@ addACLocation(df, con = con)
 # Pull the location ids for the new stations from table 'locations'
 locs <- DBI::dbGetQuery(
   con,
-  "SELECT location_id, location, name FROM locations WHERE location IN ('YT09AB0006', 'YT09AB0008', 'YT09DD0008', 'YT09DD0014', 'YT09FB0003', 'YT09FC0002', 'YT09BC0021', '08AA003', '08AB001', '09EA003', '09EB003', '09FB002', '10AA001', '10MA002', '10MD001')"
+  "SELECT location_id, location, name FROM locations WHERE location IN ('YT09AB0006', 'YT09AB0008', 'YT09DD0008', 'YT09DD0014', 'YT09FB0003', 'YT09FC0002', 'YT09BC0021', '08AA003', '08AB001', '09EA003', '09EB003', '09FB002', '10AA001', '10MA002', '10MD001') ORDER BY location"
 )
 
 locs$args = c(
@@ -115,32 +115,32 @@ locs$args = c(
 )
 
 # For each location, add a sample_series entry and fetch results
-for (i in 4:nrow(locs)) {
+for (i in 1:nrow(locs)) {
   row <- locs[i, ]
-  args <- row$args
-  # split into "argument1: value1" etc.
-  args <- strsplit(args, ",\\s*")[[1]]
-
-  # split only on first colon
-  keys <- sub(":.*", "", args)
-  vals <- sub("^[^:]+:\\s*", "", args)
-
-  # build named list
-  args <- stats::setNames(as.list(vals), keys)
-
-  # convert to JSON
-  args <- jsonlite::toJSON(args, auto_unbox = TRUE)
-
-  # Build a df and add to sample_series
-  df <- data.frame(
-    location_id = row$location_id,
-    default_owner = owner,
-    default_contributor = owner,
-    active = TRUE,
-    source_fx = 'downloadECCCwq',
-    source_fx_args = args
-  )
-  DBI::dbAppendTable(con, "sample_series", df)
+  # args <- row$args
+  # # split into "argument1: value1" etc.
+  # args <- strsplit(args, ",\\s*")[[1]]
+  # 
+  # # split only on first colon
+  # keys <- sub(":.*", "", args)
+  # vals <- sub("^[^:]+:\\s*", "", args)
+  # 
+  # # build named list
+  # args <- stats::setNames(as.list(vals), keys)
+  # 
+  # # convert to JSON
+  # args <- jsonlite::toJSON(args, auto_unbox = TRUE)
+  # 
+  # # Build a df and add to sample_series
+  # df <- data.frame(
+  #   location_id = row$location_id,
+  #   default_owner = owner,
+  #   default_contributor = owner,
+  #   active = TRUE,
+  #   source_fx = 'downloadECCCwq',
+  #   source_fx_args = args
+  # )
+  # DBI::dbAppendTable(con, "sample_series", df)
 
   # Fetch the sample_series_id
   ss_id <- DBI::dbGetQuery(

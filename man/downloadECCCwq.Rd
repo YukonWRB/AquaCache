@@ -7,7 +7,7 @@
 downloadECCCwq(
   location,
   file,
-  key = system.file("import_keys", "downloadECCCeq1.csv", package = "AquaCache"),
+  key = "downloadECCCeq1.csv",
   tz,
   start_datetime,
   end_datetime = Sys.time(),
