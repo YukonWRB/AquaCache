@@ -85,14 +85,13 @@ addACImageSeries <- function(
   # split into "argument1: value1" etc.
   args <- strsplit(args, ",\\s*")[[1]]
 
-  # split each pair on ":" and trim whitespace
-  args <- strsplit(args, ":\\s*")
+  # split only on first colon
+  keys <- sub(":.*", "", args)
+  vals <- sub("^[^:]+:\\s*", "", args)
 
-  # build a named list: names = keys, values = values
-  args <- stats::setNames(
-    lapply(args, function(x) x[2]),
-    sapply(args, function(x) x[1])
-  )
+  # build named list
+  args <- stats::setNames(as.list(vals), keys)
+
   # convert to JSON
   args <- jsonlite::toJSON(args, auto_unbox = TRUE)
 
