@@ -278,13 +278,13 @@ getNewDiscrete <- function(
           args_list[["snowCon"]] <- snowCon
         }
         if (!is.na(source_fx_args)) {
-          #add some arguments if they are specified
+          # add some arguments if they are specified
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
         }
 
         ## Get the data ##############
-        data <- do.call(source_fx, args_list) #Get the data using the args_list
+        data <- do.call(source_fx, args_list) # Get the data using the args_list
 
         if (length(data) == 0) {
           next
@@ -330,10 +330,14 @@ getNewDiscrete <- function(
           sample <- data[[j]][["sample"]]
 
           # Functions may pass the location code instead of location_id, change it
+          # Also possible that the function did not pass 'location_id' at all, if so fill it in using 'loc_id'
           names_samp <- names(sample)
           if ("location" %in% names_samp) {
             sample$location_id <- loc_id
             sample$location <- NULL
+            names_samp <- names(sample)
+          } else if (!("location_id" %in% names_samp)) {
+            sample$location_id <- loc_id
             names_samp <- names(sample)
           }
           if ("sub_location" %in% names_samp) {
@@ -527,6 +531,7 @@ getNewDiscrete <- function(
                 result_speciation_bool & is.na(result_speciation_id)
               )
               if (any(chk)) {
+                params <- merge$parameter_id[chk]
                 warning(
                   "For sample_series_id ",
                   sid,
@@ -534,7 +539,9 @@ getNewDiscrete <- function(
                   j,
                   " (sample_datetime ",
                   sample$datetime,
-                  ") the source function returned NA values in the column 'result_speciation_id' for at least one parameter where the database mandates this value. Skipping to next sample."
+                  ") the source function returned NA values in the column 'result_speciation_id' for parameter ",
+                  paste(params, collapse = ", "),
+                  " where the database mandates this value. Skipping to next sample."
                 )
                 next
               }
@@ -589,7 +596,9 @@ getNewDiscrete <- function(
                 warning(
                   "getNewDiscrete: Failed to commit new data for sample_series_id, ",
                   sid,
-                  ". Error message: ",
+                  ". Failed on fetched sample number ",
+                  j,
+                  " with error message: ",
                   e$message
                 )
               }

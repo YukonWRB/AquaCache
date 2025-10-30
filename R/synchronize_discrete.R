@@ -812,9 +812,13 @@ synchronize_discrete <- function(
               # No database sample was found, add the sample and corresponding results (follow same process as getNewDiscrete)
               ## Checks on sample metadata ###########
               # Functions may pass the location code instead of location_id, change it
+              # Also possible that the function did not pass 'location_id' at all, if so fill it in using 'loc_id'
               if ("location" %in% names_inRemote_samp) {
                 inRemote_sample$location_id <- loc_id
                 inRemote_sample$location <- NULL
+                names_inRemote_samp <- names(inRemote_sample)
+              } else if (!("location_id" %in% names_inRemote_samp)) {
+                inRemote_sample$location_id <- loc_id
                 names_inRemote_samp <- names(inRemote_sample)
               }
               if ("sub_location" %in% names_inRemote_samp) {
@@ -861,7 +865,9 @@ synchronize_discrete <- function(
                 inRemote_sample$owner <- default_owner
                 names_inRemote_samp <- names(inRemote_sample)
               }
-              if (is.null(inRemote_sample$owner) || is.na(inRemote_sample$owner)) {
+              if (
+                is.null(inRemote_sample$owner) || is.na(inRemote_sample$owner)
+              ) {
                 warning(
                   "For sample_series_id ",
                   sid,

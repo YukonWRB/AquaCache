@@ -7,7 +7,8 @@
 downloadECCCwq(
   location,
   file,
-  key = system.file("import_keys", "ECCCwq.csv", package = "AquaCache"),
+  key = system.file("import_keys", "downloadECCCeq1.csv", package = "AquaCache"),
+  tz,
   start_datetime,
   end_datetime = Sys.time(),
   con = NULL
@@ -20,6 +21,8 @@ downloadECCCwq(
 
 \item{key}{Path to the import key .csv file defining the parameter mappings for ECCC water quality data.}
 
+\item{tz}{Time zone of the input data (does NOT apply to \code{start_datetime} or \code{end_datetime} parameters). This is used to correctly interpret the datetime values in the ECCC data file. Common time zones include "UTC", "MST", "PST", etc.}
+
 \item{start_datetime}{Start datetime (inclusive) from which to fetch measurements. Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 
 \item{end_datetime}{End datetime (inclusive) to which to fetch measurements. Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
@@ -30,5 +33,7 @@ downloadECCCwq(
 A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 }
 \description{
-Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format.
+Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings defined in an import key .csv file, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
+
+Note that ECCC's results are converted to the AquaCache database parameters and units using the provided key file. Users should ensure that the key file contains accurate mappings for the parameters of interest. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
 }

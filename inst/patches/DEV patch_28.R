@@ -118,6 +118,57 @@ tryCatch(
         "INSERT INTO parameters (param_name, unit_default, result_speciation, sample_fraction, plot_default_y_orientation) VALUES ('palladium', 'mg/L', FALSE, TRUE, 'normal');"
       )
     }
+    # Check parameter_id for palladium
+    pd_id <- DBI::dbGetQuery(
+      con,
+      "SELECT parameter_id FROM parameters WHERE param_name = 'palladium';"
+    )$parameter_id
+
+    if (pd_id != 1263) {
+      warning(
+        "Palladium parameter_id is not 1263 as expected. Please check the downloadECCCeq1.csv key integrity."
+      )
+    }
+
+    # Update ECCC's lab name
+    exist <- DBI::dbGetQuery(
+      con,
+      "SELECT COUNT(*) AS n FROM laboratories WHERE lab_name = 'Environment Canada';"
+    )$n
+
+    if (exist == 1) {
+      DBI::dbExecute(
+        con,
+        "UPDATE laboratories SET lab_name = 'Environment and Climate Change Canada' WHERE lab_name = 'Environment Canada';"
+      )
+    } else {
+      DBI::dbExecute(
+        con,
+        "INSERT INTO laboratories (lab_name) VALUES ('Environment and Climate Change Canada');"
+      )
+    }
+
+    # Drop and update unique constraint on 'results' to include lab/field in the key
+    # Find the name of the existing unique constraint
+    constraint_name <- DBI::dbGetQuery(
+      con,
+      "SELECT conname FROM pg_constraint WHERE conrelid = 'discrete.results'::regclass AND contype = 'u';"
+    )$conname
+    # Drop the existing unique constraint
+    DBI::dbExecute(
+      con,
+      paste0(
+        "ALTER TABLE discrete.results DROP CONSTRAINT ",
+        constraint_name,
+        ";"
+      )
+    )
+    DBI::dbExecute(
+      con,
+      "
+    ALTER TABLE discrete.results ADD CONSTRAINT sampleid_type_parameter_fraction_result_value_key UNIQUE NULLS NOT DISTINCT (sample_id, result_type, parameter_id, sample_fraction_id, result_value_type, result_speciation_id, protocol_method, laboratory, analysis_datetime)
+    "
+    )
 
     # Wrap things up ##################
     # Update the version_info table
