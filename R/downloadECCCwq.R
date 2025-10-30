@@ -52,7 +52,7 @@ downloadECCCwq <- function(
       "The key you specified cannot be found in this package's inst/import_keys folder. "
     )
   }
-  key <- data.table::fread(keypath, stringsAsFactors = FALSE)
+  key <- data.table::fread(keypath, stringsAsFactors = FALSE, encoding = "UTF-8")
 
   required_columns_key <- c(
     "input_param",
