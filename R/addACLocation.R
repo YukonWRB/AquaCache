@@ -2,13 +2,13 @@
 #'
 #' Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
-#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters must be NA or left as their default values.
+#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
 #' @param location A character vector of the location code(s).
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French.
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
-#' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default is "public_reader".
+#' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default public group is "public_reader".
 #' @param owner A numeric vector of the owner(s) of the location(s).
 #' @param data_sharing_agreement_id A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
@@ -32,7 +32,7 @@ addACLocation <- function(
   name_fr = NA,
   latitude = NA,
   longitude = NA,
-  share_with = "public_reader",
+  share_with = NA,
   owner = NA,
   data_sharing_agreement_id = NA,
   location_type = NA,
@@ -118,8 +118,30 @@ addACLocation <- function(
           colnames(df)
       )
     ) {
+      missing <- setdiff(
+        c(
+          "location",
+          "name",
+          "name_fr",
+          "latitude",
+          "longitude",
+          "share_with",
+          "owner",
+          "data_sharing_agreement_id",
+          "location_type",
+          "note",
+          "contact",
+          "datum_id_from",
+          "datum_id_to",
+          "conversion_m",
+          "current"
+        ),
+        colnames(df)
+      )
       stop(
-        "The data.frame provided does not contain all the necessary columns."
+        "The data.frame provided does not contain all the necessary columns: missing column(s) ",
+        paste(missing, collapse = ", "),
+        "."
       )
     }
     # Check that the data.frame is not empty
@@ -235,11 +257,8 @@ addACLocation <- function(
   for (i in name_fr) {
     exists <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT location_id FROM locations WHERE LOWER(name_fr) = '",
-        tolower(i),
-        "';"
-      )
+      "SELECT location_id FROM locations WHERE LOWER(name_fr) = $1;",
+      params = list(tolower(i))
     )[1, 1]
     if (!is.na(exists)) {
       stop("There is already a location with the French name ", i, ".")
