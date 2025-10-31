@@ -12,7 +12,7 @@ make_ts <- function(vals, start = "2025-06-01 00:00:00", by = "hour") {
   )
 }
 test_that("basic increasing series yields correct increments", {
-  ts <- make_ts(c(0, 1, 3, 6))
+  ts <- make_ts(c(0, 1, 3, 6, 10, 12))
   out <- compute_increments(ts, reset_drop = 20, min_pos = 0)
 
   expect_s3_class(out, "data.frame")
@@ -21,14 +21,14 @@ test_that("basic increasing series yields correct increments", {
 
   # First is NA; then 1, 2, 3
   expect_true(is.na(out$value[1]))
-  expect_equal(out$value[-1], c(1, 2, 3))
+  expect_equal(out$value[-1], c(1, 2, 3, 4, 2))
   # no negatives
   expect_true(all(out$value[!is.na(out$value)] >= 0))
 })
 
 test_that("small negative wiggles are ignored (baseline holds)", {
   # drop by 1 (not a reset), then rebound; only counts rise above baseline
-  ts <- make_ts(c(10, 9, 10.5, 11))
+  ts <- make_ts(c(10, 9, 10.5, 11, 12, 13))
   out <- compute_increments(ts, reset_drop = 20, min_pos = 0)
 
   # First NA, then 0 (ignored wiggle), then 0.5, then 0.5
@@ -37,7 +37,7 @@ test_that("small negative wiggles are ignored (baseline holds)", {
 })
 
 test_that("large drop triggers reset and increment at reset step is 0", {
-  ts <- make_ts(c(50, 10, 12)) # drop of 40 -> reset
+  ts <- make_ts(c(50, 10, 12, 13, 14, 15)) # drop of 40 -> reset
   out <- compute_increments(ts, reset_drop = 20, min_pos = 0)
 
   # At reset step: 0; then increments from new baseline
@@ -46,7 +46,7 @@ test_that("large drop triggers reset and increment at reset step is 0", {
 })
 
 test_that("reset occurs when drop equals the threshold (<= -reset_drop)", {
-  ts <- make_ts(c(30, 10, 11)) # drop of 20 exactly
+  ts <- make_ts(c(30, 10, 11, 12, 13, 14)) # drop of 20 exactly
   out <- compute_increments(ts, reset_drop = 20, min_pos = 0)
 
   expect_true(is.na(out$value[1]))
@@ -54,7 +54,7 @@ test_that("reset occurs when drop equals the threshold (<= -reset_drop)", {
 })
 
 test_that("min_pos filters tiny positives; strict greater-than behavior", {
-  ts <- make_ts(c(0, 0.01, 0.02, 0.05))
+  ts <- make_ts(c(0, 0.01, 0.02, 0.05, 0.10, 0.15))
   out <- compute_increments(ts, reset_drop = 20, min_pos = 0.02)
 
   # add == min_pos is not counted (strict >)
@@ -64,7 +64,7 @@ test_that("min_pos filters tiny positives; strict greater-than behavior", {
 })
 
 test_that("NAs in value propagate to increments", {
-  ts <- make_ts(c(0, 1, NA, 3, 4))
+  ts <- make_ts(c(0, 1, NA, 3, 4, 5))
   out <- compute_increments(ts)
 
   # d at i=3 is NA, so inc[3] stays NA; i=4 uses NA prev -> NA; i=5 uses prev=3 -> valid
@@ -76,15 +76,15 @@ test_that("NAs in value propagate to increments", {
 
 test_that("unsorted input is sorted by datetime before computation", {
   # Reverse the order intentionally
-  ts <- make_ts(c(0, 1, 3, 6))
-  ts <- ts[4:1, ] # unsorted
+  ts <- make_ts(c(0, 1, 3, 6, 8, 10))
+  ts <- ts[6:1, ] # unsorted
   out <- compute_increments(ts, reset_drop = 20, min_pos = 0)
 
   # Output should be sorted and equivalent to basic case
   expect_true(is.unsorted(ts$datetime)) # input unsorted
   expect_false(is.unsorted(out$datetime)) # output sorted
   expect_true(is.na(out$value[1]))
-  expect_equal(out$value[-1], c(1, 2, 3))
+  expect_equal(out$value[-1], c(1, 2, 3, 2, 2))
 })
 
 test_that("output always has non-negative increments (excluding NA)", {

@@ -32,14 +32,6 @@ downloadECCCwq <- function(
   # start_datetime <- "2020-01-01"
   # end_datetime <- Sys.time()
   # tz = "MST"
-  
-  # Set system encoding to UTF-8 to avoid issues with special characters
-  # Different process depend on OS
-  if (.Platform$OS.type == "windows") {
-    Sys.setlocale("LC_ALL", "English_United States")
-  } else {
-    Sys.setlocale("LC_ALL", "en_US.UTF-8")
-  }
 
   # Load the file and key
   keypath <- system.file(
@@ -52,7 +44,11 @@ downloadECCCwq <- function(
       "The key you specified cannot be found in this package's inst/import_keys folder. "
     )
   }
-  key <- data.table::fread(keypath, stringsAsFactors = FALSE, encoding = "UTF-8")
+  key <- data.table::fread(
+    keypath,
+    stringsAsFactors = FALSE,
+    encoding = "UTF-8"
+  )
 
   required_columns_key <- c(
     "input_param",
@@ -83,15 +79,17 @@ downloadECCCwq <- function(
     cache_dir <- file.path(tempdir(), "AquaCache_ECCC_cache")
     dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
-    # Construct a stable, safe filename. Prefer a short hash if {digest} is available.
-    if (requireNamespace("digest", quietly = TRUE)) {
-      key_hash <- substr(digest::digest(file, algo = "xxhash64"), 1, 16)
-      fname <- paste0("eccc_wq_", key_hash, ".csv")
-    } else {
-      # Fallback: sanitize the URL into a filename (trim to avoid path length issues)
-      safe <- gsub("[^A-Za-z0-9]+", "_", utils::URLdecode(file))
-      fname <- paste0(substr(safe, 1, 120), ".csv")
-    }
+    # Fallback: sanitize the URL into a filename (trim to avoid path length issues)
+    safe <- gsub("[^A-Za-z0-9]+", "_", utils::URLdecode(file))
+    # Remove the string "long_term_water_quality_monitoring_data" to shorten filename
+    safe <- gsub("long_term_water_quality_monitoring_data_", "", safe)
+    safe <- gsub(
+      "https_data_donnees_az_ec_gc_ca_api_file_path_substances_monitor_",
+      "",
+      safe
+    )
+    safe <- gsub("_csv$", "", safe)
+    fname <- paste0(safe, ".csv")
 
     local_path <- file.path(cache_dir, fname)
 
@@ -102,24 +100,14 @@ downloadECCCwq <- function(
         unlink(part_path)
       }
 
-      # Prefer curl::curl_download for robustness; fall back to utils if curl not available
       tryCatch(
         {
-          if (requireNamespace("curl", quietly = TRUE)) {
-            curl::curl_download(
-              file,
-              destfile = part_path,
-              mode = "wb",
-              quiet = TRUE
-            )
-          } else {
-            utils::download.file(
-              file,
-              destfile = part_path,
-              mode = "wb",
-              quiet = TRUE
-            )
-          }
+          utils::download.file(
+            file,
+            destfile = part_path,
+            mode = "wb",
+            quiet = TRUE
+          )
 
           # Basic guard: ensure we didn’t get an empty file
           if (!file.exists(part_path) || file.info(part_path)$size == 0) {
@@ -155,17 +143,15 @@ downloadECCCwq <- function(
   file <- data.table::fread(file_path_to_read, encoding = "UTF-8")
   # ---- end cached download block ----
 
-  # file <- data.table::fread(file)
-
   # Ensure that 'file' and 'key' have the necessary columns
   required_columns_file <- c(
     "SITE_NO",
     "DATE_TIME_HEURE",
     "FLAG_MARQUEUR",
     "VALUE_VALEUR",
-    "UNIT_UNITÉ",
+    "UNIT_UNIT\u00C9",
     "VARIABLE",
-    "SAMPLE_ID_ÉCHANTILLON"
+    "SAMPLE_ID_\u00C9CHANTILLON"
   )
 
   missing_columns_file <- setdiff(required_columns_file, colnames(file))
@@ -296,7 +282,7 @@ downloadECCCwq <- function(
       owner = owner_contributor,
       contributor = owner_contributor,
       import_source_id = paste(
-        unique(subset$`SAMPLE_ID_ÉCHANTILLON`),
+        unique(subset[["SAMPLE_ID_\u00C9CHANTILLON"]]),
         collapse = ","
       )
       # import_source is added in by getNewDiscrete
@@ -309,14 +295,14 @@ downloadECCCwq <- function(
       }
       param_row <- key[
         key$input_param == var &
-          key$input_unit == subset$`UNIT_UNITÉ`[j],
+          key$input_unit == subset[["UNIT_UNIT\u00C9"]][j],
       ]
       if (nrow(param_row) == 0) {
         warning(paste0(
           "No parameter mapping found for variable '",
           var,
           "' with unit '",
-          subset$`UNIT_UNITÉ`[j],
+          subset[["UNIT_UNIT\u00C9"]][j],
           "'. Skipping this result."
         ))
         next
@@ -327,7 +313,7 @@ downloadECCCwq <- function(
             "Parameter mapping for variable '",
             var,
             "' with unit '",
-            subset$`UNIT_UNITÉ`[j],
+            subset[["UNIT_UNIT\u00C9"]][j],
             "' has no parameter_id assigned. Skipping this result."
           ))
         }

@@ -105,13 +105,14 @@ downloadAquarius <- function(
   end <- paste0(end, "-00:00") # For UTC offset of 0
 
   if (difference) {
-    # Adjust start time back by one second to get prior value for difference calculation (it was passed in as 1 second after the last data point present in the database, so the point should exist in Aquarius)
+    old_start <- start
+    # Adjust start time back by one day + 1 second to get prior values for difference calculation (it was passed in as 1 second after the last data point present in the database, so the point should exist in Aquarius). If there are enough data points in the prior day, great, otherwise a later check will fail gracefully until enough data exists.
     start <- as.POSIXct(
       gsub("-00:00", "", start),
       format = "%Y-%m-%dT%H:%M",
       tz = "UTC"
     ) -
-      1
+      (1 + 24 * 60 * 60)
   }
   # Read corrected time-series data from Aquarius, format time series to POSIXct
   RawDL <- timeseries$getTimeSeriesCorrectedData(
@@ -150,12 +151,24 @@ downloadAquarius <- function(
 
     # Calculate differences if requested
     if (difference) {
+      if (nrow(ts) < 6) {
+        stop(
+          "downloadAquarius: When 'difference' is TRUE, at least 6 data points are required to compute increments reliably. I've already tried to fetch data for a whole day earlier than your requested start time to help with this, so perhaps the recording rate is low. Don't worry, this import will succeed when enough new data points exist. This applies to location ",
+          location,
+          " and parameter ",
+          parameter,
+          "."
+        )
+      }
       ts <- compute_increments(
         ts,
         reset_drop = reset_drop,
         min_pos = min_pos,
         max_gap = max_gap
       )
+
+      # Remove all data points prior to the original requested start time
+      ts <- ts[ts$datetime >= old_start, ]
     }
 
     # format approvals, grade, qualifiers times

@@ -28,37 +28,39 @@ compute_increments <- function(
 
   # Add points where there are missing data
   ts <- suppressWarnings(calculate_period(ts, timeseries_id = NA))
-  ts[, "period_secs" := as.numeric(lubridate::period(period))]
+  ts[, "period_secs" := as.numeric(lubridate::period(ts$period))]
 
   # ---- Expand gaps with NA rows at each expected interval ----
   # Build per-row "next observed" and expected step
-  ts[, "next_dt" := data.table::shift(datetime, type = "lead")]
+  ts[, "next_dt" := data.table::shift(ts$datetime, type = "lead")]
+  gaps <- ts[
+    !is.na(ts$next_dt) & (ts$datetime + ts$period_secs) < ts$next_dt
+  ]
   # For each gap, make a seq of missing datetimes at expected cadence
-  na_rows <- ts[
-    !is.na(next_dt) & (datetime + period_secs) < next_dt,
-    {
-      gap_sec <- as.numeric(next_dt - datetime)
-      # how many expected points are missing strictly between the two observed points
-      n_missing <- floor(gap_sec / period_secs) - 1L
-      if (is.finite(period_secs) && period_secs > 0 && n_missing > 0L) {
-        data.table(
-          datetime = seq(
-            from = datetime + period_secs,
-            by = period_secs,
-            length.out = n_missing
-          ),
-          value = NA_real_
-        )
-      } else {
-        NULL
-      }
-    },
-    by = .I
-  ][, .(datetime, value)]
+  na_rows <- list()
+  for (i in seq_len(nrow(gaps))) {
+    gap_sec <- as.numeric(gaps$next_dt[i] - gaps$datetime[i])
+    # how many expected points are missing strictly between the two observed points
+    n_missing <- floor(gap_sec / gaps$period_secs[i]) - 1L
+    if (
+      is.finite(gaps$period_secs[i]) &&
+        gaps$period_secs[i] > 0 &&
+        n_missing > 0L
+    ) {
+      na_rows[[i]] <- data.table(
+        "datetime" = seq(
+          from = gaps$datetime[i] + gaps$period_secs[i],
+          by = gaps$period_secs[i],
+          length.out = n_missing
+        ),
+        "value" = NA_real_
+      )
+    }
+  }
 
   # Bind and order
   ts <- data.table::rbindlist(
-    list(ts[, .(datetime, value)], na_rows),
+    list(ts[, c("datetime", "value")], na_rows),
     use.names = TRUE,
     fill = TRUE
   )
@@ -121,8 +123,10 @@ compute_increments <- function(
   # Rebuild data.table
   out <- data.table::data.table(datetime = ts$datetime, value = inc)
 
-  # Drop rows with NA 'value' (these were gaps we inserted)
-  out <- out[!is.na(value)]
+  # # Drop rows with NA 'value' except in row 1 (these were gaps we inserted)
+  # retain <- out[1]
+  # out <- out[!is.na(value)]
+  # out <- data.table::rbindlist(list(retain, out), use.names = TRUE)
 
   if (as_dt) {
     return(out)
