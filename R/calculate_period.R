@@ -11,6 +11,7 @@
 
 calculate_period <- function(data, timeseries_id, con = NULL) {
   if (!inherits(data, "data.frame")) {
+    # Also valid for data.tables
     # Then it might be a vector
     if (!inherits(data, "POSIXct")) {
       stop(

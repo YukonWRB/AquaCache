@@ -812,9 +812,13 @@ synchronize_discrete <- function(
               # No database sample was found, add the sample and corresponding results (follow same process as getNewDiscrete)
               ## Checks on sample metadata ###########
               # Functions may pass the location code instead of location_id, change it
+              # Also possible that the function did not pass 'location_id' at all, if so fill it in using 'loc_id'
               if ("location" %in% names_inRemote_samp) {
                 inRemote_sample$location_id <- loc_id
                 inRemote_sample$location <- NULL
+                names_inRemote_samp <- names(inRemote_sample)
+              } else if (!("location_id" %in% names_inRemote_samp)) {
+                inRemote_sample$location_id <- loc_id
                 names_inRemote_samp <- names(inRemote_sample)
               }
               if ("sub_location" %in% names_inRemote_samp) {
@@ -823,14 +827,13 @@ synchronize_discrete <- function(
                 names_inRemote_samp <- names(inRemote_sample)
               }
 
-              # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "owner", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
+              # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
               mandatory_samp <- c(
                 "location_id",
                 "media_id",
                 "datetime",
                 "collection_method",
                 "sample_type",
-                "owner",
                 "import_source_id"
               )
               if (!all(c(mandatory_samp) %in% names_inRemote_samp)) {
@@ -860,6 +863,21 @@ synchronize_discrete <- function(
                   is.na(inRemote_sample$owner)
               ) {
                 inRemote_sample$owner <- default_owner
+                names_inRemote_samp <- names(inRemote_sample)
+              }
+              if (
+                is.null(inRemote_sample$owner) || is.na(inRemote_sample$owner)
+              ) {
+                warning(
+                  "For sample_series_id ",
+                  sid,
+                  ", returned sample ",
+                  j,
+                  " (sample_datetime ",
+                  inRemote_sample$datetime,
+                  ") the source function did not provide an owner and there is no default owner for the sample series. Skipping to next sample."
+                )
+                next
               }
               if (
                 !("contributor" %in% names_inRemote_samp) ||

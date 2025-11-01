@@ -8,10 +8,17 @@
 #' ## Grades, approvals, qualifiers:
 #' This function will attempt to map Aquarius grades, approvals, and qualifiers to the database defaults. The function was designed around the Yukon Water Resources Branch Aquarius schemes, but 'forks' can be implemented for each based on the server URL. If you need to implement a fork, see the commented-out example in the function at line 116.
 #'
+#' ## 'difference' parameter:
+#' The difference parameter takes cumulative values, such as increasing standpipe readings, and returns the difference between consecutive values rather than the values themselves. This is useful for converting cumulative measurements into interval measurements. To do this, the function will ignore any negative differences (which may occur due to equipment resets or normal instrument fluctations) and record positive values only when the next increment value is greater than the previous non-negative value. The 'start_datetime' parameter will be automatically adjusted within the function to fetch the necessary prior value to calculate the first difference; this value will not be included in the returned data.frame, ensuring consistent performance with or without the difference parameter set to TRUE.
+#'
 #' @param location The location ID, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `29EA001` or `YOWN-0804`.
 #' @param parameter The timeseries name, exactly as visible in Aquarius web portal, as a character vector of length 1. Typically of form `Wlevel_bgs.Calculated`.
 #' @param start_datetime The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.
 #' @param end_datetime The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.
+#' @param difference Logical. If TRUE, the difference between consecutive values will be returned rather than the values themselves. Default is FALSE. Relies on function [compute_increments()], see details.
+#' @param reset_drop Numeric. The threshold for a large drop that indicates a true reset. This can be used for example to process standpipe precipitation data where the standpipe is emptied when full or during regular maintenance. Passed to [compute_increments()].
+#' @param min_pos Numeric. Thereshold below which to ignore positive noise in increments. For example, if min_pos is 2, only increments of 2 or more units will be recorded; smaller positive differences will be treated as zero increments. Passed to [compute_increments()].
+#' @param max_gap Numeric. Maximum allowed gap in number of data points above which an increment is not computed. Passed to [compute_increments()].
 #' @param login Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.
 #' @param server The URL for your organization's Aquarius web server. Default pulls from your .renviron file; see details.
 #' @param con A connection to the aquacache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.
@@ -24,12 +31,24 @@ downloadAquarius <- function(
   location,
   parameter,
   start_datetime,
-  end_datetime = Sys.Date(),
+  end_datetime = Sys.time(),
+  difference = FALSE,
+  reset_drop = 20,
+  min_pos = 0,
+  max_gap = 0,
   login = Sys.getenv(c("AQUSER", "AQPASS")),
   server = Sys.getenv("AQSERVER"),
   con = NULL
 ) {
-  #Check that login and server credentials exist
+  # location = "09AA-M1"
+  # parameter = "Precip Total.Corrected"
+  # start_datetime = "2025-01-10 00:00"
+  # end_datetime = Sys.time()
+  # difference = TRUE
+  # login = Sys.getenv(c("AQUSER", "AQPASS"))
+  # server = Sys.getenv("AQSERVER")
+  # con = NULL
+  # Check that login and server credentials exist
   if (nchar(server) == 0 | is.null(server)) {
     stop(
       "downloadAquarius: It looks like you haven't provided a server, or that it can't be found in your .Renviron file if you left the function defaults."
@@ -46,14 +65,14 @@ downloadAquarius <- function(
     )
   }
 
-  source(system.file("scripts", "timeseries_client.R", package = "AquaCache")) #This loads the code dependencies
+  source(system.file("scripts", "timeseries_client.R", package = "AquaCache")) # This loads the code dependencies
 
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con), add = TRUE)
   }
 
-  #Make the Aquarius configuration
+  # Make the Aquarius configuration
   config = list(
     server = server,
     username = login[1],
@@ -85,6 +104,16 @@ downloadAquarius <- function(
   end <- gsub(" ", "T", end)
   end <- paste0(end, "-00:00") # For UTC offset of 0
 
+  if (difference) {
+    old_start <- start
+    # Adjust start time back by one day + 1 second to get prior values for difference calculation (it was passed in as 1 second after the last data point present in the database, so the point should exist in Aquarius). If there are enough data points in the prior day, great, otherwise a later check will fail gracefully until enough data exists.
+    start <- as.POSIXct(
+      gsub("-00:00", "", start),
+      format = "%Y-%m-%dT%H:%M",
+      tz = "UTC"
+    ) -
+      (1 + 24 * 60 * 60)
+  }
   # Read corrected time-series data from Aquarius, format time series to POSIXct
   RawDL <- timeseries$getTimeSeriesCorrectedData(
     c(config$timeSeriesName),
@@ -92,7 +121,7 @@ downloadAquarius <- function(
     queryTo = end
   )
 
-  #Make the basic timeseries
+  # Make the basic timeseries
   ts <- data.frame(
     datetime = RawDL$Points$Timestamp,
     value = RawDL$Points$Value$Numeric
@@ -117,7 +146,32 @@ downloadAquarius <- function(
       tz = "UTC"
     )
 
-    #format approvals, grade, qualifiers times
+    ts <- ts[!duplicated(ts), ] # In unknown circumstances, Aquarius spits out duplicate points.
+    ts <- ts[order(ts$datetime), ]
+
+    # Calculate differences if requested
+    if (difference) {
+      if (nrow(ts) < 6) {
+        stop(
+          "downloadAquarius: When 'difference' is TRUE, at least 6 data points are required to compute increments reliably. I've already tried to fetch data for a whole day earlier than your requested start time to help with this, so perhaps the recording rate is low. Don't worry, this import will succeed when enough new data points exist. This applies to location ",
+          location,
+          " and parameter ",
+          parameter,
+          "."
+        )
+      }
+      ts <- compute_increments(
+        ts,
+        reset_drop = reset_drop,
+        min_pos = min_pos,
+        max_gap = max_gap
+      )
+
+      # Remove all data points prior to the original requested start time
+      ts <- ts[ts$datetime >= old_start, ]
+    }
+
+    # format approvals, grade, qualifiers times
     approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
     if (is.null(nrow(RawDL$Approvals)) || nrow(RawDL$Approvals) == 0) {
       # Then it's probably an empty list or data.frame because there are no approvals
@@ -387,11 +441,7 @@ downloadAquarius <- function(
       )
     }
 
-    #Add in grades, approval, and qualifier columns
-    ts <- ts[!duplicated(ts), ] #In unknown circumstances, Aquarius spits out duplicate points.
-
-    ts <- ts[order(ts$datetime), ]
-
+    # Add in grades, approval, and qualifier columns
     # Get the row indices in ts corresponding to qualifier/approval/grade start and end times.
     # For each row, if the time is before ts_min, use the first index.
     # If it exactly matches a ts time, use that index (found via match).
@@ -469,6 +519,9 @@ downloadAquarius <- function(
       qualifiers_DB$qualifier_type_code == "UNS",
       "qualifier_type_id"
     ]
+
+    # Drop any rows where 'value' is NA
+    ts <- ts[!is.na(ts$value), ]
 
     return(ts)
   } else {

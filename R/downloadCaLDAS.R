@@ -1,0 +1,199 @@
+#' Get CaLDAS rasters
+#'
+#' @param parameter The parameter for which to get new rasters, such as 'AirTemp_AGL-1.5m' or 'SnowDepth_Sfc' or 'SnowWaterEquiv_Sfc'.
+#' @param start_datetime The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC. At present, CaLDAS rasters are only available for 30 days in the past, so earlier start datetimes will be adjusted to 30 days ago for speed.
+#' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the rasters. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
+#' @param hrs CaLDAS data is provided every 3 hours. Give a vector of hours from 0, 3, 6, 9, 12, 15, 18, 21 to specify which rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at 00:00 UTC.
+
+#'
+#' @return A list of lists, where each element consists of the target raster as well as associated attributes.
+#' @export
+#'
+
+downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
+  # check parameter 'clip'
+  if (!is.null(clip)) {
+    if (!inherits(clip, "character")) {
+      stop("Parameter clip must be a character vector of 2 characters.")
+    } else if (nchar(clip) != 2) {
+      stop("Parameter clip must be a character vector of 2 characters.")
+    }
+  }
+
+  if (!inherits(start_datetime, "POSIXct")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else {
+    attr(start_datetime, "tzone") <- "UTC"
+  }
+
+  if (start_datetime < (Sys.time() - 30 * 24 * 60 * 60)) {
+    message(
+      "CaLDAS rasters are only available for the past 30 days; adjusting start_datetime accordingly."
+    )
+    start_datetime <- Sys.time() - 30 * 24 * 60 * 60
+  }
+  
+  # 'hrs' might have been passed in a a character vector like 0,6,12,18. Separate on the commas so it can be made a numeric vector
+  if (inherits(hrs, "character")) {
+    hrs <- strsplit(hrs, ",")[[1]]
+  }
+  
+  # Check that 'hrs' is a numeric vector of integers between 0 and 23
+  if (!inherits(hrs, "numeric")) {
+    hrs <- as.numeric(hrs)
+  }
+  if (
+    !is.numeric(hrs) ||
+    !any(hrs %in% c(0, 3, 6, 9, 12, 15, 18, 21))
+  ) {
+    stop(
+      "Parameter 'hrs' must be a numeric vector of integers in c(0, 3, 6, 9, 12, 15, 18, 21)."
+    )
+  }
+
+  # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
+  saved_files <- list.files(paste0(tempdir(), "/downloadCaLDAS"))
+  if (length(saved_files) == 0) {
+    file_exists <- FALSE
+  } else {
+    saved_files <- data.frame(
+      file = saved_files,
+      datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds")
+    )
+    ok <- saved_files[saved_files$datetime > Sys.time() - 10 * 60, ]
+    if (nrow(ok) > 0) {
+      target_file <- saved_files[
+        order(saved_files$datetime, decreasing = TRUE),
+      ][1, ]
+      available <- readRDS(paste0(
+        tempdir(),
+        "/downloadCaLDAS/",
+        target_file$file
+      ))
+      file_exists <- TRUE
+    } else {
+      file_exists <- FALSE
+    }
+  }
+  # If there is no file that matches necessary use, download and save for later
+  if (!file_exists) {
+    seq_days <- seq.Date(
+      as.Date(start_datetime),
+      as.Date(.POSIXct(Sys.time(), tz = "UTC")),
+      by = "day"
+    )
+    available <- data.frame()
+    for (i in 1:length(seq_days)) {
+      day <- seq_days[i]
+      for (j in hrs) {
+        # j is hour, but it it's single digit is needs to be padded with a 0
+        if (nchar(as.character(j)) == 1) {
+          j <- paste0("0", j)
+        } else {
+          j <- as.character(j)
+        }
+        tryCatch(
+          {
+            files <- suppressWarnings(rvest::session(paste0(
+              "https://dd.weather.gc.ca/",
+              gsub("-", "", day),
+              "/WXO-DD/model_nsrps-caldas/2.5km/",
+              j,
+              "/"
+            ))) |>
+              rvest::html_elements(xpath = '//*[contains(@href, ".nc")]') |>
+              rvest::html_attr("href")
+            files <- files[grep(parameter, files)] # only retain the files we're interested in
+            tmp <- data.frame(
+              file = files,
+              datetime = as.POSIXct(
+                substr(files, 1, 11),
+                format = "%Y%m%dT%H",
+                tz = "UTC"
+              ),
+              prelim = FALSE,
+              path = paste0(
+                "https://dd.weather.gc.ca/",
+                gsub("-", "", day),
+                "/WXO-DD/model_nsrps-caldas/2.5km/",
+                j,
+                "/",
+                files
+              )
+            )
+            available <- rbind(available, tmp)
+          },
+          error = function(e) {
+            message(paste0(
+              "No CaLDASS raster available for ",
+              day,
+              " at ",
+              j,
+              " UTC"
+            ))
+          }
+        )
+      }
+    }
+
+    suppressWarnings(dir.create(paste0(tempdir(), "/downloadCaLDAS")))
+    name <- gsub(" ", "", Sys.time())
+    name <- gsub("-", "", name)
+    name <- substr(gsub(":", "", name), 1, 12)
+    saveRDS(available, paste0(tempdir(), "/downloadCaLDAS/", name, ".rds"))
+  }
+
+  # Now filter by start_datetime
+  available <- available[available$datetime >= start_datetime, ]
+  available <- available[order(available$datetime), ]
+  duplicates <- duplicated(available$datetime, fromLast = TRUE) |
+    duplicated(available$datetime)
+  available <- available[!(available$prelim & duplicates) | !duplicates, ]
+
+  # Make clip polygon
+  if (!is.null(clip)) {
+    clip <- prov_buff[prov_buff$PREABBR %in% clip, ] #This is package data living as shapefile in inst/extdata, loaded using file data_load.R
+    if (nrow(clip) == 0) {
+      clip <- NULL
+    }
+  }
+
+  if (nrow(available) > 0) {
+    message("downloadCaLDAS: new rasters available. Downloading...")
+    files <- list()
+    clipped <- FALSE
+    for (i in 1:nrow(available)) {
+      file <- list()
+      download_url <- available$path[i]
+      tmp <- tempfile(fileext = ".nc")
+      utils::download.file(download_url, destfile = tmp, mode = "wb", quiet = TRUE)
+      rast <- terra::rast(tmp)[[1]]
+      file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
+      rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
+      if (!clipped) {
+        if (!is.null(clip)) {
+          clip <- terra::project(clip, rast) # project clip vector to crs of the raster
+        }
+        clipped <- TRUE # So that project doesn't happen after the first iteration
+      }
+      if (!is.null(clip)) {
+        rast <- terra::mask(rast, clip) # Makes NA values beyond the boundary of clip
+        rast <- terra::trim(rast) # Trims the NA values
+      }
+      file[["rast"]] <- rast
+      # Check which parameter we're dealing with: 6h or 24h, based on if 'parameter' contains 6h or 24h
+      file[["valid_from"]] <- available[i, "datetime"] - 60 * 60 * 3 # CaLDAS rasters are every 3 hours
+      file[["valid_to"]] <- available[i, "datetime"]
+      file[["source"]] <- download_url
+      file[["issued"]] <- available[i, "issue"]
+      file[["model"]] <- "CaLDAS"
+      files[[i]] <- file
+    }
+    files[["forecast"]] <- FALSE
+    message("downloadCaLDAS: finished downloading new rasters.")
+  } else {
+    message("downloadCaLDAS: no new rasters found.")
+    files <- NULL
+  }
+  return(files)
+}

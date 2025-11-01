@@ -22,16 +22,17 @@
 #' - 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 #'
 #'
-#' The 'results' data.frame must contain the following columns:
+#' The 'results' data.frame should contain one row per result and must contain the following columns:
 #' - 'parameter_id': a numeric specifying the parameter_id of the data point from table 'parameters'.
 #' - 'result': a numeric specifying the sample's results, matched to the parameters
+#' - 'result_type': a numeric specifying the result_type_id of the data point from table 'result_types', such as 1 (concentration), 2 (load), or 3 (other).
+#' Additionally, the following columns may need to be included:
 #' - 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
 #' - 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 #'
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
-#'
 #'
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param location_id The location_ids you wish to have updated, as character or numeric vector. Defaults to NULL which will fetch data from all location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
@@ -277,13 +278,13 @@ getNewDiscrete <- function(
           args_list[["snowCon"]] <- snowCon
         }
         if (!is.na(source_fx_args)) {
-          #add some arguments if they are specified
+          # add some arguments if they are specified
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
         }
 
         ## Get the data ##############
-        data <- do.call(source_fx, args_list) #Get the data using the args_list
+        data <- do.call(source_fx, args_list) # Get the data using the args_list
 
         if (length(data) == 0) {
           next
@@ -329,10 +330,14 @@ getNewDiscrete <- function(
           sample <- data[[j]][["sample"]]
 
           # Functions may pass the location code instead of location_id, change it
+          # Also possible that the function did not pass 'location_id' at all, if so fill it in using 'loc_id'
           names_samp <- names(sample)
           if ("location" %in% names_samp) {
             sample$location_id <- loc_id
             sample$location <- NULL
+            names_samp <- names(sample)
+          } else if (!("location_id" %in% names_samp)) {
+            sample$location_id <- loc_id
             names_samp <- names(sample)
           }
           if ("sub_location" %in% names_samp) {
@@ -340,14 +345,13 @@ getNewDiscrete <- function(
             sample$sub_location <- NULL
             names_samp <- names(sample)
           }
-          # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "owner", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
+          # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
           mandatory_samp <- c(
             "location_id",
             "media_id",
             "datetime",
             "collection_method",
             "sample_type",
-            "owner",
             "import_source_id"
           )
           if (!all(c(mandatory_samp) %in% names_samp)) {
@@ -372,6 +376,19 @@ getNewDiscrete <- function(
           # Apply default owner/contributor if not provided
           if (!("owner" %in% names_samp) || is.na(sample$owner)) {
             sample$owner <- owner
+            names_samp <- names(sample)
+          }
+          if (is.null(sample$owner) || is.na(sample$owner)) {
+            warning(
+              "For sample_series_id ",
+              sid,
+              " element ",
+              j,
+              " (sample_datetime ",
+              sample$datetime,
+              ") the source function did not provide an owner and there is no default owner for the sample series. Skipping to next sample."
+            )
+            next
           }
           if (!("contributor" %in% names_samp) || is.na(sample$contributor)) {
             if (!is.na(contributor)) sample$contributor <- contributor
@@ -514,6 +531,7 @@ getNewDiscrete <- function(
                 result_speciation_bool & is.na(result_speciation_id)
               )
               if (any(chk)) {
+                params <- merge$parameter_id[chk]
                 warning(
                   "For sample_series_id ",
                   sid,
@@ -521,7 +539,9 @@ getNewDiscrete <- function(
                   j,
                   " (sample_datetime ",
                   sample$datetime,
-                  ") the source function returned NA values in the column 'result_speciation_id' for at least one parameter where the database mandates this value. Skipping to next sample."
+                  ") the source function returned NA values in the column 'result_speciation_id' for parameter ",
+                  paste(params, collapse = ", "),
+                  " where the database mandates this value. Skipping to next sample."
                 )
                 next
               }
@@ -576,7 +596,9 @@ getNewDiscrete <- function(
                 warning(
                   "getNewDiscrete: Failed to commit new data for sample_series_id, ",
                   sid,
-                  ". Error message: ",
+                  ". Failed on fetched sample number ",
+                  j,
+                  " with error message: ",
                   e$message
                 )
               }
