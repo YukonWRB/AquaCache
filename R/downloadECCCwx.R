@@ -139,7 +139,7 @@ downloadECCCwx <- function(
     )
   }
 
-  #Extract the necessary information according to the parameter
+  # Extract the necessary information according to the parameter
   if (nrow(dl) > 0) {
     # Ensure that the parameter name exists in dl
     if (!(parameter %in% names(dl))) {
@@ -153,11 +153,11 @@ downloadECCCwx <- function(
       # then it must be hourly
       data <- data.frame(datetime = dl$time, value = dl[[parameter]]) #Note the different subsetting because dl is a tibble.
     } else if (("date" %in% names(dl)) & !("time" %in% names(dl))) {
-      #Must be daily or more
+      # Must be daily or more
       data <- data.frame(
         datetime = as.POSIXct(dl$date, tz = "UTC") + 30 * 60 * 60, # Observations building daily values end at 6 UTC on following day (so values reported on the 24th include hours 07 to 23 on the 24th plus 00 to 06 on the 25th)
         value = dl[[parameter]]
-      ) #Note the different subsetting because dl is a tibble.
+      ) # Note the different subsetting because dl is a tibble.
     } else {
       stop("downloadECCCwx: Column named 'time' or 'date' has not been found.")
     }
@@ -202,6 +202,14 @@ downloadECCCwx <- function(
       data$qualifier <- qualifier_unspecified
       data$owner <- organization_id
       data$contributor <- organization_id
+
+      # Now check for wind speed and wind direction parameters and convert to what the database needs.
+      if (parameter == "wind_spd") {
+        data$value <- data$value / 3.6 # Convert from km/h to m/s
+      }
+      if (parameter == "wind_dir") {
+        data$value <- data$value * 10 # Convert from tens of degrees to degrees
+      }
     }
   } else {
     data <- data.frame()

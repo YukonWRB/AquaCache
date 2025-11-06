@@ -65,22 +65,31 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
 
   # daily stats summary functions
   calc_daily_value <- function(values, aggregation_type) {
+    if (all(is.na(values))) {
+      return(NA_real_)
+    }
     if (aggregation_type == "sum") {
-      sum(values)
+      sum(values, na.rm = TRUE)
     } else if (aggregation_type == "median") {
-      stats::median(values)
+      stats::median(values, na.rm = TRUE)
     } else if (aggregation_type == "min") {
-      min(values)
+      min(values, na.rm = TRUE)
     } else if (aggregation_type == "max") {
-      max(values)
+      max(values, na.rm = TRUE)
     } else if (aggregation_type == "mean") {
-      mean(values)
+      mean(values, na.rm = TRUE)
     } else if (aggregation_type == "(min+max)/2") {
-      mean(c(min(values), max(values)))
+      mean(
+        c(
+          min(values, na.rm = TRUE),
+          max(values, na.rm = TRUE)
+        ),
+        na.rm = TRUE
+      )
     } else if (aggregation_type == "instantaneous") {
-      mean(values)
+      mean(values, na.rm = TRUE)
     } else {
-      mean(values)
+      mean(values, na.rm = TRUE)
     }
   }
   summarize_measurements <- function(measurements, aggregation_type, offset) {
@@ -250,7 +259,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             i,
             " AND max IS NOT NULL;"
           )
-        )[1, ]
+        )[1, 1]
         if (is.na(last_day_historic)) {
           last_day_historic <- DBI::dbGetQuery(
             con,
@@ -259,7 +268,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               i,
               ";"
             )
-          )[1, ]
+          )[1, 1]
         }
         earliest_day_historic <- as.Date(DBI::dbGetQuery(
           con,
@@ -268,7 +277,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             i,
             " AND max IS NOT NULL;"
           )
-        )[1, ])
+        )[1, 1])
         if (is.na(earliest_day_historic)) {
           earliest_day_historic <- as.Date(DBI::dbGetQuery(
             con,
@@ -277,7 +286,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               i,
               ";"
             )
-          )[1, ])
+          )[1, 1])
         }
         # Find the earliest datetime in the measurements_continuous table, without considering unusable data
         if (unusable) {
@@ -358,7 +367,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 i,
                 " AND max IS NULL;"
               )
-            )[1, ]
+            )[1, 1]
           }
         }
 

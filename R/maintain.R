@@ -1,17 +1,17 @@
-#' Maintenance function for aquacache database.
+#' Maintenance function for aquacache database
 #'
 #' @description
 #'
-#' Performs maintenance operations operation on the database, according to the parameters selected.
+#' Performs maintenance operations on the database according to the parameters selected.
 #'
 #' @param con A connection to the database. If left NULL will use function AquaConnect and automatically disconnect when finished.
 #' @param vacuum Performs a vacuum with analyze. Default TRUE.
 #' @param vacuum_full Performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space. Default FALSE.
-#' @param timeseries_check Runs check on that data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables.
+#' @param timeseries_check Runs checks on data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables and adjusts if needed.
 #' @param locations_check Runs checks on the data present in the locations table: Ensures that each location is used somewhere in the database (warns if not) and makes sure that each location has an associated point in the 'vectors' table.
-#' @param visibility_check Checks all table entries where share_with != 'public_reader' AND an entry to column private_expiry. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL
+#' @param visibility_check Checks all tables that have colums for 'whare_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.
 #'
-#' @return TRUE if completed successfully, possibly with messages printed to the console.
+#' @return TRUE if completed successfully, possibly with messages and warnings printed to the console.
 #' @export
 #'
 

@@ -26,14 +26,14 @@ addACRasterSeries <- function(
   source_fx_args = NA,
   con = NULL
 ) {
-  #function will add entry to raster_series_index, then trigger getNewRasters from the user-specified start_datetime
+  # function will add entry to raster_series_index, then trigger getNewRasters from the user-specified start_datetime
 
-  # model <- "ERA5"
+  # model <- "CaLDAS"
   # parameter = "snow water equivalent"
-  # start_datetime <- "2025-01-01 00:00:00"
+  # start_datetime <- "2025-10-01 00:00:00"
   # type <- "reanalysis"
-  # source_fx <- "downloadERA5"
-  # source_fx_args <- "param: snow_depth_water_equivalent, clip: YT, key: 5815cfa9-2642-46bd-9a7f-9ac2099b32f4, user: everett.snieder@gmail.com"
+  # source_fx <- "downloadCaLDAS"
+  # source_fx_args <- "hrs: 0, parameter: SnowWaterEquiv_Sfc, clip: YT"
 
   if (!type %in% c("forecast", "reanalysis")) {
     stop("The 'type' parameter must be either 'forecast' or 'reanalysis'.")
@@ -63,13 +63,14 @@ addACRasterSeries <- function(
   args <- source_fx_args
   # split into "argument1: value1" etc.
   args <- strsplit(args, ",\\s*")[[1]]
-  # split each pair on ":" and trim whitespace
-  args <- strsplit(args, ":\\s*")
-  # build a named list: names = keys, values = values
-  args <- stats::setNames(
-    lapply(args, function(x) x[2]),
-    sapply(args, function(x) x[1])
-  )
+
+  # split only on first colon
+  keys <- sub(":.*", "", args)
+  vals <- sub("^[^:]+:\\s*", "", args)
+
+  # build named list
+  args <- stats::setNames(as.list(vals), keys)
+
   # convert to JSON
   args <- jsonlite::toJSON(args, auto_unbox = TRUE)
 

@@ -30,34 +30,40 @@ addNewContinuous <- function(
     paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id = ", tsid)
   )[1, 1]
   if (is.na(check)) {
-    stop("The timeseries_id you specified does not exist.")
+    stop("addNewContinuous: The timeseries_id you specified does not exist.")
   }
 
   if (!overwrite %in% c("no", "all", "conflict")) {
-    stop("Parameter 'overwrite' must be one of 'no', 'all', or 'conflict'.")
+    stop(
+      "addNewContinuous: Parameter 'overwrite' must be one of 'no', 'all', or 'conflict'."
+    )
   }
 
   if (!target %in% c("realtime", "daily")) {
-    stop("Parameter 'target' must be one of 'realtime' or 'daily'")
+    stop(
+      "addNewContinuous: Parameter 'target' must be one of 'realtime' or 'daily'"
+    )
   }
 
   if (target == "realtime") {
     # Ensure there's a 'datetime' column
     if (!("datetime" %in% names(df))) {
       stop(
-        "The data.frame must contain a column named 'datetime' if the parameter 'target' is set to 'daily'."
+        "addNewContinuous: The data.frame must contain a column named 'datetime' if the parameter 'target' is set to 'realtime'."
       )
     }
   } else {
     if (!"date" %in% names(df)) {
       stop(
-        "The data.frame must contain a column named 'date' if the parameter 'target' is set to 'daily'."
+        "addNewContinuous: The data.frame must contain a column named 'date' if the parameter 'target' is set to 'daily'."
       )
     }
   }
 
   if (!("value" %in% names(df))) {
-    stop("The data.frame must contain a column named 'value'.")
+    stop(
+      "addNewContinuous: The data.frame must contain a column named 'value'."
+    )
   }
 
   grade_unknown <- DBI::dbGetQuery(
@@ -164,7 +170,7 @@ addNewContinuous <- function(
         df$datetime <- as.POSIXct(df$datetime, tz = "UTC")
       } else {
         stop(
-          "The 'datetime' column must be in POSIXct format or convertible to it (time zone will be assumed as UTC)."
+          "addNewContinuous: The 'datetime' column must be in POSIXct format or convertible to it (time zone will be assumed as UTC)."
         )
       }
     }
@@ -210,8 +216,8 @@ addNewContinuous <- function(
       } else if (
         (info$aggregation_type != "instantaneous") & !("period" %in% names(df))
       ) {
-        #aggregation_types of mean, median, min, max should all have a period
-        df_period <- calculate_period(
+        # aggregation_types of mean, median, min, max should all have a period
+        df <- calculate_period(
           data = df,
           timeseries_id = tsid,
           con = con
@@ -265,11 +271,11 @@ addNewContinuous <- function(
         DBI::dbExecute(
           con,
           paste0(
-            "DELETE FROM measurements_continuous WHERE datetime BETWEEN ('",
+            "DELETE FROM measurements_continuous WHERE datetime BETWEEN '",
             min(df$datetime),
             "' AND '",
             max(df$datetime),
-            "') AND timeseries_id = ",
+            "' AND timeseries_id = ",
             tsid,
             ";"
           )
@@ -309,7 +315,7 @@ addNewContinuous <- function(
         }
       )
 
-      #make the new entry into table timeseries
+      # make the new entry into table timeseries
       DBI::dbExecute(
         con,
         paste0(
@@ -322,7 +328,7 @@ addNewContinuous <- function(
           ";"
         )
       )
-    }
+    } # end commit_fx
 
     activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
     if (activeTrans) {
@@ -345,7 +351,7 @@ addNewContinuous <- function(
     }
   } else {
     if (!inherits(df$date, "Date")) {
-      stop("The 'date' column must be in Date format.")
+      stop("addNewContinuous: The 'date' column must be in Date format.")
     }
 
     if (is.na(last_data_point)) {

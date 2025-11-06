@@ -16,6 +16,7 @@
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param active Sets behavior for checking timeseries or not. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all timeseries
+#' @param sync_remote_false Controls whether to synchronize timeseries that have the `sync_remote` column set to FALSE in the `timeseries` table.
 #' @param dbName The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per [AquaConnect()].
 #' @param dbHost The host address of the database. If left NULL, the function will use the default host address from the .Renviron file as per [AquaConnect()].
 #' @param dbPort The port of the database. If left NULL, the function will use the default port from the .Renviron file as per [AquaConnect()].
@@ -33,6 +34,7 @@ synchronize_continuous <- function(
   timeseries_id = "all",
   start_datetime,
   active = 'default',
+  sync_remote_false = FALSE,
   dbName = NULL,
   dbHost = NULL,
   dbPort = NULL,
@@ -118,13 +120,13 @@ synchronize_continuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL"
+      "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN (",
+        "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN (",
         paste(timeseries_id, collapse = ", "),
         ") AND source_fx IS NOT NULL;"
       )
@@ -149,6 +151,12 @@ synchronize_continuous <- function(
 
   if (active == 'default') {
     all_timeseries <- all_timeseries[all_timeseries$active, ]
+  }
+
+  if (!sync_remote_false) {
+    all_timeseries <- all_timeseries[
+      all_timeseries$sync_remote,
+    ]
   }
 
   grade_unknown <- DBI::dbGetQuery(

@@ -8,7 +8,11 @@ downloadAquarius(
   location,
   parameter,
   start_datetime,
-  end_datetime = Sys.Date(),
+  end_datetime = Sys.time(),
+  difference = FALSE,
+  reset_drop = 20,
+  min_pos = 0,
+  max_gap = 0,
   login = Sys.getenv(c("AQUSER", "AQPASS")),
   server = Sys.getenv("AQSERVER"),
   con = NULL
@@ -22,6 +26,14 @@ downloadAquarius(
 \item{start_datetime}{The first day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the first moment of the day. Times requested prior to the actual timeseries start will be adjusted to match available data.}
 
 \item{end_datetime}{The last day or instant for which you want information. You can specify a Date object, POSIXct object, or character vector of form yyyy-mm-dd or yyyy-mm-dd HH:mm:ss. If specifying a POSIXct the UTC offset associated with the time will be used, otherwise UTC 0 will be assumed. If only a date is specified it will be assigned the last moment of the day. Times requested prior to the actual timeseries end will be adjusted to match available data.}
+
+\item{difference}{Logical. If TRUE, the difference between consecutive values will be returned rather than the values themselves. Default is FALSE. Relies on function \code{\link[=compute_increments]{compute_increments()}}, see details.}
+
+\item{reset_drop}{Numeric. The threshold for a large drop that indicates a true reset. This can be used for example to process standpipe precipitation data where the standpipe is emptied when full or during regular maintenance. Passed to \code{\link[=compute_increments]{compute_increments()}}.}
+
+\item{min_pos}{Numeric. Thereshold below which to ignore positive noise in increments. For example, if min_pos is 2, only increments of 2 or more units will be recorded; smaller positive differences will be treated as zero increments. Passed to \code{\link[=compute_increments]{compute_increments()}}.}
+
+\item{max_gap}{Numeric. Maximum allowed gap in number of data points above which an increment is not computed. Passed to \code{\link[=compute_increments]{compute_increments()}}.}
 
 \item{login}{Your Aquarius login credentials as a character vector of two. Default pulls information from your .renviron file; see details.}
 
@@ -42,5 +54,10 @@ To store login credentials in your .renviron file call \code{\link[usethis:edit]
 \subsection{Grades, approvals, qualifiers:}{
 
 This function will attempt to map Aquarius grades, approvals, and qualifiers to the database defaults. The function was designed around the Yukon Water Resources Branch Aquarius schemes, but 'forks' can be implemented for each based on the server URL. If you need to implement a fork, see the commented-out example in the function at line 116.
+}
+
+\subsection{'difference' parameter:}{
+
+The difference parameter takes cumulative values, such as increasing standpipe readings, and returns the difference between consecutive values rather than the values themselves. This is useful for converting cumulative measurements into interval measurements. To do this, the function will ignore any negative differences (which may occur due to equipment resets or normal instrument fluctations) and record positive values only when the next increment value is greater than the previous non-negative value. The 'start_datetime' parameter will be automatically adjusted within the function to fetch the necessary prior value to calculate the first difference; this value will not be included in the returned data.frame, ensuring consistent performance with or without the difference parameter set to TRUE.
 }
 }

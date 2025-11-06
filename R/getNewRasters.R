@@ -143,6 +143,9 @@ getNewRasters <- function(
             )
           )[1, 1] +
             1 # one second after the last raster end_datetime
+          if (is.na(next_instant)) {
+            next_instant <- meta_ids[i, "end_datetime"]
+          }
         }
       }
     } else if (type == "forecast") {

@@ -9,6 +9,7 @@ synchronize_continuous(
   timeseries_id = "all",
   start_datetime,
   active = "default",
+  sync_remote_false = FALSE,
   dbName = NULL,
   dbHost = NULL,
   dbPort = NULL,
@@ -24,6 +25,8 @@ synchronize_continuous(
 \item{start_datetime}{The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{timeseries_id}, or one per element of \code{timeseries_id.}}
 
 \item{active}{Sets behavior for checking timeseries or not. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all timeseries}
+
+\item{sync_remote_false}{Controls whether to synchronize timeseries that have the \code{sync_remote} column set to FALSE in the \code{timeseries} table.}
 
 \item{dbName}{The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 

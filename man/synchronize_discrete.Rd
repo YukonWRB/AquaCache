@@ -9,6 +9,7 @@ synchronize_discrete(
   sample_series_id = "all",
   start_datetime,
   active = "default",
+  sync_remote_false = FALSE,
   delete = FALSE,
   snowCon = NULL,
   EQCon = NULL
@@ -22,6 +23,8 @@ synchronize_discrete(
 \item{start_datetime}{The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all \code{sample_series_id}, or one per element of \code{sample_series_id}}
 
 \item{active}{Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id}
+
+\item{sync_remote_false}{Controls whether to synchronize sample_series that have the \code{sync_remote} column set to FALSE in the \code{sample_series} table.}
 
 \item{delete}{If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.}
 

@@ -45,7 +45,7 @@ addACTimeseries(
 
 \item{aggregation_type}{A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.}
 
-\item{record_rate}{A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'; set to NA for discrete timeseries.}
+\item{record_rate}{A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'.}
 
 \item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or multiple such strings if specifying multiple timeseries in one go.}
 
@@ -81,7 +81,7 @@ Additional arguments to pass to the function specified in \code{source_fx} go in
 \examples{
 \dontrun{
 #Make a data.frame to pass to the function:
-  df <- data.frame(start_datetime = "2015-01-01 00:00",
+df <- data.frame(start_datetime = "2015-01-01 00:00",
 location = "09AA-M3",
 z = c(NA, 3),
 parameter = c(34, 1154),
