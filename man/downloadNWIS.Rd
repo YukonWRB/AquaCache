@@ -2,7 +2,7 @@
 % Please edit documentation in R/downloadNWIS.R
 \name{downloadNWIS}
 \alias{downloadNWIS}
-\title{Get realtime data from NWIS locations}
+\title{Get data from NWIS locations}
 \usage{
 downloadNWIS(
   location,

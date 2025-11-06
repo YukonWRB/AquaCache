@@ -2,7 +2,7 @@
 % Please edit documentation in R/maintain.R
 \name{maintain}
 \alias{maintain}
-\title{Maintenance function for aquacache database.}
+\title{Maintenance function for aquacache database}
 \usage{
 maintain(
   con = NULL,
@@ -20,15 +20,15 @@ maintain(
 
 \item{vacuum_full}{Performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space. Default FALSE.}
 
-\item{timeseries_check}{Runs check on that data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables.}
+\item{timeseries_check}{Runs checks on data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables and adjusts if needed.}
 
 \item{locations_check}{Runs checks on the data present in the locations table: Ensures that each location is used somewhere in the database (warns if not) and makes sure that each location has an associated point in the 'vectors' table.}
 
-\item{visibility_check}{Checks all table entries where share_with != 'public_reader' AND an entry to column private_expiry. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL}
+\item{visibility_check}{Checks all tables that have colums for 'whare_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.}
 }
 \value{
-TRUE if completed successfully, possibly with messages printed to the console.
+TRUE if completed successfully, possibly with messages and warnings printed to the console.
 }
 \description{
-Performs maintenance operations operation on the database, according to the parameters selected.
+Performs maintenance operations on the database according to the parameters selected.
 }

@@ -27,7 +27,7 @@
 #' @param media A numeric vector corresponding to column 'media_id' of table 'media_types'.
 #' @param sensor_priority A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.
 #' @param aggregation_type A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.
-#' @param record_rate A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'; set to NA for discrete timeseries.
+#' @param record_rate A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'.
 #' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or multiple such strings if specifying multiple timeseries in one go.
 #' @param owner A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!
 #' @param source_fx The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.
@@ -41,7 +41,7 @@
 #' @examples
 #' \dontrun{
 #' #Make a data.frame to pass to the function:
-#'   df <- data.frame(start_datetime = "2015-01-01 00:00",
+#' df <- data.frame(start_datetime = "2015-01-01 00:00",
 #' location = "09AA-M3",
 #' z = c(NA, 3),
 #' parameter = c(34, 1154),
@@ -178,11 +178,14 @@ addACTimeseries <- function(
     length(note)
   )
 
+  if (any(is.na(start_datetime))) {
+    stop("start_datetime cannot contain NA values")
+  }
   if (!inherits(start_datetime, "POSIXct")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
   }
   if (length(start_datetime) == 1 && maxlength > 1) {
-    start_datetime <- rep(start_datetime, length)
+    start_datetime <- rep(start_datetime, maxlength)
   }
   if (!is.null(data) & length(data) != maxlength) {
     stop(
@@ -200,7 +203,7 @@ addACTimeseries <- function(
     stop("location cannot contain NA values")
   } else {
     if (length(location) == 1 && maxlength > 1) {
-      location <- rep(location, length)
+      location <- rep(location, maxlength)
     }
 
     #Check that every location in 'location' already exists
@@ -317,14 +320,14 @@ addACTimeseries <- function(
             'sum',
             'mean',
             'median',
-            'min',
-            'max',
+            'minimum',
+            'maximum',
             '(min+max)/2'
           )
       )
     ) {
       stop(
-        "aggregation_type must be one of 'instantaneous', 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'"
+        "aggregation_type must be one of 'instantaneous', 'sum', 'mean', 'median', 'minimum', 'maximum', '(min+max)/2'"
       )
     }
     if (length(aggregation_type) == 1 && maxlength > 1) {
@@ -365,8 +368,8 @@ addACTimeseries <- function(
 
   if (any(is.na(owner))) {
     stop("owner cannot be NA")
-  } else if (!inherits(owner, "numeric")) {
-    stop("owner must be a numeric vector")
+  } else if (!inherits(owner, "numeric") & !inherits(owner, "integer")) {
+    stop("owner must be a numeric or integer vector")
   }
   if (length(owner) == 1 && maxlength > 1) {
     owner <- rep(owner, maxlength)
@@ -408,14 +411,14 @@ addACTimeseries <- function(
     )
   }
 
-  if (length(note) == 1 && maxlength > 1) {
-    stop(
-      "note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors."
-    )
-  }
   if (!any(is.na(note))) {
     if (!inherits(note, "character")) {
       stop("note must be a character vector or left NA.")
+    }
+    if (length(note) == 1 && maxlength > 1) {
+      stop(
+        "note must be a character vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that notes are particular to single timeseries and won't replicate to length of other vectors."
+      )
     }
   }
 
@@ -504,7 +507,7 @@ addACTimeseries <- function(
           location = loc_code,
           sub_location_id = sub_location[i],
           location_id = loc_id,
-          z = zi,
+          z_id = zi,
           parameter_id = parameter[i],
           media_id = media[i],
           sensor_priority = sensor_priority[i],
@@ -520,7 +523,7 @@ addACTimeseries <- function(
 
         tryCatch(
           {
-            DBI::dbAppendTable(con, "timeseries", add) #This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
+            DBI::dbAppendTable(con, "timeseries", add) # This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
             message(
               "Added a new entry to the timeseries table for location ",
               add$location,
@@ -588,52 +591,56 @@ addACTimeseries <- function(
         )
 
         if (!is.null(data)) {
-          if (!is.na(data[i])) {
-            if ('date' %in% colnames(data[[i]])) {
-              addNewContinuous(
-                tsid = new_tsid,
-                df = data[[i]],
-                target = 'daily',
-                con = con
-              )
-              calculate_stats(
-                timeseries_id = new_tsid,
-                con = con,
-                start_recalc = min(data[[i]]$date)
-              )
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE timeseries SET start_datetime = (SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-                  new_tsid,
-                  ") WHERE timeseries_id = ",
-                  new_tsid,
-                  ";"
-                )
-              )
-            } else {
-              addNewContinuous(
-                tsid = new_tsid,
-                df = data[[i]],
-                target = 'realtime',
-                con = con
-              )
-              calculate_stats(
-                timeseries_id = new_tsid,
-                con = con,
-                start_recalc = min(data[[i]]$datetime)
-              )
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE timeseries SET start_datetime = (SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-                  new_tsid,
-                  ") WHERE timeseries_id = ",
-                  new_tsid,
-                  ";"
-                )
+          x <- data[[i]]
+          if (!is.data.frame(x)) {
+            stop(
+              "The element of the 'data' list corresponding to timeseries ",
+              i,
+              " is not a data.frame."
+            )
+          } else if (nrow(x) == 0) {
+            stop(
+              "The element of the 'data' list corresponding to timeseries ",
+              i,
+              " is an empty data.frame."
+            )
+          } else {
+            # Ensure that the data.frame has the necessary columns
+            if (!all(c("datetime", "value") %in% colnames(data[[i]]))) {
+              stop(
+                "The element of the 'data' list corresponding to timeseries ",
+                i,
+                " does not contain the necessary columns 'datetime' and 'value'."
               )
             }
+
+            addNewContinuous(
+              tsid = new_tsid,
+              df = data[[i]],
+              target = 'realtime',
+              con = con
+            ) # Calculates stats within the function
+
+            add$end_datetime <- DBI::dbGetQuery(
+              con,
+              paste0(
+                "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+                new_tsid,
+                ";"
+              )
+            )[1, 1] +
+              1
+
+            DBI::dbExecute(
+              con,
+              paste0(
+                "UPDATE timeseries SET start_datetime = (SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+                new_tsid,
+                ") WHERE timeseries_id = ",
+                new_tsid,
+                ";"
+              )
+            )
           }
         }
 
@@ -647,10 +654,11 @@ addACTimeseries <- function(
             )
           )[1, 1]
 
-          # Call the relevant 'get' functions to bring in data
+          # Call the relevant 'get' functions to bring in new data
           remove_after_hydat <- FALSE
           tryCatch(
             {
+              # Wipe any potential data that is after what was added
               DBI::dbExecute(
                 con,
                 paste0(

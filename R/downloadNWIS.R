@@ -1,4 +1,4 @@
-#' Get realtime data from NWIS locations
+#' Get data from NWIS locations
 #'
 #'@description
 #'
@@ -30,16 +30,16 @@ downloadNWIS <- function(
   if (!inherits(parameter, "numeric")) {
     as.numeric(parameter)
   } else {
-    parameter <- sprintf("%05d", parameter) #param codes always have 5 digits, but padded with leading zeros
+    parameter <- sprintf("%05d", parameter) # param codes always have 5 digits, but padded with leading zeros
   }
   if (inherits(location, "numeric")) {
-    #location codes are always at least 8 digits, but if entering a numeric starting with 0s (some codes contain letters too) then these are not retained.
+    # location codes are always at least 8 digits, but if entering a numeric starting with 0s (some codes contain letters too) then these are not retained.
     location <- sprintf("%08d", location)
   }
   tryCatch(
     {
       if (inherits(start_datetime, c("character", "Date"))) {
-        #Either way defaults to 0 hour
+        # Either way defaults to 0 hour
         start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
       } else if (inherits(start_datetime, "POSIXct")) {
         attr(start_datetime, "tzone") <- "UTC"
@@ -57,7 +57,7 @@ downloadNWIS <- function(
   tryCatch(
     {
       if (inherits(end_datetime, "character") & nchar(end_datetime) > 10) {
-        #Does not necessarily default to 0 hour.
+        # Does not necessarily default to 0 hour.
         end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
       } else if (inherits(end_datetime, "POSIXct")) {
         attr(end_datetime, "tzone") <- "UTC"
@@ -134,17 +134,17 @@ downloadNWIS <- function(
         colnames(data) <- c("datetime", "value", "combined")
         data <- data[!is.na(data$value), ]
         if (parameter == "00011") {
-          #temp in F into C
+          # temp in F into C
           data$value <- (data$value - 32) / 1.8
         } else if (parameter %in% c("00060", "00061")) {
-          #flow in ft3/s into m3/s
+          # flow in ft3/s into m3/s
           data$value <- data$value * 0.028316832
         } else if (parameter %in% c("00065", "62610", "62611", "72150")) {
-          #levels in ft into meters
+          # levels in ft into meters
           data$value <- data$value * 0.3048
         }
 
-        #Extract first capital letter, which is the approval
+        # Extract first capital letter, which is the approval
         approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
         data$approval <- gsub("^([APR]).*", "\\1", data$combined)
         approval_mapping <- c(
@@ -170,7 +170,7 @@ downloadNWIS <- function(
           ]
         )
 
-        #After that it's the qualifier, maybe. Anything that's not clearly a qualifier gets Z, unknown
+        # After that it's the qualifier, maybe. Anything that's not clearly a qualifier gets Z, unknown
         qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
         data$qualifier <- trimws(gsub("^[APR](.*)", "\\1", data$combined))
         data$qualifier[data$qualifier == ""] <- "U"

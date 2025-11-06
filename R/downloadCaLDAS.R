@@ -32,19 +32,19 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
     )
     start_datetime <- Sys.time() - 30 * 24 * 60 * 60
   }
-  
+
   # 'hrs' might have been passed in a a character vector like 0,6,12,18. Separate on the commas so it can be made a numeric vector
   if (inherits(hrs, "character")) {
     hrs <- strsplit(hrs, ",")[[1]]
   }
-  
+
   # Check that 'hrs' is a numeric vector of integers between 0 and 23
   if (!inherits(hrs, "numeric")) {
     hrs <- as.numeric(hrs)
   }
   if (
     !is.numeric(hrs) ||
-    !any(hrs %in% c(0, 3, 6, 9, 12, 15, 18, 21))
+      !any(hrs %in% c(0, 3, 6, 9, 12, 15, 18, 21))
   ) {
     stop(
       "Parameter 'hrs' must be a numeric vector of integers in c(0, 3, 6, 9, 12, 15, 18, 21)."
@@ -166,7 +166,12 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
       file <- list()
       download_url <- available$path[i]
       tmp <- tempfile(fileext = ".nc")
-      utils::download.file(download_url, destfile = tmp, mode = "wb", quiet = TRUE)
+      utils::download.file(
+        download_url,
+        destfile = tmp,
+        mode = "wb",
+        quiet = TRUE
+      )
       rast <- terra::rast(tmp)[[1]]
       file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
       rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
@@ -185,7 +190,6 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
       file[["valid_from"]] <- available[i, "datetime"] - 60 * 60 * 3 # CaLDAS rasters are every 3 hours
       file[["valid_to"]] <- available[i, "datetime"]
       file[["source"]] <- download_url
-      file[["issued"]] <- available[i, "issue"]
       file[["model"]] <- "CaLDAS"
       files[[i]] <- file
     }

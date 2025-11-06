@@ -11,7 +11,7 @@ compute_increments(ts, reset_drop = 20, min_pos = 0, max_gap = 0)
 
 \item{reset_drop}{Threshold for a large drop that indicates a true reset. This can be used for example to process standpipe precipitation data where the standpipe is emptied when full or during regular maintenance.}
 
-\item{min_pos}{Thereshold below which to ignore positive noise in increments. For example, if min_pos is 2, only increments of 2 or more units will be recorded; smaller positive differences will be treated as zero increments.}
+\item{min_pos}{Threshold below which to ignore positive noise in increments. For example, if min_pos is 2, only increments of 2 or more units will be recorded; smaller positive differences will be treated as zero increments.}
 
 \item{max_gap}{Maximum allowed gap in number of data points above which an increment is not computed.}
 }
@@ -19,5 +19,5 @@ compute_increments(ts, reset_drop = 20, min_pos = 0, max_gap = 0)
 A data.frame with datetime and value columns. The value column contains the computed increments.
 }
 \description{
-Given a time series of cumulative measurements that may include resets (large drops), this function computes the increments between measurements, accounting for resetsand ignoring small positive noise. The first value provided is treated as the starting point. Since it cannot be determined if this starting point is at zero or not, no increment is computed for it. In cases where values fluctuate, positive differences are only recorded when the next increment value is greater than the previous non-negative value.
+Given a time series of cumulative measurements that may include resets (large drops), this function computes the increments between measurements, accounting for resets and ignoring small positive noise. The first value provided is treated as the starting point, so no increment is computed for it. When values fluctuate, increments are measured relative to the greater of the previous reading and the running post-reset maximum, and any increase smaller than \code{min_pos} is treated as zero.
 }

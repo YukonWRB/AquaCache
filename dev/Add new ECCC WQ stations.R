@@ -117,30 +117,30 @@ locs$args = c(
 # For each location, add a sample_series entry and fetch results
 for (i in 1:nrow(locs)) {
   row <- locs[i, ]
-  # args <- row$args
-  # # split into "argument1: value1" etc.
-  # args <- strsplit(args, ",\\s*")[[1]]
-  # 
-  # # split only on first colon
-  # keys <- sub(":.*", "", args)
-  # vals <- sub("^[^:]+:\\s*", "", args)
-  # 
-  # # build named list
-  # args <- stats::setNames(as.list(vals), keys)
-  # 
-  # # convert to JSON
-  # args <- jsonlite::toJSON(args, auto_unbox = TRUE)
-  # 
-  # # Build a df and add to sample_series
-  # df <- data.frame(
-  #   location_id = row$location_id,
-  #   default_owner = owner,
-  #   default_contributor = owner,
-  #   active = TRUE,
-  #   source_fx = 'downloadECCCwq',
-  #   source_fx_args = args
-  # )
-  # DBI::dbAppendTable(con, "sample_series", df)
+  args <- row$args
+  # split into "argument1: value1" etc.
+  args <- strsplit(args, ",\\s*")[[1]]
+
+  # split only on first colon
+  keys <- sub(":.*", "", args)
+  vals <- sub("^[^:]+:\\s*", "", args)
+
+  # build named list
+  args <- stats::setNames(as.list(vals), keys)
+
+  # convert to JSON
+  args <- jsonlite::toJSON(args, auto_unbox = TRUE)
+
+  # Build a df and add to sample_series
+  df <- data.frame(
+    location_id = row$location_id,
+    default_owner = owner,
+    default_contributor = owner,
+    active = TRUE,
+    source_fx = 'downloadECCCwq',
+    source_fx_args = args
+  )
+  DBI::dbAppendTable(con, "sample_series", df)
 
   # Fetch the sample_series_id
   ss_id <- DBI::dbGetQuery(

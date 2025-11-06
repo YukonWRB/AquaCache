@@ -11,6 +11,7 @@
 #' @param sample_series_id The sample_series_id you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `sample_series_id`, or one per element of `sample_series_id`
 #' @param active Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id
+#' @param sync_remote_false Controls whether to synchronize sample_series that have the `sync_remote` column set to FALSE in the `sample_series` table.
 #' @param delete If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.
 #' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
 #' @param EQCon A connection to the EQWin database, created with [EQConnect()]. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.
@@ -24,6 +25,7 @@ synchronize_discrete <- function(
   sample_series_id = "all",
   start_datetime,
   active = 'default',
+  sync_remote_false = FALSE,
   delete = FALSE,
   snowCon = NULL,
   EQCon = NULL
@@ -95,6 +97,9 @@ synchronize_discrete <- function(
 
   if (active == 'default') {
     all_series <- all_series[all_series$active, ]
+  }
+  if (!sync_remote_false) {
+    all_series <- all_series[all_series$sync_remote, ]
   }
 
   valid_sample_names <- DBI::dbGetQuery(
