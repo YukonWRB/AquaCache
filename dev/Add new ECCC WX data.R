@@ -736,16 +736,37 @@ ts_daily <- DBI::dbGetQuery(
   "SELECT timeseries_id FROM timeseries WHERE source_fx = 'downloadECCCwx' AND record_rate = '1 day';"
 )
 DBI::dbExecute(con, "BEGIN;")
-for (ts_id in ts_daily$timeseries_id) {
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE measurements_continuous SET datetime = datetime + INTERVAL '6 hours' WHERE timeseries_id = ",
-      ts_id,
-      " AND EXTRACT(HOUR FROM datetime) = 0 AND EXTRACT(MINUTE FROM datetime) = 0 AND EXTRACT(SECOND FROM datetime) = 0;"
-    )
+DBI::dbExecute(
+  con,
+  paste0(
+    "
+  DELETE FROM measurements_continuous m_target
+USING measurements_continuous m_src
+WHERE m_target.timeseries_id = m_src.timeseries_id
+  AND m_target.datetime = m_src.datetime + INTERVAL '6 hours'
+  AND m_src.timeseries_id IN (",
+    paste(ts_daily$timeseries_id, collapse = ", "),
+    ")
+  AND EXTRACT(HOUR FROM m_src.datetime)=0
+  AND EXTRACT(MINUTE FROM m_src.datetime)=0
+  AND EXTRACT(SECOND FROM m_src.datetime)=0;
+"
   )
-}
+)
+DBI::dbExecute(
+  con,
+  paste0(
+    "UPDATE measurements_continuous
+  SET datetime = datetime + INTERVAL '6 hours'
+  WHERE timeseries_id IN (",
+    paste(ts_daily$timeseries_id, collapse = ", "),
+    ")
+    AND EXTRACT(HOUR   FROM datetime)=0
+    AND EXTRACT(MINUTE FROM datetime)=0
+    AND EXTRACT(SECOND FROM datetime)=0;"
+  )
+)
+DBI::dbExecute(con, "COMMIT;")
 
 # For each of these timeseries, we also need to update the start_datetime in the timeseries table
 for (ts_id in ts_daily$timeseries_id) {
@@ -765,6 +786,20 @@ for (ts_id in ts_daily$timeseries_id) {
       "' WHERE timeseries_id = ",
       ts_id,
       ";"
+    )
+  )
+}
+
+# For each timeseries for wind speed or wind direction, delete the last two days of data in case auto appends have added data with wrong units
+for (ts_id in c(ts$timeseries_id, ts_dir$timeseries_id)) {
+  DBI::dbExecute(
+    con,
+    paste0(
+      "DELETE FROM measurements_continuous WHERE timeseries_id = ",
+      ts_id,
+      " AND datetime >= '",
+      Sys.time() - 2 * 24 * 60 * 60,
+      "';"
     )
   )
 }
