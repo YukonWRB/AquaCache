@@ -8,7 +8,10 @@
 #' Use function [YGwater::getVector()] to retrieve a point, line, or polygon from the database.
 #'
 #' ## Attribute tables:
-#' The attribute table of the object will be discarded except for the columns specified in parameters `feature_name_col` and `description_col` to work with the existing database column names and to enable many to many relationships within the database. If you want vector files with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using [insertACDocument()]. Note however that this precludes using the object's spatial attributes within the database!
+#' The attribute table of the object will be retained in the `attributes` JSON column for all fields that are not already
+#' represented by dedicated columns in the `vectors` table. This preserves additional metadata for each feature while still
+#' allowing spatial relationships to be maintained within the database. Fields supplied through `feature_name`/`feature_name_col`
+#' and `description`/`description_col` are still written to their respective columns, with all remaining fields stored as JSON.
 #'
 #' @param geom The geometry object to add to the database, as a [terra::vect()] object or as a file path to a shapefile, geopackage or something else that terra::vect() van use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.
 #' @param layer_name The name to give to the vector layer, which defines which layer_name it gets assigned to in the database. This should always be an existing layer_name unless you have a good reason to create a new one.
@@ -124,6 +127,46 @@ insertACVector <- function(
         } else if (!is.null(description_col)) {
           desc <- tbl[i, description_col]
           sub.geom$description <- desc
+        }
+
+        # Prepare JSON attribute payload for any remaining columns
+        attribute_data <- tbl[i, , drop = FALSE]
+        drop_cols <- c("layer_name", "feature_name", "description")
+        if (!is.null(feature_name_col)) {
+          drop_cols <- c(drop_cols, feature_name_col)
+        }
+        if (!is.null(description_col)) {
+          drop_cols <- c(drop_cols, description_col)
+        }
+        drop_cols <- unique(drop_cols)
+        if (length(drop_cols) > 0) {
+          attribute_data <- attribute_data[, setdiff(names(attribute_data), drop_cols), drop = FALSE]
+        }
+
+        if (ncol(attribute_data) > 0) {
+          attribute_list <- as.list(attribute_data[1, , drop = FALSE])
+          attribute_list <- lapply(attribute_list, function(value) {
+            val <- value[[1]]
+            if (inherits(val, "POSIXct")) {
+              val <- format(val, tz = "UTC", usetz = TRUE)
+            } else if (inherits(val, "Date")) {
+              val <- format(val, "%Y-%m-%d")
+            } else if (is.factor(val)) {
+              val <- as.character(val)
+            }
+            val
+          })
+          attr_json <- jsonlite::toJSON(
+            attribute_list,
+            auto_unbox = TRUE,
+            null = "null",
+            na = "null",
+            POSIXt = "ISO8601",
+            digits = NA
+          )
+          sub.geom$attributes <- as.character(attr_json)
+        } else {
+          sub.geom$attributes <- NA
         }
 
         if (!terra::is.valid(sub.geom)) {
