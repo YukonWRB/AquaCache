@@ -102,7 +102,7 @@ insertACVector <- function(
     )
   }
 
-  #re-project if necessary
+  # re-project if necessary
   if (!(terra::same.crs(geom, "epsg:4269"))) {
     geom <- terra::project(geom, "epsg:4269")
   }
@@ -112,7 +112,7 @@ insertACVector <- function(
   for (i in 1:nrow(geom)) {
     tryCatch(
       {
-        sub.geom <- geom[i, 0] #Drop attribute table for the feature
+        sub.geom <- geom[i, 0] # Drop attribute table for the feature
         sub.geom$layer_name <- layer_name
         if (nrow(geom) == 1 & !is.null(feature_name)) {
           feat_name <- feature_name
@@ -140,7 +140,10 @@ insertACVector <- function(
         }
         drop_cols <- unique(drop_cols)
         if (length(drop_cols) > 0) {
-          attribute_data <- attribute_data[, setdiff(names(attribute_data), drop_cols), drop = FALSE]
+          attribute_data <- attribute_data[,
+            setdiff(names(attribute_data), drop_cols),
+            drop = FALSE
+          ]
         }
 
         if (ncol(attribute_data) > 0) {
@@ -241,7 +244,7 @@ insertACVector <- function(
             )
           }
         } else {
-          #overwrite if FALSE
+          # overwrite if FALSE
           exist <- DBI::dbGetQuery(
             con,
             paste0(

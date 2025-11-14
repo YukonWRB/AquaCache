@@ -55,17 +55,17 @@ dbTransBegin <- function(con, silent = TRUE) {
 dbTransCheck <- function(con) {
   active <- DBI::dbGetQuery(
     con,
-    "SELECT pg_current_xact_id_if_assigned() IS NOT NULL AS is_transaction;"
+    "SELECT pg_current_xact_id_if_assigned() IS NOT NULL;"
   )[1, 1]
 
   if (!active) {
     # If transaction was started and nothing done yet, active would still be FALSE. Code below handles that possibility
     # Create a temporary table that auto-destructs so the xact_id is assigned (otherwise nothing happens until something is pushed)
-    DBI::dbExecute(con, "CREATE TEMPORARY TABLE a (b int) ON COMMIT DROP;") # Of course, also destroyed on rollback
+    DBI::dbExecute(con, "CREATE TEMPORARY TABLE a (b int) ON COMMIT DROP;") # Of course, also destroyed on rollback (if not in a transaction, this will just create and drop the table immediately)
     # Check again
     active <- DBI::dbGetQuery(
       con,
-      "SELECT pg_current_xact_id_if_assigned() IS NOT NULL AS is_transaction;"
+      "SELECT pg_current_xact_id_if_assigned() IS NOT NULL;"
     )[1, 1]
   }
 
