@@ -33,11 +33,16 @@ tryCatch(
 
     DBI::dbExecute(
       con,
-      "ALTER TABLE timeseries ADD COLUMN sync_remote BOOLEAN NOT NULL DEFAULT TRUE;"
+      "ALTER TABLE continuous.timeseries ADD COLUMN sync_remote BOOLEAN NOT NULL DEFAULT TRUE;"
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE sample_series ADD COLUMN sync_remote BOOLEAN NOT NULL DEFAULT TRUE;"
+      "ALTER TABLE discrete.sample_series ADD COLUMN sync_remote BOOLEAN NOT NULL DEFAULT TRUE;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.boreholes ADD COLUMN depth_to_bedrock_m NUMERIC;"
     )
 
     # Modify the spatial.vectors table so that it can store attributes beyond the current columns. Use JSONB format.

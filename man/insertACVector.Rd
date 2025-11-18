@@ -53,6 +53,9 @@ Use function \code{\link[YGwater:getVector]{YGwater::getVector()}} to retrieve a
 
 \subsection{Attribute tables:}{
 
-The attribute table of the object will be discarded except for the columns specified in parameters \code{feature_name_col} and \code{description_col} to work with the existing database column names and to enable many to many relationships within the database. If you want vector files with attribute tables please use another method, such as saving a .gpkg of the vector file and uploading it to the 'documents' table using \code{\link[=insertACDocument]{insertACDocument()}}. Note however that this precludes using the object's spatial attributes within the database!
+The attribute table of the object will be retained in the \code{attributes} JSON column for all fields that are not already
+represented by dedicated columns in the \code{vectors} table. This preserves additional metadata for each feature while still
+allowing spatial relationships to be maintained within the database. Fields supplied through \code{feature_name}/\code{feature_name_col}
+and \code{description}/\code{description_col} are still written to their respective columns, with all remaining fields stored as JSON.
 }
 }
