@@ -251,7 +251,7 @@ create_test_db <- function(
     "information.internal_status",
     "information.version_info",
     "public.approval_types",
-    "public.correction_types",
+    "continuous.correction_types",
     "public.datum_list",
     "public.grade_types",
     "public.location_types",
