@@ -86,6 +86,7 @@ insertACBorehole <- function(
 ) {
   # Establish database connection if not provided
   if (is.null(con)) {
+    print("insertACBorehole: Connection was NULL, creating new connection")
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
   }
