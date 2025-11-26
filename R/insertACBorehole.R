@@ -188,7 +188,7 @@ insertACBorehole <- function(
   # Construct SQL query for borehole insertion
   query <- paste0(
     "INSERT INTO boreholes (share_with, latitude, longitude, borehole_name,",
-    "location_source, ground_elevation_m, depth_m, drilled_by, ",
+    "location_source, ground_elevation_m, depth_m, depth_to_bedrock_m, drilled_by, ",
     "drill_method, completion_date, notes, borehole_well_purpose_id, inferred_purpose) VALUES (",
     "'{",
     paste(share_with_borehole, collapse = ","),
@@ -204,6 +204,8 @@ insertACBorehole <- function(
     ifelse(is.null(ground_elev_m), "NULL", ground_elev_m),
     ", ",
     ifelse(is.null(well_depth), "NULL", well_depth),
+    ", ",
+    ifelse(is.null(depth_to_bedrock), "NULL", depth_to_bedrock),
     ", ",
     ifelse(is.null(drilled_by), "NULL", paste0("'", drilled_by, "'")),
     ", ",

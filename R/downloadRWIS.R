@@ -31,24 +31,30 @@ downloadRWIS <- function(
     on.exit(DBI::dbDisconnect(con), add = TRUE)
   }
 
+  # Checking start_datetime parameter
   tryCatch(
     {
-      if (inherits(start_datetime, c("character", "Date"))) {
-        # Either way defaults to 0 hour
+      if (inherits(start_datetime, "character") & nchar(start_datetime) > 10) {
+        # Does not necessarily default to 0 hour.
         start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
       } else if (inherits(start_datetime, "POSIXct")) {
         attr(start_datetime, "tzone") <- "UTC"
+      } else if (
+        inherits(start_datetime, "Date") |
+        (inherits(start_datetime, "character") & nchar(start_datetime) == 10)
+      ) {
+        # defaults to 0 hour
+        start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
       } else {
         stop("Parameter start_datetime could not be coerced to POSIXct.")
-      }
-      if (nchar(start_datetime) == 10) {
-        start_datetime <- paste0(start_datetime, " 00:00:00")
       }
     },
     error = function(e) {
       stop("Failed to convert parameter start_datetime to POSIXct.")
     }
   )
+  
+  # Checking end_datetime parameter
   tryCatch(
     {
       if (inherits(end_datetime, "character") & nchar(end_datetime) > 10) {
@@ -58,15 +64,13 @@ downloadRWIS <- function(
         attr(end_datetime, "tzone") <- "UTC"
       } else if (
         inherits(end_datetime, "Date") |
-          (inherits(end_datetime, "character") & nchar(end_datetime) == 10)
+        (inherits(end_datetime, "character") & nchar(end_datetime) == 10)
       ) {
+        # defaults to very end of day
         end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
         end_datetime <- end_datetime + 60 * 60 * 23.9999
       } else {
         stop("Parameter end_datetime could not be coerced to POSIXct.")
-      }
-      if (nchar(end_datetime) == 10) {
-        end_datetime <- paste0(end_datetime, " 00:00:00")
       }
     },
     error = function(e) {

@@ -31,7 +31,7 @@ downloadECCCwx <- function(
   tryCatch(
     {
       if (inherits(start_datetime, "character") & nchar(start_datetime) > 10) {
-        #Does not necessarily default to 0 hour.
+        # Does not necessarily default to 0 hour.
         start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
       } else if (inherits(start_datetime, "POSIXct")) {
         attr(start_datetime, "tzone") <- "UTC"
@@ -39,7 +39,7 @@ downloadECCCwx <- function(
         inherits(start_datetime, "Date") |
           (inherits(start_datetime, "character") & nchar(start_datetime) == 10)
       ) {
-        #defaults to 0 hour
+        # defaults to 0 hour
         start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
       } else {
         stop("Parameter start_datetime could not be coerced to POSIXct.")
@@ -54,7 +54,7 @@ downloadECCCwx <- function(
   tryCatch(
     {
       if (inherits(end_datetime, "character") & nchar(end_datetime) > 10) {
-        #Does not necessarily default to 0 hour.
+        # Does not necessarily default to 0 hour.
         end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
       } else if (inherits(end_datetime, "POSIXct")) {
         attr(end_datetime, "tzone") <- "UTC"
@@ -62,7 +62,7 @@ downloadECCCwx <- function(
         inherits(end_datetime, "Date") |
           (inherits(end_datetime, "character") & nchar(end_datetime) == 10)
       ) {
-        #defaults to very end of day
+        # defaults to very end of day
         end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
         end_datetime <- end_datetime + 60 * 60 * 23.9999
       } else {
@@ -120,7 +120,7 @@ downloadECCCwx <- function(
       time_disp = "UTC",
       quiet = TRUE
     ))
-    #Save the file to the tempdir, from which it will be deleted once the R session ends
+    # Save the file to the tempdir, from which it will be deleted once the R session ends
     dir.create(paste0(tempdir(), "/downloadECCCwx"), showWarnings = FALSE)
     save(
       dl,
