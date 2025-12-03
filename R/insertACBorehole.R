@@ -235,9 +235,9 @@ insertACBorehole <- function(
       "'",
       borehole_id,
       "', ",
-      ifelse(is.na(permafrost_top), "NULL", permafrost_top),
+      ifelse(is.null(permafrost_top), "NULL", permafrost_top),
       ", ",
-      ifelse(is.na(permafrost_bot), "NULL", permafrost_bot),
+      ifelse(is.null(permafrost_bot), "NULL", permafrost_bot),
       ")"
     )
     DBI::dbExecute(con, query)
