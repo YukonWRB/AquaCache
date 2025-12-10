@@ -219,17 +219,19 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     )
     # Drop rows where start_dt and end_dt are the same
     grades_dt <- grades_dt[!(grades_dt$start_dt == grades_dt$end_dt), ]
-    # Make the SQL for the exclusions as it's reused later
-    exclusions <- sprintf(
-      "datetime NOT BETWEEN '%s' AND '%s'",
-      grades_dt$start_dt,
-      grades_dt$end_dt
-    )
-    exclusions <- paste(exclusions, collapse = " AND ")
+
     if (nrow(grades_dt) != 0) {
       unusable <- TRUE
+      # Make the SQL for the exclusions as it's reused later
+      exclusions <- sprintf(
+        "datetime NOT BETWEEN '%s' AND '%s'",
+        grades_dt$start_dt,
+        grades_dt$end_dt
+      )
+      exclusions <- paste(exclusions, collapse = " AND ")
     } else {
       unusable <- FALSE
+      exclusions <- "1=1" # Dummy condition that is always TRUE
     }
 
     start_recalc_i <- start_recalc
@@ -290,6 +292,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         }
         # Find the earliest datetime in the measurements_continuous table, without considering unusable data
         if (unusable) {
+          # There is unusable data to exclude
           query <- sprintf(
             "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = %s AND period <= 'P1D' AND %s",
             i,
@@ -300,6 +303,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             daily_offset
           )
         } else {
+          # No unusable data to exclude
           earliest_day_measurements <- to_local_date(
             DBI::dbGetQuery(
               con,
@@ -470,7 +474,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               } else {
                 if (unusable) {
                   query <- paste0(
-                    "SELECT datetime, value AS value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+                    "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
                     i,
                     " AND datetime >= '",
                     start_hydat_ts,
