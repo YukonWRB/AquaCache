@@ -11,6 +11,7 @@
 #' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
 #' @param adjust_start The start date or datetime to use for the adjustment of the old location data. If NULL, the start date of the new location will be used. To have no adjustment, set adjust_start and adjust_end to the same date/datetime
 #' @param adjust_end The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.
+#' @param share_with Which user groups to share the data with. Default is 'yg_reader'; set to 'public_reader' to share publicly.
 #' @param con A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
 #' @param snowCon A connection to the snow database.
 #'
@@ -25,6 +26,7 @@ downloadSnowCourse <- function(
   old_loc = NULL,
   adjust_start = NULL,
   adjust_end = NULL,
+  share_with = 'yg_reader',
   con = NULL,
   snowCon = snowConnect()
 ) {
@@ -361,7 +363,8 @@ downloadSnowCourse <- function(
             contributor = sample_contributor,
             collection_method = sample_collect_method,
             media_id = media_id,
-            import_source = "downloadSnowCourse"
+            import_source = "downloadSnowCourse",
+            share_with = share_with
           )
           DBI::dbAppendTable(con, "samples", df)
 
