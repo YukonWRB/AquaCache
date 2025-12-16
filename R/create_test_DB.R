@@ -13,7 +13,7 @@
 #' @param psql The path to the psql utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
 #' @param continuous_locations Character vector of location codes to retain in continuous tables. Defaults to the first location found in the database when `NULL`.
 #' @param discrete_locations Character vector of location codes to retain in discrete tables.  Defaults to `continuous_locations` when `NULL`.
-#' @param start_datetime The start datetime for the data to be copied.  If `NULL`, data is copied from the beginning of records to `end_datetime` for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records.
+#' @param start_datetime The start datetime for the data to be copied.  If `NULL`, data is copied from the beginning of records to `end_datetime` for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records - this is to enable historic range and return period calculations to be reproduced.
 #' @param end_datetime The end datetime for the data to be copied.  If `NULL`, all data is copied from `start_datetime` to the end of records for the affected locations. This **does** apply to the 'measurements_calculated_daily' table.
 #' @param delete If TRUE, will delete the test_temp database after the function is done. If FALSE, the database will remain for further testing.
 #'

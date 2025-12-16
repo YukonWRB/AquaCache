@@ -44,7 +44,7 @@ create_test_db(
 
 \item{discrete_locations}{Character vector of location codes to retain in discrete tables.  Defaults to \code{continuous_locations} when \code{NULL}.}
 
-\item{start_datetime}{The start datetime for the data to be copied.  If \code{NULL}, data is copied from the beginning of records to \code{end_datetime} for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records.}
+\item{start_datetime}{The start datetime for the data to be copied.  If \code{NULL}, data is copied from the beginning of records to \code{end_datetime} for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records - this is to enable historic range and return period calculations to be reproduced.}
 
 \item{end_datetime}{The end datetime for the data to be copied.  If \code{NULL}, all data is copied from \code{start_datetime} to the end of records for the affected locations. This \strong{does} apply to the 'measurements_calculated_daily' table.}
 
