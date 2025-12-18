@@ -97,7 +97,7 @@ downloadSnowCourse <- function(
   )[1, 1]
   media_id <- DBI::dbGetQuery(
     con,
-    "SELECT media_id FROM media_types WHERE media_type = 'atmospheric'"
+    "SELECT media_id FROM media_types WHERE media_type = 'snow'"
   )[1, 1]
   sample_type <- DBI::dbGetQuery(
     con,
@@ -364,7 +364,7 @@ downloadSnowCourse <- function(
             collection_method = sample_collect_method,
             media_id = media_id,
             import_source = "downloadSnowCourse",
-            share_with = share_with
+            share_with = paste0("{", share_with, "}")
           )
           DBI::dbAppendTable(con, "samples", df)
 
@@ -381,6 +381,7 @@ downloadSnowCourse <- function(
           )[1, 1]
         } else {
           # Update the existing survey and results
+          # Important: no change to share_with is done here
           DBI::dbExecute(
             con,
             paste0(

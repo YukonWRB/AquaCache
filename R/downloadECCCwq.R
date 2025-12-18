@@ -26,6 +26,7 @@ downloadECCCwq <- function(
   end_datetime = Sys.time(),
   con = NULL
 ) {
+  # Testing/dev parameters
   # location <- "YT09AB0006"
   # file <- "https://data-donnees.az.ec.gc.ca/api/file?path=%2Fsubstances%2Fmonitor%2Fnational-long-term-water-quality-monitoring-data%2Fyukon-river-basin-long-term-water-quality-monitoring-data%2FWater-Qual-Eau-Yukon-2000-present.csv"
   # key <- "downloadECCCeq1.csv"
