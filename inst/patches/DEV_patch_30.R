@@ -53,7 +53,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE discrete.sample_series ADD CONSTRAINT sample_series_default_owner_fkey FOREIGN KEY (default_owner) REFERENCES public.organizations(organization_id) ON DELETE SET NULL ON UPDATE SET NULL;"
+      "ALTER TABLE discrete.sample_series ADD CONSTRAINT sample_series_default_owner_fkey FOREIGN KEY (default_owner) REFERENCES public.organizations(organization_id) ON DELETE SET NULL ON UPDATE CASCADE;"
     )
     DBI::dbExecute(
       con,
@@ -61,7 +61,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE discrete.sample_series ADD CONSTRAINT sample_series_default_contributor_fkey FOREIGN KEY (default_contributor) REFERENCES public.organizations(organization_id) ON DELETE SET NULL ON UPDATE SET NULL;"
+      "ALTER TABLE discrete.sample_series ADD CONSTRAINT sample_series_default_contributor_fkey FOREIGN KEY (default_contributor) REFERENCES public.organizations(organization_id) ON DELETE SET NULL ON UPDATE CASCADE;"
     )
 
     # Do same for images
@@ -74,7 +74,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE files.images ADD CONSTRAINT images_image_type_fkey FOREIGN KEY (image_type) REFERENCES files.image_types(image_type_id) ON DELETE SET NULL ON UPDATE SET NULL;"
+      "ALTER TABLE files.images ADD CONSTRAINT images_image_type_fkey FOREIGN KEY (image_type) REFERENCES files.image_types(image_type_id) ON DELETE SET NULL ON UPDATE CASCADE;"
     )
     DBI::dbExecute(
       con,
@@ -143,6 +143,11 @@ tryCatch(
       con,
       "ALTER TABLE continuous.measurements_calculated_daily
       ADD COLUMN IF NOT EXISTS window_min NUMERIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_mean NUMERIC;"
     )
     DBI::dbExecute(
       con,
@@ -276,7 +281,7 @@ tryCatch(
     for (i in 1:nrow(df)) {
       DBI::dbExecute(
         con,
-        "UPDATE TABLE boreholes.borehole_well_purposes SET purpose_name_fr = $1, description_fr = $2 WHERE purpose_name = $3;",
+        "UPDATE boreholes.borehole_well_purposes SET purpose_name_fr = $1, description_fr = $2 WHERE purpose_name = $3;",
         params = list(
           df$purpose_name_fr[i],
           df$description_fr[i],

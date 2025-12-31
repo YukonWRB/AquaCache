@@ -1129,6 +1129,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                         "window_q50",
                         "window_q25",
                         "window_q10",
+                        "window_mean",
                         "window_doy_count"
                       )
                     ] <- suppressWarnings(c(
