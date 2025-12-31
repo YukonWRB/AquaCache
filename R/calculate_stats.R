@@ -4,6 +4,8 @@
 #'
 #' Calculates daily means from data in the measurements_continuous table as well as derived statistics for each day (historical min, max, q10, q25, q50 (mean), q75, q90), using the timezone specified in table 'timeseries' to define the start/end of days. Derived daily statistics are for each day of year **prior** to the current date for historical context, with the exception of the first day of record for which only the min/max are populated with the day's value. Any data graded as 'unusable' is excluded from calculations. February 29 calculations are handled differently: see details.
 #'
+#' When a timeseries includes a value for `historic_window_years`, the function also calculates "window" statistics (window_*) using only data within that many years of each date, while still maintaining the full-history statistics.
+#'
 #' Water Survey of Canada daily means are dealt with differently than other timeseries: daily means provided in the HYDAT database take precedence over means calculated from data in table 'measurements_continuous'.
 #'
 #' Some continuous measurement data may have a period of greater than 1 day. In these cases it would be impossible to calculate daily statistics, so this function explicitly excludes data points with a period greater than P1D.
@@ -201,7 +203,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     timeseries_id <- all_timeseries$timeseries_id
   }
 
-  #calculate daily means or sums for any days without them
+  # calculate daily means or sums for any days without them
   years <- 1800:2100
   leap_list <- years[
     (years %% 400 == 0) | (years %% 4 == 0 & years %% 100 != 0)
@@ -238,20 +240,20 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     skip <- FALSE
     tryCatch(
       {
-        select_clause <- "at.aggregation_type, t.source_fx, t.timezone_daily_calc"
         tmp <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT ",
-            select_clause,
-            " FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ",
+            "SELECT at.aggregation_type, t.source_fx, t.timezone_daily_calc, t.historic_window_years FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ",
             i,
             ";"
           )
         )
         aggregation_type <- tmp[1, 1] # Daily values are calculated differently depending on the period type
-        source_fx <- tmp[1, 2] #source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
+        source_fx <- tmp[1, 2] # source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
         daily_offset <- tmp[1, 3]
+        historic_window_years <- suppressWarnings(as.numeric(tmp[1, 4]))
+        window_configured <- !is.na(historic_window_years) &&
+          historic_window_years > 0
 
         # error catching for calculating stats; another one later for appending to the DB
         last_day_historic <- DBI::dbGetQuery(
@@ -347,20 +349,20 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 max(earliest_day_measurements, start_recalc_i)
               } else {
                 earliest_day_measurements
-              } #in case the user asked for a start prior to the actual record start, or if there is no record in measurements_calculated_daily yet
+              } # in case the user asked for a start prior to the actual record start, or if there is no record in measurements_calculated_daily yet
             }
           } else {
             # There are no measurements, so we can only calculate from the earliest day in the measurements_calculated_daily table
             last_day_historic <- earliest_day_historic
           }
         } else {
-          #start_recalc_i is NULL so let's find out when to start recalculating
+          # start_recalc_i is NULL so let's find out when to start recalculating
           if (!is.na(last_day_historic) & !is.na(earliest_day_measurements)) {
             last_day_historic <- last_day_historic - 2 # recalculate the last two days of historic data in case new data has come in
           } else if (
             is.na(last_day_historic) & !is.na(earliest_day_measurements)
           ) {
-            #say, a new timeseries that isn't in hydat yet or one that's just being added and has no calculations yet
+            # say, a new timeseries that isn't in hydat yet or one that's just being added and has no calculations yet
             last_day_historic <- earliest_day_measurements
           } else {
             # a timeseries that is only in HYDAT, has no realtime measurements
@@ -402,14 +404,14 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           }
 
           missing_stats <- data.frame()
-          flag <- FALSE #This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
+          flag <- FALSE # This flag is set to TRUE in cases where there isn't an entry in hydat for the station yet. Rare case but it happens! Also is set TRUE if the timeseries recalculation isn't far enough in the past to overlap with HYDAT daily means, or if it's WSC data that's not level or flow.
           if (is.na(source_fx)) {
             source_fx <- "NA"
           }
           if (
             (source_fx == "downloadWSC") & (last_day_historic < Sys.Date() - 30)
           ) {
-            #this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
+            # this will check to make sure that we're not overwriting HYDAT daily means with calculated realtime means
             # Check to make sure HYDAT is installed and up to date
             if (!hydat_checked) {
               hydat_check(silent = TRUE)
@@ -498,7 +500,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               }
 
               if (nrow(gap_measurements) > 0) {
-                #Then there is new measurements data, or we're force-recalculating from an earlier date
+                # Then there is new measurements data, or we're force-recalculating from an earlier date
                 gap_measurements <- summarize_measurements(
                   gap_measurements,
                   aggregation_type,
@@ -506,7 +508,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 )
 
                 if (!((last_hydat + 1) %in% gap_measurements$date)) {
-                  #Makes a row if there is no data for that day, this way stats will be calculated for that day later.
+                  # Makes a row if there is no data for that day, this way stats will be calculated for that day later.
                   gap_measurements <- rbind(
                     gap_measurements,
                     data.frame(
@@ -518,7 +520,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 }
 
                 if (last_day_historic < min(gap_measurements$date)) {
-                  #Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the measurements_calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with HYDAT values where they exist, taking from the database first for any imputed values and then directly from HYDAT.
+                  # Because of the frequent gap between historical HYDAT database and realtime data and the fact that HYDAT daily means are directly appended to the measurements_calculated_daily table, it's possible that no realtime measurements exist between last_day_historic and the earliest measurement. In that case infill with HYDAT values where they exist, taking from the database first for any imputed values and then directly from HYDAT.
 
                   backfill_imputed <- DBI::dbGetQuery(
                     con,
@@ -551,7 +553,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   backfill <- backfill[!is.na(backfill$value), ]
                   backfill$imputed <- FALSE
 
-                  #Remove any entries with values that are already in backfill and not NA, even if they've been imputed
+                  # Remove any entries with values that are already in backfill and not NA, even if they've been imputed
                   backfill_imputed <- backfill_imputed[
                     !backfill_imputed$date %in%
                       backfill[!is.na(backfill$value), "date"],
@@ -565,7 +567,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   gap_measurements <- rbind(gap_measurements, backfill)
                 }
 
-                #Fill in any missing dates so that they get calculated values where possible
+                # Fill in any missing dates so that they get calculated values where possible
                 full_dates <- data.frame(
                   "date" = seq.Date(
                     min(gap_measurements$date),
@@ -595,7 +597,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     "';"
                   )
                 )
-                #Need to rbind only the calculated daily means AFTER last_hydat
+                # Need to rbind only the calculated daily means AFTER last_hydat
                 all_stats <- rbind(
                   all_stats,
                   gap_measurements[
@@ -605,7 +607,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 )
                 missing_stats <- gap_measurements
               } else {
-                #There is no new measurement data, but stats may still need to be calculated because of new HYDAT data
+                # There is no new measurement data, but stats may still need to be calculated because of new HYDAT data
 
                 all_imputed <- DBI::dbGetQuery(
                   con,
@@ -626,7 +628,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 all_hydat <- all_hydat[!is.na(all_hydat$value), ]
                 all_hydat$imputed <- FALSE
 
-                #Remove any entries with values that are already in all_hydat and not NA, even if they've been imputed
+                # Remove any entries with values that are already in all_hydat and not NA, even if they've been imputed
                 all_imputed <- all_imputed[
                   !all_imputed$date %in%
                     all_hydat[!is.na(all_hydat$value), "date"],
@@ -648,7 +650,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           }
 
           if (!(source_fx == "downloadWSC") || flag) {
-            #All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
+            # All timeseries where: operator is not WSC and therefore lacks superseding daily means; isn't recalculating past enough to overlap HYDAT daily means; operator is WSC but there's no entry in HYDAT
             recalc_start_ts <- midnight_to_utc(last_day_historic, daily_offset)
             if (is.na(recalc_start_ts)) {
               recalc_start_ts <- paste0(last_day_historic, " 00:00:00")
@@ -704,7 +706,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             }
 
             if (nrow(gap_measurements) > 0) {
-              #Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
+              # Then there is new measurements data, or we're force-recalculating from an earlier date perhaps due to updated HYDAT
               gap_measurements <- summarize_measurements(
                 gap_measurements,
                 aggregation_type,
@@ -712,7 +714,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               )
 
               if (!((last_day_historic + 1) %in% gap_measurements$date)) {
-                #Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
+                # Makes a row if there is no data for that day, this way stats will be calculated for that day later. Reminder that last_day_historic is 2 days *prior* to the last day for which there is a daily mean.
                 gap_measurements <- rbind(
                   gap_measurements,
                   data.frame(
@@ -722,7 +724,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   )
                 )
               }
-              #Fill in any missing dates so that they get calculated values where possible
+              # Fill in any missing dates so that they get calculated values where possible
               full_dates <- data.frame(
                 "date" = seq.Date(
                   min(gap_measurements$date),
@@ -758,7 +760,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               )
               missing_stats <- gap_measurements
             } else {
-              #There is no new measurement data, but stats may still need to be calculated
+              # There is no new measurement data, but stats may still need to be calculated
               missing_stats <- DBI::dbGetQuery(
                 con,
                 paste0(
@@ -822,7 +824,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               ),
               lubridate::yday(all_stats$date)
             )
-            #select only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated). Selects valid rows even if there is no current value, ensuring complete plotting parameters.
+            # select only records beginning with the second dayofyear and having values for the second time from all_stats (those for which stats can be calculated). Selects valid rows even if there is no current value, ensuring complete plotting parameters.
             temp <- data.frame()
             first_instance_no_stats <- data.frame()
             for (j in unique(missing_stats$dayofyear)) {
@@ -832,7 +834,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 ]) >
                   0
               ) {
-                #Check that there is at least some data for that doy. If not, no need to manipulate that doy further.
+                # Check that there is at least some data for that doy. If not, no need to manipulate that doy further.
                 earliest_full_stats <- lubridate::add_with_rollback(
                   min(
                     all_stats[
@@ -863,7 +865,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             }
             missing_stats <- temp
 
-            #Find the first Feb 29, and add it to first_instance_no_stats if there are no adjacent values that will get added in later
+            # Find the first Feb 29, and add it to first_instance_no_stats if there are no adjacent values that will get added in later
             if (nrow(feb_29) > 0) {
               first_feb_29 <- feb_29[feb_29$date == min(feb_29$date), ]
               if (
@@ -873,8 +875,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 ) &
                   !is.na(first_feb_29$value)
               ) {
-                #if statement is FALSE, feb 29 will be dealt with later by getting the mean of the surrounding samples so don't add it to first_instance_no_stats so it isn't dealt with here
-                feb_29 <- feb_29[!feb_29$date == first_feb_29$date, ]
+                # if statement is FALSE, feb 29 will be dealt with later by getting the mean of the surrounding samples so don't add it to first_instance_no_stats so it isn't dealt with here
+                feb_29 <- feb_29[feb_29$date != first_feb_29$date, ]
                 first_feb_29$dayofyear <- NA
                 first_instance_no_stats <- rbind(
                   first_instance_no_stats,
@@ -884,7 +886,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             }
 
             if (nrow(first_instance_no_stats) > 0) {
-              #Add a min and max for the first instance, delete + append, then remove it from missing_stats for calculations
+              # Add a min and max for the first instance, delete + append, then remove it from missing_stats for calculations
               missing_stats <- missing_stats[
                 !(missing_stats$date %in% first_instance_no_stats$date),
               ]
@@ -897,6 +899,17 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               first_instance_no_stats$timeseries_id <- i
               first_instance_no_stats$max <- first_instance_no_stats$min <- first_instance_no_stats$value
               first_instance_no_stats$doy_count <- 1
+
+              first_instance_no_stats$window_percent_historic_range <- NA_real_
+              first_instance_no_stats$window_max <- NA_real_
+              first_instance_no_stats$window_min <- NA_real_
+              first_instance_no_stats$window_mean <- NA_real_
+              first_instance_no_stats$window_q90 <- NA_real_
+              first_instance_no_stats$window_q75 <- NA_real_
+              first_instance_no_stats$window_q50 <- NA_real_
+              first_instance_no_stats$window_q25 <- NA_real_
+              first_instance_no_stats$window_q10 <- NA_real_
+              first_instance_no_stats$window_doy_count <- NA_integer_
 
               # Now commit the changes to the database
               commit_fx1 <- function(
@@ -921,7 +934,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   first_instance_no_stats
                 )
                 if (nrow(missing_stats) == 0) {
-                  #If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
+                  # If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
                   DBI::dbExecute(
                     con,
                     paste0(
@@ -962,8 +975,25 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 past <- all_stats[
                   all_stats$dayofyear == doy & all_stats$date < date,
                   "value"
-                ] #Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
+                ] # Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
                 past <- past[!is.na(past)]
+
+                past_window <- past
+                if (window_configured) {
+                  window_start <- lubridate::add_with_rollback(
+                    # Using add_with_rollback to avoid issues with leap years
+                    date,
+                    lubridate::years(-historic_window_years)
+                  )
+                  past_window <- all_stats[
+                    all_stats$dayofyear == doy &
+                      all_stats$date < date &
+                      all_stats$date >= window_start,
+                    "value"
+                  ]
+                  past_window <- past_window[!is.na(past_window)]
+                }
+
                 if (length(past) >= 1) {
                   current <- missing_stats$value[int]
                   min <- min(past)
@@ -981,6 +1011,31 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       length(past)
                     }
                   )
+
+                  window_values <- rep(NA_real_, 9)
+                  if (window_configured && length(past_window) >= 1) {
+                    window_current <- missing_stats$value[int]
+                    window_min <- min(past_window)
+                    window_max <- max(past_window)
+                    window_values <- c(
+                      list(
+                        "window_max" = window_max,
+                        "window_min" = window_min,
+                        "window_mean" = mean(past_window)
+                      ),
+                      as.list(stats::quantile(
+                        past_window,
+                        c(0.90, 0.75, 0.50, 0.25, 0.10),
+                        names = FALSE
+                      )),
+                      "window_doy_count" = if (!is.na(window_current)) {
+                        length(past_window) + 1
+                      } else {
+                        length(past_window)
+                      }
+                    )
+                  }
+
                   data.table::set(
                     missing_stats,
                     i = int,
@@ -993,12 +1048,21 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       "q50",
                       "q25",
                       "q10",
-                      "doy_count"
+                      "doy_count",
+                      "window_max",
+                      "window_min",
+                      "window_mean",
+                      "window_q90",
+                      "window_q75",
+                      "window_q50",
+                      "window_q25",
+                      "window_q10",
+                      "window_doy_count"
                     ),
-                    value = values
+                    value = c(values, window_values)
                   )
                   if (length(past) > 1 & !is.na(current)) {
-                    #need at least 2 measurements to calculate a percent historic, plus a current measurement!
+                    # need at least 2 measurements to calculate a percent historic, plus a current measurement!
                     data.table::set(
                       missing_stats,
                       i = int,
@@ -1006,11 +1070,25 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       value = ((current - min) / (max - min)) * 100
                     )
                   }
+                  if (
+                    window_configured &&
+                      length(past_window) > 1 &
+                      !is.na(current)
+                  ) {
+                    data.table::set(
+                      missing_stats,
+                      i = int,
+                      j = "window_percent_historic_range",
+                      value = ((current - window_min) /
+                        (window_max - window_min)) *
+                        100
+                    )
+                  }
                 }
               }
               data.table::set(missing_stats, j = "dayofyear", value = NULL)
 
-              #Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st.
+              # Assign values to Feb 29 that are between Feb 28 and March 1. Doesn't run on the 29, 1st, or 2nd to wait for complete stats on the 1st.
               if (
                 nrow(feb_29) > 0 &
                   !(substr(
@@ -1024,10 +1102,10 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   before <- missing_stats[missing_stats$date == l - 1, ]
                   after <- missing_stats[missing_stats$date == l + 1, ]
                   if (nrow(before) == 0 & nrow(after) == 0) {
-                    #If TRUE then can't do anything except for passing the value forward
+                    # If TRUE then can't do anything except for passing the value forward
                     if (is.na(feb_29[feb_29$date == l, "value"])) {
-                      #If there's no value and can't do anything else then drop the row
-                      feb_29 <- feb_29[!feb_29$date == l, ]
+                      # If there's no value and can't do anything else then drop the row
+                      feb_29 <- feb_29[feb_29$date != l, ]
                     }
                   } else {
                     feb_29[
@@ -1042,7 +1120,16 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                         "q25",
                         "q10",
                         "mean",
-                        "doy_count"
+                        "doy_count",
+                        "window_percent_historic_range",
+                        "window_max",
+                        "window_min",
+                        "window_q90",
+                        "window_q75",
+                        "window_q50",
+                        "window_q25",
+                        "window_q10",
+                        "window_doy_count"
                       )
                     ] <- suppressWarnings(c(
                       mean(c(
@@ -1057,14 +1144,27 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       mean(c(before$q25, after$q25)),
                       mean(c(before$q10, after$q10)),
                       mean(c(before$mean, after$mean)),
-                      min(c(before$doy_count, after$doy_count))
+                      min(c(before$doy_count, after$doy_count)),
+                      mean(c(
+                        before$window_percent_historic_range,
+                        after$window_percent_historic_range
+                      )),
+                      mean(c(before$window_max, after$window_max)),
+                      mean(c(before$window_min, after$window_min)),
+                      mean(c(before$window_q90, after$window_q90)),
+                      mean(c(before$window_q75, after$window_q75)),
+                      mean(c(before$window_q50, after$window_q50)),
+                      mean(c(before$window_q25, after$window_q25)),
+                      mean(c(before$window_q10, after$window_q10)),
+                      mean(c(before$window_mean, after$window_mean)),
+                      min(c(before$window_doy_count, after$window_doy_count))
                     )) # warnings suppressed because of the possibility of NA values
                   }
                 }
                 feb_29 <- inf_to_na(feb_29)
                 missing_stats <- rbind(missing_stats, feb_29, fill = TRUE)
               }
-              missing_stats$timeseries_id <- i
+              data.table::set(missing_stats, j = "timeseries_id", value = i)
             }
           }
         } else {
@@ -1079,7 +1179,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           e$message
         )
       }
-    ) #End of tryCatch for stats calculation
+    ) # End of tryCatch for stats calculation
 
     if (skip) {
       message(
@@ -1091,7 +1191,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     }
 
     if (nrow(missing_stats) > 0) {
-      #This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.
+      # This is separated from the calculation portion to allow for a tryCatch for calculation and appending, separately.
       tryCatch(
         {
           missing_stats <- missing_stats[order(missing_stats$date), ]
@@ -1171,7 +1271,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             e$message
           )
         }
-      ) #End of tryCatch for removing/adding to DB
+      ) # End of tryCatch for removing/adding to DB
     }
   } # End of for loop calculating means and stats for each station in timeseries table
 } # End of calculate_stats function
