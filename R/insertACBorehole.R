@@ -190,7 +190,7 @@ insertACBorehole <- function(
   query <- paste0(
     "INSERT INTO boreholes (share_with, latitude, longitude, borehole_name,",
     "location_source, ground_elevation_m, depth_m, depth_to_bedrock_m, drilled_by, ",
-    "drill_method, completion_date, notes, borehole_well_purpose_id, inferred_purpose) VALUES (",
+    "drill_method, completion_date, notes, borehole_purpose_id, inferred_purpose) VALUES (",
     "'{",
     paste(share_with_borehole, collapse = ","),
     "}', ",
@@ -249,7 +249,7 @@ insertACBorehole <- function(
     query <- paste0(
       "INSERT INTO wells (borehole_id, casing_diameter_mm, ",
       "screen_top_depth_m, screen_bottom_depth_m, stick_up_height_m, ",
-      "static_water_level_m, estimated_yield_lps, borehole_well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
+      "static_water_level_m, estimated_yield_lps, well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
       "",
       borehole_id,
       ", ",

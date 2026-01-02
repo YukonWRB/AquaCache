@@ -1,8 +1,117 @@
+# Add columns to measurements_calculated_daily table to hold 30 year window stats
+message(
+  "Adding 30 year window statistics columns to measurements_calculated_daily table."
+)
+
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.timeseries ADD COLUMN IF NOT EXISTS historic_window_years INTEGER DEFAULT 30;"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.timeseries.historic_window_years IS 'Optional number of years to use when calculating windowed historical statistics (window_* columns) alongside the full-history metrics.';"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_percent_historic_range NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_max NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_min NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_mean NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_q90 NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_q75 NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_q50 NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_q25 NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_q10 NUMERIC;"
+)
+DBI::dbExecute(
+  con,
+  "ALTER TABLE continuous.measurements_calculated_daily
+      ADD COLUMN IF NOT EXISTS window_doy_count INTEGER;"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_percent_historic_range IS 'Percent of historical range for the same day of year using only the most recent years defined by timeseries.historic_window_years. Values are populated when a window is configured and enough historic points exist within that window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_max IS 'Historical max for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_min IS 'Historical min for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_mean IS 'Historical mean for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q50 IS 'Historical 50th quantile for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q75 IS 'Historical 75th quantile for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q90 IS 'Historical 90th quantile for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q25 IS 'Historical 25th quantile for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q10 IS 'Historical 10th quantile for the day of year within the configured recent-year window.';"
+)
+DBI::dbExecute(
+  con,
+  "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_doy_count IS 'Number of historical points available for the day of year within the configured recent-year window.';"
+)
+
+
+# calculate_stats function that had been modified to do window stats (not quite worked through)
+
 #' Calculate daily means and statistics
 #'
 #' @description
 #'
 #' Calculates daily means from data in the measurements_continuous table as well as derived statistics for each day (historical min, max, q10, q25, q50 (mean), q75, q90), using the timezone specified in table 'timeseries' to define the start/end of days. Derived daily statistics are for each day of year **prior** to the current date for historical context, with the exception of the first day of record for which only the min/max are populated with the day's value. Any data graded as 'unusable' is excluded from calculations. February 29 calculations are handled differently: see details.
+#'
+#' When a timeseries includes a value for `historic_window_years`, the function also calculates "window" statistics (window_*) using only data within that many years of each date, while still maintaining the full-history statistics.
 #'
 #' Water Survey of Canada daily means are dealt with differently than other timeseries: daily means provided in the HYDAT database take precedence over means calculated from data in table 'measurements_continuous'.
 #'
@@ -241,7 +350,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         tmp <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT at.aggregation_type, t.source_fx, t.timezone_daily_calc FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ",
+            "SELECT at.aggregation_type, t.source_fx, t.timezone_daily_calc, t.historic_window_years FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ",
             i,
             ";"
           )
@@ -249,6 +358,9 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         aggregation_type <- tmp[1, 1] # Daily values are calculated differently depending on the period type
         source_fx <- tmp[1, 2] # source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
         daily_offset <- tmp[1, 3]
+        historic_window_years <- suppressWarnings(as.numeric(tmp[1, 4]))
+        window_configured <- !is.na(historic_window_years) &&
+          historic_window_years > 0
 
         # error catching for calculating stats; another one later for appending to the DB
         last_day_historic <- DBI::dbGetQuery(
@@ -895,6 +1007,17 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               first_instance_no_stats$max <- first_instance_no_stats$min <- first_instance_no_stats$value
               first_instance_no_stats$doy_count <- 1
 
+              first_instance_no_stats$window_percent_historic_range <- NA_real_
+              first_instance_no_stats$window_max <- NA_real_
+              first_instance_no_stats$window_min <- NA_real_
+              first_instance_no_stats$window_mean <- NA_real_
+              first_instance_no_stats$window_q90 <- NA_real_
+              first_instance_no_stats$window_q75 <- NA_real_
+              first_instance_no_stats$window_q50 <- NA_real_
+              first_instance_no_stats$window_q25 <- NA_real_
+              first_instance_no_stats$window_q10 <- NA_real_
+              first_instance_no_stats$window_doy_count <- NA_integer_
+
               # Now commit the changes to the database
               commit_fx1 <- function(
                 con,
@@ -960,6 +1083,23 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   all_stats$dayofyear == doy & all_stats$date < date,
                   "value"
                 ] # Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
+                past <- past[!is.na(past)]
+
+                past_window <- past
+                if (window_configured) {
+                  window_start <- lubridate::add_with_rollback(
+                    # Using add_with_rollback to avoid issues with leap years
+                    date,
+                    lubridate::years(-historic_window_years)
+                  )
+                  past_window <- all_stats[
+                    all_stats$dayofyear == doy &
+                      all_stats$date < date &
+                      all_stats$date >= window_start,
+                    "value"
+                  ]
+                  past_window <- past_window[!is.na(past_window)]
+                }
 
                 if (length(past) >= 1) {
                   current <- missing_stats$value[int]
@@ -979,6 +1119,30 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     }
                   )
 
+                  window_values <- rep(NA_real_, 9)
+                  if (window_configured && length(past_window) >= 1) {
+                    window_current <- missing_stats$value[int]
+                    window_min <- min(past_window)
+                    window_max <- max(past_window)
+                    window_values <- c(
+                      list(
+                        "window_max" = window_max,
+                        "window_min" = window_min,
+                        "window_mean" = mean(past_window)
+                      ),
+                      as.list(stats::quantile(
+                        past_window,
+                        c(0.90, 0.75, 0.50, 0.25, 0.10),
+                        names = FALSE
+                      )),
+                      "window_doy_count" = if (!is.na(window_current)) {
+                        length(past_window) + 1
+                      } else {
+                        length(past_window)
+                      }
+                    )
+                  }
+
                   data.table::set(
                     missing_stats,
                     i = int,
@@ -991,9 +1155,18 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       "q50",
                       "q25",
                       "q10",
-                      "doy_count"
+                      "doy_count",
+                      "window_max",
+                      "window_min",
+                      "window_mean",
+                      "window_q90",
+                      "window_q75",
+                      "window_q50",
+                      "window_q25",
+                      "window_q10",
+                      "window_doy_count"
                     ),
-                    value = values
+                    value = c(values, window_values)
                   )
                   if (length(past) > 1 & !is.na(current)) {
                     # need at least 2 measurements to calculate a percent historic, plus a current measurement!
@@ -1002,6 +1175,20 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       i = int,
                       j = "percent_historic_range",
                       value = ((current - min) / (max - min)) * 100
+                    )
+                  }
+                  if (
+                    window_configured &&
+                      length(past_window) > 1 &
+                      !is.na(current)
+                  ) {
+                    data.table::set(
+                      missing_stats,
+                      i = int,
+                      j = "window_percent_historic_range",
+                      value = ((current - window_min) /
+                        (window_max - window_min)) *
+                        100
                     )
                   }
                 }
@@ -1040,7 +1227,17 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                         "q25",
                         "q10",
                         "mean",
-                        "doy_count"
+                        "doy_count",
+                        "window_percent_historic_range",
+                        "window_max",
+                        "window_min",
+                        "window_q90",
+                        "window_q75",
+                        "window_q50",
+                        "window_q25",
+                        "window_q10",
+                        "window_mean",
+                        "window_doy_count"
                       )
                     ] <- suppressWarnings(c(
                       mean(c(
@@ -1055,7 +1252,20 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                       mean(c(before$q25, after$q25)),
                       mean(c(before$q10, after$q10)),
                       mean(c(before$mean, after$mean)),
-                      min(c(before$doy_count, after$doy_count))
+                      min(c(before$doy_count, after$doy_count)),
+                      mean(c(
+                        before$window_percent_historic_range,
+                        after$window_percent_historic_range
+                      )),
+                      mean(c(before$window_max, after$window_max)),
+                      mean(c(before$window_min, after$window_min)),
+                      mean(c(before$window_q90, after$window_q90)),
+                      mean(c(before$window_q75, after$window_q75)),
+                      mean(c(before$window_q50, after$window_q50)),
+                      mean(c(before$window_q25, after$window_q25)),
+                      mean(c(before$window_q10, after$window_q10)),
+                      mean(c(before$window_mean, after$window_mean)),
+                      min(c(before$window_doy_count, after$window_doy_count))
                     )) # warnings suppressed because of the possibility of NA values
                   }
                 }

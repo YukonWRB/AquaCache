@@ -33,7 +33,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE discrete.sample_series DROP CONSTRAINT sample_series_location_id_fkey;"
+      "ALTER TABLE discrete.sample_series DROP CONSTRAINT IF EXISTS sample_series_location_id_fkey;"
     )
     DBI::dbExecute(
       con,
@@ -41,7 +41,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE discrete.sample_series DROP CONSTRAINT sample_series_sub_location_id_fkey;"
+      "ALTER TABLE discrete.sample_series DROP CONSTRAINT IF EXISTS sample_series_sub_location_id_fkey;"
     )
     DBI::dbExecute(
       con,
@@ -49,7 +49,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE discrete.sample_series DROP CONSTRAINT sample_series_default_owner_fkey;"
+      "ALTER TABLE discrete.sample_series DROP CONSTRAINT IF EXISTS sample_series_default_owner_fkey;"
     )
     DBI::dbExecute(
       con,
@@ -57,7 +57,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE discrete.sample_series DROP CONSTRAINT sample_series_default_contributor_fkey;"
+      "ALTER TABLE discrete.sample_series DROP CONSTRAINT IF EXISTS sample_series_default_contributor_fkey;"
     )
     DBI::dbExecute(
       con,
@@ -70,7 +70,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE files.images DROP CONSTRAINT images_image_type_fkey;"
+      "ALTER TABLE files.images DROP CONSTRAINT IF EXISTS images_image_type_fkey;"
     )
     DBI::dbExecute(
       con,
@@ -78,7 +78,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE files.images DROP CONSTRAINT images_location_id_fkey;"
+      "ALTER TABLE files.images DROP CONSTRAINT IF EXISTS images_location_id_fkey;"
     )
     DBI::dbExecute(
       con,
@@ -116,110 +116,6 @@ tryCatch(
       "DROP FUNCTION IF EXISTS files.update_polygon_flag();"
     )
 
-    # Add columns to measurements_calculated_daily table to hold 30 year window stats
-    message(
-      "Adding 30 year window statistics columns to measurements_calculated_daily table."
-    )
-
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.timeseries ADD COLUMN IF NOT EXISTS historic_window_years INTEGER DEFAULT 30;"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.timeseries.historic_window_years IS 'Optional number of years to use when calculating windowed historical statistics (window_* columns) alongside the full-history metrics.';"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_percent_historic_range NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_max NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_min NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_mean NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_q90 NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_q75 NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_q50 NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_q25 NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_q10 NUMERIC;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE continuous.measurements_calculated_daily
-      ADD COLUMN IF NOT EXISTS window_doy_count INTEGER;"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_percent_historic_range IS 'Percent of historical range for the same day of year using only the most recent years defined by timeseries.historic_window_years. Values are populated when a window is configured and enough historic points exist within that window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_max IS 'Historical max for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_min IS 'Historical min for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_mean IS 'Historical mean for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q50 IS 'Historical 50th quantile for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q75 IS 'Historical 75th quantile for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q90 IS 'Historical 90th quantile for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q25 IS 'Historical 25th quantile for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_q10 IS 'Historical 10th quantile for the day of year within the configured recent-year window.';"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.measurements_calculated_daily.window_doy_count IS 'Number of historical points available for the day of year within the configured recent-year window.';"
-    )
-
     # Apply modifications to borehole purposes and bring in data from old SQL Server DB
     # First ammend the purpose table to add a French translation
     DBI::dbExecute(
@@ -232,7 +128,7 @@ tryCatch(
     )
 
     # Populate with some common purposes
-    df <- data.frame(
+    new_purposes <- data.frame(
       purpose_name = c(
         # This should already be in the table
         "monitoring",
@@ -278,15 +174,71 @@ tryCatch(
         "Forage installé dans le cadre d'activités d'exploration minérale."
       )
     )
-    for (i in 1:nrow(df)) {
+    for (i in 1:nrow(new_purposes)) {
       DBI::dbExecute(
         con,
         "UPDATE boreholes.borehole_well_purposes SET purpose_name_fr = $1, description_fr = $2 WHERE purpose_name = $3;",
         params = list(
-          df$purpose_name_fr[i],
-          df$description_fr[i],
-          df$purpose_name[i]
+          new_purposes$purpose_name_fr[i],
+          new_purposes$description_fr[i],
+          new_purposes$purpose_name[i]
         )
+      )
+    }
+
+    # Add a purpose for 'Unknown'
+    DBI::dbExecute(
+      con,
+      "INSERT INTO boreholes.borehole_well_purposes (purpose_name, description, purpose_name_fr, description_fr)
+      VALUES ('unknown', 'Purpose of the borehole or well is unknown.', 'inconnu', 'Le but du forage ou du puits est inconnu.')
+      ON CONFLICT (purpose_name) DO NOTHING;"
+    )
+    # Add a purpose for 'Test well'
+    DBI::dbExecute(
+      con,
+      "INSERT INTO boreholes.borehole_well_purposes (purpose_name, description, purpose_name_fr, description_fr)
+      VALUES ('test well', 'Borehole or well installed for testing purposes.', 'puits de test', 'Forage ou puits installé à des fins de test.')
+      ON CONFLICT (purpose_name) DO NOTHING;"
+    )
+    # Add a purpose for 'commercial/industrial processe'
+    DBI::dbExecute(
+      con,
+      "INSERT INTO boreholes.borehole_well_purposes (purpose_name, description, purpose_name_fr, description_fr)
+      VALUES ('commercial/industrial process', 'Borehole or well installed to supply water for commercial or industrial processes.', 'processus commercial/industriel', 'Forage ou puits installé pour fournir de l''eau aux processus commerciaux ou industriels.')
+      ON CONFLICT (purpose_name) DO NOTHING;"
+    )
+
+    # Rename column boreholes.boreholes.borehole_well_purpose_id to borehole_purpose_id
+    exist <- DBI::dbGetQuery(
+      con,
+      "SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'boreholes'
+        AND table_name = 'boreholes'
+        AND column_name = 'borehole_well_purpose_id'
+  );"
+    )[1, 1]
+    if (exist) {
+      DBI::dbExecute(
+        con,
+        "ALTER TABLE boreholes.boreholes RENAME COLUMN borehole_well_purpose_id TO borehole_purpose_id;"
+      )
+    }
+    exist2 <- DBI::dbGetQuery(
+      con,
+      "SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'boreholes'
+        AND table_name = 'wells'
+        AND column_name = 'borehole_well_purpose_id'
+  );"
+    )[1, 1]
+    if (exist2) {
+      DBI::dbExecute(
+        con,
+        "ALTER TABLE boreholes.wells RENAME COLUMN borehole_well_purpose_id TO well_purpose_id;"
       )
     }
 
@@ -316,12 +268,86 @@ tryCatch(
         "SELECT BoreholeId, Purpose FROM WellRecords;"
       )
 
-      # TODO: Make a key to match random text from SQL server to our purpose_name in AquaCache
+      new_purposes <- (DBI::dbGetQuery(
+        con,
+        "SELECT borehole_well_purpose_id, purpose_name FROM boreholes.borehole_well_purposes;"
+      ))
+      key <- data.frame(
+        old = unique(boreholes_sql$Purpose),
+        new = c(3, 11, 2, 12, 3, 8, 1, 15, 4, 11, 11, 12)
+      )
+      key <- merge(
+        key,
+        new_purposes,
+        by.x = "new",
+        by.y = "borehole_well_purpose_id",
+        all.x = TRUE
+      )
+
+      # Now let's update records in the postgres DB based on borehole ID
+
+      for (i in 1:nrow(boreholes_sql)) {
+        old_id <- boreholes_sql$BoreholeId[i]
+        purpose_old <- boreholes_sql$Purpose[i]
+        if (is.na(purpose_old)) {
+          purpose_new <- key[key$purpose_name == "unknown", "new"][1]
+        } else {
+          purpose_new <- key[key$old == purpose_old, "new"]
+          purpose_new <- purpose_new[!is.na(purpose_new)][1]
+          if (length(purpose_new) == 0) {
+            purpose_new <- key[key$purpose_name == "unknown", "new"][1]
+          }
+        }
+
+        new_id <- DBI::dbGetQuery(
+          con,
+          "SELECT borehole_id FROM boreholes.boreholes WHERE import_borehole_id = $1;",
+          params = list(old_id)
+        )[1, 1]
+
+        DBI::dbExecute(
+          con,
+          "UPDATE boreholes.boreholes SET borehole_purpose_id = $1 WHERE borehole_id = $2;",
+          params = list(purpose_new, new_id)
+        )
+        DBI::dbExecute(
+          con,
+          "UPDATE boreholes.wells SET well_purpose_id = $1 WHERE borehole_id = $2;",
+          params = list(purpose_new, new_id)
+        )
+      }
+
+      unknown <- DBI::dbGetQuery(
+        con,
+        "SELECT borehole_well_purpose_id FROM boreholes.borehole_well_purposes WHERE purpose_name = 'unknown';"
+      )[1, 1]
+      DBI::dbExecute(
+        con,
+        paste0(
+          "UPDATE boreholes.boreholes SET borehole_purpose_id = ",
+          unknown,
+          " WHERE borehole_purpose_id IS NULL;"
+        )
+      )
+      DBI::dbExecute(
+        con,
+        paste0(
+          "UPDATE boreholes.wells SET well_purpose_id = ",
+          unknown,
+          " WHERE well_purpose_id IS NULL;"
+        )
+      )
     } else {
       message(
         "Looks like you're not on the YG network, so I can't fetch the missing well purposes from the SQL Server database. You can update them manually later if needed."
       )
     }
+
+    calculate_stats(
+      con = con,
+      timeseries_id = "all",
+      start_recalc = "1800-01-01"
+    )
 
     # Wrap things up ##################
     # Update the version_info table
