@@ -274,7 +274,7 @@ tryCatch(
       ))
       key <- data.frame(
         old = unique(boreholes_sql$Purpose),
-        new = c(3, 11, 2, 12, 3, 8, 1, 15, 4, 11, 11, 12)
+        new = c(3, 15, 2, 16, 3, 8, 1, 17, 4, 15, 15, 16)
       )
       key <- merge(
         key,
@@ -342,12 +342,6 @@ tryCatch(
         "Looks like you're not on the YG network, so I can't fetch the missing well purposes from the SQL Server database. You can update them manually later if needed."
       )
     }
-
-    calculate_stats(
-      con = con,
-      timeseries_id = "all",
-      start_recalc = "1800-01-01"
-    )
 
     # Wrap things up ##################
     # Update the version_info table
