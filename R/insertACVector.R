@@ -93,8 +93,9 @@ insertACVector <- function(
     if (!(feature_name_col %in% names(geom))) {
       stop("You specified a non-existent column for 'feature_name_col.'")
     }
-    # Aggregate on the feature_name_col
+    # Aggregate on the feature_name_col and drop column 'agg_n'
     geom <- terra::aggregate(geom, by = feature_name_col)
+    geom[["agg_n"]] <- NULL
   }
   if (!is.null(feature_name) & nrow(geom) > 1) {
     stop(
@@ -211,14 +212,6 @@ insertACVector <- function(
               partial.match = TRUE,
               upsert.using = "geom_id"
             ))
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE internal_status SET value = '",
-                .POSIXct(Sys.time(), "UTC"),
-                "' WHERE event = 'last_new_vectors'"
-              )
-            )
           } else if (nrow(exist) == 0) {
             message(
               "There is no existing database entry for this mix of layer_name = ",
@@ -234,14 +227,6 @@ insertACVector <- function(
               geom = geom_col,
               partial.match = TRUE
             ))
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE internal_status SET value = '",
-                .POSIXct(Sys.time(), "UTC"),
-                "' WHERE event = 'last_new_vectors'"
-              )
-            )
           }
         } else {
           # overwrite if FALSE
@@ -300,14 +285,6 @@ insertACVector <- function(
                 geom = geom_col,
                 partial.match = TRUE
               ))
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE internal_status SET value = '",
-                  .POSIXct(Sys.time(), "UTC"),
-                  "' WHERE event = 'last_new_vectors'"
-                )
-              )
               message("Succeeded in adding to the existing vector!")
             }
           } else {
@@ -318,14 +295,6 @@ insertACVector <- function(
               geom = geom_col,
               partial.match = TRUE
             ))
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE internal_status SET value = '",
-                .POSIXct(Sys.time(), "UTC"),
-                "' WHERE event = 'last_new_vectors'"
-              )
-            )
           }
         }
       },
