@@ -47,11 +47,11 @@ addACLocation <- function(
   con = NULL
 ) {
   # df = NULL
-  # location = "09FD-SC02"
-  # name = "Old Crow Mountain Snow Course"
-  # name_fr = "Parcours nivométrique de la montagne Old Crow"
-  # latitude = 67.60114
-  # longitude = -139.85132
+  # location = "TEST02"
+  # name = "Test location2"
+  # name_fr = "Endroit test2"
+  # latitude = 66.60114
+  # longitude = -138.85132
   # share_with = 'public_reader'
   # owner = 2
   # location_type = 15
@@ -60,9 +60,11 @@ addACLocation <- function(
   # conversion_m = 440
   # current = TRUE
   # network = 4
+  # project = NA
   # con = con
   # note = NA
   # contact = NA
+  # data_sharing_agreement_id = NA
 
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -429,7 +431,7 @@ addACLocation <- function(
     {
       for (i in 1:length(location)) {
         # Add the location to the 'vectors' table ############################
-        # Check if there's already a point withe the exact same name
+        # Check if there's already a point with the exact same name
         exists <- DBI::dbGetQuery(
           con,
           paste0(
@@ -477,63 +479,70 @@ addACLocation <- function(
         }
 
         # Add the location to the 'locations' table ############################
-        add_location <- data.frame(
-          location = location[i],
-          name = name[i],
-          name_fr = name_fr[i],
-          latitude = latitude[i],
-          longitude = longitude[i],
-          share_with = paste0("{", paste(share_with, collapse = ", "), "}"),
-          data_sharing_agreement_id = data_sharing_agreement_id[i],
-          location_type = location_type[i],
-          note = note[i],
-          contact = contact[i],
-          geom_id = geom_id
-        )
-        DBI::dbAppendTable(con, "locations", add_location)
-
-        # Get the location_id of the new location
         location_id <- DBI::dbGetQuery(
           con,
-          paste0(
-            "SELECT location_id FROM locations WHERE location = '",
+          "INSERT INTO locations (location, name, name_fr, latitude, longitude, share_with, data_sharing_agreement_id, location_type, note, contact, geom_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING location_id;",
+          params = list(
             location[i],
-            "';"
+            name[i],
+            name_fr[i],
+            latitude[i],
+            longitude[i],
+            paste0("{", paste(share_with, collapse = ", "), "}"),
+            data_sharing_agreement_id[i],
+            location_type[i],
+            note[i],
+            contact[i],
+            geom_id
           )
         )[1, 1]
 
         # Deal with ownership information ############################
-        add_owner <- data.frame(
-          location_id = location_id,
-          owner = owner[i],
-          operator = owner[i],
-          start_datetime = "1970-01-01"
-        )
-        DBI::dbAppendTable(
+        DBI::dbExecute(
           con,
-          "locations_metadata_owners_operators",
-          add_owner
+          "INSERT INTO locations_metadata_owners_operators (location_id, owner, operator, start_datetime) VALUES ($1, $2, $3, $4);",
+          params = list(
+            location_id,
+            owner[i],
+            owner[i],
+            "1970-01-01"
+          )
         )
 
         # Add the location's datum information to the 'datums' table ############################
-        datum <- data.frame(
-          location_id = location_id,
-          datum_id_from = datum_id_from[i],
-          datum_id_to = datum_id_to[i],
-          conversion_m = conversion_m[i],
-          current = current[i]
+        DBI::dbExecute(
+          con,
+          "INSERT INTO datum_conversions (location_id, datum_id_from, datum_id_to, conversion_m, current) VALUES ($1, $2, $3, $4, $5);",
+          params = list(
+            location_id,
+            datum_id_from[i],
+            datum_id_to[i],
+            conversion_m[i],
+            current[i]
+          )
         )
-        DBI::dbAppendTable(con, "datum_conversions", datum)
 
         # Add entries to the project and network tables ############################
         if (!is.na(network[i])) {
-          tbl <- data.frame(location_id = location_id, network_id = network[i])
-          DBI::dbAppendTable(con, "locations_networks", tbl)
+          DBI::dbExecute(
+            con,
+            "INSERT INTO locations_networks (location_id, network_id) VALUES ($1, $2);",
+            params = list(
+              location_id,
+              network[i]
+            )
+          )
         }
 
         if (!is.na(project[i])) {
-          tbl <- data.frame(location_id = location_id, project_id = project[i])
-          DBI::dbAppendTable(con, "locations_projects", tbl)
+          DBI::dbExecute(
+            con,
+            "INSERT INTO locations_projects (location_id, project_id) VALUES ($1, $2);",
+            params = list(
+              location_id,
+              project[i]
+            )
+          )
         }
 
         message(
