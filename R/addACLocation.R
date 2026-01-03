@@ -426,10 +426,13 @@ addACLocation <- function(
     }
   }
 
-  active <- dbTransBegin(con)
-  tryCatch(
-    {
-      for (i in 1:length(location)) {
+  for (i in 1:length(location)) {
+    tryCatch(
+      {
+        # A transaction is NOT started here because insertACVector calls rpostgis which starts and ends its own transaction. Transaction is started after that if the vector insert was successful.
+
+        active <- FALSE # Gets set to TRUE once a transaction is started in this function; set to FALSE now to avoid trying to rollback a non-existent transaction in case of error before that point
+
         # Add the location to the 'vectors' table ############################
         # Check if there's already a point with the exact same name
         exists <- DBI::dbGetQuery(
@@ -454,6 +457,7 @@ addACLocation <- function(
             geom = c("longitude", "latitude"),
             crs = "epsg:4269"
           )
+
           insertACVector(
             geom = point,
             layer_name = "Locations",
@@ -469,6 +473,9 @@ addACLocation <- function(
               "';"
             )
           )[1, 1]
+
+          # rpostgis called from insertACVector has closed its own transaction, let's start one for the rest of the operations
+          active <- dbTransBegin(con)
         } else {
           geom_id <- exists$geom_id
           message(
@@ -550,16 +557,17 @@ addACLocation <- function(
           location[i],
           "."
         )
+
+        if (active) {
+          DBI::dbExecute(con, "COMMIT;")
+        }
+      },
+      error = function(e) {
+        if (active) {
+          DBI::dbExecute(con, "ROLLBACK;")
+        }
+        stop("Error adding location ", location[i], ": ", e$message)
       }
-      if (active) {
-        DBI::dbExecute(con, "COMMIT;")
-      }
-    },
-    error = function(e) {
-      if (active) {
-        DBI::dbExecute(con, "ROLLBACK;")
-      }
-      stop("Error adding location. No changes were made. Error: ", e$message)
-    }
-  )
+    ) # end tryCatch
+  } # end for loop
 }
