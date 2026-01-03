@@ -473,9 +473,6 @@ addACLocation <- function(
               "';"
             )
           )[1, 1]
-
-          # rpostgis called from insertACVector has closed its own transaction, let's start one for the rest of the operations
-          active <- dbTransBegin(con)
         } else {
           geom_id <- exists$geom_id
           message(
@@ -484,6 +481,9 @@ addACLocation <- function(
             " already exists in the 'vectors' table."
           )
         }
+
+        # rpostgis called from insertACVector has closed its own transaction, let's start one for the rest of the operations
+        active <- dbTransBegin(con)
 
         # Add the location to the 'locations' table ############################
         location_id <- DBI::dbGetQuery(
