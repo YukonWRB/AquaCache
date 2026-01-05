@@ -970,7 +970,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     as.list(stats::quantile(
                       past,
                       c(0.90, 0.75, 0.50, 0.25, 0.10),
-                      names = FALSE
+                      names = FALSE,
+                      na.rm = TRUE
                     )),
                     "doy_count" = if (!is.na(current)) {
                       length(past) + 1
