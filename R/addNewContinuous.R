@@ -258,7 +258,7 @@ addNewContinuous <- function(
         }
 
         # Only retain rows in df_period that were in df (calculate_period could have added rows if it needed to pull extra data to calculate the period)
-        df <- df_period[df$datetime %in% df_period$datetime, ]
+        df <- df_period[df_period$datetime %in% df$datetime, ]
       } else {
         #Check to make sure that the supplied period can actually be coerced to a period
         check <- lubridate::period(unique(df$period))
