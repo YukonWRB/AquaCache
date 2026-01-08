@@ -637,7 +637,7 @@ synchronize_discrete <- function(
                     paste0(
                       "SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id = ",
                       sub$parameter_id,
-                      ");"
+                      ";"
                     )
                   )
                   sample_fraction <- DBI::dbGetQuery(
@@ -645,7 +645,7 @@ synchronize_discrete <- function(
                     paste0(
                       "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id = ",
                       sub$parameter_id,
-                      ");"
+                      ";"
                     )
                   )
                   if (result_speciation$result_speciation_bool) {
@@ -1165,28 +1165,28 @@ synchronize_discrete <- function(
   message(
     "Found ",
     new_samples,
-    " new samples to add at the ",
+    " new samples to add to the ",
     nrow(all_series),
     " sample_series provided."
   )
   message(
     "Found ",
     updated_samples,
-    " samples to update at the ",
+    " samples to update for the ",
     nrow(all_series),
     " sample_series provided."
   )
   message(
     "Found ",
     new_results,
-    " new results to add at the ",
+    " new results to add to the ",
     nrow(all_series),
     " sample_series provided."
   )
   message(
     "Found ",
     updated_results,
-    " results to update at the ",
+    " results to update for the ",
     nrow(all_series),
     " sample_series provided."
   )
