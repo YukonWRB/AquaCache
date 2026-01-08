@@ -217,7 +217,7 @@ addNewContinuous <- function(
         (info$aggregation_type != "instantaneous") & !("period" %in% names(df))
       ) {
         # aggregation_types of mean, median, min, max should all have a period
-        df <- calculate_period(
+        df_period <- calculate_period(
           data = df,
           timeseries_id = tsid,
           con = con
@@ -258,7 +258,7 @@ addNewContinuous <- function(
         }
 
         # Only retain rows in df_period that were in df (calculate_period could have added rows if it needed to pull extra data to calculate the period)
-        df <- df[df$datetime %in% df_period$datetime, ]
+        df <- df_period[df$datetime %in% df_period$datetime, ]
       } else {
         #Check to make sure that the supplied period can actually be coerced to a period
         check <- lubridate::period(unique(df$period))
@@ -292,7 +292,20 @@ addNewContinuous <- function(
           )
         )
       } else {
-        # If overwrite is "no", we do not delete any existing data, so we just append
+        # If overwrite is "no", we remove any rows in df that conflict with existing data
+        existing_datetimes <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT datetime FROM measurements_continuous WHERE datetime IN ('",
+            paste(df$datetime, collapse = "', '"),
+            "') AND timeseries_id = ",
+            tsid,
+            ";"
+          )
+        )$datetime
+        if (length(existing_datetimes) > 0) {
+          df <- df[!df$datetime %in% existing_datetimes, ]
+        }
       }
       DBI::dbAppendTable(con, "measurements_continuous", df)
 
@@ -316,16 +329,21 @@ addNewContinuous <- function(
       )
 
       # make the new entry into table timeseries
+      exist_times <- DBI::dbGetQuery(
+        con,
+        "SELECT start_datetime, end_datetime FROM timeseries WHERE timeseries_id =  $1;",
+        params = list(tsid)
+      )
+      new_start <- min(c(exist_times$start_datetime, df$datetime), na.rm = TRUE)
+      new_end <- max(c(exist_times$end_datetime, df$datetime), na.rm = TRUE)
       DBI::dbExecute(
         con,
-        paste0(
-          "UPDATE timeseries SET end_datetime = '",
-          max(df$datetime),
-          "', last_new_data = '",
+        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = $3 WHERE timeseries_id = $4",
+        params = list(
+          new_end,
+          new_start,
           .POSIXct(Sys.time(), "UTC"),
-          "' WHERE timeseries_id = ",
-          tsid,
-          ";"
+          tsid
         )
       )
     } # end commit_fx
