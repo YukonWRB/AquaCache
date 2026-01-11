@@ -960,13 +960,18 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   all_stats$dayofyear == doy & all_stats$date < date,
                   "value"
                 ] # Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
+                past <- past[!is.na(past)] # remove NAs
 
                 if (length(past) >= 1) {
                   current <- missing_stats$value[int]
-                  min <- min(past)
-                  max <- max(past)
+                  min <- min(past, na.rm = TRUE)
+                  max <- max(past, na.rm = TRUE)
                   values <- c(
-                    list("max" = max, "min" = min, "mean" = mean(past)),
+                    list(
+                      "max" = max,
+                      "min" = min,
+                      "mean" = mean(past, na.rm = TRUE)
+                    ),
                     as.list(stats::quantile(
                       past,
                       c(0.90, 0.75, 0.50, 0.25, 0.10),
