@@ -206,6 +206,32 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
   leap_list <- years[
     (years %% 400 == 0) | (years %% 4 == 0 & years %% 100 != 0)
   ]
+
+  # Extract necessary metadata for all timeseries at once
+  timeseries_meta <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT t.timeseries_id, at.aggregation_type, t.source_fx, ",
+      "t.timezone_daily_calc FROM timeseries t ",
+      "JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id ",
+      "WHERE t.timeseries_id IN (",
+      paste(timeseries_id, collapse = ", "),
+      ");"
+    )
+  )
+  daily_ranges <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT timeseries_id, ",
+      "MAX(date) FILTER (WHERE max IS NOT NULL) AS last_historic, ",
+      "MIN(date) FILTER (WHERE max IS NOT NULL) AS earliest_historic, ",
+      "MIN(date) AS earliest_any ",
+      "FROM measurements_calculated_daily WHERE timeseries_id IN (",
+      paste(timeseries_id, collapse = ", "),
+      ") GROUP BY timeseries_id;"
+    )
+  )
+
   hydat_checked <- FALSE
   for (i in timeseries_id) {
     # Fetch the grades to disregard 'unusable' data later
@@ -237,55 +263,33 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
     start_recalc_i <- start_recalc
     skip <- FALSE
     tryCatch(
+      # error catching for calculating stats; another one later for appending to the DB
       {
-        tmp <- DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT at.aggregation_type, t.source_fx, t.timezone_daily_calc FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id = ",
-            i,
-            ";"
-          )
-        )
-        aggregation_type <- tmp[1, 1] # Daily values are calculated differently depending on the period type
-        source_fx <- tmp[1, 2] # source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
-        daily_offset <- tmp[1, 3]
+        meta_row <- timeseries_meta[
+          match(i, timeseries_meta$timeseries_id),
+          ,
+          drop = FALSE
+        ]
+        aggregation_type <- meta_row$aggregation_type[
+          1
+        ] # Daily values are calculated differently depending on the period type
+        source_fx <- meta_row$source_fx[
+          1
+        ] # source_fx is necessary to deal differently with WSC locations, since HYDAT daily means take precedence over calculated ones.
+        daily_offset <- meta_row$timezone_daily_calc[1]
 
-        # error catching for calculating stats; another one later for appending to the DB
-        last_day_historic <- DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-            i,
-            " AND max IS NOT NULL;"
-          )
-        )[1, 1]
+        range_row <- daily_ranges[
+          match(i, daily_ranges$timeseries_id),
+          ,
+          drop = FALSE
+        ]
+        last_day_historic <- as.Date(range_row$last_historic[1])
         if (is.na(last_day_historic)) {
-          last_day_historic <- DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-              i,
-              ";"
-            )
-          )[1, 1]
+          last_day_historic <- as.Date(range_row$earliest_any[1])
         }
-        earliest_day_historic <- as.Date(DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-            i,
-            " AND max IS NOT NULL;"
-          )
-        )[1, 1])
+        earliest_day_historic <- as.Date(range_row$earliest_historic[1])
         if (is.na(earliest_day_historic)) {
-          earliest_day_historic <- as.Date(DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-              i,
-              ";"
-            )
-          )[1, 1])
+          earliest_day_historic <- as.Date(range_row$earliest_any[1])
         }
         # Find the earliest datetime in the measurements_continuous table, without considering unusable data
         if (unusable) {
@@ -960,13 +964,18 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   all_stats$dayofyear == doy & all_stats$date < date,
                   "value"
                 ] # Importantly, does NOT include the current measurement. A current measure greater than past maximum will rank > 100%
+                past <- past[!is.na(past)] # remove NAs
 
                 if (length(past) >= 1) {
                   current <- missing_stats$value[int]
-                  min <- min(past)
-                  max <- max(past)
+                  min <- min(past, na.rm = TRUE)
+                  max <- max(past, na.rm = TRUE)
                   values <- c(
-                    list("max" = max, "min" = min, "mean" = mean(past)),
+                    list(
+                      "max" = max,
+                      "min" = min,
+                      "mean" = mean(past, na.rm = TRUE)
+                    ),
                     as.list(stats::quantile(
                       past,
                       c(0.90, 0.75, 0.50, 0.25, 0.10),

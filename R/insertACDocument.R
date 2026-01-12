@@ -65,7 +65,7 @@ insertACDocument <- function(
   type <- tolower(type)
   db_types <- DBI::dbGetQuery(
     con,
-    "SELECT document_type_id, document_type_en FROM document_types;"
+    "SELECT document_type_id, document_type_en FROM files.document_types;"
   )
   if (!(type %in% db_types$document_type_en)) {
     stop(
@@ -76,7 +76,7 @@ insertACDocument <- function(
   #Check that the name doesn't already exist
   name_check <- DBI::dbGetQuery(
     con,
-    paste0("SELECT name FROM documents WHERE name = '", name, "';")
+    paste0("SELECT name FROM files.documents WHERE name = '", name, "';")
   )
   if (nrow(name_check) != 0) {
     stop("There is already a document with this name in the database.")
@@ -87,7 +87,7 @@ insertACDocument <- function(
     exist_geoms <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT geom_id, geom_type, layer_name, feature_name, description FROM vectors WHERE geom_id IN (",
+        "SELECT geom_id, geom_type, layer_name, feature_name, description FROM spatial.vectors WHERE geom_id IN (",
         paste(geoms, collapse = ", "),
         ")"
       )
@@ -126,7 +126,7 @@ insertACDocument <- function(
   DBI::dbExecute(
     con,
     paste0(
-      "INSERT INTO documents (name, type, description, format, document, share_with) VALUES ('",
+      "INSERT INTO files.documents (name, type, description, format, document, share_with) VALUES ('",
       name,
       "', '",
       assigned_type,
@@ -145,14 +145,15 @@ insertACDocument <- function(
   # Get the document_id of the newly added (or existing) document
   id <- DBI::dbGetQuery(
     con,
-    paste0("SELECT MAX(document_id) FROM documents WHERE name = '", name, "';")
+    "SELECT MAX(document_id) FROM files.documents WHERE name = $1",
+    params = list(name)
   )[1, 1]
 
   if (!is.null(authors)) {
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET authors = '{",
+        "UPDATE files.documents SET authors = '{",
         paste(authors, collapse = ", "),
         "}' WHERE document_id = ",
         id,
@@ -164,7 +165,7 @@ insertACDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET url = '",
+        "UPDATE files.documents SET url = '",
         url,
         "' WHERE document_id = ",
         id,
@@ -176,7 +177,7 @@ insertACDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET publish_date = '",
+        "UPDATE files.documents SET publish_date = '",
         publish_date,
         "' WHERE document_id = ",
         id,
@@ -188,7 +189,7 @@ insertACDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET tags = '{",
+        "UPDATE files.documents SET tags = '{",
         paste(tags, collapse = ", "),
         "}' WHERE document_id = ",
         id,
