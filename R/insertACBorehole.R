@@ -288,6 +288,7 @@ insertACBorehole <- function(
     # Determine document type based on is_well flag
     document_type <- if (is_well) "well log" else "borehole log"
     res <- insertACDocument(
+      con = con,
       path = path,
       type = document_type,
       name = paste0("Document for borehole/well", well_name),
