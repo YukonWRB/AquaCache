@@ -66,6 +66,15 @@ addNewContinuous <- function(
     )
   }
 
+  # Remove all rows where 'value' is NA
+  df <- df[!is.na(df$value), ]
+
+  if (nrow(df) == 0) {
+    stop(
+      "addNewContinuous: The data.frame contains no rows with non-NA 'value' entries."
+    )
+  }
+
   grade_unknown <- DBI::dbGetQuery(
     con,
     "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';"
