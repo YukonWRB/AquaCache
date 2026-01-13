@@ -8,6 +8,7 @@ insertACBorehole(
   con = NULL,
   path = NULL,
   well_name = NULL,
+  location_id = NULL,
   latitude = NULL,
   longitude = NULL,
   location_source = NULL,
@@ -44,6 +45,8 @@ insertACBorehole(
 \item{path}{Path to a document/file to attach to the borehole record. If NULL, no document is attached.}
 
 \item{well_name}{Name of the borehole/well. Required.}
+
+\item{location_id}{Optional location ID if the borehole is associated with a predefined location.}
 
 \item{latitude}{The latitude coordinate of the borehole location. Required.}
 
