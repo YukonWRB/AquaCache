@@ -274,7 +274,7 @@ tryCatch(
     # modify the seach path to include the new schema
     DBI::dbExecute(
       con,
-      "ALTER DATABASE aquacache SET search_path TO public, continuous, discrete, spatial, files, instruments, information, application;"
+      "ALTER DATABASE aquacache SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
     )
 
     # Grant usage to all
