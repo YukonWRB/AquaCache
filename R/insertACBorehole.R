@@ -9,6 +9,7 @@
 #' @param con A connection to the database. Default NULL uses AquaConnect() and closes the connection afterwards.
 #' @param path Path to a document/file to attach to the borehole record. If NULL, no document is attached.
 #' @param well_name Name of the borehole/well. Required.
+#' @param location_id Optional location ID if the borehole is associated with a predefined location.
 #' @param latitude The latitude coordinate of the borehole location. Required.
 #' @param longitude The longitude coordinate of the borehole location. Required.
 #' @param location_source Source of the location information (e.g., "GPS", "Survey").
@@ -55,6 +56,7 @@ insertACBorehole <- function(
   con = NULL,
   path = NULL,
   well_name = NULL,
+  location_id = NULL,
   latitude = NULL,
   longitude = NULL,
   location_source = NULL,
@@ -112,6 +114,50 @@ insertACBorehole <- function(
   }
   if (!is.null(location_source) && !is.character(location_source)) {
     stop("'location_source' must be character if provided.")
+  }
+
+  # Validate location_id if provided
+  if (!is.null(location_id)) {
+    # Check if location_id exists in the database
+    exists <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT location_id FROM locations WHERE location_id = ",
+        location_id,
+        ";"
+      )
+    )[1, 1]
+    if (is.na(exists)) {
+      stop("The specified 'location_id' does not exist in the database.")
+    }
+  }
+
+  # Validate latitude and longitude
+  if (is.null(latitude) || !is.numeric(latitude)) {
+    stop("'latitude' must be a non-NULL numeric value.")
+  }
+  if (is.null(longitude) || !is.numeric(longitude)) {
+    stop("'longitude' must be a non-NULL numeric value.")
+  }
+
+  # Validate permafrost parameters
+  if (!is.logical(permafrost_present) || length(permafrost_present) != 1) {
+    stop("'permafrost_present' must be a single logical value (TRUE or FALSE).")
+  }
+  if (permafrost_present) {
+    if (is.null(permafrost_top) || !is.numeric(permafrost_top)) {
+      stop(
+        "'permafrost_top' must be provided as a numeric value when 'permafrost_present' is TRUE."
+      )
+    }
+    if (is.null(permafrost_bot) || !is.numeric(permafrost_bot)) {
+      stop(
+        "'permafrost_bot' must be provided as a numeric value when 'permafrost_present' is TRUE."
+      )
+    }
+    if (permafrost_bot <= permafrost_top) {
+      stop("'permafrost_bot' must be greater than 'permafrost_top'.")
+    }
   }
 
   # Validate purpose_of_borehole and purpose_of_well if provided
@@ -188,12 +234,14 @@ insertACBorehole <- function(
 
   # Construct SQL query for borehole insertion
   query <- paste0(
-    "INSERT INTO boreholes (share_with, latitude, longitude, borehole_name,",
+    "INSERT INTO boreholes (share_with, location_id, latitude, longitude, borehole_name,",
     "location_source, ground_elevation_m, depth_m, depth_to_bedrock_m, drilled_by, ",
     "drill_method, completion_date, notes, borehole_purpose_id, inferred_purpose) VALUES (",
     "'{",
     paste(share_with_borehole, collapse = ","),
     "}', ",
+    ifelse(is.null(location_id), "NULL", location_id),
+    ", ",
     latitude,
     ", ",
     longitude,
