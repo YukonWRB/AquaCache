@@ -482,7 +482,7 @@ addACLocation <- function(
           )
         }
 
-        # rpostgis called from insertACVector has closed its own transaction, let's start one for the rest of the operations
+        # rpostgis called from insertACVector has closed the transaction, let's start one for the rest of the operations
         active <- dbTransBegin(con)
 
         # Add the location to the 'locations' table ############################
