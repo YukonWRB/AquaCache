@@ -548,7 +548,7 @@ create_test_db <- function(
     "-- ensure search_path is set when restoring the database",
     "DO $$",
     "BEGIN",
-    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete, spatial, files, instruments, information;', current_database());",
+    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete,spatial, files,  boreholes, instruments, information;', current_database());",
     "END$$;",
     sep = "\n"
   )
