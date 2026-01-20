@@ -1,0 +1,54 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "R-Debugger",
+            "name": "Launch R-Workspace",
+            "request": "launch",
+            "debugMode": "workspace",
+            "workingDirectory": "${workspaceFolder}",
+            "rPath": "C:/Program Files/R/R-4.5.0/bin/x64/R.exe"
+        },
+        {
+            "type": "R-Debugger",
+            "name": "Debug R-File",
+            "request": "launch",
+            "debugMode": "file",
+            "workingDirectory": "${workspaceFolder}",
+            "file": "${file}",
+            "rPath": "C:/Program Files/R/R-4.5.0/bin/x64/R.exe"
+        },
+        {
+            "type": "R-Debugger",
+            "name": "Debug R-Function",
+            "request": "launch",
+            "debugMode": "function",
+            "workingDirectory": "${workspaceFolder}",
+            "file": "${file}",
+            "mainFunction": "main",
+            "allowGlobalDebugging": false,
+            "rPath": "C:/Program Files/R/R-4.5.0/bin/x64/R.exe"
+        },
+        {
+            "type": "R-Debugger",
+            "name": "Debug R-Package",
+            "request": "launch",
+            "debugMode": "workspace",
+            "workingDirectory": "${workspaceFolder}",
+            "includePackageScopes": true,
+            "loadPackages": [
+                "."
+            ],
+            "rPath": "C:/Program Files/R/R-4.5.0/bin/x64/R.exe"
+        },
+        {
+            "type": "R-Debugger",
+            "request": "attach",
+            "name": "Attach to R process",
+            "splitOverwrittenOutput": true,
+        }
+    ]
+}

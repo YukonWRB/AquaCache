@@ -714,10 +714,30 @@ imputeMissing <- function(
   if (nrow(similar) > 0) {
     similar <- merge(similar, nrby, by = "location")
 
+    # Calculate period for entry and similar timeseries
+    # If record_rate is in HH:MM:ss, convert to seconds
+    parse_record_rate <- function(rate) {
+      if (grepl("^\\d{2}:\\d{2}:\\d{2}$", rate)) {
+        hms <- as.numeric(unlist(strsplit(rate, ":")))
+        return(hms[1] * 3600 + hms[2] * 60 + hms[3])
+      } else {
+        return(tryCatch(
+          as.numeric(lubridate::period_to_seconds(lubridate::period(rate))),
+          error = function(e) NA
+        ))
+      }
+    }
+
+    entry$period <- parse_record_rate(entry$record_rate)
+    similar$period <- vapply(
+      similar$record_rate,
+      parse_record_rate,
+      numeric(1)
+    )
+
     # Retain only entries with equal or more frequent record rates
     similar <- similar[
-      lubridate::period(similar$record_rate) <=
-        lubridate::period(entry$record_rate),
+      similar$period <= entry$period,
     ]
 
     if (nrow(similar) > 0) {
@@ -1242,7 +1262,7 @@ imputeMissing <- function(
   commit <- readline(
     prompt = writeLines(paste(
       "\n1: Yes, and please modify the timeseries in the database",
-      "\n2: Yes, but please ONLY return the result",
+      "\n2: Yes, but please ONLY return the result"
     ))
   )
   commit <- as.numeric(commit)
