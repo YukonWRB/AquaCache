@@ -24,7 +24,7 @@ synchronize_discrete(
 
 \item{active}{Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id}
 
-\item{sync_remote_false}{Controls whether to synchronize sample_series that have the \code{sync_remote} column set to FALSE in the \code{sample_series} table.}
+\item{sync_remote_false}{Controls whether to synchronize sample_series that have the \code{sync_remote} column set to FALSE in the \code{sample_series} table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!}
 
 \item{delete}{If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.}
 

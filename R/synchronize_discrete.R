@@ -11,7 +11,7 @@
 #' @param sample_series_id The sample_series_id you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `sample_series_id`, or one per element of `sample_series_id`
 #' @param active Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id
-#' @param sync_remote_false Controls whether to synchronize sample_series that have the `sync_remote` column set to FALSE in the `sample_series` table.
+#' @param sync_remote_false Controls whether to synchronize sample_series that have the `sync_remote` column set to FALSE in the `sample_series` table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!
 #' @param delete If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.
 #' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
 #' @param EQCon A connection to the EQWin database, created with [EQConnect()]. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.
@@ -30,6 +30,15 @@ synchronize_discrete <- function(
   snowCon = NULL,
   EQCon = NULL
 ) {
+  # con = AquaConnect()
+  # sample_series_id = 50
+  # start_datetime = "1900-01-01"
+  # active = 'default'
+  # sync_remote_false = FALSE
+  # delete = FALSE
+  # snowCon = NULL
+  # EQCon = NULL
+
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
@@ -53,7 +62,7 @@ synchronize_discrete <- function(
 
   message("Synchronizing sample series with synchronize_discrete...")
 
-  #Check length of start_datetime is either 1 of same as sample_series_id
+  # Check length of start_datetime is either 1 of same as sample_series_id
   if (length(start_datetime) != 1) {
     if (length(start_datetime) != length(sample_series_id)) {
       stop(
@@ -219,7 +228,7 @@ synchronize_discrete <- function(
           args_list[["snowCon"]] <- snowCon
         }
 
-        inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
+        inRemote <- do.call(source_fx, args_list) # Get the data using the args_list
 
         if (length(inRemote) == 0) {
           # There was no data in remote for the date range specified
@@ -251,10 +260,32 @@ synchronize_discrete <- function(
           }
 
           if (delete) {
-            # Extract the 'datetime' of each sample in the list (make a blank element if it's not found)
-            inRemote_datetimes <- lapply(inRemote, function(x) {
-              if ("sample" %in% names(x)) x$sample$datetime else NA
-            })
+            # Extract and order the 'datetime' of each sample in the list
+            extract_datetime <- function(x) {
+              if (!("sample" %in% names(x))) {
+                return(as.POSIXct(NA, tz = "UTC"))
+              }
+              if (is.null(x$sample$datetime) || is.na(x$sample$datetime)) {
+                return(as.POSIXct(NA, tz = "UTC"))
+              }
+              as.POSIXct(x$sample$datetime, tz = "UTC")
+            }
+            inRemote_datetimes <- vapply(
+              inRemote,
+              extract_datetime,
+              FUN.VALUE = as.POSIXct(NA, tz = "UTC")
+            )
+            inRemote_datetimes <- as.POSIXct(inRemote_datetimes, tz = "UTC")
+            if (any(is.na(inRemote_datetimes))) {
+              warning(
+                "For sample_series_id ",
+                sid,
+                " the source function returned one or more samples with missing datetimes. Delete logic will skip those samples."
+              )
+            }
+            order_idx <- order(inRemote_datetimes, na.last = TRUE)
+            inRemote <- inRemote[order_idx]
+            inRemote_datetimes <- inRemote_datetimes[order_idx]
           }
 
           for (j in 1:length(inRemote)) {
@@ -278,106 +309,110 @@ synchronize_discrete <- function(
             names_inRemote_res <- names(inRemote_results)
 
             if (delete) {
-              if (j == 1) {
-                # Delete any samples between the start of the series and the first sample in the remote data, if any. Cascades to results.
-                DBI::dbExecute(
-                  con,
-                  paste0(
-                    "DELETE FROM samples WHERE datetime > '",
-                    start_i,
-                    "' AND datetime < '",
-                    inRemote_datetimes[[j]],
-                    "' AND location_id = ",
-                    loc_id,
-                    " AND sub_location_id ",
-                    if (!is.na(sub_loc_id)) {
-                      paste0("= ", sub_loc_id)
-                    } else {
-                      "IS NULL"
-                    },
-                    " AND z ",
-                    if (!is.null(inRemote_sample$z)) {
-                      paste0("= ", inRemote_sample$z)
-                    } else {
-                      "IS NULL"
-                    },
-                    " AND media_id = ",
-                    inRemote_sample$media_id,
-                    " AND sample_type = ",
-                    inRemote_sample$sample_type,
-                    " AND collection_method = ",
-                    inRemote_sample$collection_method,
-                    " AND import_source = '",
-                    source_fx,
-                    "' AND no_update IS FALSE;"
+              delete_has_prev <- j > 1 && !is.na(inRemote_datetimes[j - 1])
+              delete_has_curr <- !is.na(inRemote_datetimes[j])
+              if (delete_has_curr) {
+                if (j == 1) {
+                  # Delete any samples between the start of the series and the first sample in the remote data, if any. Cascades to results.
+                  DBI::dbExecute(
+                    con,
+                    paste0(
+                      "DELETE FROM samples WHERE datetime > '",
+                      start_i,
+                      "' AND datetime < '",
+                      inRemote_datetimes[j],
+                      "' AND location_id = ",
+                      loc_id,
+                      " AND sub_location_id ",
+                      if (!is.na(sub_loc_id)) {
+                        paste0("= ", sub_loc_id)
+                      } else {
+                        "IS NULL"
+                      },
+                      " AND z ",
+                      if (!is.null(inRemote_sample$z)) {
+                        paste0("= ", inRemote_sample$z)
+                      } else {
+                        "IS NULL"
+                      },
+                      " AND media_id = ",
+                      inRemote_sample$media_id,
+                      " AND sample_type = ",
+                      inRemote_sample$sample_type,
+                      " AND collection_method = ",
+                      inRemote_sample$collection_method,
+                      " AND import_source = '",
+                      source_fx,
+                      "' AND no_update IS FALSE;"
+                    )
                   )
-                )
-              } else if (j == length(inRemote)) {
-                DBI::dbExecute(
-                  con,
-                  paste0(
-                    "DELETE FROM samples WHERE datetime < '",
-                    end_i,
-                    "' AND datetime > '",
-                    inRemote_datetimes[[j]],
-                    "' AND location_id = ",
-                    loc_id,
-                    " AND sub_location_id ",
-                    if (!is.na(sub_loc_id)) {
-                      paste0("= ", sub_loc_id)
-                    } else {
-                      "IS NULL"
-                    },
-                    " AND z ",
-                    if (!is.null(inRemote_sample$z)) {
-                      paste0("= ", inRemote_sample$z)
-                    } else {
-                      "IS NULL"
-                    },
-                    " AND media_id = ",
-                    inRemote_sample$media_id,
-                    " AND sample_type = ",
-                    inRemote_sample$sample_type,
-                    " AND collection_method = ",
-                    inRemote_sample$collection_method,
-                    " AND import_source = '",
-                    source_fx,
-                    "' AND no_update IS FALSE;"
+                } else if (j == length(inRemote) && delete_has_prev) {
+                  DBI::dbExecute(
+                    con,
+                    paste0(
+                      "DELETE FROM samples WHERE datetime < '",
+                      end_i,
+                      "' AND datetime > '",
+                      inRemote_datetimes[j],
+                      "' AND location_id = ",
+                      loc_id,
+                      " AND sub_location_id ",
+                      if (!is.na(sub_loc_id)) {
+                        paste0("= ", sub_loc_id)
+                      } else {
+                        "IS NULL"
+                      },
+                      " AND z ",
+                      if (!is.null(inRemote_sample$z)) {
+                        paste0("= ", inRemote_sample$z)
+                      } else {
+                        "IS NULL"
+                      },
+                      " AND media_id = ",
+                      inRemote_sample$media_id,
+                      " AND sample_type = ",
+                      inRemote_sample$sample_type,
+                      " AND collection_method = ",
+                      inRemote_sample$collection_method,
+                      " AND import_source = '",
+                      source_fx,
+                      "' AND no_update IS FALSE;"
+                    )
                   )
-                )
-              } else {
-                DBI::dbExecute(
-                  con,
-                  paste0(
-                    "DELETE FROM samples WHERE datetime BETWEEN '",
-                    inRemote_datetimes[[j - 1]] + 1,
-                    "' AND '",
-                    inRemote_datetimes[[j]] - 1,
-                    "' AND location_id = ",
-                    loc_id,
-                    " AND sub_location_id ",
-                    if (!is.na(sub_loc_id)) {
-                      paste0("= ", sub_loc_id)
-                    } else {
-                      "IS NULL"
-                    },
-                    " AND z ",
-                    if (!is.null(inRemote_sample$z)) {
-                      paste0("= ", inRemote_sample$z)
-                    } else {
-                      "IS NULL"
-                    },
-                    " AND media_id = ",
-                    inRemote_sample$media_id,
-                    " AND sample_type = ",
-                    inRemote_sample$sample_type,
-                    " AND collection_method = ",
-                    inRemote_sample$collection_method,
-                    " AND import_source = '",
-                    source_fx,
-                    "' AND no_update IS FALSE;"
+                } else if (delete_has_prev) {
+                  DBI::dbExecute(
+                    con,
+                    paste0(
+                      "DELETE FROM samples WHERE datetime BETWEEN '",
+                      inRemote_datetimes[j - 1] + 1,
+                      "' AND '",
+                      inRemote_datetimes[j] - 1,
+                      "' AND location_id = ",
+                      loc_id,
+                      " AND sub_location_id ",
+                      if (!is.na(sub_loc_id)) {
+                        paste0("= ", sub_loc_id)
+                      } else {
+                        "IS NULL"
+                      },
+                      " AND z ",
+                      if (!is.null(inRemote_sample$z)) {
+                        paste0("= ", inRemote_sample$z)
+                      } else {
+                        "IS NULL"
+                      },
+                      " AND media_id = ",
+                      inRemote_sample$media_id,
+                      " AND sample_type = ",
+                      inRemote_sample$sample_type,
+                      " AND collection_method = ",
+                      inRemote_sample$collection_method,
+                      " AND import_source = '",
+                      source_fx,
+                      "' AND no_update IS FALSE;"
+                    )
                   )
-                )
+                }
               }
             }
 

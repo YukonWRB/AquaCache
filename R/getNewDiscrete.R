@@ -59,7 +59,7 @@ getNewDiscrete <- function(
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
 
-  # Make sure that location_id and sample_series_id are not both NULL or both not NULL
+  # Make sure that location_id and sample_series_id are not both specified
   if (!is.null(location_id) & !is.null(sample_series_id)) {
     stop("location_id and sample_series_id cannot both be specified (not NULL)")
   }
@@ -241,7 +241,7 @@ getNewDiscrete <- function(
         " UTC'"
       )
     }
-    last_data_point <- DBI::dbGetQuery(con, paste0(query, ";"))[1, 1]
+    last_data_point <- DBI::dbGetQuery(con, query)[1, 1]
     if (is.na(last_data_point)) {
       # Means we're dealing with a location that has no samples in yet - probably just created
       last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")

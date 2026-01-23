@@ -272,9 +272,16 @@ tryCatch(
     )
 
     # modify the seach path to include the new schema
+    # Fetch the DB name from the connection
+    name <- DBI::dbGetQuery(con, "SELECT current_database()")[1, 1]
+
     DBI::dbExecute(
       con,
-      "ALTER DATABASE aquacache SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
+      paste0(
+        "ALTER DATABASE ",
+        name,
+        " SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
+      )
     )
 
     # Grant usage to all
