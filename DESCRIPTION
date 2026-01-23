@@ -9,17 +9,17 @@ Authors@R: c(
     person("Everett", "Snieder", , email = "everett.snieder@gmail.com", role = c("ctb"), 
            comment = c(ORCID = "0000-0003-4997-3404"))
   )
-Description: Set of functions for the creation and ongoing maintenance of
+Description: Set of functions for the ongoing maintenance of
     the Yukon Government's hydrometeorological databases in postgreSQL
     format. Contains functions which operate on two databases, the 'snow' and 'aquacache' 
     databases. The former is designed to hold discrete snowpack measurements and 
     detailled snow survey data, while the later is designed to hold hydrometric, 
     meteorological and water quality data along with images, spatial files and documents.
     Currently includes adapters to import data from the Water Survey of Canada (WSC)
-    real-time and historical data, date held in Aquarius, USGS data, discrete 
+    real-time and historical data, data held in Aquarius, USGS data, discrete 
     snow survey data from the snow database created with this package,
     water quality data, images from NuPoint and the WSC, and meteorological 
-    data in the form of timeseries observations are unique locations and rasters (with special handling for forecast rasters). 
+    data in the form of timeseries observations at locations and rasters data (with special handling for forecast rasters). 
     Supports any number of timeseries unique by their location,
     parameter, data type, and period (for sum, mean, etc. measurements).
     Disparate data sources are handled via import scripts and function arguments specified for each
