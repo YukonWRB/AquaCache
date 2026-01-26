@@ -381,7 +381,7 @@ downloadAquarius <- function(
           "qualifier_type_id"
         ],
         "E" = qualifiers_DB[
-          qualifiers_DB$qualifier_type_code == "EST",
+          qualifiers_DB$qualifier_type_code == "US-DISTURB",
           "qualifier_type_id"
         ],
         "ES" = qualifiers_DB[

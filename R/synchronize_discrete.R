@@ -120,49 +120,6 @@ synchronize_discrete <- function(
     "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'results';"
   )[, 1]
 
-  # Define a function to commit the data to the database, used later for each sample
-  commit_fx <- function(con, sample, results) {
-    # Insert the sample data
-    DBI::dbAppendTable(con, "samples", sample)
-
-    # Get the sample_id using all fields that define a unique sample
-    sample_id <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT sample_id FROM samples WHERE location_id = ",
-        sample$location_id,
-        " AND datetime = '",
-        sample$datetime,
-        " UTC'",
-        " AND media_id = ",
-        sample$media_id,
-        " AND sample_type = ",
-        sample$sample_type,
-        " AND collection_method = ",
-        sample$collection_method,
-        ifelse(
-          is.null(sample$sub_location_id) || is.na(sample$sub_location_id),
-          " AND sub_location_id IS NULL",
-          paste0(" AND sub_location_id = ", sample$sub_location_id)
-        ),
-        ifelse(
-          is.null(sample$z) || is.na(sample$z),
-          " AND z IS NULL",
-          paste0(" AND z = ", sample$z)
-        ),
-        " AND import_source = '",
-        sample$import_source,
-        "';"
-      )
-    )[1, 1]
-
-    # Insert the results data
-    results$sample_id <- sample_id
-    DBI::dbAppendTable(con, "results", results)
-
-    return(sample_id)
-  }
-
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
   }
@@ -841,7 +798,7 @@ synchronize_discrete <- function(
                     paste0(
                       "DELETE FROM results WHERE result_id IN (",
                       paste(to_delete, collapse = ", "),
-                      ");"
+                      ") AND no_update IS FALSE;"
                     )
                   )
                 }
@@ -1125,31 +1082,26 @@ synchronize_discrete <- function(
                 }
               }
 
-              # Append values in a transaction block ##########
-              activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
-              if (activeTrans) {
-                tryCatch(
-                  {
-                    commit_fx(con, inRemote_sample, inRemote_results)
-                    DBI::dbExecute(con, "COMMIT;")
-                  },
-                  error = function(e) {
-                    DBI::dbExecute(con, "ROLLBACK;")
-                    warning(
-                      "synchronize_discrete: Failed to commit new data for sample_series_id ",
-                      sid,
-                      " and list element ",
-                      j,
-                      " . Error message: ",
-                      e$message
-                    )
-                  }
-                )
-              } else {
-                # we're already in a transaction
-                commit_fx(con, inRemote_sample, inRemote_results)
+              # Append values
+              sample_id <- tryCatch(
+                {
+                  addNewDiscrete(con, inRemote_sample, inRemote_results)
+                },
+                error = function(e) {
+                  warning(
+                    "synchronize_discrete: Failed to commit new data for sample_series_id, ",
+                    sid,
+                    ". Failed on fetched sample number ",
+                    j,
+                    " with error message: ",
+                    e$message
+                  )
+                  NA
+                }
+              )
+              if (!is.na(sample_id)) {
+                new_samples <- new_samples + 1
               }
-              new_samples <- new_samples + 1
             } # End of if no sample is found (making a new one)
           } # End of loop over inRemote
         }
