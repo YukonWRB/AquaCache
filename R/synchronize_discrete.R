@@ -798,7 +798,7 @@ synchronize_discrete <- function(
                     paste0(
                       "DELETE FROM results WHERE result_id IN (",
                       paste(to_delete, collapse = ", "),
-                      "AND no_update IS FALSE);"
+                      ") AND no_update IS FALSE;"
                     )
                   )
                 }
