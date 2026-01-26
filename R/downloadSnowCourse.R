@@ -678,6 +678,8 @@ downloadSnowCourse <- function(
       location,
       "' AND survey_date > '",
       start_date,
+      "' AND survey_date < '",
+      end_date,
       "';"
     )
   )
