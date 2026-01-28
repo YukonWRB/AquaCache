@@ -27,8 +27,14 @@
 #' @export
 #'
 #'
-#TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
-
+#' @examples
+#' \dontrun{
+#' # Synchronize all active timeseries from 2020-01-01 onwards
+#' synchronize_continuous(
+#' start_datetime = as.Date("2020-01-01")
+#' )
+#' }
+#'
 synchronize_continuous <- function(
   con = NULL,
   timeseries_id = "all",
@@ -106,7 +112,7 @@ synchronize_continuous <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
-  #Check length of start_datetime is either 1 of same as timeseries_id
+  # Check length of start_datetime is either 1 of same as timeseries_id
   if (length(start_datetime) != 1) {
     if (length(start_datetime) != length(timeseries_id)) {
       stop(
@@ -206,6 +212,37 @@ synchronize_continuous <- function(
     } else {
       start_datetime
     }
+
+    # Set a lock for this timeseries to prevent concurrent updates, notably by getNewContinuous.
+    # IMPORTANT: This lock waits until it can acquire the lock, so if two processes are trying to sync the same timeseries at the same time, one will wait until the other is done. getNewContinuous on the other hand just skips to the next timeseries if it can't get the lock right away.
+    lock_namespace <- "aquacache_timeseries"
+    DBI::dbExecute(
+      con,
+      paste0(
+        "SELECT pg_advisory_lock(",
+        "hashtext('",
+        lock_namespace,
+        "'), ",
+        tsid,
+        ");"
+      )
+    )
+    on.exit(
+      DBI::dbExecute(
+        con,
+        paste0(
+          "SELECT pg_advisory_unlock(",
+          "hashtext('",
+          lock_namespace,
+          "'), ",
+          tsid,
+          ");"
+        )
+      ),
+      add = TRUE
+    )
+
+    mismatch <- FALSE
 
     args_list <- list(start_datetime = start_dt, con = con)
     if (!is.na(source_fx_args)) {
@@ -870,4 +907,4 @@ synchronize_continuous <- function(
     ". End of function."
   )
   return(updated)
-} #End of function
+} # End of function

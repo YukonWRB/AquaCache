@@ -133,16 +133,39 @@ getNewContinuous <- function(
       last_data_point <- as.POSIXct("1970-01-01 00:00:00", "UTC")
     }
 
+    # Acquire a lock for this timeseries to prevent concurrent updates, notably by synchronize_continuous
+    # IMPORTANT: this lock does not wait if another process has it, it just skips to the next timeseries. Synchronize_continuous **will** wait for the lock to be released, on the other hand.
+    lock_namespace <- "aquacache_timeseries"
+    lock_acquired <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT pg_try_advisory_lock(",
+        "hashtext('",
+        lock_namespace,
+        "'), ",
+        tsid,
+        ") AS locked;"
+      )
+    )[[1]]
+    if (!isTRUE(lock_acquired)) {
+      warning(
+        "getNewContinuous: Skipping timeseries_id ",
+        tsid,
+        " because it is locked by another process."
+      )
+      next
+    }
+
     tryCatch(
       {
         args_list <- list(start_datetime = last_data_point, con = con)
         if (!is.na(source_fx_args)) {
-          #add some arguments if they are specified
+          # add some arguments if they are specified
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
         }
 
-        ts <- do.call(source_fx, args_list) #Get the data using the args_list
+        ts <- do.call(source_fx, args_list) # Get the data using the args_list
         ts <- ts[!is.na(ts$value), ]
 
         if (nrow(ts) > 0) {
@@ -192,17 +215,17 @@ getNewContinuous <- function(
             # Drop columns no longer necessary
             ts <- ts[, c("datetime", "value", "timeseries_id", "imputed")]
 
-            #assign a period to the data
+            # assign a period to the data
             if (aggregation_type == "instantaneous") {
-              #Period is always 0 for instantaneous data
+              # Period is always 0 for instantaneous data
               ts$period <- "00:00:00"
             } else if (
               (aggregation_type != "instantaneous") & !("period" %in% names(ts))
             ) {
-              #aggregation_types of mean, median, min, max should all have a period
+              # aggregation_types of mean, median, min, max should all have a period
               ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
             } else {
-              #Check to make sure that the supplied period can actually be coerced to a period
+              # Check to make sure that the supplied period can actually be coerced to a period
               check <- lubridate::period(unique(ts$period))
               if (NA %in% check) {
                 ts$period <- NA
@@ -222,7 +245,7 @@ getNewContinuous <- function(
               )
             }
             DBI::dbAppendTable(con, "measurements_continuous", ts)
-            #make the new entry into table timeseries
+            # make the new entry into table timeseries
             DBI::dbExecute(
               con,
               "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
@@ -287,8 +310,22 @@ getNewContinuous <- function(
           e$message,
           "'."
         )
+      },
+      finally = {
+        # Release the lock
+        DBI::dbExecute(
+          con,
+          paste0(
+            "SELECT pg_advisory_unlock(",
+            "hashtext('",
+            lock_namespace,
+            "'), ",
+            tsid,
+            ");"
+          )
+        )
       }
-    ) #End of tryCatch
+    ) # End of tryCatch
 
     if (interactive()) {
       utils::setTxtProgressBar(pb, i)
@@ -315,4 +352,4 @@ getNewContinuous <- function(
   if (nrow(success) > 0) {
     return(success)
   }
-} #End of function
+} # End of function
