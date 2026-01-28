@@ -671,31 +671,23 @@ update_hydat <- function(
             )[1, 1]
             location_id <- DBI::dbGetQuery(
               con,
-              paste0(
-                "SELECT location_id FROM locations WHERE location = '",
-                i,
-                "';"
-              )
+              "SELECT location_id FROM locations WHERE location = $1",
+              params = list(i)
             )[1, 1]
             tsid_level <- DBI::dbGetQuery(
               con,
-              paste0(
-                "SELECT timeseries_id FROM timeseries WHERE parameter_id = ",
-                parameter_id,
-                " AND location = '",
-                i,
-                "' AND source_fx = 'downloadWSC'"
-              )
+              "SELECT timeseries_id FROM timeseries WHERE parameter_id = $1 AND location = $2 AND source_fx = 'downloadWSC'",
+              params = list(parameter_id, i)
             )[1, 1]
             if (length(tsid_level) == 0 | is.na(tsid_level)) {
-              #There is no realtime or daily data yet, and no corresponding tsid.
+              # There is no realtime or daily data yet, and no corresponding tsid.
               new_entry <- data.frame(
                 "location" = i,
                 "location_id" = location_id,
                 "parameter_id" = parameter_id,
                 "category" = "continuous",
                 "aggregation_type" = "instantaneous",
-                "record_rate" = "5 minutes", #HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
+                "record_rate" = "5 minutes", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
                 "media_id" = media_id,
                 "start_datetime" = min(new_level$date),
                 "end_datetime" = max(new_level$date),
@@ -707,13 +699,8 @@ update_hydat <- function(
               DBI::dbAppendTable(con, "timeseries", new_entry)
               tsid_level <- DBI::dbGetQuery(
                 con,
-                paste0(
-                  "SELECT timeseries_id FROM timeseries WHERE location = '",
-                  i,
-                  "' AND parameter_id = ",
-                  parameter_id,
-                  " AND source_fx = 'downloadWSC';"
-                )
+                "SELECT timeseries_id FROM timeseries WHERE location = $1 AND parameter_id = $2 AND source_fx = 'downloadWSC';",
+                params = list(i, parameter_id)
               )[1, 1]
               new_level$timeseries_id <- tsid_level
 
@@ -765,10 +752,8 @@ update_hydat <- function(
               # There is a corresponding tsid in the database
               existing <- DBI::dbGetQuery(
                 con,
-                paste0(
-                  "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
-                  tsid_level
-                )
+                "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = $1",
+                params = list(tsid_level)
               )
               if (nrow(existing) > 0) {
                 #There is an entry in timeseries table AND existing data
@@ -898,14 +883,11 @@ update_hydat <- function(
                     } else {
                       DBI::dbExecute(
                         con,
-                        paste0(
-                          "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
+                        "DELETE FROM measurements_calculated_daily WHERE timeseries_id = $1 AND date BETWEEN $2 AND $3;",
+                        params = list(
                           tsid_level,
-                          " AND date BETWEEN '",
                           min(new_level$date),
-                          "' AND '",
-                          max(new_level$date),
-                          "';"
+                          max(new_level$date)
                         )
                       )
                       DBI::dbAppendTable(
@@ -922,13 +904,8 @@ update_hydat <- function(
 
                     DBI::dbExecute(
                       con,
-                      paste0(
-                        "UPDATE timeseries SET start_datetime = '",
-                        start,
-                        "'WHERE timeseries_id = ",
-                        tsid_level,
-                        ";"
-                      )
+                      "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
+                      params = list(start, tsid_level)
                     )
                   }
 
@@ -975,13 +952,8 @@ update_hydat <- function(
                   # Check that star_datetime is correct in timeseries table
                   DBI::dbExecute(
                     con,
-                    paste0(
-                      "UPDATE timeseries SET start_datetime = '",
-                      start,
-                      "'WHERE timeseries_id = ",
-                      tsid_level,
-                      ";"
-                    )
+                    "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
+                    params = list(start, tsid_level)
                   )
                 }
               } else {
@@ -996,13 +968,8 @@ update_hydat <- function(
                   )
                   DBI::dbExecute(
                     con,
-                    paste0(
-                      "UPDATE timeseries SET start_datetime = '",
-                      min(new_level$date),
-                      "'WHERE timeseries_id = ",
-                      tsid_level,
-                      ";"
-                    )
+                    "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
+                    params = list(min(new_level$date), tsid_level)
                   )
                 }
 
@@ -1074,17 +1041,13 @@ update_hydat <- function(
             # Now find the earliest/last datetime between measurements_calculated_daily and measurements_realtime and update start_datetime in timeseries table if needed
             cd <- DBI::dbGetQuery(
               con,
-              paste0(
-                "SELECT MIN(date) AS start_datetime, MAX(date) AS end_datetime FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid_level
-              )
+              "SELECT MIN(date) AS start_datetime, MAX(date) AS end_datetime FROM measurements_calculated_daily WHERE timeseries_id = $1",
+              params = list(tsid_level)
             )
             rt <- DBI::dbGetQuery(
               con,
-              paste0(
-                "SELECT MIN(datetime) AS start_datetime, MAX(datetime) AS end_datetime FROM measurements_continuous WHERE timeseries_id = ",
-                tsid_level
-              )
+              "SELECT MIN(datetime) AS start_datetime, MAX(datetime) AS end_datetime FROM measurements_continuous WHERE timeseries_id = $1",
+              params = list(tsid_level)
             )
             if (is.na(cd$start_datetime) && !is.na(rt$start_datetime)) {
               sdt <- rt$start_datetime
@@ -1108,28 +1071,18 @@ update_hydat <- function(
 
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET start_datetime = '",
-                sdt,
-                "' WHERE timeseries_id = ",
-                tsid_level
-              )
+              "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
+              params = list(sdt, tsid_level)
             )
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET end_datetime = '",
-                edt,
-                "' WHERE timeseries_id = ",
-                tsid_level
-              )
+              "UPDATE timeseries SET end_datetime = $1 WHERE timeseries_id = $2",
+              params = list(edt, tsid_level)
             )
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = ",
-                tsid_level
-              )
+              "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
+              params = list(tsid_level)
             )
           },
           error = function(e) {
@@ -1142,14 +1095,17 @@ update_hydat <- function(
       } #End of for level loop
     } #End of for loop iterating over locations
 
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE internal_status SET value = '",
-        local_hydat,
-        "' WHERE event = 'HYDAT_version'"
-      )
+    try(
+      # In a try in case the user doesn't have update permissions on internal_status
+      {
+        DBI::dbExecute(
+          con,
+          "UPDATE internal_status SET value = NOW() WHERE event = 'HYDAT_version'"
+        )
+      },
+      silent = TRUE
     )
+
     message("Completed update of HYDAT related data.")
   } else {
     message(

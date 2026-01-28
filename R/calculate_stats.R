@@ -925,13 +925,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   # If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
                   DBI::dbExecute(
                     con,
-                    paste0(
-                      "UPDATE timeseries SET last_daily_calculation = '",
-                      .POSIXct(Sys.time(), "UTC"),
-                      "' WHERE timeseries_id = ",
-                      i,
-                      ";"
-                    )
+                    "UPDATE timeseries SET last_daily_calculation = NOW() WHERE timeseries_id = $1",
+                    params = list(i)
                   )
                 }
               }
@@ -1144,13 +1139,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             ) # Append the missing_stats data to the measurements_calculated_daily table
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET last_daily_calculation = '",
-                .POSIXct(Sys.time(), "UTC"),
-                "' WHERE timeseries_id = ",
-                i,
-                ";"
-              )
+              "UPDATE timeseries SET last_daily_calculation = NOW() WHERE timeseries_id = $1",
+              params = list(i)
             )
           }
 

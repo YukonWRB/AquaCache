@@ -347,11 +347,10 @@ addNewContinuous <- function(
       new_end <- max(c(exist_times$end_datetime, df$datetime), na.rm = TRUE)
       DBI::dbExecute(
         con,
-        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = $3 WHERE timeseries_id = $4",
+        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = NOW() WHERE timeseries_id = $4",
         params = list(
           new_end,
           new_start,
-          .POSIXct(Sys.time(), "UTC"),
           tsid
         )
       )
@@ -442,26 +441,14 @@ addNewContinuous <- function(
       if (max(df$date) > last_data_point) {
         DBI::dbExecute(
           con,
-          paste0(
-            "UPDATE timeseries SET end_datetime = '",
-            max(df$date),
-            "', last_new_data = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
+          "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
+          params = list(max(df$date), tsid)
         )
       } else {
         DBI::dbExecute(
           con,
-          paste0(
-            "UPDATE timeseries SET last_new_data = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
+          "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
+          params = list(tsid)
         )
       }
     }

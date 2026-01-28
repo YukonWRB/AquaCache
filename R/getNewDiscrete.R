@@ -594,12 +594,14 @@ getNewDiscrete <- function(
     nrow(all_series),
     " sample_series specified."
   )
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_new_discrete'"
-    )
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_new_discrete'"
+      )
+    },
+    silent = TRUE
   )
 }

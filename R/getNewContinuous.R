@@ -225,15 +225,8 @@ getNewContinuous <- function(
             #make the new entry into table timeseries
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET end_datetime = '",
-                max(ts$datetime),
-                "', last_new_data = '",
-                .POSIXct(Sys.time(), "UTC"),
-                "' WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
+              "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
+              params = list(max(ts$datetime), tsid)
             )
           } # End of commit_fx function
 
@@ -307,13 +300,16 @@ getNewContinuous <- function(
   }
 
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_new_continuous'"
-    )
+
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_new_continuous'"
+      )
+    },
+    silent = TRUE
   )
 
   if (nrow(success) > 0) {

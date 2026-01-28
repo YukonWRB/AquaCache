@@ -221,13 +221,8 @@ synchronize_continuous <- function(
       # There was no data in remote for the date range specified
       DBI::dbExecute(
         con,
-        paste0(
-          "UPDATE timeseries SET last_synchronize = '",
-          .POSIXct(Sys.time(), "UTC"),
-          "' WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
+        "UPDATE timeseries SET last_synchronize = NOW() WHERE timeseries_id = $1",
+        params = list(tsid)
       )
       return()
     } else if (!all(c("value", "datetime") %in% names(inRemote))) {
@@ -518,17 +513,8 @@ synchronize_continuous <- function(
         )
         DBI::dbExecute(
           con,
-          paste0(
-            "UPDATE timeseries SET end_datetime = '",
-            end,
-            "', last_new_data = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "', last_synchronize = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
+          "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW(), last_synchronize = NOW() WHERE timeseries_id = $2",
+          params = list(end, tsid)
         )
         earliest <- min(
           DBI::dbGetQuery(
@@ -593,13 +579,8 @@ synchronize_continuous <- function(
       # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
       DBI::dbExecute(
         con,
-        paste0(
-          "UPDATE timeseries SET last_synchronize = '",
-          .POSIXct(Sys.time(), "UTC"),
-          "' WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
+        "UPDATE timeseries SET last_synchronize = NOW() WHERE timeseries_id = $1",
+        params = list(tsid)
       )
       # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
 
@@ -861,13 +842,15 @@ synchronize_continuous <- function(
     close(pb)
   }
 
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_sync_continuous';"
-    )
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_sync_continuous';"
+      )
+    },
+    silent = TRUE
   )
   message(
     "Successfully checked ",

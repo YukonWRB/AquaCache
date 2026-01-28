@@ -191,13 +191,8 @@ synchronize_discrete <- function(
           # There was no data in remote for the date range specified
           DBI::dbExecute(
             con,
-            paste0(
-              "UPDATE sample_series SET last_synchronize = '",
-              .POSIXct(Sys.time(), "UTC"),
-              "' WHERE sample_series_id = ",
-              sid,
-              ";"
-            )
+            "UPDATE sample_series SET last_synchronize = NOW() WHERE sample_series_id = $1",
+            params = list(sid)
           )
 
           next
@@ -1141,14 +1136,17 @@ synchronize_discrete <- function(
     close(pb)
   }
 
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_synchronize_discrete';"
-    )
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_synchronize_discrete';"
+      )
+    },
+    silent = TRUE
   )
+
   message(
     "Found ",
     new_samples,

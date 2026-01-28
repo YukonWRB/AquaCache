@@ -286,23 +286,13 @@ getNewRasters <- function(
             ))
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE raster_series_index SET last_new_raster = '",
-                .POSIXct(Sys.time(), tz = "UTC"),
-                "' WHERE raster_series_id = ",
-                id,
-                ";"
-              )
+              "UPDATE raster_series_index SET last_new_raster = NOW() WHERE raster_series_id = $1",
+              params = list(id)
             )
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE raster_series_index SET end_datetime = '",
-                valid_to,
-                "' WHERE raster_series_id = ",
-                id,
-                ";"
-              )
+              "UPDATE raster_series_index SET end_datetime = $1 WHERE raster_series_id = $2",
+              params = list(valid_to, id)
             )
             raster_count <- raster_count + 1
 
@@ -422,13 +412,16 @@ getNewRasters <- function(
     " raster_series_id's were updated."
   )
   message(raster_count, " rasters were added in total.")
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_new_rasters'"
-    )
+
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_new_rasters';"
+      )
+    },
+    silent = TRUE
   )
   return(success)
 }

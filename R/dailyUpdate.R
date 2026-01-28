@@ -59,9 +59,9 @@ dailyUpdate <- function(
     continuous_ts <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE timeseries_id IN ('",
-        paste(timeseries_id, collapse = "', '"),
-        "')"
+        "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE timeseries_id IN (",
+        paste(timeseries_id, collapse = ", "),
+        ") AND source_fx IS NOT NULL"
       )
     )
     if (length(timeseries_id) != nrow(continuous_ts)) {
@@ -128,9 +128,9 @@ dailyUpdate <- function(
       all_sample_series <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT sample_series_id FROM sample_series WHERE sample_series_id IN ('",
-          paste(sample_series_id, collapse = "', '"),
-          "')"
+          "SELECT sample_series_id FROM sample_series WHERE sample_series_id IN (",
+          paste(sample_series_id, collapse = ", "),
+          ") AND source_fx IS NOT NULL"
         )
       )
       if (length(sample_series_id) != nrow(all_sample_series)) {
@@ -275,9 +275,9 @@ dailyUpdate <- function(
         calc_ts <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT timeseries_id, last_daily_calculation, last_new_data FROM timeseries WHERE timeseries_id IN ('",
-            paste(continuous_ts$timeseries_id, collapse = "', '"),
-            "') AND record_rate <= '1 day';"
+            "SELECT timeseries_id, last_daily_calculation, last_new_data FROM timeseries WHERE timeseries_id IN (",
+            paste(continuous_ts$timeseries_id, collapse = ", "),
+            ") AND record_rate <= '1 day';"
           )
         )
         needs_calc <- calc_ts[is.na(calc_ts$last_daily_calculation), ] #All of these need a new calculation.
@@ -315,13 +315,15 @@ dailyUpdate <- function(
     )
   }
 
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_update_daily'"
-    )
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_update_daily'"
+      )
+    },
+    silent = TRUE
   )
 
   total_diff <- Sys.time() - function_start

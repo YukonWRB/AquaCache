@@ -33,14 +33,18 @@ maintain <- function(
     } else {
       DBI::dbExecute(con, "VACUUM (ANALYZE)")
     }
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE internal_status SET value = '",
-        .POSIXct(Sys.time(), "UTC"),
-        "' WHERE event = 'last_vacuum';"
-      )
+
+    try(
+      # In a try in case the user doesn't have update permissions on internal_status
+      {
+        DBI::dbExecute(
+          con,
+          "UPDATE internal_status SET value = NOW() WHERE event = 'last_vacuum';"
+        )
+      },
+      silent = TRUE
     )
+
     message("Database vacuum completed")
   }
 
