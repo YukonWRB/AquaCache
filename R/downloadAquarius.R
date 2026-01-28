@@ -105,7 +105,12 @@ downloadAquarius <- function(
   end <- paste0(end, "-00:00") # For UTC offset of 0
 
   if (difference) {
-    old_start <- start
+    # Start's format is 2026-01-25T09:00:01-00:00
+    old_start <- as.POSIXct(
+      gsub("-00:00", "", start),
+      format = "%Y-%m-%dT%H:%M:%S",
+      tz = "UTC"
+    )
     # Adjust start time back by one day + 1 second to get prior values for difference calculation (it was passed in as 1 second after the last data point present in the database, so the point should exist in Aquarius). If there are enough data points in the prior day, great, otherwise a later check will fail gracefully until enough data exists.
     start <- as.POSIXct(
       gsub("-00:00", "", start),
