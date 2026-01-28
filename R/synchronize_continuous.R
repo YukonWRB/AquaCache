@@ -200,18 +200,7 @@ synchronize_continuous <- function(
     parallel,
     con
   ) {
-    loc <- all_timeseries$location[i]
-    parameter <- all_timeseries$parameter_id[i]
-    aggregation_type <- all_timeseries$aggregation_type[i]
     tsid <- all_timeseries$timeseries_id[i]
-    source_fx <- all_timeseries$source_fx[i]
-    owner <- all_timeseries$default_owner[i]
-    source_fx_args <- all_timeseries$source_fx_args[i]
-    start_dt <- if (length(start_datetime) > 1) {
-      start_datetime[i]
-    } else {
-      start_datetime
-    }
 
     # Set a lock for this timeseries to prevent concurrent updates, notably by getNewContinuous.
     # IMPORTANT: This lock waits until it can acquire the lock, so if two processes are trying to sync the same timeseries at the same time, one will wait until the other is done. getNewContinuous on the other hand just skips to the next timeseries if it can't get the lock right away.
@@ -241,6 +230,18 @@ synchronize_continuous <- function(
       ),
       add = TRUE
     )
+
+    loc <- all_timeseries$location[i]
+    parameter <- all_timeseries$parameter_id[i]
+    aggregation_type <- all_timeseries$aggregation_type[i]
+    source_fx <- all_timeseries$source_fx[i]
+    owner <- all_timeseries$default_owner[i]
+    source_fx_args <- all_timeseries$source_fx_args[i]
+    start_dt <- if (length(start_datetime) > 1) {
+      start_datetime[i]
+    } else {
+      start_datetime
+    }
 
     mismatch <- FALSE
 

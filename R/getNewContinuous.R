@@ -109,29 +109,7 @@ getNewContinuous <- function(
   }
   # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)) {
-    loc <- all_timeseries$location[i]
-    parameter <- all_timeseries$parameter_id[i]
-    aggregation_type <- all_timeseries$aggregation_type[i]
     tsid <- all_timeseries$timeseries_id[i]
-    source_fx <- all_timeseries$source_fx[i]
-    source_fx_args <- all_timeseries$source_fx_args[i]
-    owner <- all_timeseries$default_owner[i]
-    # Find the last data point in measurements_continuous
-    # Not using column in 'timeseries' table in case it's out of sync
-    last_data_point <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT MAX(datetime) AS last_datetime FROM measurements_continuous WHERE timeseries_id = ",
-        tsid,
-        ";"
-      )
-    )[1, 1] +
-      1 # one second after the last data point
-
-    # Some timeseries only have data in calculated_daily table (HYDAT timeseries), but let's do a cursory check of them in case they're ever reactivated.
-    if (is.na(last_data_point)) {
-      last_data_point <- as.POSIXct("1970-01-01 00:00:00", "UTC")
-    }
 
     # Acquire a lock for this timeseries to prevent concurrent updates, notably by synchronize_continuous
     # IMPORTANT: this lock does not wait if another process has it, it just skips to the next timeseries. Synchronize_continuous **will** wait for the lock to be released, on the other hand.
@@ -158,6 +136,27 @@ getNewContinuous <- function(
 
     tryCatch(
       {
+        loc <- all_timeseries$location[i]
+        parameter <- all_timeseries$parameter_id[i]
+        aggregation_type <- all_timeseries$aggregation_type[i]
+        source_fx <- all_timeseries$source_fx[i]
+        source_fx_args <- all_timeseries$source_fx_args[i]
+        owner <- all_timeseries$default_owner[i]
+
+        # Find the last data point in measurements_continuous
+        # Not using column in 'timeseries' table in case it's out of sync
+        last_data_point <- DBI::dbGetQuery(
+          con,
+          "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1",
+          params = list(tsid)
+        )[1, 1] +
+          1 # one second after the last data point
+
+        # Some timeseries only have data in calculated_daily table (HYDAT timeseries), but let's do a cursory check of them in case they're ever reactivated.
+        if (is.na(last_data_point)) {
+          last_data_point <- as.POSIXct("1970-01-01 00:00:00", "UTC")
+        }
+
         args_list <- list(start_datetime = last_data_point, con = con)
         if (!is.na(source_fx_args)) {
           # add some arguments if they are specified

@@ -132,41 +132,61 @@ synchronize_discrete <- function(
   # Start of for loop ########################################################
   for (i in 1:nrow(all_series)) {
     sid <- all_series$sample_series_id[i]
-    loc_id <- all_series$location_id[i]
-    sub_loc_id <- all_series$sub_location_id[i]
-    synch_from <- all_series$synch_from[i]
-    synch_to <- all_series$synch_to[i]
-    source_fx <- all_series$source_fx[i]
-    source_fx_args <- all_series$source_fx_args[i]
-    default_owner <- all_series$default_owner[i]
-    default_contributor <- all_series$default_contributor[i]
 
-    # start/end datetime for the sample series
-    start_i <- if (!is.na(synch_from)) {
-      min(start_datetime, synch_from)
-    } else {
-      start_datetime
-    }
-    end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
-
-    # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
-    if (source_fx == "downloadEQWin" & is.null(EQCon)) {
-      EQCon <- EQConnect(silent = TRUE)
-      on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
-    }
-
-    if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
-      # Try with the same host and port as the AquaCache connection
-      dets <- DBI::dbGetQuery(
-        con,
-        "SELECT inet_server_addr() AS ip, inet_server_port() AS port"
+    # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewDiscrete
+    # IMPORTANT: this lock will wait for other processes to release the lock, so if another process is stuck, this will be stuck too.
+    lock_namespace <- "aquacache_sample_series"
+    lock_acquired <- DBI::dbExecute(
+      con,
+      paste0(
+        "SELECT pg_advisory_lock(",
+        "hashtext('",
+        lock_namespace,
+        "'), ",
+        sid,
+        ");"
       )
-      snowCon <- snowConnect(host = dets$ip, port = dets$port, silent = TRUE)
-      on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
-    }
+    )
 
     tryCatch(
       {
+        loc_id <- all_series$location_id[i]
+        sub_loc_id <- all_series$sub_location_id[i]
+        synch_from <- all_series$synch_from[i]
+        synch_to <- all_series$synch_to[i]
+        source_fx <- all_series$source_fx[i]
+        source_fx_args <- all_series$source_fx_args[i]
+        default_owner <- all_series$default_owner[i]
+        default_contributor <- all_series$default_contributor[i]
+
+        # start/end datetime for the sample series
+        start_i <- if (!is.na(synch_from)) {
+          min(start_datetime, synch_from)
+        } else {
+          start_datetime
+        }
+        end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
+
+        # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
+        if (source_fx == "downloadEQWin" & is.null(EQCon)) {
+          EQCon <- EQConnect(silent = TRUE)
+          on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
+        }
+
+        if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
+          # Try with the same host and port as the AquaCache connection
+          dets <- DBI::dbGetQuery(
+            con,
+            "SELECT inet_server_addr() AS ip, inet_server_port() AS port"
+          )
+          snowCon <- snowConnect(
+            host = dets$ip,
+            port = dets$port,
+            silent = TRUE
+          )
+          on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
+        }
+
         args_list <- list(
           start_datetime = start_i,
           end_datetime = end_i,
@@ -1123,6 +1143,20 @@ synchronize_discrete <- function(
           sid,
           " with message: ",
           m$message
+        )
+      },
+      finally = {
+        # Release the lock
+        DBI::dbExecute(
+          con,
+          paste0(
+            "SELECT pg_advisory_unlock(",
+            "hashtext('",
+            lock_namespace,
+            "'), ",
+            sid,
+            ");"
+          )
         )
       }
     ) # End of tryCatch

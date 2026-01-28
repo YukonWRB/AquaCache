@@ -157,70 +157,98 @@ getNewDiscrete <- function(
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
   }
   for (i in 1:nrow(all_series)) {
-    loc_id <- all_series$location_id[i]
-    sub_loc_id <- all_series$sub_location_id[i]
     sid <- all_series$sample_series_id[i]
-    source_fx <- all_series$source_fx[i]
-    source_fx_args <- all_series$source_fx_args[i]
-    share_with <- all_series$share_with[i]
-    owner <- all_series$default_owner[i]
-    contributor <- all_series$default_contributor[i]
-    range_start <- all_series$synch_from[i]
-    range_end <- all_series$synch_to[i]
 
-    # Find the last data point for this series
-    query <- paste0(
-      "SELECT MAX(datetime) FROM samples WHERE location_id = ",
-      loc_id,
-      " AND import_source = '",
-      source_fx,
-      "'"
-    )
-    if (!is.na(sub_loc_id)) {
-      query <- paste0(query, " AND sub_location_id = ", sub_loc_id)
-    } else {
-      query <- paste0(query, " AND sub_location_id IS NULL")
-    }
-    if (!is.na(range_start)) {
-      query <- paste0(
-        query,
-        " AND datetime >= '",
-        as.character(range_start),
-        " UTC'"
+    # Acquire a lock for this timeseries to prevent concurrent updates, notably by synchronize_discrete
+    # IMPORTANT: this lock does not wait if another process has it, it just skips to the next timeseries. synchronize_discrete **will** wait for the lock to be released, on the other hand.
+    lock_namespace <- "aquacache_sample_series"
+    lock_acquired <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT pg_try_advisory_lock(",
+        "hashtext('",
+        lock_namespace,
+        "'), ",
+        sid,
+        ") AS locked;"
       )
-    }
-    if (!is.na(range_end)) {
-      query <- paste0(
-        query,
-        " AND datetime <= '",
-        as.character(range_end),
-        " UTC'"
+    )[[1]]
+    if (!isTRUE(lock_acquired)) {
+      warning(
+        "getNewDiscrete: Skipping sample_series_id ",
+        sid,
+        " because it is locked by another process."
       )
-    }
-    last_data_point <- DBI::dbGetQuery(con, query)[1, 1]
-    if (is.na(last_data_point)) {
-      # Means we're dealing with a location that has no samples in yet - probably just created
-      last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
-    } else {
-      last_data_point <- last_data_point + 1
-    }
-
-    if (source_fx == "downloadEQWin" & is.null(EQCon)) {
-      EQCon <- EQConnect(silent = TRUE)
-      on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
-    }
-    if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
-      # Try with the same host and port as the AquaCache connection
-      dets <- DBI::dbGetQuery(
-        con,
-        "SELECT inet_server_addr() AS ip, inet_server_port() AS port"
-      )
-      snowCon <- snowConnect(host = dets$ip, port = dets$port, silent = TRUE)
-      on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
+      next
     }
 
     tryCatch(
       {
+        loc_id <- all_series$location_id[i]
+        sub_loc_id <- all_series$sub_location_id[i]
+        source_fx <- all_series$source_fx[i]
+        source_fx_args <- all_series$source_fx_args[i]
+        share_with <- all_series$share_with[i]
+        owner <- all_series$default_owner[i]
+        contributor <- all_series$default_contributor[i]
+        range_start <- all_series$synch_from[i]
+        range_end <- all_series$synch_to[i]
+
+        # Find the last data point for this series
+        query <- paste0(
+          "SELECT MAX(datetime) FROM samples WHERE location_id = ",
+          loc_id,
+          " AND import_source = '",
+          source_fx,
+          "'"
+        )
+        if (!is.na(sub_loc_id)) {
+          query <- paste0(query, " AND sub_location_id = ", sub_loc_id)
+        } else {
+          query <- paste0(query, " AND sub_location_id IS NULL")
+        }
+        if (!is.na(range_start)) {
+          query <- paste0(
+            query,
+            " AND datetime >= '",
+            as.character(range_start),
+            " UTC'"
+          )
+        }
+        if (!is.na(range_end)) {
+          query <- paste0(
+            query,
+            " AND datetime <= '",
+            as.character(range_end),
+            " UTC'"
+          )
+        }
+        last_data_point <- DBI::dbGetQuery(con, query)[1, 1]
+        if (is.na(last_data_point)) {
+          # Means we're dealing with a location that has no samples in yet - probably just created
+          last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+        } else {
+          last_data_point <- last_data_point + 1
+        }
+
+        if (source_fx == "downloadEQWin" & is.null(EQCon)) {
+          EQCon <- EQConnect(silent = TRUE)
+          on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
+        }
+        if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
+          # Try with the same host and port as the AquaCache connection
+          dets <- DBI::dbGetQuery(
+            con,
+            "SELECT inet_server_addr() AS ip, inet_server_port() AS port"
+          )
+          snowCon <- snowConnect(
+            host = dets$ip,
+            port = dets$port,
+            silent = TRUE
+          )
+          on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
+        }
+
         args_list <- list(
           con = con,
           start_datetime = last_data_point,
@@ -562,11 +590,8 @@ getNewDiscrete <- function(
         } # End of looping over each list element (sample) for a sample_series_id
         DBI::dbExecute(
           con,
-          paste0(
-            "UPDATE sample_series SET last_new_data = now() WHERE sample_series_id = ",
-            sid,
-            ";"
-          )
+          "UPDATE sample_series SET last_new_data = now() WHERE sample_series_id = $1",
+          params = list(sid)
         ) # Update the last new data column
       },
       error = function(e) {
@@ -575,6 +600,20 @@ getNewDiscrete <- function(
           sid,
           ". Error message: ",
           e$message
+        )
+      },
+      finally = {
+        # Release the lock
+        DBI::dbExecute(
+          con,
+          paste0(
+            "SELECT pg_advisory_unlock(",
+            "hashtext('",
+            lock_namespace,
+            "'), ",
+            sid,
+            ");"
+          )
         )
       }
     ) #End of tryCatch
