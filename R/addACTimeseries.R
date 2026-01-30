@@ -20,8 +20,8 @@
 #' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
 #' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
-#' @param location A character vector corresponding to column 'location' of table 'locations' OR a numeric vector corresponding to column 'location_id' of table 'locations'.
-#' @param sub_location A character vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.
+#' @param location A character vector corresponding to column 'name' of table 'locations' OR a numeric vector corresponding to column 'location_id' of table 'locations'.
+#' @param sub_location A numeric vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
 #' @param media A numeric vector corresponding to column 'media_id' of table 'media_types'.
@@ -214,7 +214,7 @@ addACTimeseries <- function(
       ]
       new_locs <- location[!(location %in% exist_locs)]
     } else if (inherits(location, "character")) {
-      exist_locs <- DBI::dbGetQuery(con, "SELECT location FROM locations")[, 1]
+      exist_locs <- DBI::dbGetQuery(con, "SELECT name FROM locations")[, 1]
       new_locs <- location[!(location %in% exist_locs)]
     }
     if (!all(location %in% exist_locs)) {
@@ -425,25 +425,15 @@ addACTimeseries <- function(
   #Add the timeseries #######################################################################################################
 
   for (i in 1:length(location)) {
-    loc_code <- location[i]
-    if (inherits(loc_code, "character")) {
+    loc_id <- location[i]
+    if (inherits(loc_id, "character")) {
       # Get the location_id from the database
       loc_id <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT location_id FROM locations WHERE location = '",
-          loc_code,
-          "';"
-        )
-      )[1, 1]
-    } else {
-      loc_id <- loc_code
-      loc_code <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT location FROM locations WHERE location_id = ",
+          "SELECT location_id FROM locations WHERE name = '",
           loc_id,
-          ";"
+          "';"
         )
       )[1, 1]
     }
@@ -504,7 +494,6 @@ addACTimeseries <- function(
         }
 
         add <- data.frame(
-          location = loc_code,
           sub_location_id = sub_location[i],
           location_id = loc_id,
           z_id = zi,
