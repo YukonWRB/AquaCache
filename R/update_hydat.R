@@ -47,13 +47,13 @@ update_hydat <- function(
     if (timeseries_id[1] == "all") {
       all_timeseries <- DBI::dbGetQuery(
         con,
-        "SELECT t.location, t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx = 'downloadWSC';"
+        "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx = 'downloadWSC';"
       )
     } else {
       all_timeseries <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT t.location, t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
+          "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
           paste(timeseries_id, collapse = "', '"),
           "') AND source_fx = 'downloadWSC';"
         )
@@ -77,6 +77,19 @@ update_hydat <- function(
         }
       }
     }
+
+    # Now find the value for 'location' in the JSONB timeseries.source_fx_args column for each timeseries_id
+    locations <- c()
+    for (i in 1:nrow(all_timeseries)) {
+      loc <- DBI::dbGetQuery(
+        con,
+        "SELECT source_fx_args FROM timeseries WHERE timeseries_id = $1;",
+        params = list(all_timeseries$timeseries_id[i])
+      )[1, 1]
+      loc <- jsonlite::fromJSON(loc)$location
+      locations <- c(locations, loc)
+    }
+    all_timeseries$location <- locations
 
     # Get organization_id for 'Water Survey of Canada'
     organization_id <- DBI::dbGetQuery(

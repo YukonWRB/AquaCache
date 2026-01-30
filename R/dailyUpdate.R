@@ -53,13 +53,13 @@ dailyUpdate <- function(
   if (timeseries_id[1] == "all") {
     continuous_ts <- DBI::dbGetQuery(
       con,
-      "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE source_fx IS NOT NULL"
+      "SELECT timeseries_id, last_daily_calculation, active FROM timeseries WHERE source_fx IS NOT NULL"
     )
   } else {
     continuous_ts <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT location, timeseries_id, last_daily_calculation, active FROM timeseries WHERE timeseries_id IN (",
+        "SELECT timeseries_id, last_daily_calculation, active FROM timeseries WHERE timeseries_id IN (",
         paste(timeseries_id, collapse = ", "),
         ") AND source_fx IS NOT NULL"
       )

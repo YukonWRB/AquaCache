@@ -42,13 +42,13 @@ getNewContinuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL;"
+      "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL;"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
+        "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
         paste(timeseries_id, collapse = "', '"),
         "') AND source_fx IS NOT NULL;"
       )
@@ -70,8 +70,6 @@ getNewContinuous <- function(
 
   count <- 0 #counter for number of successful new pulls
   success <- data.frame(
-    "location" = NULL,
-    "parameter_id" = NULL,
     "timeseries" = NULL
   )
 
@@ -136,7 +134,6 @@ getNewContinuous <- function(
 
     tryCatch(
       {
-        loc <- all_timeseries$location[i]
         parameter <- all_timeseries$parameter_id[i]
         aggregation_type <- all_timeseries$aggregation_type[i]
         source_fx <- all_timeseries$source_fx[i]
@@ -262,8 +259,6 @@ getNewContinuous <- function(
                 success <- rbind(
                   success,
                   data.frame(
-                    "location" = loc,
-                    "parameter_id" = parameter,
                     "timeseries_id" = tsid
                   )
                 )
@@ -271,13 +266,9 @@ getNewContinuous <- function(
               error = function(e) {
                 DBI::dbExecute(con, "ROLLBACK;")
                 warning(
-                  "getNewContinuous: Failed to append new data at location ",
-                  loc,
-                  " and parameter ",
-                  parameter,
-                  " (timeseries_id ",
+                  "getNewContinuous: Failed to append new data at timeseries_id ",
                   all_timeseries$timeseries_id[i],
-                  "). Returned error '",
+                  ". Returned error '",
                   e$message,
                   "'."
                 )
@@ -289,8 +280,6 @@ getNewContinuous <- function(
             success <- rbind(
               success,
               data.frame(
-                "location" = loc,
-                "parameter_id" = parameter,
                 "timeseries_id" = tsid
               )
             )
@@ -299,13 +288,9 @@ getNewContinuous <- function(
       },
       error = function(e) {
         warning(
-          "getNewContinuous: Failed to get new data or to append new data at location ",
-          loc,
-          " and parameter ",
-          parameter,
-          " (timeseries_id ",
+          "getNewContinuous: Failed to get new data or to append new data at timeseries_id ",
           all_timeseries$timeseries_id[i],
-          "). Returned error '",
+          ". Returned error '",
           e$message,
           "'."
         )

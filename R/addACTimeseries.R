@@ -527,8 +527,8 @@ addACTimeseries <- function(
             new_tsid <- DBI::dbGetQuery(
               con,
               paste0(
-                "SELECT timeseries_id FROM timeseries WHERE location = '",
-                add$location,
+                "SELECT timeseries_id FROM timeseries WHERE location_id = '",
+                add$location_id,
                 "' AND parameter_id = ",
                 add$parameter_id,
                 " AND aggregation_type_id = '",
@@ -554,8 +554,8 @@ addACTimeseries <- function(
             new_tsid <<- DBI::dbGetQuery(
               con,
               paste0(
-                "SELECT timeseries_id FROM timeseries WHERE location = '",
-                add$location,
+                "SELECT timeseries_id FROM timeseries WHERE location_id = '",
+                add$location_id,
                 "' AND parameter_id = ",
                 add$parameter_id,
                 " AND aggregation_type_id = '",
