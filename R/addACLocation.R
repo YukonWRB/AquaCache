@@ -2,14 +2,13 @@
 #'
 #' Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
-#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
+#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
 #' @param location A character vector of the location code(s).
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French.
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
 #' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default public group is "public_reader".
-#' @param owner A numeric vector of the owner(s) of the location(s).
 #' @param data_sharing_agreement_id A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
 #' @param note A character vector of notes for the location(s) (optional).
@@ -33,7 +32,6 @@ addACLocation <- function(
   latitude = NA,
   longitude = NA,
   share_with = NA,
-  owner = NA,
   data_sharing_agreement_id = NA,
   location_type = NA,
   note = NA,
@@ -53,7 +51,6 @@ addACLocation <- function(
   # latitude = 66.60114
   # longitude = -138.85132
   # share_with = 'public_reader'
-  # owner = 2
   # location_type = 15
   # datum_id_from = 10
   # datum_id_to = 35
@@ -81,7 +78,6 @@ addACLocation <- function(
         latitude,
         longitude,
         share_with,
-        owner,
         data_sharing_agreement_id,
         location_type,
         note,
@@ -107,7 +103,6 @@ addACLocation <- function(
           "latitude",
           "longitude",
           "share_with",
-          "owner",
           "data_sharing_agreement_id",
           "location_type",
           "note",
@@ -128,7 +123,6 @@ addACLocation <- function(
           "latitude",
           "longitude",
           "share_with",
-          "owner",
           "data_sharing_agreement_id",
           "location_type",
           "note",
@@ -157,7 +151,6 @@ addACLocation <- function(
     latitude <- df$latitude
     longitude <- df$longitude
     share_with <- df$share_with
-    owner <- df$owner
     data_sharing_agreement_id <- df$data_sharing_agreement_id
     location_type <- df$location_type
     note <- df$note
@@ -182,7 +175,6 @@ addACLocation <- function(
     length(latitude),
     length(longitude),
     length(share_with),
-    length(owner),
     length(data_sharing_agreement_id),
     length(location_type),
     length(note),
@@ -370,33 +362,6 @@ addACLocation <- function(
     stop("At least one of the location type IDs you specified does not exist.")
   }
 
-  # Check that owner exists in the 'organizations' table
-  unique_owners <- unique(owner)
-  if (length(unique_owners) > 1) {
-    exists <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT organization_id FROM organizations WHERE organization_id IN (",
-        paste(unique_owners, collapse = ", "),
-        ");"
-      )
-    )
-  } else {
-    exists <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT organization_id FROM organizations WHERE organization_id = ",
-        unique_owners,
-        ";"
-      )
-    )
-  }
-  if (length(unique_owners) != nrow(exists)) {
-    stop(
-      "At least one of the owner IDs you specified does not exist. You can add it with function addACOrg()."
-    )
-  }
-
   # Check that data_sharing_agreement_id exists in the 'documents' table
   unique_data_sharing_agreements <- unique(data_sharing_agreement_id)
   if (!is.na(unique_data_sharing_agreements)) {
@@ -503,18 +468,6 @@ addACLocation <- function(
             geom_id
           )
         )[1, 1]
-
-        # Deal with ownership information ############################
-        DBI::dbExecute(
-          con,
-          "INSERT INTO locations_metadata_owners_operators (location_id, owner, operator, start_datetime) VALUES ($1, $2, $3, $4);",
-          params = list(
-            location_id,
-            owner[i],
-            owner[i],
-            "1970-01-01"
-          )
-        )
 
         # Add the location's datum information to the 'datums' table ############################
         DBI::dbExecute(
