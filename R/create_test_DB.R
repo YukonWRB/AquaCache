@@ -281,7 +281,7 @@ create_test_db <- function(
     # Find the locations for the Liard River at upper crossing and Marsh Lake, plus Tagish meteorological
     continuous_locations <- DBI::dbGetQuery(
       con,
-      "SELECT DISTINCT(location_id) FROM timeseries WHERE location IN ('09EA004', '09AB004', '09AA-M1', '48168')"
+      "SELECT DISTINCT(t.location_id) FROM timeseries t JOIN locations l ON t.location_id = l.location_id WHERE l.alias IN ('09EA004', '09AB004', '09AA-M1', '48168')"
     )$location_id
   }
   if (is.null(discrete_locations)) {

@@ -226,15 +226,14 @@ update_hydat <- function(
               paste0(
                 "SELECT timeseries_id FROM timeseries WHERE parameter_id = ",
                 parameter_id,
-                " AND location = '",
-                i,
+                " AND location_id = '",
+                location_id,
                 "' AND source_fx = 'downloadWSC'"
               )
             )[1, 1]
             if (length(tsid_flow) == 0 | is.na(tsid_flow)) {
               #There is no realtime or daily data yet, and no corresponding tsid.
               new_entry <- data.frame(
-                "location" = i,
                 "location_id" = location_id,
                 "parameter_id" = parameter_id,
                 "category" = "continuous",
@@ -252,8 +251,8 @@ update_hydat <- function(
               tsid_flow <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT timeseries_id FROM timeseries WHERE location = '",
-                  i,
+                  "SELECT timeseries_id FROM timeseries WHERE location_id = '",
+                  location_id,
                   "' AND parameter_id = ",
                   parameter_id,
                   " AND source_fx = 'downloadWSC';"
@@ -689,13 +688,12 @@ update_hydat <- function(
             )[1, 1]
             tsid_level <- DBI::dbGetQuery(
               con,
-              "SELECT timeseries_id FROM timeseries WHERE parameter_id = $1 AND location = $2 AND source_fx = 'downloadWSC'",
-              params = list(parameter_id, i)
+              "SELECT timeseries_id FROM timeseries WHERE parameter_id = $1 AND location_id = $2 AND source_fx = 'downloadWSC'",
+              params = list(parameter_id, location_id)
             )[1, 1]
             if (length(tsid_level) == 0 | is.na(tsid_level)) {
               # There is no realtime or daily data yet, and no corresponding tsid.
               new_entry <- data.frame(
-                "location" = i,
                 "location_id" = location_id,
                 "parameter_id" = parameter_id,
                 "category" = "continuous",
@@ -712,8 +710,8 @@ update_hydat <- function(
               DBI::dbAppendTable(con, "timeseries", new_entry)
               tsid_level <- DBI::dbGetQuery(
                 con,
-                "SELECT timeseries_id FROM timeseries WHERE location = $1 AND parameter_id = $2 AND source_fx = 'downloadWSC';",
-                params = list(i, parameter_id)
+                "SELECT timeseries_id FROM timeseries WHERE location_id = $1 AND parameter_id = $2 AND source_fx = 'downloadWSC';",
+                params = list(location_id, parameter_id)
               )[1, 1]
               new_level$timeseries_id <- tsid_level
 
