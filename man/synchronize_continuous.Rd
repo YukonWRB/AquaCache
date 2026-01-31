@@ -52,3 +52,12 @@ NOTE that any data point labelled as imputed = TRUE is only replaced if a value 
 
 Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[=downloadAquarius]{downloadAquarius()}} for more information.
 }
+\examples{
+\dontrun{
+# Synchronize all active timeseries from 2020-01-01 onwards
+synchronize_continuous(
+start_datetime = as.Date("2020-01-01")
+)
+}
+
+}
