@@ -20,7 +20,7 @@
 #' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
 #' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
-#' @param location A character vector corresponding to locations.location_code (preferred), locations.alias (legacy), or locations.name OR a numeric vector corresponding to locations.location_id.
+#' @param location A character vector corresponding to locations.location_code (preferred), locations.alias (legacy and nullable), or locations.name OR a numeric vector corresponding to locations.location_id.
 #' @param sub_location A numeric vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
@@ -436,6 +436,7 @@ addACTimeseries <- function(
 
   for (i in 1:length(location)) {
     loc_id <- location[i]
+    loc_label <- as.character(loc_id)
     if (inherits(loc_id, "character")) {
       # Get the location_id from the database
       loc_name <- tolower(loc_id)
@@ -458,6 +459,22 @@ addACTimeseries <- function(
         stop("Unable to find a location matching ", loc_id, ".")
       }
       loc_id <- loc_match$location_id[1]
+      loc_label <- loc_match$location_code[1]
+      if (is.na(loc_label) || loc_label == "") {
+        loc_label <- loc_match$name[1]
+      }
+    } else if (inherits(loc_id, "numeric")) {
+      loc_info <- DBI::dbGetQuery(
+        con,
+        "SELECT location_code, name FROM locations WHERE location_id = $1;",
+        params = list(loc_id)
+      )
+      if (nrow(loc_info) == 1) {
+        loc_label <- loc_info$location_code[1]
+        if (is.na(loc_label) || loc_label == "") {
+          loc_label <- loc_info$name[1]
+        }
+      }
     }
     tryCatch(
       {
@@ -537,7 +554,7 @@ addACTimeseries <- function(
             DBI::dbAppendTable(con, "timeseries", add) # This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
             message(
               "Added a new entry to the timeseries table for location ",
-              add$location,
+              loc_label,
               ", parameter ",
               add$parameter_id,
               ", media_type ",
@@ -564,7 +581,7 @@ addACTimeseries <- function(
           error = function(e) {
             message(
               "It looks like the timeseries for for location ",
-              add$location,
+              loc_label,
               ", parameter ",
               add$parameter_id,
               ", media_type ",
@@ -703,7 +720,7 @@ addACTimeseries <- function(
             error = function(e) {
               message(
                 "Failed to add new continuous data for location ",
-                add$location,
+                loc_label,
                 " and parameter ",
                 add$parameter_id,
                 "."
@@ -725,7 +742,7 @@ addACTimeseries <- function(
                 )
                 message(
                   "Deleted the timeseries entry for location ",
-                  add$location,
+                  loc_label,
                   " and parameter ",
                   add$parameter_id,
                   "."
@@ -766,7 +783,7 @@ addACTimeseries <- function(
                 )
                 message(
                   "Deleted the timeseries entry for location ",
-                  add$location,
+                  loc_label,
                   " and parameter ",
                   add$parameter_id,
                   " as no realtime or daily means data could be found."
@@ -786,7 +803,7 @@ addACTimeseries <- function(
                 )
                 message(
                   "Success! Calculated daily means and statistics for ",
-                  add$location,
+                  loc_label,
                   " and parameter ",
                   param_name,
                   "."
@@ -794,7 +811,7 @@ addACTimeseries <- function(
               } else {
                 message(
                   "Not calculating daily statistics for ",
-                  add$location,
+                  loc_label,
                   " and parameter ",
                   param_name,
                   " as recording rate is greater than 1 day."
@@ -804,7 +821,7 @@ addACTimeseries <- function(
             error = function(e) {
               message(
                 "Unable to calculate daily means and statistics for ",
-                add$location,
+                loc_label,
                 " and parameter ",
                 param_name,
                 " with message ",
@@ -815,7 +832,7 @@ addACTimeseries <- function(
             warning = function(e) {
               message(
                 "May have failed to calculate daily means and statistics for ",
-                add$location,
+                loc_label,
                 " and parameter ",
                 param_name,
                 "."
@@ -832,7 +849,7 @@ addACTimeseries <- function(
       error = function(e) {
         warning(
           "Failed to add new data for location ",
-          add$location,
+          loc_label,
           " and parameter ",
           add$parameter_id,
           ". Returned error: ",

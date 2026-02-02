@@ -308,9 +308,9 @@ tryCatch(
       DBI::dbExecute(
         con,
         "
-      UPDATE locations
-      SET location_code = $1
-      WHERE location_id = $2;
+        UPDATE locations
+        SET location_code = $1
+        WHERE location_id = $2;
       ",
         params = list(code, exist_locs$location_id[i])
       )
@@ -331,25 +331,26 @@ tryCatch(
     DBI::dbExecute(
       con,
       "CREATE VIEW public.location_metadata_en WITH (security_invoker='true') AS
-    SELECT loc.location_id,
-    loc.name,
-    loc.alias AS alias,
-    loc.location_code,
-    loc.latitude,
-    loc.longitude,
-    dc.conversion_m AS elevation,
-    dl.datum_name_en AS datum,
-    loc.note,
-    array_agg(DISTINCT proj.name) AS projects,
-    array_agg(DISTINCT net.name) AS networks
-   FROM ((((((public.locations loc
-     LEFT JOIN public.locations_projects loc_proj ON ((loc.location_id = loc_proj.location_id)))
-     LEFT JOIN public.projects proj ON ((loc_proj.project_id = proj.project_id)))
-     LEFT JOIN public.locations_networks loc_net ON ((loc.location_id = loc_net.location_id)))
-     LEFT JOIN public.networks net ON ((loc_net.network_id = net.network_id)))
-     LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
-     LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
-  GROUP BY loc.location_id, loc.location_code, loc.name, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_en;"
+      SELECT 
+        loc.location_id,
+        loc.name,
+        loc.alias AS alias,
+        loc.location_code,
+        loc.latitude,
+        loc.longitude,
+        dc.conversion_m AS elevation,
+        dl.datum_name_en AS datum,
+        loc.note,
+        array_agg(DISTINCT proj.name) AS projects,
+        array_agg(DISTINCT net.name) AS networks
+      FROM ((((((public.locations loc
+        LEFT JOIN public.locations_projects loc_proj ON ((loc.location_id = loc_proj.location_id)))
+        LEFT JOIN public.projects proj ON ((loc_proj.project_id = proj.project_id)))
+        LEFT JOIN public.locations_networks loc_net ON ((loc.location_id = loc_net.location_id)))
+        LEFT JOIN public.networks net ON ((loc_net.network_id = net.network_id)))
+        LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
+        LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
+      GROUP BY loc.location_id, loc.location_code, loc.name, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_en;"
     )
 
     DBI::dbExecute(
@@ -360,25 +361,25 @@ tryCatch(
     DBI::dbExecute(
       con,
       "CREATE VIEW public.location_metadata_fr WITH (security_invoker='true') AS
- SELECT loc.location_id,
- loc.name_fr AS nom,
-    loc.alias AS alias,
-    loc.location_code AS code_de_site,
-    loc.latitude,
-    loc.longitude,
-    dc.conversion_m AS altitude,
-    dl.datum_name_fr AS datum,
-    loc.note,
-    array_agg(DISTINCT proj.name_fr) AS projets,
-    array_agg(DISTINCT net.name_fr) AS réseaux
-   FROM ((((((public.locations loc
-     LEFT JOIN public.locations_projects loc_proj ON ((loc.location_id = loc_proj.location_id)))
-     LEFT JOIN public.projects proj ON ((loc_proj.project_id = proj.project_id)))
-     LEFT JOIN public.locations_networks loc_net ON ((loc.location_id = loc_net.location_id)))
-     LEFT JOIN public.networks net ON ((loc_net.network_id = net.network_id)))
-     LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
-     LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
-  GROUP BY loc.location_id, loc.location_code, loc.name_fr, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_fr;"
+      SELECT loc.location_id,
+      loc.name_fr AS nom,
+          loc.alias AS alias,
+          loc.location_code AS code_de_site,
+          loc.latitude,
+          loc.longitude,
+          dc.conversion_m AS altitude,
+          dl.datum_name_fr AS datum,
+          loc.note,
+          array_agg(DISTINCT proj.name_fr) AS projets,
+          array_agg(DISTINCT net.name_fr) AS réseaux
+        FROM ((((((public.locations loc
+          LEFT JOIN public.locations_projects loc_proj ON ((loc.location_id = loc_proj.location_id)))
+          LEFT JOIN public.projects proj ON ((loc_proj.project_id = proj.project_id)))
+          LEFT JOIN public.locations_networks loc_net ON ((loc.location_id = loc_net.location_id)))
+          LEFT JOIN public.networks net ON ((loc_net.network_id = net.network_id)))
+          LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
+          LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
+        GROUP BY loc.location_id, loc.location_code, loc.name_fr, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_fr;"
     )
 
     DBI::dbExecute(
