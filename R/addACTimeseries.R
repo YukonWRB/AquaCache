@@ -20,7 +20,7 @@
 #' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
 #' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
-#' @param location A character vector corresponding to column 'name' of table 'locations' OR a numeric vector corresponding to column 'location_id' of table 'locations'.
+#' @param location A character vector corresponding to locations.location_code (preferred), locations.alias (legacy), or locations.name OR a numeric vector corresponding to locations.location_id.
 #' @param sub_location A numeric vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
@@ -206,18 +206,28 @@ addACTimeseries <- function(
       location <- rep(location, maxlength)
     }
 
-    #Check that every location in 'location' already exists
+    # Check that every location in 'location' already exists
     new_locs <- NULL
+    loc_tbl <- NULL
     if (inherits(location, "numeric")) {
       exist_locs <- DBI::dbGetQuery(con, "SELECT location_id FROM locations")[,
         1
       ]
       new_locs <- location[!(location %in% exist_locs)]
     } else if (inherits(location, "character")) {
-      exist_locs <- DBI::dbGetQuery(con, "SELECT name FROM locations")[, 1]
-      new_locs <- location[!(location %in% exist_locs)]
+      loc_tbl <- DBI::dbGetQuery(
+        con,
+        "SELECT location_id, location_code, alias, name FROM locations"
+      )
+      exist_locs <- tolower(unique(c(
+        loc_tbl$location_code,
+        loc_tbl$alias,
+        loc_tbl$name
+      )))
+      exist_locs <- exist_locs[!is.na(exist_locs)]
+      new_locs <- location[!(tolower(location) %in% exist_locs)]
     }
-    if (!all(location %in% exist_locs)) {
+    if (length(new_locs) > 0) {
       stop(
         "Not all of the locations in your timeseries_df are already in the database. Please add the following location(s) first using addACLocation() or the add location Shiny module: ",
         paste(new_locs, collapse = ", "),
@@ -428,14 +438,26 @@ addACTimeseries <- function(
     loc_id <- location[i]
     if (inherits(loc_id, "character")) {
       # Get the location_id from the database
-      loc_id <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT location_id FROM locations WHERE name = '",
-          loc_id,
-          "';"
+      loc_name <- tolower(loc_id)
+      if (is.null(loc_tbl)) {
+        loc_tbl <- DBI::dbGetQuery(
+          con,
+          "SELECT location_id, location_code, alias, name FROM locations"
         )
-      )[1, 1]
+      }
+      loc_match <- loc_tbl[
+        tolower(loc_tbl$location_code) == loc_name,
+      ]
+      if (nrow(loc_match) == 0) {
+        loc_match <- loc_tbl[tolower(loc_tbl$alias) == loc_name, ]
+      }
+      if (nrow(loc_match) == 0) {
+        loc_match <- loc_tbl[tolower(loc_tbl$name) == loc_name, ]
+      }
+      if (nrow(loc_match) == 0) {
+        stop("Unable to find a location matching ", loc_id, ".")
+      }
+      loc_id <- loc_match$location_id[1]
     }
     tryCatch(
       {

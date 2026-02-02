@@ -6,9 +6,10 @@
 \usage{
 addACLocation(
   df = NULL,
-  location = NA,
   name = NA,
   name_fr = NA,
+  alias = NA,
+  location_code = NA,
   latitude = NA,
   longitude = NA,
   share_with = NA,
@@ -26,13 +27,15 @@ addACLocation(
 )
 }
 \arguments{
-\item{df}{A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for \code{con} must be left as their default values.}
-
-\item{location}{A character vector of the location code(s).}
+\item{df}{A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for \code{con} must be left as their default values.}
 
 \item{name}{A character vector of the location name(s).}
 
 \item{name_fr}{A character vector of the location name(s) in French.}
+
+\item{alias}{A character vector of the location alias(es).}
+
+\item{location_code}{A character vector of the location code(s). Note that in most cases this should be auto-generated when by adding a new location using the YGwater Shiny application!}
 
 \item{latitude}{A numeric vector of the latitude(s) as decimal degrees.}
 

@@ -31,7 +31,7 @@ addACTimeseries(
 
 \item{start_datetime}{A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.}
 
-\item{location}{A character vector corresponding to column 'name' of table 'locations' OR a numeric vector corresponding to column 'location_id' of table 'locations'.}
+\item{location}{A character vector corresponding to locations.location_code (preferred), locations.alias (legacy), or locations.name OR a numeric vector corresponding to locations.location_id.}
 
 \item{sub_location}{A numeric vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.}
 

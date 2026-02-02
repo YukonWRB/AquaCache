@@ -18,7 +18,7 @@ downloadSnowCourse(
 )
 }
 \arguments{
-\item{location}{The location code associated with the snow course.}
+\item{location}{The location code associated with the snow course in the snow database,  should match locations.location_code in the aquacache database (locations.alias is checked as a fallback).}
 
 \item{sub_location}{The sub-location code associated with the snow course (leave NULL if not applicable).}
 
