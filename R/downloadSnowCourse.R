@@ -4,7 +4,7 @@
 #'
 #' Brings in pared-down snow course data to the database. Can automatically calculate an offset value where locations have operated in parallel in anticipation of replacing the old location with a nearby new one, updating the calculation with each new data point (see parameter old_loc).
 #'
-#' @param location The location code associated with the snow course.
+#' @param location The location code associated with the snow course in the snow database, which must also match locations.alias column in the aquacache database if old_loc is specified.
 #' @param sub_location The sub-location code associated with the snow course (leave NULL if not applicable).
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
@@ -131,7 +131,7 @@ downloadSnowCourse <- function(
   location_id <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT location_id FROM locations WHERE location = '",
+      "SELECT location_id FROM locations WHERE alias = '",
       location,
       "';"
     )

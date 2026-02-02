@@ -47,13 +47,13 @@ update_hydat <- function(
     if (timeseries_id[1] == "all") {
       all_timeseries <- DBI::dbGetQuery(
         con,
-        "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx = 'downloadWSC';"
+        "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type, l.location_id FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id JOIN locations AS l ON t.location_id = l.location_id WHERE source_fx = 'downloadWSC';"
       )
     } else {
       all_timeseries <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
+          "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type, l.location_id FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id JOIN locations AS l ON t.location_id = l.location_id WHERE timeseries_id IN ('",
           paste(timeseries_id, collapse = "', '"),
           "') AND source_fx = 'downloadWSC';"
         )
@@ -213,14 +213,10 @@ update_hydat <- function(
               con,
               "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
             )[1, 1]
-            location_id <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT location_id FROM locations WHERE location = '",
-                i,
-                "';"
-              )
-            )[1, 1]
+            location_id <- all_timeseries[
+              all_timeseries$location == i,
+              "location_id"
+            ][1]
             tsid_flow <- DBI::dbGetQuery(
               con,
               paste0(
@@ -681,11 +677,10 @@ update_hydat <- function(
               con,
               "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
             )[1, 1]
-            location_id <- DBI::dbGetQuery(
-              con,
-              "SELECT location_id FROM locations WHERE location = $1",
-              params = list(i)
-            )[1, 1]
+            location_id <- all_timeseries[
+              all_timeseries$location == i,
+              "location_id"
+            ][1]
             tsid_level <- DBI::dbGetQuery(
               con,
               "SELECT timeseries_id FROM timeseries WHERE parameter_id = $1 AND location_id = $2 AND source_fx = 'downloadWSC'",
