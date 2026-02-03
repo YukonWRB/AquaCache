@@ -116,7 +116,7 @@ tryCatch(
     # Add a column 'data_sharing_agreement_id' to timeseries table
     DBI::dbExecute(
       con,
-      "ALTER TABLE timeseries ADD COLUMN IF NOT EXISTS data_sharing_agreement_id INTEGER REFERENCES files.documents(document_id);"
+      "ALTER TABLE continuous.timeseries ADD COLUMN IF NOT EXISTS data_sharing_agreement_id INTEGER REFERENCES files.documents(document_id);"
     )
     # Re-use a function to check document type for data sharing agreement
     try(
@@ -125,6 +125,24 @@ tryCatch(
           con,
           "
     create trigger trg_check_data_sharing_agreement before insert or update on continuous.timeseries for each row execute function files.check_data_sharing_agreement()
+    ;"
+        )
+      },
+      silent = TRUE
+    )
+
+    # Add a column 'data_sharing_agreement_id' to discrete.samples table
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE discrete.samples ADD COLUMN IF NOT EXISTS data_sharing_agreement_id INTEGER REFERENCES files.documents(document_id);"
+    )
+    # Re-use a function to check document type for data sharing agreement
+    try(
+      {
+        DBI::dbExecute(
+          con,
+          "
+    create trigger trg_check_data_sharing_agreement before insert or update on discrete.samples for each row execute function files.check_data_sharing_agreement()
     ;"
         )
       },
@@ -150,48 +168,31 @@ tryCatch(
       "ALTER TABLE timeseries DROP COLUMN IF EXISTS location;"
     )
 
-    # Rename 'location' in table 'locations' to 'alias' and drop not null
-    # Find the name of the unique constraint on column 'location' in table 'locations'
-    # Check if the column is present first (in case patch is re-run)
+    # Rename 'location' in table 'locations' to 'location_code' and add 'alias' column
+    # First check if 'location_code' column already exists
     column_check <- DBI::dbGetQuery(
       con,
-      "SELECT column_name FROM information_schema.columns WHERE table_name = 'locations' AND column_name = 'location';"
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'locations' AND column_name = 'location_code';"
     )$column_name
-    if (length(column_check) > 0) {
-      unique_constraint_name <- DBI::dbGetQuery(
-        con,
-        "SELECT conname FROM pg_constraint WHERE conrelid = 'locations'::regclass AND contype = 'u' AND conkey = (SELECT array_agg(attnum) FROM pg_attribute WHERE attrelid = 'locations'::regclass AND attname = 'location');"
-      )$conname
-      if (length(unique_constraint_name) > 0) {
-        # Drop the unique constraint if it exists
-        DBI::dbExecute(
-          con,
-          paste0(
-            "ALTER TABLE locations DROP CONSTRAINT ",
-            unique_constraint_name,
-            ";"
-          )
-        )
-      }
+    if (length(column_check) == 0) {
       DBI::dbExecute(
         con,
-        "ALTER TABLE locations ALTER COLUMN location DROP NOT NULL;"
-      )
-
-      DBI::dbExecute(
-        con,
-        "ALTER TABLE locations RENAME COLUMN location TO alias;"
+        "ALTER TABLE locations RENAME COLUMN location TO location_code;"
       )
     }
-
-    # Create a new column 'location_code' in table 'locations'
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE locations ADD COLUMN IF NOT EXISTS location_code TEXT;"
-    )
     DBI::dbExecute(
       con,
       "COMMENT ON COLUMN locations.location_code IS 'A unique code for the location, ideally constructed from the location National Hydro Network polygon in which the location is situated, using the first 2 digits and 2-3 letters of the polygon name, location type suffix, and a unique number.';"
+    )
+
+    # Create a new column 'alias' in table 'locations'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE locations ADD COLUMN IF NOT EXISTS alias TEXT;"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN locations.alias IS 'An alternate name or code for the location.';"
     )
 
     # Now we'll create location codes for all existing locations
@@ -233,10 +234,14 @@ tryCatch(
       )
     }
 
-    # Iterate through all locations with NULL location_code and generate codes
+    # Iterate through all locations with location_codes that are null, that don't begin with (two numbers, 2-3 letters), that don't begin with 'YOWN-' and generate codes
     exist_locs <- DBI::dbGetQuery(
       con,
-      "SELECT location_id, latitude, longitude, location_type FROM locations WHERE location_code IS NULL;"
+      "SELECT location_id, latitude, longitude, location_type, location_code
+      FROM locations
+      WHERE location_code IS NOT NULL
+        AND location_code !~ '^(?:[0-9]{2}[A-Za-z]{2,3}|YOWN)';
+      "
     )
     location_types <- DBI::dbGetQuery(
       con,
@@ -247,19 +252,19 @@ tryCatch(
       poly <- DBI::dbGetQuery(
         con,
         "
-      WITH p AS (
-        SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1,$2), 4326), ST_SRID(geom)) AS pt
-        FROM spatial.vectors
-        WHERE layer_name = 'National Hydro Network - Basins'
-        LIMIT 1
-      )
-      SELECT feature_name
-      FROM spatial.vectors v, p
-      WHERE v.layer_name = 'National Hydro Network - Basins'
-        AND ST_Intersects(v.geom, p.pt)
-      ORDER BY ST_Area(v.geom::geography) ASC
-      LIMIT 1;
-      ",
+        WITH p AS (
+          SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1,$2), 4326), ST_SRID(geom)) AS pt
+          FROM spatial.vectors
+          WHERE layer_name = 'National Hydro Network - Basins'
+          LIMIT 1
+        )
+        SELECT feature_name
+        FROM spatial.vectors v, p
+        WHERE v.layer_name = 'National Hydro Network - Basins'
+          AND ST_Intersects(v.geom, p.pt)
+        ORDER BY ST_Area(v.geom::geography) ASC
+        LIMIT 1;
+        ",
         params = list(exist_locs$longitude[i], exist_locs$latitude[i])
       )[1, 1]
 
@@ -304,7 +309,15 @@ tryCatch(
         code <- paste0(code, "-", sprintf("%05d", suffix_num))
       }
 
-      # Update the location_code in the database
+      # Update the location_code in the database (move the old code to 'alias' first)
+      DBI::dbExecute(
+        con,
+        "
+        UPDATE locations
+        SET alias = location_code
+        WHERE location_id = $1;",
+        params = list(exist_locs$location_id[i])
+      )
       DBI::dbExecute(
         con,
         "
@@ -316,15 +329,77 @@ tryCatch(
       )
     } # End of generating location codes loop
 
-    # Make location_code NOT NULL
+    # Add a table to hold first nation language names
+    DBI::dbExecute(con, "DROP TABLE IF EXISTS public.languages;")
     DBI::dbExecute(
       con,
-      "ALTER TABLE locations ALTER COLUMN location_code SET NOT NULL;"
+      "CREATE TABLE IF NOT EXISTS public.languages (
+        language_code INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        language_name_en TEXT NOT NULL,
+        language_name_fr TEXT
+      );"
     )
-    # Make location_code UNIQUE
     DBI::dbExecute(
       con,
-      "ALTER TABLE locations ADD CONSTRAINT unique_location_code UNIQUE (location_code);"
+      "COMMENT ON TABLE public.languages IS 'Table of First Nation language names.';"
+    )
+
+    languages_df <- data.frame(
+      language_name_en = c(
+        "Gwich’in",
+        "Hän",
+        "Upper Tanana",
+        "Northern Tutchone",
+        "Southern Tutchone",
+        "Kaska",
+        "Tagish",
+        "Tlingit"
+      ),
+      language_name_fr = c(
+        "Gwich’in",
+        "Hän",
+        "Tanana supérieur",
+        "Tutchone du Nord",
+        "Tutchone du Sud",
+        "Kaska",
+        "Tagish",
+        "Tlingit"
+      ),
+      stringsAsFactors = FALSE
+    )
+    DBI::dbAppendTable(
+      con,
+      "languages",
+      languages_df
+    )
+
+    # Now let's add a table to hold First Nation language names for locations, linked on location_id. One column per language.
+    DBI::dbExecute(
+      con,
+      "
+      CREATE TABLE IF NOT EXISTS public.location_names (
+        location_id INTEGER NOT NULL REFERENCES public.locations (location_id) ON DELETE CASCADE ON UPDATE CASCADE,
+        language_code INTEGER NOT NULL REFERENCES public.languages (language_code) ON DELETE CASCADE ON UPDATE CASCADE,
+        name TEXT NOT NULL,
+        PRIMARY KEY (location_id, language_code)
+      );"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_location_names_location_id ON public.location_names (location_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_location_names_language_code ON public.location_names (language_code);"
+    )
+
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE public.location_names IS 'Table of First Nation language names for locations, one row per language:location association.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN public.location_names.name IS 'The name of the location in the specified First Nation language.';"
     )
 
     # Deal with views
@@ -342,7 +417,17 @@ tryCatch(
         dl.datum_name_en AS datum,
         loc.note,
         array_agg(DISTINCT proj.name) AS projects,
-        array_agg(DISTINCT net.name) AS networks
+        array_agg(DISTINCT net.name) AS networks,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'language_code', lng.language_code,
+              'language_name_en', lng.language_name_en,
+              'name', ln.name
+            )
+          ) FILTER (WHERE ln.location_id IS NOT NULL),
+          '[]'::jsonb
+        ) AS fn_names
       FROM ((((((public.locations loc
         LEFT JOIN public.locations_projects loc_proj ON ((loc.location_id = loc_proj.location_id)))
         LEFT JOIN public.projects proj ON ((loc_proj.project_id = proj.project_id)))
@@ -350,6 +435,8 @@ tryCatch(
         LEFT JOIN public.networks net ON ((loc_net.network_id = net.network_id)))
         LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
         LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
+        LEFT JOIN public.location_names ln ON loc.location_id = ln.location_id
+        LEFT JOIN public.languages lng ON ln.language_code = lng.language_code
       GROUP BY loc.location_id, loc.location_code, loc.name, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_en;"
     )
 
@@ -372,6 +459,16 @@ tryCatch(
           loc.note,
           array_agg(DISTINCT proj.name_fr) AS projets,
           array_agg(DISTINCT net.name_fr) AS réseaux
+          COALESCE(
+            jsonb_agg(
+              DISTINCT jsonb_build_object(
+                'language_code', lng.language_code,
+                'language_name_fr', lng.language_name_fr,
+                'name', ln.name
+              )
+            ) FILTER (WHERE ln.location_id IS NOT NULL),
+            '[]'::jsonb
+          ) AS noms_premières_nations
         FROM ((((((public.locations loc
           LEFT JOIN public.locations_projects loc_proj ON ((loc.location_id = loc_proj.location_id)))
           LEFT JOIN public.projects proj ON ((loc_proj.project_id = proj.project_id)))
@@ -379,6 +476,8 @@ tryCatch(
           LEFT JOIN public.networks net ON ((loc_net.network_id = net.network_id)))
           LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
           LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
+          LEFT JOIN public.location_names ln ON loc.location_id = ln.location_id
+          LEFT JOIN public.languages lng ON ln.language_code = lng.language_code
         GROUP BY loc.location_id, loc.location_code, loc.name_fr, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_fr;"
     )
 
