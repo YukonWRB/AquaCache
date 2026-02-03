@@ -27,7 +27,8 @@ addNewContinuous <- function(
   # Check that the timeseries_id is valid
   check <- DBI::dbGetQuery(
     con,
-    paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id = ", tsid)
+    "SELECT timeseries_id FROM timeseries WHERE timeseries_id = $1",
+    params = list(tsid)
   )[1, 1]
   if (is.na(check)) {
     stop("addNewContinuous: The timeseries_id you specified does not exist.")
@@ -105,27 +106,23 @@ addNewContinuous <- function(
 
   info <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT at.aggregation_type, t.default_owner AS owner FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = ",
-      tsid,
-      ";"
-    )
+    "SELECT at.aggregation_type, t.default_owner AS owner FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = $1;",
+    params = list(tsid)
   )
   end_datetime_realtime <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-      tsid,
-      ";"
-    )
+    "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1;",
+    params = list(tsid)
   )[[1]]
   end_datetime_daily <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-      tsid,
-      ";"
-    )
+    "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = $1;",
+    params = list(tsid)
+  )[[1]]
+  end_datetime_daily <- DBI::dbGetQuery(
+    con,
+    "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = $1;",
+    params = list(tsid)
   )[[1]]
 
   if (is.na(end_datetime_realtime) && is.na(end_datetime_daily)) {
@@ -187,11 +184,8 @@ addNewContinuous <- function(
     if (is.na(last_data_point)) {
       last_data_point <- DBI::dbGetQuery(
         con,
-        paste0(
-          "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
+        "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1;",
+        params = list(tsid)
       )[1, 1]
     }
     if (is.na(last_data_point)) {
@@ -253,14 +247,11 @@ addNewContinuous <- function(
           for (i in seq_len(nrow(no_period))) {
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE measurements_continuous SET period = '",
+              "UPDATE measurements_continuous SET period = $1 WHERE datetime = $2 AND timeseries_id = $3",
+              params = list(
                 no_period$period[i],
-                "' WHERE datetime = '",
                 no_period$datetime[i],
-                "' AND timeseries_id = ",
-                tsid,
-                ";"
+                tsid
               )
             )
           }
@@ -279,14 +270,11 @@ addNewContinuous <- function(
       if (overwrite == "all") {
         DBI::dbExecute(
           con,
-          paste0(
-            "DELETE FROM measurements_continuous WHERE datetime BETWEEN '",
+          "DELETE FROM measurements_continuous WHERE datetime BETWEEN $1 AND $2 AND timeseries_id = $3;",
+          params = list(
             min(df$datetime),
-            "' AND '",
             max(df$datetime),
-            "' AND timeseries_id = ",
-            tsid,
-            ";"
+            tsid
           )
         )
       } else if (overwrite == "conflict") {
@@ -347,7 +335,7 @@ addNewContinuous <- function(
       new_end <- max(c(exist_times$end_datetime, df$datetime), na.rm = TRUE)
       DBI::dbExecute(
         con,
-        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = NOW() WHERE timeseries_id = $4",
+        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = NOW() WHERE timeseries_id = $3",
         params = list(
           new_end,
           new_start,
@@ -383,11 +371,8 @@ addNewContinuous <- function(
     if (is.na(last_data_point)) {
       last_data_point <- DBI::dbGetQuery(
         con,
-        paste0(
-          "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
+        "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = $1;",
+        params = list(tsid)
       )[1, 1]
     }
     if (is.na(last_data_point)) {
@@ -412,14 +397,11 @@ addNewContinuous <- function(
       if (overwrite == "all") {
         DBI::dbExecute(
           con,
-          paste0(
-            "DELETE FROM measurements_calculated_daily WHERE date BETWEEN ('",
+          "DELETE FROM measurements_calculated_daily WHERE date BETWEEN $1 AND $2 AND timeseries_id = $3",
+          params = list(
             min(df$date),
-            "' AND '",
             max(df$date),
-            "') AND timeseries_id = ",
-            tsid,
-            ";"
+            tsid
           )
         )
       } else if (overwrite == "conflict") {
