@@ -126,13 +126,39 @@ synchronize_continuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL"
+      "SELECT 
+      `  t.parameter_id, 
+        t.timeseries_id, 
+        t.source_fx, 
+        t.source_fx_args, 
+        t.last_daily_calculation, 
+        at.aggregation_type, 
+        t.default_owner,
+        t.default_data_sharing_agreement_id,
+        t.active, 
+        t.sync_remote
+      FROM timeseries t 
+      JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id 
+      WHERE source_fx IS NOT NULL"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN (",
+        "SELECT 
+          t.parameter_id, 
+          t.timeseries_id, 
+          t.source_fx, 
+          t.source_fx_args, 
+          t.last_daily_calculation, 
+          at.aggregation_type, 
+          t.default_owner,
+          t.default_data_sharing_agreement_id,
+          t.active, 
+          t.sync_remote 
+        FROM timeseries t 
+        JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id 
+        WHERE timeseries_id IN (",
         paste(timeseries_id, collapse = ", "),
         ") AND source_fx IS NOT NULL;"
       )
@@ -235,6 +261,8 @@ synchronize_continuous <- function(
     aggregation_type <- all_timeseries$aggregation_type[i]
     source_fx <- all_timeseries$source_fx[i]
     owner <- all_timeseries$default_owner[i]
+    default_data_sharing_agreement_id <-
+      all_timeseries$default_data_sharing_agreement_id[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
     start_dt <- if (length(start_datetime) > 1) {
       start_datetime[i]
@@ -306,10 +334,16 @@ synchronize_continuous <- function(
     if (!("qualifier" %in% names(inRemote))) {
       inRemote$qualifier <- qualifier_unknown
     }
-    if (!is.null(owner)) {
-      # There may not be an owner assigned in table timeseries
-      if (!("owner" %in% names(inRemote))) {
+
+    if (!("owner" %in% names(inRemote))) {
+      if (!is.na(owner)) {
         inRemote$owner <- owner
+      }
+    }
+
+    if (!("data_sharing_agreement_id" %in% names(inRemote))) {
+      if (!is.na(default_data_sharing_agreement_id)) {
+        inRemote$data_sharing_agreement_id <- default_data_sharing_agreement_id
       }
     }
 
@@ -327,6 +361,16 @@ synchronize_continuous <- function(
       )
       inRemote$contributor <- NULL # Drop the contributor column as it's already taken care of
     }
+    if ("data_sharing_agreement_id" %in% names(inRemote)) {
+      adjust_data_sharing_agreement(
+        con,
+        tsid,
+        inRemote[, c("datetime", "data_sharing_agreement_id")],
+        delete = TRUE
+      )
+      inRemote$data_sharing_agreement_id <- NULL # Drop the data_sharing_agreement_id column as it's already taken care of
+    }
+
     if ("grade" %in% names(inRemote)) {
       adjust_grade(con, tsid, inRemote[, c("datetime", "grade")], delete = TRUE)
       inRemote$grade <- NULL # Drop the grade column as it's already taken care of

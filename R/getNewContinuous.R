@@ -42,13 +42,35 @@ getNewContinuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL;"
+      "SELECT 
+        t.parameter_id, 
+        t.timeseries_id, 
+        t.source_fx, 
+        t.source_fx_args, 
+        at.aggregation_type, 
+        t.default_owner, 
+        t.default_data_sharing_agreement_id,
+        t.active 
+      FROM timeseries t 
+      JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id 
+      WHERE source_fx IS NOT NULL;"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
+        "SELECT 
+          t.parameter_id, 
+          t.timeseries_id, 
+          t.source_fx, 
+          t.source_fx_args, 
+          at.aggregation_type, 
+          t.default_owner,
+          t.default_data_sharing_agreement_id,
+          t.active 
+        FROM timeseries t 
+        JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
+         WHERE timeseries_id IN ('",
         paste(timeseries_id, collapse = "', '"),
         "') AND source_fx IS NOT NULL;"
       )
@@ -139,6 +161,8 @@ getNewContinuous <- function(
         source_fx <- all_timeseries$source_fx[i]
         source_fx_args <- all_timeseries$source_fx_args[i]
         owner <- all_timeseries$default_owner[i]
+        data_sharing_agreement_id <-
+          all_timeseries$default_data_sharing_agreement_id[i]
 
         # Find the last data point in measurements_continuous
         # Not using column in 'timeseries' table in case it's out of sync
@@ -197,6 +221,18 @@ getNewContinuous <- function(
             ts$qualifier <- qualifier_unknown
           }
 
+          if ("data_sharing_agreement_id" %in% names(ts)) {
+            if (!is.na(default_data_sharing_agreement_id)) {
+              ts$data_sharing_agreement_id[
+                is.na(ts$data_sharing_agreement_id)
+              ] <- default_data_sharing_agreement_id
+            }
+          } else {
+            if (!is.na(default_data_sharing_agreement_id)) {
+              ts$data_sharing_agreement_id <- default_data_sharing_agreement_id
+            }
+          }
+
           commit_fx <- function(con, ts, last_data_point, tsid) {
             adjust_grade(con, tsid, ts[, c("datetime", "grade")])
             adjust_approval(con, tsid, ts[, c("datetime", "approval")])
@@ -206,6 +242,14 @@ getNewContinuous <- function(
             }
             if ("contributor" %in% names(ts)) {
               adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
+            }
+
+            if ("data_sharing_agreement_id" %in% names(ts)) {
+              adjust_data_sharing_agreement(
+                con,
+                tsid,
+                ts[, c("datetime", "data_sharing_agreement_id")]
+              )
             }
 
             # Drop columns no longer necessary

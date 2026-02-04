@@ -13,7 +13,6 @@ addACLocation(
   latitude = NA,
   longitude = NA,
   share_with = NA,
-  data_sharing_agreement_id = NA,
   location_type = NA,
   note = NA,
   contact = NA,
@@ -27,13 +26,13 @@ addACLocation(
 )
 }
 \arguments{
-\item{df}{A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for \code{con} must be left as their default values.}
+\item{df}{A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for \code{con} must be left as their default values.}
 
 \item{name}{A character vector of the location name(s).}
 
 \item{name_fr}{A character vector of the location name(s) in French.}
 
-\item{alias}{A character vector of the location alias(es).}
+\item{alias}{A character vector of the location alias(es). This is optional, leave NA if not needed.}
 
 \item{location_code}{A character vector of the location code(s). Note that in most cases this should be auto-generated when by adding a new location using the YGwater Shiny application!}
 
@@ -42,8 +41,6 @@ addACLocation(
 \item{longitude}{A numeric vector of the longitude(s) as decimal degrees.}
 
 \item{share_with}{A character vector of the user group(s) with which to share the location(s), separated by a comma. Default public group is "public_reader".}
-
-\item{data_sharing_agreement_id}{A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.}
 
 \item{location_type}{A numeric vector of the location type(s) id(s) from table 'location_types'.}
 

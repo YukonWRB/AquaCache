@@ -113,23 +113,176 @@ tryCatch(
       "DROP TABLE IF EXISTS public.locations_metadata_owners_operators;"
     )
 
-    # Add a column 'data_sharing_agreement_id' to timeseries table
+    # Create a table to hold data sharing agreements for timeseries with temporal ranges.
     DBI::dbExecute(
       con,
-      "ALTER TABLE continuous.timeseries ADD COLUMN IF NOT EXISTS data_sharing_agreement_id INTEGER REFERENCES files.documents(document_id);"
+      "CREATE TABLE IF NOT EXISTS public.timeseries_data_sharing_agreements (
+        timeseries_data_sharing_agreement_id SERIAL PRIMARY KEY,
+        timeseries_id INTEGER NOT NULL REFERENCES continuous.timeseries(timeseries_id) ON DELETE CASCADE ON UPDATE CASCADE,
+        data_sharing_agreement_id INTEGER NOT NULL REFERENCES files.documents(document_id),
+        start_dt TIMESTAMPTZ NOT NULL,
+        end_dt TIMESTAMPTZ NOT NULL DEFAULT 'infinity',
+        created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );"
     )
-    # Re-use a function to check document type for data sharing agreement
-    try(
-      {
-        DBI::dbExecute(
-          con,
-          "
-    create trigger trg_check_data_sharing_agreement before insert or update on continuous.timeseries for each row execute function files.check_data_sharing_agreement()
-    ;"
-        )
-      },
-      silent = TRUE
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE public.timeseries_data_sharing_agreements IS 'Temporal data sharing agreements for timeseries. Use start_dt/end_dt to define applicability windows.';"
     )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN public.timeseries_data_sharing_agreements.data_sharing_agreement_id IS 'References documents.document_id where document type is data sharing agreement.';"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX IF NOT EXISTS idx_timeseries_data_sharing_agreements_range
+       ON public.timeseries_data_sharing_agreements (timeseries_id, start_dt, end_dt);"
+    )
+    # Drop old triggers if they exist
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS update_timeseries_data_sharing_agreements_updated ON public.timeseries_data_sharing_agreements;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER update_timeseries_data_sharing_agreements_updated
+       BEFORE UPDATE
+       ON public.timeseries_data_sharing_agreements
+       FOR EACH ROW
+       EXECUTE FUNCTION public.update_updated();"
+    )
+    # Drop the trigger if it exists
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS trg_check_timeseries_data_sharing_agreement_type ON public.timeseries_data_sharing_agreements;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER trg_check_timeseries_data_sharing_agreement_type
+       BEFORE INSERT OR UPDATE ON public.timeseries_data_sharing_agreements
+       FOR EACH ROW
+       EXECUTE FUNCTION files.check_data_sharing_agreement();"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.check_timeseries_data_sharing_agreements_overlap()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $$
+       BEGIN
+         IF EXISTS (
+           SELECT 1
+           FROM public.timeseries_data_sharing_agreements
+           WHERE timeseries_id = NEW.timeseries_id
+             AND timeseries_data_sharing_agreement_id != NEW.timeseries_data_sharing_agreement_id
+             AND (NEW.start_dt < end_dt AND NEW.end_dt > start_dt)
+         ) THEN
+           RAISE EXCEPTION 'Data sharing agreements cannot overlap in time for the same timeseries_id. Failed on: %', NEW.timeseries_id;
+         END IF;
+         RETURN NEW;
+       END;
+       $$;"
+    )
+    # Drop the trigger if it exists
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS check_timeseries_data_sharing_agreements_overlap ON public.timeseries_data_sharing_agreements;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE CONSTRAINT TRIGGER check_timeseries_data_sharing_agreements_overlap
+       AFTER INSERT OR UPDATE ON public.timeseries_data_sharing_agreements
+       DEFERRABLE INITIALLY DEFERRED
+       FOR EACH ROW
+       EXECUTE FUNCTION public.check_timeseries_data_sharing_agreements_overlap();"
+    )
+
+    # Add a column on timeseries for default data sharing agreements.
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE continuous.timeseries ADD COLUMN IF NOT EXISTS default_data_sharing_agreement_id INTEGER REFERENCES files.documents(document_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN continuous.timeseries.default_data_sharing_agreement_id IS 'Default data sharing agreement for this timeseries when data does not specify otherwise. Must match to a document_type of data sharing agreement, enforced by trigger and function.';"
+    )
+
+    # Create a function and trigger to enforce document type
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION files.check_default_data_sharing_agreement()
+          RETURNS TRIGGER
+          LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          IF NEW.default_data_sharing_agreement_id IS NOT NULL THEN
+            IF NOT EXISTS (
+              SELECT 1
+              FROM files.documents d
+              JOIN files.document_types dt ON d.document_type_id = dt.document_type_id
+              WHERE d.document_id = NEW.default_data_sharing_agreement_id
+                AND dt.type = 'data sharing agreement'
+            ) THEN
+              RAISE EXCEPTION 'Invalid document type: default_data_sharing_agreement_id must reference a document of type ''data sharing agreement''';
+            END IF;
+          END IF;
+          RETURN NEW;
+        END;
+        $$;
+        "
+    )
+    # Drop the trigger if it exists and create it anew
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS trg_check_default_data_sharing_agreement ON continuous.timeseries;"
+    )
+    DBI::dbExecute(
+      con,
+      "
+        CREATE TRIGGER trg_check_default_data_sharing_agreement
+        BEFORE INSERT OR UPDATE ON continuous.timeseries
+        FOR EACH ROW
+        EXECUTE FUNCTION files.check_default_data_sharing_agreement();
+        "
+    )
+
+    # Migrate existing timeseries data_sharing_agreement_id values into the new table if present.
+    column_check <- DBI::dbGetQuery(
+      con,
+      "SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'continuous'
+         AND table_name = 'timeseries'
+         AND column_name = 'data_sharing_agreement_id';"
+    )$column_name
+    if (length(column_check) > 0) {
+      DBI::dbExecute(
+        con,
+        "INSERT INTO public.timeseries_data_sharing_agreements
+           (timeseries_id, data_sharing_agreement_id, start_dt, end_dt)
+         SELECT timeseries_id,
+                data_sharing_agreement_id,
+                COALESCE(start_datetime, NOW()),
+                COALESCE(end_datetime, 'infinity'::timestamptz)
+         FROM continuous.timeseries
+         WHERE data_sharing_agreement_id IS NOT NULL;"
+      )
+      DBI::dbExecute(
+        con,
+        "UPDATE continuous.timeseries
+         SET default_data_sharing_agreement_id = data_sharing_agreement_id
+         WHERE data_sharing_agreement_id IS NOT NULL;"
+      )
+      DBI::dbExecute(
+        con,
+        "ALTER TABLE continuous.timeseries DROP COLUMN IF EXISTS data_sharing_agreement_id;"
+      )
+      DBI::dbExecute(
+        con,
+        "DROP TRIGGER IF EXISTS trg_check_data_sharing_agreement ON continuous.timeseries;"
+      )
+    }
 
     # Add a column 'data_sharing_agreement_id' to discrete.samples table
     DBI::dbExecute(
@@ -405,9 +558,14 @@ tryCatch(
     )
 
     # Deal with views
+    # Drop view and recreate in English
     DBI::dbExecute(
       con,
-      "CREATE VIEW public.location_metadata_en WITH (security_invoker='true') AS
+      "DROP VIEW IF EXISTS public.location_metadata_en;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE VIEW public.location_metadata_en WITH (security_invoker='true') AS
       SELECT 
         loc.location_id,
         loc.name,
@@ -447,6 +605,11 @@ tryCatch(
       "ALTER VIEW public.location_metadata_en OWNER TO admin;"
     )
 
+    # Drop view and recreate in French
+    DBI::dbExecute(
+      con,
+      "DROP VIEW IF EXISTS public.location_metadata_fr;"
+    )
     DBI::dbExecute(
       con,
       "CREATE VIEW public.location_metadata_fr WITH (security_invoker='true') AS
@@ -504,10 +667,10 @@ tryCatch(
       "
     CREATE TABLE IF NOT EXISTS public.organization_data_sharing_agreements (
       organization_id INT NOT NULL,
-      document_id INT NOT NULL,
-      PRIMARY KEY (organization_id, document_id),
+      data_sharing_agreement_id INT NOT NULL,
+      PRIMARY KEY (organization_id, data_sharing_agreement_id),
       FOREIGN KEY (organization_id) REFERENCES public.organizations (organization_id),
-      FOREIGN KEY (document_id) REFERENCES files.documents(document_id)
+      FOREIGN KEY (data_sharing_agreement_id) REFERENCES files.documents(document_id)
     );
     "
     )
