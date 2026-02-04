@@ -452,29 +452,37 @@ tryCatch(
     # If not found, download and load the NHN basins
     if (check < 1338) {
       message(
-        "National Hydro Network - Basins layer not found or incomplete in spatial.vectors. Downloading and loading the layer now. This will take a few minutes..."
+        "National Hydro Network - Basins layer not found or incomplete in spatial.vectors. Do you want to download the layer? This will take a few minutes. These polygons are necessary to generate location codes in this patch if they are not similar to NHN codes, or in the YGwater::YGwater Shiny application."
       )
-      # Fetch the file. terra::vect will auto-unzip.
-      vect <- terra::vect(
-        "https://ftp.maps.canada.ca/pub/nrcan_rncan/vector/geobase_nhn_rhn/gpkg_en/CA/rhn_nhn_decoupage.gpkg.zip"
-      )
-      vect <- vect[, c("validity_date", "dataset_name", "edition", "version")]
-      vect$description <- paste0(
-        "Edition: ",
-        vect$edition,
-        ", Version: ",
-        vect$version
-      )
+      ans <- readline(prompt = "Download and load NHN Basins now? (y/n): ")
+      if (tolower(ans) == "y") {
+        message("Downloading and loading NHN basins...")
+        # Fetch the file. terra::vect will auto-unzip.
+        vect <- terra::vect(
+          "https://ftp.maps.canada.ca/pub/nrcan_rncan/vector/geobase_nhn_rhn/gpkg_en/CA/rhn_nhn_decoupage.gpkg.zip"
+        )
+        vect <- vect[, c("validity_date", "dataset_name", "edition", "version")]
+        vect$description <- paste0(
+          "Edition: ",
+          vect$edition,
+          ", Version: ",
+          vect$version
+        )
 
-      AquaCache::insertACVector(
-        geom = vect,
-        layer_name = "National Hydro Network - Basins",
-        feature_name_col = "dataset_name",
-        description_col = "description",
-        con = con,
-        overwrite = FALSE,
-        ask = FALSE
-      )
+        AquaCache::insertACVector(
+          geom = vect,
+          layer_name = "National Hydro Network - Basins",
+          feature_name_col = "dataset_name",
+          description_col = "description",
+          con = con,
+          overwrite = FALSE,
+          ask = FALSE
+        )
+      } else {
+        message(
+          "Skipping download of NHN basins. You will be prompted again to download them from the YGwater::YGwater Shiny application if necessary."
+        )
+      }
     }
 
     # Iterate through all locations with location_codes that are null, that don't begin with (two numbers, 2-3 letters), that don't begin with 'YOWN-' and generate codes
@@ -592,8 +600,8 @@ tryCatch(
         language_code INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
         language_name_en TEXT NOT NULL,
         language_name_fr TEXT,
-        created TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        created_by TEXT DEFAULT current_user
+        created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by TEXT DEFAULT current_user,
         modified TIMESTAMP WITH TIME ZONE,
         modified_by TEXT
       );"
@@ -1021,13 +1029,19 @@ tryCatch(
       # Triggers
       DBI::dbExecute(
         con,
-        "create or replace trigger trg_user_audit before update on $1 for each row execute function user_modified()",
-        params = list(tables$table_name[i])
+        paste0(
+          "create or replace trigger trg_user_audit before update on ",
+          tables$table_name[i],
+          " for each row execute function user_modified()"
+        )
       )
       DBI::dbExecute(
         con,
-        "create or replace trigger update_modify_time before update on $1 for each row execute function update_modified()",
-        params = list(tables$table_name[i])
+        paste0(
+          "create or replace trigger update_modify_time before update on ",
+          tables$table_name[i],
+          " for each row execute function update_modified()"
+        )
       )
     }
 
