@@ -73,18 +73,18 @@ tryCatch(
 
     DBI::dbExecute(
       con,
-      "ALTER TABLE location_types ADD COLUMN IF NOT EXISTS type_suffix TEXT;"
+      "ALTER TABLE public.location_types ADD COLUMN IF NOT EXISTS type_suffix TEXT;"
     )
     DBI::dbExecute(
       con,
-      "COMMENT ON COLUMN location_types.type_suffix IS 'A short suffix to use in constructing location codes, e.g., SW for surface water, GW for groundwater, WW for wastewater, OC for oceanic, MET for meteorological.';"
+      "COMMENT ON COLUMN public.location_types.type_suffix IS 'A short suffix to use in constructing location codes, e.g., SW for surface water, GW for groundwater, WW for wastewater, OC for oceanic, MET for meteorological.';"
     )
 
     for (i in 1:nrow(type_suffix)) {
       DBI::dbExecute(
         con,
         paste0(
-          "UPDATE location_types SET type_suffix = '",
+          "UPDATE public.location_types SET type_suffix = '",
           type_suffix$suffix[i],
           "' WHERE type = '",
           type_suffix$type[i],
@@ -110,7 +110,7 @@ tryCatch(
     # Re-jig location ownership and data sharing agreements
     DBI::dbExecute(
       con,
-      "DROP TABLE IF EXISTS locations_metadata_owners_operators;"
+      "DROP TABLE IF EXISTS public.locations_metadata_owners_operators;"
     )
 
     # Add a column 'data_sharing_agreement_id' to timeseries table
@@ -152,7 +152,7 @@ tryCatch(
     # Drop column 'data_sharing_agreement_id' from locations table
     DBI::dbExecute(
       con,
-      "ALTER TABLE locations DROP COLUMN IF EXISTS data_sharing_agreement_id;"
+      "ALTER TABLE public.locations DROP COLUMN IF EXISTS data_sharing_agreement_id;"
     )
 
     # Drop the trigger trg_check_data_sharing_agreement from locations table if it exists
@@ -165,7 +165,7 @@ tryCatch(
     # Drop 'location' from table 'timeseries'
     DBI::dbExecute(
       con,
-      "ALTER TABLE timeseries DROP COLUMN IF EXISTS location;"
+      "ALTER TABLE continuous.timeseries DROP COLUMN IF EXISTS location;"
     )
 
     # Rename 'location' in table 'locations' to 'location_code' and add 'alias' column
@@ -177,22 +177,22 @@ tryCatch(
     if (length(column_check) == 0) {
       DBI::dbExecute(
         con,
-        "ALTER TABLE locations RENAME COLUMN location TO location_code;"
+        "ALTER TABLE public.locations RENAME COLUMN location TO location_code;"
       )
     }
     DBI::dbExecute(
       con,
-      "COMMENT ON COLUMN locations.location_code IS 'A unique code for the location, ideally constructed from the location National Hydro Network polygon in which the location is situated, using the first 2 digits and 2-3 letters of the polygon name, location type suffix, and a unique number.';"
+      "COMMENT ON COLUMN public.locations.location_code IS 'A unique code for the location, ideally constructed from the location National Hydro Network polygon in which the location is situated, using the first 2 digits and 2-3 letters of the polygon name, location type suffix, and a unique number.';"
     )
 
     # Create a new column 'alias' in table 'locations'
     DBI::dbExecute(
       con,
-      "ALTER TABLE locations ADD COLUMN IF NOT EXISTS alias TEXT;"
+      "ALTER TABLE public.locations ADD COLUMN IF NOT EXISTS alias TEXT;"
     )
     DBI::dbExecute(
       con,
-      "COMMENT ON COLUMN locations.alias IS 'An alternate name or code for the location.';"
+      "COMMENT ON COLUMN public.locations.alias IS 'An alternate name or code for the location.';"
     )
 
     # Now we'll create location codes for all existing locations
@@ -239,8 +239,9 @@ tryCatch(
       con,
       "SELECT location_id, latitude, longitude, location_type, location_code
       FROM locations
-      WHERE location_code IS NOT NULL
-        AND location_code !~ '^(?:[0-9]{2}[A-Za-z]{2,3}|YOWN)';
+      WHERE location_code IS NULL
+        OR location_code = ''
+        OR location_code !~ '^(?:[0-9]{2}[A-Za-z]{2,3}|YOWN)';
       "
     )
     location_types <- DBI::dbGetQuery(
@@ -315,7 +316,8 @@ tryCatch(
         "
         UPDATE locations
         SET alias = location_code
-        WHERE location_id = $1;",
+        WHERE location_id = $1
+        AND alias IS NULL;",
         params = list(exist_locs$location_id[i])
       )
       DBI::dbExecute(
@@ -386,11 +388,11 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "CREATE INDEX idx_location_names_location_id ON public.location_names (location_id);"
+      "CREATE INDEX IF NOT EXISTS idx_location_names_location_id ON public.location_names (location_id);"
     )
     DBI::dbExecute(
       con,
-      "CREATE INDEX idx_location_names_language_code ON public.location_names (language_code);"
+      "CREATE INDEX IF NOT EXISTS idx_location_names_language_code ON public.location_names (language_code);"
     )
 
     DBI::dbExecute(
@@ -458,7 +460,7 @@ tryCatch(
           dl.datum_name_fr AS datum,
           loc.note,
           array_agg(DISTINCT proj.name_fr) AS projets,
-          array_agg(DISTINCT net.name_fr) AS réseaux
+          array_agg(DISTINCT net.name_fr) AS réseaux,
           COALESCE(
             jsonb_agg(
               DISTINCT jsonb_build_object(
