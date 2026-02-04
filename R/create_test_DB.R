@@ -228,12 +228,12 @@ create_test_db <- function(
   # Set the search path (takes effect at next connection)
   DBI::dbExecute(
     test_con,
-    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, instruments, information;"
+    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, boreholes, instruments, information;"
   )
   # Update the search path for this session
   DBI::dbExecute(
     test_con,
-    "SET search_path TO public, continuous, discrete, spatial, files, instruments, information;"
+    "SET search_path TO public, continuous, discrete, spatial, files, boreholes, instruments, information;"
   )
 
   message("Loading ancillary tables...")

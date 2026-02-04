@@ -123,9 +123,99 @@ tryCatch(
         start_dt TIMESTAMPTZ NOT NULL,
         end_dt TIMESTAMPTZ NOT NULL DEFAULT 'infinity',
         created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        modified TIMESTAMP WITH TIME ZONE,
+        modified_by TEXT
       );"
     )
+    # Make owner 'admin'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.timeseries_data_sharing_agreements OWNER TO admin;"
+    )
+    # Triggers
+    DBI::dbExecute(
+      con,
+      "create or replace trigger trg_user_audit before update on public.timeseries_data_sharing_agreements for each row execute function user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create or replace trigger update_modify_time before update on public.timeseries_data_sharing_agreements for each row execute function update_modified()"
+    )
+
+    # Add RLS policies
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.timeseries_data_sharing_agreements ENABLE ROW LEVEL SECURITY;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.timeseries_data_sharing_agreements FORCE ROW LEVEL SECURITY;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "DROP POLICY IF EXISTS ts_dsa_select ON public.timeseries_data_sharing_agreements;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE POLICY ts_dsa_select
+      ON public.timeseries_data_sharing_agreements
+      FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM files.documents d
+          WHERE d.document_id = data_sharing_agreement_id
+        )
+      );
+      "
+    )
+
+    DBI::dbExecute(
+      con,
+      "DROP POLICY IF EXISTS ts_dsa_insert ON public.timeseries_data_sharing_agreements;"
+    )
+    DBI::dbExecute(
+      con,
+      "DROP POLICY IF EXISTS ts_dsa_update ON public.timeseries_data_sharing_agreements;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE POLICY ts_dsa_insert
+        ON public.timeseries_data_sharing_agreements
+        FOR INSERT
+        WITH CHECK (
+          EXISTS (
+            SELECT 1
+            FROM files.documents d
+            WHERE d.document_id = data_sharing_agreement_id
+          )
+        );
+        "
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE POLICY ts_dsa_update
+        ON public.timeseries_data_sharing_agreements
+        FOR UPDATE
+        WITH CHECK (
+          EXISTS (
+            SELECT 1
+            FROM files.documents d
+            WHERE d.document_id = data_sharing_agreement_id
+          )
+        );
+        "
+    )
+
+    # Give SELECT to all
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE public.timeseries_data_sharing_agreements TO public;"
+    )
+
     DBI::dbExecute(
       con,
       "COMMENT ON TABLE public.timeseries_data_sharing_agreements IS 'Temporal data sharing agreements for timeseries. Use start_dt/end_dt to define applicability windows.';"
@@ -146,7 +236,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "CREATE TRIGGER update_timeseries_data_sharing_agreements_updated
+      "create or replace trigger update_timeseries_data_sharing_agreements_updated
        BEFORE UPDATE
        ON public.timeseries_data_sharing_agreements
        FOR EACH ROW
@@ -159,7 +249,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "CREATE TRIGGER trg_check_timeseries_data_sharing_agreement_type
+      "create or replace trigger trg_check_timeseries_data_sharing_agreement_type
        BEFORE INSERT OR UPDATE ON public.timeseries_data_sharing_agreements
        FOR EACH ROW
        EXECUTE FUNCTION files.check_data_sharing_agreement();"
@@ -240,7 +330,7 @@ tryCatch(
     DBI::dbExecute(
       con,
       "
-        CREATE TRIGGER trg_check_default_data_sharing_agreement
+        create or replace trigger trg_check_default_data_sharing_agreement
         BEFORE INSERT OR UPDATE ON continuous.timeseries
         FOR EACH ROW
         EXECUTE FUNCTION files.check_default_data_sharing_agreement();
@@ -295,7 +385,7 @@ tryCatch(
         DBI::dbExecute(
           con,
           "
-    create trigger trg_check_data_sharing_agreement before insert or update on discrete.samples for each row execute function files.check_data_sharing_agreement()
+    create or replace trigger trg_check_data_sharing_agreement before insert or update on discrete.samples for each row execute function files.check_data_sharing_agreement()
     ;"
         )
       },
@@ -482,6 +572,16 @@ tryCatch(
       ",
         params = list(code, exist_locs$location_id[i])
       )
+
+      # Table 'vectors' might also have location codes to update.
+      DBI::dbExecute(
+        con,
+        "UPDATE spatial.vectors SET feature_name = $1 WHERE feature_name = $2 AND layer_name = 'Drainage basins';",
+        params = list(
+          code,
+          exist_locs$location_code[i]
+        )
+      )
     } # End of generating location codes loop
 
     # Add a table to hold first nation language names
@@ -491,8 +591,29 @@ tryCatch(
       "CREATE TABLE IF NOT EXISTS public.languages (
         language_code INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
         language_name_en TEXT NOT NULL,
-        language_name_fr TEXT
+        language_name_fr TEXT,
+        created TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        created_by TEXT DEFAULT current_user
+        modified TIMESTAMP WITH TIME ZONE,
+        modified_by TEXT
       );"
+    )
+
+    # Triggers
+    # Triggers
+    DBI::dbExecute(
+      con,
+      "create or replace trigger trg_user_audit before update on public.languages for each row execute function user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create or replace trigger update_modify_time before update on public.languages for each row execute function update_modified()"
+    )
+
+    # Make owner 'admin'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.languages OWNER TO admin;"
     )
     DBI::dbExecute(
       con,
@@ -536,8 +657,27 @@ tryCatch(
         location_id INTEGER NOT NULL REFERENCES public.locations (location_id) ON DELETE CASCADE ON UPDATE CASCADE,
         language_code INTEGER NOT NULL REFERENCES public.languages (language_code) ON DELETE CASCADE ON UPDATE CASCADE,
         name TEXT NOT NULL,
+        created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by TEXT DEFAULT current_user,
+        modified TIMESTAMP WITH TIME ZONE,
+        modified_by TEXT,
         PRIMARY KEY (location_id, language_code)
       );"
+    )
+    # Triggers
+    DBI::dbExecute(
+      con,
+      "create or replace trigger trg_user_audit before update on public.location_names for each row execute function user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create or replace trigger update_modify_time before update on public.location_names for each row execute function update_modified()"
+    )
+
+    # Make owner 'admin'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.location_names OWNER TO admin;"
     )
     DBI::dbExecute(
       con,
@@ -668,22 +808,239 @@ tryCatch(
     CREATE TABLE IF NOT EXISTS public.organization_data_sharing_agreements (
       organization_id INT NOT NULL,
       data_sharing_agreement_id INT NOT NULL,
+      created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_by TEXT DEFAULT current_user,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT,
       PRIMARY KEY (organization_id, data_sharing_agreement_id),
       FOREIGN KEY (organization_id) REFERENCES public.organizations (organization_id),
       FOREIGN KEY (data_sharing_agreement_id) REFERENCES files.documents(document_id)
     );
     "
     )
+    # Triggers
+    DBI::dbExecute(
+      con,
+      "create or replace trigger trg_user_audit before update on public.organization_data_sharing_agreements for each row execute function user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create or replace trigger update_modify_time before update on public.organization_data_sharing_agreements for each row execute function update_modified()"
+    )
+    # Make owner 'admin'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.organization_data_sharing_agreements OWNER TO admin;"
+    )
+    # Add RLS policies
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.organization_data_sharing_agreements ENABLE ROW LEVEL SECURITY;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.organization_data_sharing_agreements FORCE ROW LEVEL SECURITY;"
+    )
+    DBI::dbExecute(
+      con,
+      "DROP POLICY IF EXISTS org_dsa_select ON public.organization_data_sharing_agreements;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE POLICY org_dsa_select
+      ON public.organization_data_sharing_agreements
+      FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM files.documents d
+          WHERE d.document_id = data_sharing_agreement_id
+        )
+      );
+      "
+    )
+    DBI::dbExecute(
+      con,
+      "DROP POLICY IF EXISTS org_dsa_insert ON public.organization_data_sharing_agreements;"
+    )
+    DBI::dbExecute(
+      con,
+      "DROP POLICY IF EXISTS org_dsa_update ON public.organization_data_sharing_agreements;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE POLICY org_dsa_insert
+        ON public.organization_data_sharing_agreements
+        FOR INSERT
+        WITH CHECK (
+          EXISTS (
+            SELECT 1
+            FROM files.documents d
+            WHERE d.document_id = data_sharing_agreement_id
+          )
+        );
+        "
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE POLICY org_dsa_update
+        ON public.organization_data_sharing_agreements
+        FOR UPDATE
+        WITH CHECK (
+          EXISTS (
+            SELECT 1
+            FROM files.documents d
+            WHERE d.document_id = data_sharing_agreement_id
+          )
+        );
+        "
+    )
 
     # Use the function files.check_data_sharing_agreement() to create a trigger on organization_data_sharing that enforces document type
     DBI::dbExecute(
       con,
       "
-    CREATE TRIGGER trg_check_data_sharing_agreement_type
+    create or replace trigger trg_check_data_sharing_agreement_type
     BEFORE INSERT OR UPDATE ON public.organization_data_sharing_agreements
     FOR EACH ROW
     EXECUTE FUNCTION files.check_data_sharing_agreement();
     "
+    )
+
+    # Remove or update columns 'create_datetime' where exist, update modifier user. Use same approach as in tables like 'public.locations'.
+
+    # List all tables in schema 'instruments'. Many of them don't have the right columns.
+    tables <- DBI::dbGetQuery(
+      con,
+      "SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'instruments'
+         AND table_type = 'BASE TABLE';"
+    )
+
+    for (i in 1:nrow(tables)) {
+      # Create columns 'created', 'created_by', 'modified', 'modified_by' if they don't exist
+      cols <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT column_name
+           FROM information_schema.columns
+           WHERE table_schema = 'instruments'
+             AND table_name = '",
+          tables$table_name[i],
+          "';"
+        )
+      )$column_name
+      if (!"created" %in% cols) {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "ALTER TABLE instruments.",
+            tables$table_name[i],
+            " ADD COLUMN created TIMESTAMPTZ NOT NULL DEFAULT NOW();"
+          )
+        )
+        # Update it with the old 'create_datetime' values if that column exists
+        if ("create_datetime" %in% cols) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE instruments.",
+              tables$table_name[i],
+              " SET created = create_datetime WHERE create_datetime IS NOT NULL;"
+            )
+          )
+        }
+      }
+      # Delete old 'create_datetime' column if it exists
+      if ("create_datetime" %in% cols) {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "ALTER TABLE instruments.",
+            tables$table_name[i],
+            " DROP COLUMN create_datetime;"
+          )
+        )
+      }
+
+      if (!"created_by" %in% cols) {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "ALTER TABLE instruments.",
+            tables$table_name[i],
+            " ADD COLUMN created_by TEXT DEFAULT current_user;"
+          )
+        )
+      }
+
+      if (!"modified" %in% cols) {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "ALTER TABLE instruments.",
+            tables$table_name[i],
+            " ADD COLUMN modified TIMESTAMP WITH TIME ZONE;"
+          )
+        )
+        if ("modify_datetime" %in% cols) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE instruments.",
+              tables$table_name[i],
+              " SET modified = modify_datetime WHERE modify_datetime IS NOT NULL;"
+            )
+          )
+        }
+      }
+      # Delete old 'modify_datetime' column if it exists
+      if ("modify_datetime" %in% cols) {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "ALTER TABLE instruments.",
+            tables$table_name[i],
+            " DROP COLUMN modify_datetime;"
+          )
+        )
+      }
+
+      if (!"modified_by" %in% cols) {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "ALTER TABLE instruments.",
+            tables$table_name[i],
+            " ADD COLUMN modified_by TEXT;"
+          )
+        )
+      }
+
+      # Triggers
+      DBI::dbExecute(
+        con,
+        "create or replace trigger trg_user_audit before update on $1 for each row execute function user_modified()",
+        params = list(tables$table_name[i])
+      )
+      DBI::dbExecute(
+        con,
+        "create or replace trigger update_modify_time before update on $1 for each row execute function update_modified()",
+        params = list(tables$table_name[i])
+      )
+    }
+
+    # Drop the old function instruments.update_modify_datetime() if it exists and cascade
+    DBI::dbExecute(
+      con,
+      "DROP FUNCTION IF EXISTS instruments.update_modify_datetime() CASCADE;"
+    )
+
+    # Remove column 'create_datetime' from files.images
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE files.images DROP COLUMN IF EXISTS create_datetime;"
     )
 
     # Wrap things up ##################
