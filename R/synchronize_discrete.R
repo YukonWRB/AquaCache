@@ -193,7 +193,7 @@ synchronize_discrete <- function(
           con = con
         )
         if (!is.na(source_fx_args)) {
-          #add some arguments if they are specified
+          # add some arguments if they are specified
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
         }

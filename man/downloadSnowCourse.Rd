@@ -34,7 +34,7 @@ downloadSnowCourse(
 
 \item{share_with}{Which user groups to share the data with. Default is 'yg_reader'; set to 'public_reader' to share publicly.}
 
-\item{con}{A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().}
+\item{con}{A connection to the aquacache database. a connection will be attempted using AquaConnect().}
 
 \item{snowCon}{A connection to the snow database.}
 }
