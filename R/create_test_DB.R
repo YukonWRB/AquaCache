@@ -228,12 +228,12 @@ create_test_db <- function(
   # Set the search path (takes effect at next connection)
   DBI::dbExecute(
     test_con,
-    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, instruments, information;"
+    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, boreholes, instruments, information;"
   )
   # Update the search path for this session
   DBI::dbExecute(
     test_con,
-    "SET search_path TO public, continuous, discrete, spatial, files, instruments, information;"
+    "SET search_path TO public, continuous, discrete, spatial, files, boreholes, instruments, information;"
   )
 
   message("Loading ancillary tables...")
@@ -281,7 +281,7 @@ create_test_db <- function(
     # Find the locations for the Liard River at upper crossing and Marsh Lake, plus Tagish meteorological
     continuous_locations <- DBI::dbGetQuery(
       con,
-      "SELECT DISTINCT(location_id) FROM timeseries WHERE location IN ('09EA004', '09AB004', '09AA-M1', '48168')"
+      "SELECT DISTINCT(t.location_id) FROM timeseries t JOIN locations l ON t.location_id = l.location_id WHERE l.location_code IN ('09EA004', '09AB004', '09AA-M1', '48168') OR l.alias IN ('09EA004', '09AB004', '09AA-M1', '48168')"
     )$location_id
   }
   if (is.null(discrete_locations)) {

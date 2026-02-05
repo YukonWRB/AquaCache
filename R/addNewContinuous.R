@@ -3,7 +3,7 @@
 #' This function can be used to append new contiuous type data directly to the database without downloading it from a remote source. Differs from [getNewContinuous()] as the later is used to pull data from a remote before append.
 #'
 #' @param tsid The timeseries_id to which the data will be appended. This is a required parameter.
-#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the `adjust_` series of functions to see how these are used.
+#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'data_sharing_agreement_id', 'imputed'; see the `adjust_` series of functions to see how these are used.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #' @param target One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.
 #' @param overwrite Select one of "no", "all", "conflict". Default is "no", which will not overwrite any existing data (and fail if there is a conflict). "all" will wipe and replace all database entries for the target timeseries in the temporal range of `df`, while "conflict" will overwrite only those entries that conflict with the data in `df` (i.e. have the same datetime or date).
@@ -106,7 +106,13 @@ addNewContinuous <- function(
 
   info <- DBI::dbGetQuery(
     con,
-    "SELECT at.aggregation_type, t.default_owner AS owner FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = $1;",
+    "SELECT 
+      at.aggregation_type, 
+      t.default_owner AS owner, 
+      t.default_data_sharing_agreement_id 
+    FROM timeseries AS t 
+    JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id 
+    WHERE timeseries_id = $1;",
     params = list(tsid)
   )
   end_datetime_realtime <- DBI::dbGetQuery(
@@ -167,6 +173,17 @@ addNewContinuous <- function(
     df$no_update <- FALSE
   }
 
+  if ("data_sharing_agreement_id" %in% names(df)) {
+    if (!is.na(info$default_data_sharing_agreement_id)) {
+      df$data_sharing_agreement_id[is.na(df$data_sharing_agreement_id)] <-
+        info$default_data_sharing_agreement_id
+    }
+  } else {
+    if (!is.na(info$default_data_sharing_agreement_id)) {
+      df$data_sharing_agreement_id <- info$default_data_sharing_agreement_id
+    }
+  }
+
   # Append the data ##########################################################
   if (target == "realtime") {
     if (!inherits(df$datetime, "POSIXct")) {
@@ -201,6 +218,13 @@ addNewContinuous <- function(
       }
       if ("contributor" %in% names(df)) {
         adjust_contributor(con, tsid, df[, c("datetime", "contributor")])
+      }
+      if ("data_sharing_agreement_id" %in% names(df)) {
+        adjust_data_sharing_agreement(
+          con,
+          tsid,
+          df[, c("datetime", "data_sharing_agreement_id")]
+        )
       }
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
@@ -388,6 +412,14 @@ addNewContinuous <- function(
       }
       if ("contributor" %in% names(df)) {
         adjust_contributor(con, tsid, df[, c("date", "contributor")])
+      }
+
+      if ("data_sharing_agreement_id" %in% names(df)) {
+        adjust_data_sharing_agreement(
+          con,
+          tsid,
+          df[, c("date", "data_sharing_agreement_id")]
+        )
       }
 
       df$timeseries_id <- tsid

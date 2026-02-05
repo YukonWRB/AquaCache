@@ -1,8 +1,7 @@
 test_that("addNewDiscrete inserts a new sample and results", {
   testthat::skip_on_cran()
-  skip_if_no_postgres()
 
-  con <- AquaConnect(silent = TRUE)
+  con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
 
   dbTransBegin(con)

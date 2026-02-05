@@ -418,12 +418,17 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             }
             tmp <- DBI::dbGetQuery(
               con,
-              paste0(
-                "SELECT t.location, t.parameter_id, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter_id = p.parameter_id WHERE t.timeseries_id = ",
-                i,
-                ";"
-              )
+              "SELECT t.parameter_id, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter_id = p.parameter_id WHERE t.timeseries_id = $1",
+              params = list(i)
             )
+            tmp.location <- DBI::dbGetQuery(
+              con,
+              "SELECT source_fx_args FROM timeseries WHERE timeseries_id = $1;",
+              params = list(i)
+            )[1, 1]
+            tmp.location <- jsonlite::fromJSON(tmp.location)$location
+            tmp$location <- tmp.location
+
             hydat_con <- DBI::dbConnect(
               RSQLite::SQLite(),
               tidyhydat::hy_downloaded_db()

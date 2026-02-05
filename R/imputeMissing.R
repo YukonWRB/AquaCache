@@ -63,7 +63,7 @@ imputeMissing <- function(
   entry <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT t.location, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.timeseries_id = ",
+      "SELECT l.name, l.location_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.timeseries_id = ",
       tsid,
       ";"
     )
@@ -543,10 +543,10 @@ imputeMissing <- function(
   nrby <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT l.location, l.name, ST_Distance(ST_Transform(v.geom, 3857), ST_Transform((SELECT v2.geom FROM vectors v2 JOIN locations l2 ON v2.geom_id = l2.geom_id WHERE l2.location = '",
-      entry$location,
-      "'), 3857)) AS distance_meters FROM locations l JOIN vectors v ON l.geom_id = v.geom_id WHERE ST_DWithin(ST_Transform(v.geom, 3857), ST_Transform((SELECT v3.geom FROM vectors v3 JOIN locations l3 ON v3.geom_id = l3.geom_id WHERE l3.location = '",
-      entry$location,
+      "SELECT l.location_id, l.name, ST_Distance(ST_Transform(v.geom, 3857), ST_Transform((SELECT v2.geom FROM vectors v2 JOIN locations l2 ON v2.geom_id = l2.geom_id WHERE l2.location_id = '",
+      entry$location_id,
+      "'), 3857)) AS distance_meters FROM locations l JOIN vectors v ON l.geom_id = v.geom_id WHERE ST_DWithin(ST_Transform(v.geom, 3857), ST_Transform((SELECT v3.geom FROM vectors v3 JOIN locations l3 ON v3.geom_id = l3.geom_id WHERE l3.location_id = '",
+      entry$location_id,
       "' AND v3.geom_type = 'ST_Point'), 3857), ",
       radius * 1000,
       ") AND v.geom_type = 'ST_Point';"
@@ -559,8 +559,8 @@ imputeMissing <- function(
     similar <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('",
-        paste(nrby$location, collapse = "', '"),
+        "SELECT l.location_id, l.name, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE l.location_id IN ('",
+        paste(nrby$location_id, collapse = "', '"),
         "') AND p.param_name IN ('",
         paste(
           entry$parameter,
@@ -581,8 +581,8 @@ imputeMissing <- function(
     similar <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.location, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.location IN ('",
-        paste(nrby$location, collapse = "', '"),
+        "SELECT l.location_id, l.name, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE l.location_id IN ('",
+        paste(nrby$location_id, collapse = "', '"),
         "') AND p.param_name = '",
         entry$parameter,
         "' AND t.timeseries_id != ",
@@ -596,7 +596,7 @@ imputeMissing <- function(
 
   message(
     "Working with location ",
-    entry$location,
+    entry$name,
     ", parameter ",
     entry$parameter,
     ", aggregation_type ",

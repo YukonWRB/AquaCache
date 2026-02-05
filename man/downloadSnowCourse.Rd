@@ -18,7 +18,7 @@ downloadSnowCourse(
 )
 }
 \arguments{
-\item{location}{The location code associated with the snow course.}
+\item{location}{The location code associated with the snow course in the snow database,  should match locations.location_code in the aquacache database (locations.alias is checked as a fallback).}
 
 \item{sub_location}{The sub-location code associated with the snow course (leave NULL if not applicable).}
 
@@ -34,7 +34,7 @@ downloadSnowCourse(
 
 \item{share_with}{Which user groups to share the data with. Default is 'yg_reader'; set to 'public_reader' to share publicly.}
 
-\item{con}{A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().}
+\item{con}{A connection to the aquacache database. a connection will be attempted using AquaConnect().}
 
 \item{snowCon}{A connection to the snow database.}
 }

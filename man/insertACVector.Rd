@@ -15,6 +15,7 @@ insertACVector(
   schema = "spatial",
   geom_col = "geom",
   overwrite = FALSE,
+  ask = TRUE,
   con = NULL
 )
 }
@@ -38,6 +39,8 @@ insertACVector(
 \item{geom_col}{The name of the database table column in which to insert the geometry object.}
 
 \item{overwrite}{If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?}
+
+\item{ask}{Whether to ask for user confirmation when creating a new layer_name or overwriting existing entries. Default TRUE.}
 
 \item{con}{A connection to the database. Default NULL will use the utility function \code{\link[=AquaConnect]{AquaConnect()}} and disconnect afterwards.}
 }

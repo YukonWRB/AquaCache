@@ -47,13 +47,13 @@ update_hydat <- function(
     if (timeseries_id[1] == "all") {
       all_timeseries <- DBI::dbGetQuery(
         con,
-        "SELECT t.location, t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx = 'downloadWSC';"
+        "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type, l.location_id FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id JOIN locations AS l ON t.location_id = l.location_id WHERE source_fx = 'downloadWSC';"
       )
     } else {
       all_timeseries <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT t.location, t.parameter_id, t.timeseries_id, at.aggregation_type FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
+          "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type, l.location_id FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id JOIN locations AS l ON t.location_id = l.location_id WHERE timeseries_id IN ('",
           paste(timeseries_id, collapse = "', '"),
           "') AND source_fx = 'downloadWSC';"
         )
@@ -77,6 +77,19 @@ update_hydat <- function(
         }
       }
     }
+
+    # Now find the value for 'location' in the JSONB timeseries.source_fx_args column for each timeseries_id
+    locations <- c()
+    for (i in 1:nrow(all_timeseries)) {
+      loc <- DBI::dbGetQuery(
+        con,
+        "SELECT source_fx_args FROM timeseries WHERE timeseries_id = $1;",
+        params = list(all_timeseries$timeseries_id[i])
+      )[1, 1]
+      loc <- jsonlite::fromJSON(loc)$location
+      locations <- c(locations, loc)
+    }
+    all_timeseries$location <- locations
 
     # Get organization_id for 'Water Survey of Canada'
     organization_id <- DBI::dbGetQuery(
@@ -200,28 +213,23 @@ update_hydat <- function(
               con,
               "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
             )[1, 1]
-            location_id <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT location_id FROM locations WHERE location = '",
-                i,
-                "';"
-              )
-            )[1, 1]
+            location_id <- all_timeseries[
+              all_timeseries$location == i,
+              "location_id"
+            ][1]
             tsid_flow <- DBI::dbGetQuery(
               con,
               paste0(
                 "SELECT timeseries_id FROM timeseries WHERE parameter_id = ",
                 parameter_id,
-                " AND location = '",
-                i,
+                " AND location_id = '",
+                location_id,
                 "' AND source_fx = 'downloadWSC'"
               )
             )[1, 1]
             if (length(tsid_flow) == 0 | is.na(tsid_flow)) {
               #There is no realtime or daily data yet, and no corresponding tsid.
               new_entry <- data.frame(
-                "location" = i,
                 "location_id" = location_id,
                 "parameter_id" = parameter_id,
                 "category" = "continuous",
@@ -239,8 +247,8 @@ update_hydat <- function(
               tsid_flow <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT timeseries_id FROM timeseries WHERE location = '",
-                  i,
+                  "SELECT timeseries_id FROM timeseries WHERE location_id = '",
+                  location_id,
                   "' AND parameter_id = ",
                   parameter_id,
                   " AND source_fx = 'downloadWSC';"
@@ -669,20 +677,18 @@ update_hydat <- function(
               con,
               "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
             )[1, 1]
-            location_id <- DBI::dbGetQuery(
-              con,
-              "SELECT location_id FROM locations WHERE location = $1",
-              params = list(i)
-            )[1, 1]
+            location_id <- all_timeseries[
+              all_timeseries$location == i,
+              "location_id"
+            ][1]
             tsid_level <- DBI::dbGetQuery(
               con,
-              "SELECT timeseries_id FROM timeseries WHERE parameter_id = $1 AND location = $2 AND source_fx = 'downloadWSC'",
-              params = list(parameter_id, i)
+              "SELECT timeseries_id FROM timeseries WHERE parameter_id = $1 AND location_id = $2 AND source_fx = 'downloadWSC'",
+              params = list(parameter_id, location_id)
             )[1, 1]
             if (length(tsid_level) == 0 | is.na(tsid_level)) {
               # There is no realtime or daily data yet, and no corresponding tsid.
               new_entry <- data.frame(
-                "location" = i,
                 "location_id" = location_id,
                 "parameter_id" = parameter_id,
                 "category" = "continuous",
@@ -699,8 +705,8 @@ update_hydat <- function(
               DBI::dbAppendTable(con, "timeseries", new_entry)
               tsid_level <- DBI::dbGetQuery(
                 con,
-                "SELECT timeseries_id FROM timeseries WHERE location = $1 AND parameter_id = $2 AND source_fx = 'downloadWSC';",
-                params = list(i, parameter_id)
+                "SELECT timeseries_id FROM timeseries WHERE location_id = $1 AND parameter_id = $2 AND source_fx = 'downloadWSC';",
+                params = list(location_id, parameter_id)
               )[1, 1]
               new_level$timeseries_id <- tsid_level
 

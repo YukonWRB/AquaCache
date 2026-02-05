@@ -1,4 +1,4 @@
-# Functions to adjust the grade, qualifier, approval, owner, and contributor of continuous-type data as it's appended to the database.
+# Functions to adjust the grade, qualifier, approval, owner, and contributor, and data sharing agreement of continuous-type data as it's appended to the database.
 
 #' Adjust the grade of a timeseries in the database
 #'
@@ -1528,3 +1528,334 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
     }
   )
 } # End of adjust_contributor function
+
+
+#' Adjust the data sharing agreement of a timeseries in the database
+#'
+#' @param con A connection to the database with write privileges to the 'timeseries_data_sharing_agreements' table.
+#' @param timeseries_id The target timeseries_id
+#' @param data A data.frame with columns for 'datetime' and 'data_sharing_agreement_id'. 'datetime' should be POSIXct and 'data_sharing_agreement_id' should refer to column 'document_id' of table 'files.documents'.
+#' @param delete Logical. If TRUE, the function will delete data sharing agreements which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
+#'
+#' @return Modifies the 'timeseries_data_sharing_agreements' table in the database.
+#' @export
+
+adjust_data_sharing_agreement <- function(
+  con,
+  timeseries_id,
+  data,
+  delete = FALSE
+) {
+  if (
+    "data_sharing_agreement" %in%
+      names(data) &&
+      !("data_sharing_agreement_id" %in% names(data))
+  ) {
+    data$data_sharing_agreement_id <- data$data_sharing_agreement
+    data$data_sharing_agreement <- NULL
+  }
+
+  if (all(is.na(data$data_sharing_agreement_id))) {
+    message(
+      "adjust_data_sharing_agreement: column 'data_sharing_agreement_id' was all NA, skipped. Applies to timeseries_id ",
+      timeseries_id,
+      "."
+    )
+    return(invisible(NULL))
+  }
+
+  active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+
+  tryCatch(
+    {
+      # If a column 'date' and no column 'datetime' is present, rename 'date' to 'datetime' and convert to POSIXct
+      if ("date" %in% names(data) & !"datetime" %in% names(data)) {
+        data$datetime <- as.POSIXct(data$date, tz = "UTC")
+        data <- data[, !names(data) == "date"]
+      }
+      # Ensure that 'datetime' is POSIXct
+      if (!inherits(data$datetime[1], "POSIXct")) {
+        stop("Column 'datetime' must be of class POSIXct.")
+      }
+
+      if (inherits(data$data_sharing_agreement_id[1], "character")) {
+        data$data_sharing_agreement_id <- as.integer(
+          data$data_sharing_agreement_id
+        )
+      }
+
+      # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
+      min_datetime <- fmt(min(data$datetime))
+      max_datetime <- fmt(max(data$datetime))
+
+      if (delete) {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "DELETE FROM timeseries_data_sharing_agreements WHERE timeseries_id = ",
+            timeseries_id,
+            " AND start_dt >= '",
+            min_datetime,
+            "';"
+          )
+        )
+      }
+
+      # Get the data where at least one of the following is true:
+      # has an end datetime within the range of the data
+      # has a start datetime within the range of the data
+      # has a start datetime before the range of the data and an end datetime after the range of the data
+      # This leaves out entries that are entirely before or after the range of the data.
+      exist <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "WITH matched AS (
+    SELECT timeseries_data_sharing_agreement_id,
+           timeseries_id,
+           data_sharing_agreement_id,
+           start_dt,
+           end_dt
+      FROM timeseries_data_sharing_agreements
+     WHERE timeseries_id = %s
+       AND (
+         (end_dt   BETWEEN '%s' AND '%s')
+      OR (start_dt BETWEEN '%s' AND '%s')
+      OR (start_dt <= '%s' AND end_dt >= '%s')
+       )
+    ), fallback AS (
+        SELECT timeseries_data_sharing_agreement_id,
+               timeseries_id,
+               data_sharing_agreement_id,
+               start_dt,
+               end_dt
+          FROM timeseries_data_sharing_agreements
+         WHERE timeseries_id = %s
+         ORDER BY end_dt DESC
+         LIMIT 1
+    )
+    SELECT * FROM matched
+    UNION ALL
+    SELECT * FROM fallback
+     WHERE NOT EXISTS (SELECT 1 FROM matched)
+    ORDER BY start_dt ASC;",
+          timeseries_id,
+          min_datetime,
+          max_datetime,
+          min_datetime,
+          max_datetime,
+          min_datetime,
+          max_datetime,
+          timeseries_id
+        )
+      )
+
+      if (nrow(exist) == 0) {
+        exist <- data.frame(
+          timeseries_data_sharing_agreement_id = NA,
+          timeseries_id = timeseries_id,
+          data_sharing_agreement_id = data$data_sharing_agreement_id[1],
+          start_dt = data$datetime[1],
+          end_dt = data$datetime[1]
+        )
+      }
+      original_exist_rows <- nrow(exist)
+
+      # Collapse consecutive rows with the same agreement using run-length encoding
+      data <- data[order(data$datetime), ]
+      runs <- rle(data$data_sharing_agreement_id)
+      ends <- cumsum(runs$lengths)
+      starts <- c(1, utils::head(ends, -1) + 1)
+      new_segments <- data.frame(
+        timeseries_data_sharing_agreement_id = NA,
+        timeseries_id = timeseries_id,
+        data_sharing_agreement_id = runs$values,
+        start_dt = data$datetime[starts],
+        end_dt = data$datetime[ends],
+        stringsAsFactors = FALSE
+      )
+
+      current <- if (!is.na(exist$data_sharing_agreement_id[1])) {
+        exist$data_sharing_agreement_id[1]
+      } else {
+        new_segments$data_sharing_agreement_id[1]
+      }
+
+      index <- 1 # keeps track of the row we should be modifying in 'exist'
+
+      # Now loop through the data to find where the data_sharing_agreement_id changes
+      for (i in 1:nrow(new_segments)) {
+        if (new_segments$data_sharing_agreement_id[i] != current) {
+          if (index <= original_exist_rows) {
+            # Modify rows in 'exist'
+            if (index == 1) {
+              # If still on first row, check if its start_dt needs to be modified
+              if (exist$start_dt[index] > new_segments$start_dt[i]) {
+                # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+                exist$start_dt[index] <- new_segments$start_dt[i]
+              } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+            } else {
+              exist$start_dt[index] <- new_segments$start_dt[i]
+            }
+            exist$data_sharing_agreement_id[
+              index
+            ] <- new_segments$data_sharing_agreement_id[i]
+            if (index != nrow(exist)) {
+              # Adjust the end_dt of this data_sharing_agreement_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+              exist$end_dt[index] <- new_segments$end_dt[i]
+            }
+            if (i < nrow(new_segments)) {
+              index <- index + 1
+              current <- new_segments$data_sharing_agreement_id[i]
+            }
+          } else {
+            # Create new rows with no timeseries_data_sharing_agreement_id
+            # Modify the last row in 'exist' and add a new row
+            if (index > 1) {
+              exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+            }
+            to_append <- data.frame(
+              timeseries_data_sharing_agreement_id = NA,
+              timeseries_id = timeseries_id,
+              data_sharing_agreement_id = new_segments$data_sharing_agreement_id[
+                i
+              ],
+              start_dt = new_segments$start_dt[i],
+              end_dt = new_segments$end_dt[i]
+            )
+            exist <- rbind(exist, to_append)
+            index <- nrow(exist)
+          }
+          current <- new_segments$data_sharing_agreement_id[i]
+        } else {
+          # If the data_sharing_agreement_id is the same as the last one, check and adjust datetimes
+          if (index <= original_exist_rows) {
+            # Modify rows in 'exist'
+            if (index == 1) {
+              # If still on first row, check if its start_dt needs to be modified
+              if (exist$start_dt[index] > new_segments$start_dt[i]) {
+                # If the start_dt of the first row in 'exist' is later than the start_dt of the first row in 'new_segments', adjust it
+                exist$start_dt[index] <- new_segments$start_dt[i]
+              } # it's possible that the user has provided data that starts *after* the full record, so don't adjust the start_dt of the first row in that case
+            } else {
+              exist$start_dt[index] <- new_segments$start_dt[i]
+            }
+            if (index != nrow(exist)) {
+              # Adjust the end_dt of this data_sharing_agreement_id if it's not the last row of 'exist' (otherwise we risk truncating a time period if the provided data does not go to the end of the timeseries)
+              exist$end_dt[index] <- new_segments$end_dt[i]
+            }
+            if (i < nrow(new_segments)) {
+              index <- index + 1
+            }
+          } else {
+            # Create new rows with no timeseries_data_sharing_agreement_id
+            # Modify the last row in 'exist' and add a new row
+            if (index > 1) {
+              exist$end_dt[nrow(exist)] <- new_segments$end_dt[i - 1]
+            }
+            to_append <- data.frame(
+              timeseries_data_sharing_agreement_id = NA,
+              timeseries_id = timeseries_id,
+              data_sharing_agreement_id = new_segments$data_sharing_agreement_id[
+                i
+              ],
+              start_dt = new_segments$start_dt[i],
+              end_dt = new_segments$end_dt[i]
+            )
+            exist <- rbind(exist, to_append)
+            index <- nrow(exist)
+          }
+        }
+
+        if (i == nrow(new_segments)) {
+          exist$end_dt[index] <- new_segments$end_dt[i] # Adjust the end_dt of this agreement
+        }
+      } # End of for loop
+
+      # if there are untouched rows in exist check if they interfere with the last end_dt. If they do, they either need adjustments to their start_dt or need to be remove form the database
+      if (index < nrow(exist)) {
+        # Pull out the rows that are left over
+        leftovers <- exist[c((index + 1):nrow(exist)), ]
+        exist <- exist[c(1:index), ]
+        # Find entries that now have a start_dt and end_dt entirely captured by other rows. Label them with timeseries_id = -1 to remove later
+        leftovers[
+          leftovers$start_dt <= exist$end_dt[index] &
+            leftovers$end_dt <= exist$end_dt[index],
+          "timeseries_id"
+        ] <- -1
+        # Find entries that have a start_dt before the end_dt of the last row, but end_dt after the end_dt of the last row. Adjust their start_dt to be the same as the end_dt of the last row. These won't be removed. This *should* only ever be a single row because of DB constraints.
+        leftovers[
+          leftovers$start_dt < exist$end_dt[index] &
+            leftovers$end_dt > exist$end_dt[index],
+          "start_dt"
+        ] <- exist$end_dt[index]
+
+        exist <- rbind(exist, leftovers)
+      }
+
+      # Now commit the changes to the database
+      commit_fx <- function(con, exist) {
+        remove <- exist[
+          exist$timeseries_id == -1,
+          "timeseries_data_sharing_agreement_id"
+        ]
+        exist <- exist[exist$timeseries_id != -1, ]
+        if (length(remove) > 0) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "DELETE FROM timeseries_data_sharing_agreements WHERE timeseries_data_sharing_agreement_id IN (",
+              paste(remove, collapse = ", "),
+              ");"
+            )
+          )
+        }
+        for (i in 1:nrow(exist)) {
+          if (!is.na(exist$timeseries_data_sharing_agreement_id[i])) {
+            # Means that we need to update rows
+            DBI::dbExecute(
+              con,
+              paste0(
+                "UPDATE timeseries_data_sharing_agreements SET data_sharing_agreement_id = ",
+                exist$data_sharing_agreement_id[i],
+                ", start_dt = '",
+                exist$start_dt[i],
+                "', end_dt = '",
+                exist$end_dt[i],
+                "' WHERE timeseries_data_sharing_agreement_id = ",
+                exist$timeseries_data_sharing_agreement_id[i],
+                ";"
+              )
+            )
+          } else {
+            # Means that we need to insert new rows
+            DBI::dbAppendTable(
+              con,
+              "timeseries_data_sharing_agreements",
+              exist[
+                i,
+                -which(
+                  names(exist) == "timeseries_data_sharing_agreement_id"
+                )
+              ]
+            )
+          }
+        }
+      }
+
+      commit_fx(con, exist)
+
+      if (active) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
+    },
+    error = function(e) {
+      if (active) {
+        DBI::dbExecute(con, "ROLLBACK;")
+      }
+      warning(
+        "adjust_data_sharing_agreement: Failed to commit changes to the database with error ",
+        e$message
+      )
+    }
+  )
+} # End of adjust_data_sharing_agreement function

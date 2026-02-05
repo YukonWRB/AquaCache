@@ -1,7 +1,5 @@
 test_that("addNewContinuous inserts a new measurement", {
-  skip_if_no_postgres()
-
-  con <- AquaConnect(silent = TRUE)
+  con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
 
   tsid <- DBI::dbGetQuery(
@@ -47,9 +45,8 @@ test_that("addNewContinuous inserts a new measurement", {
 
 test_that("addNewContinuous errors when datetime is missing", {
   testthat::skip_on_cran()
-  skip_if_no_postgres()
 
-  con <- AquaConnect(silent = TRUE)
+  con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   tsid <- DBI::dbGetQuery(

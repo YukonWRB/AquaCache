@@ -168,7 +168,7 @@ maintain <- function(
 
     for (i in 1:nrow(loc_tbl)) {
       locid <- loc_tbl$location_id[i]
-      loc_name <- loc_tbl$location[i]
+      loc_name <- loc_tbl$name[i]
 
       # Check if location is used in any other table
       # Loop over all tables listed in 'refs' until a reference to 'locid' is found
@@ -211,7 +211,7 @@ maintain <- function(
         con,
         paste0(
           "SELECT COUNT(*) FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = '",
-          tolower(loc_tbl$location[i]),
+          tolower(loc_tbl$location_code[i]),
           "';"
         )
       )
@@ -225,7 +225,7 @@ maintain <- function(
         )
         # Create a new entry in the vectors table
         point <- data.frame(
-          "feature_name" = loc_tbl$location[i],
+          "feature_name" = loc_tbl$location_code[i],
           "description" = loc_tbl$name[i],
           "latitude" = loc_tbl$latitude[i],
           "longitude" = loc_tbl$longitude[i]
