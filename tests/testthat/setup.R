@@ -40,3 +40,34 @@ skip_if_no_postgres <- function() {
     )
   }
 }
+
+
+# Helper function to connect to the test database; will skip tests if connection fails
+connect_test <- function() {
+  skip_if_no_postgres()
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RPostgres::Postgres(),
+        dbname = Sys.getenv("aquacacheName"),
+        host = Sys.getenv("aquacacheHost"),
+        port = Sys.getenv("aquacachePort"),
+        user = Sys.getenv("aquacacheAdminUser"),
+        password = Sys.getenv("aquacacheAdminPass")
+      )
+      DBI::dbExecute(con, "SET timezone = 'UTC'")
+      con
+    },
+    error = function(err) {
+      testthat::skip(paste(
+        "Unable to connect to Postgres test database:",
+        err$message
+      ))
+    }
+  )
+}
+
+cleanup_postgres_session <- function(con) {
+  try(DBI::dbExecute(con, "ROLLBACK;"), silent = TRUE)
+  DBI::dbDisconnect(con)
+}
