@@ -1057,6 +1057,357 @@ tryCatch(
       "ALTER TABLE files.images DROP COLUMN IF EXISTS create_datetime;"
     )
 
+    # Improve how raster types are labelled and add links to parameters table
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE IF NOT EXISTS spatial.raster_types (
+      raster_type_id SERIAL PRIMARY KEY,
+      raster_type_name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_by TEXT DEFAULT current_user,
+      modified TIMESTAMP WITH TIME ZONE,
+      modified_by TEXT
+    );"
+    )
+    # Triggers
+    DBI::dbExecute(
+      con,
+      "create or replace trigger trg_user_audit before update on spatial.raster_types for each row execute function user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "create or replace trigger update_modify_time before update on spatial.raster_types for each row execute function update_modified()"
+    )
+    # Make owner 'admin'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_types OWNER TO admin;"
+    )
+
+    # Add raster types
+    raster_types_df <- data.frame(
+      raster_type_name = c(
+        "forecast",
+        "reanalysis",
+        "observation",
+        "simulation",
+        "derived",
+        "calculated",
+        "other"
+      ),
+      description = c(
+        "Rasters generated from numerical models that predict future states based on initial conditions and physical laws.",
+        "Rasters produced by assimilating observational data into a consistent model framework to reconstruct past states of the environment.",
+        "Rasters created from direct measurements or observations of environmental variables, such as satellite imagery or ground-based sensors.",
+        "Rasters generated from computational models that simulate environmental processes without direct assimilation of observational data.",
+        "Rasters derived from other datasets through processing, analysis, or transformation, such as indices or classifications.",
+        "Rasters generated from computational models that simulate environmental processes or conditions, such as solar radiation models, etc..",
+        "Other types of rasters that do not fit into the predefined categories (avoid using if at all possible)."
+      ),
+      stringsAsFactors = FALSE
+    )
+    # Insert raster types if they don't already exist
+    for (i in 1:nrow(raster_types_df)) {
+      DBI::dbExecute(
+        con,
+        "INSERT INTO spatial.raster_types (raster_type_name, description)
+        VALUES ($1, $2)
+        ON CONFLICT (raster_type_name) DO NOTHING;",
+        params = list(
+          raster_types_df$raster_type_name[i],
+          raster_types_df$description[i]
+        )
+      )
+    }
+
+    # Convert the existing raster 'type' column to 'raster_type_id' foreign key
+    try(
+      {
+        DBI::dbExecute(
+          con,
+          "ALTER TABLE spatial.raster_series_index RENAME COLUMN type TO raster_type_id;"
+        )
+      },
+      silent = TRUE
+    )
+    try(
+      {
+        DBI::dbExecute(
+          con,
+          "ALTER TABLE spatial.rasters_reference RENAME COLUMN type TO raster_type_id;"
+        )
+      },
+      silent = TRUE
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.raster_series_index.raster_type_id IS 'References spatial.raster_types(raster_type_id) to define the type of raster.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.raster_type_id IS 'References spatial.raster_types(raster_type_id) to define the type of raster.';"
+    )
+    # Drop the old type check
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index DROP CONSTRAINT IF EXISTS raster_series_index_type_check;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference DROP CONSTRAINT IF EXISTS rasters_reference_type_check;"
+    )
+    # Match existing values to new raster type names
+    DBI::dbExecute(
+      con,
+      "UPDATE spatial.raster_series_index
+      SET raster_type_id = rt.raster_type_id
+      FROM spatial.raster_types rt
+      WHERE spatial.raster_series_index.raster_type_id = rt.raster_type_name;"
+    )
+
+    # Drop constraint 'check_model_constraints' on 'rasters_reference'; remake later
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference DROP CONSTRAINT IF EXISTS check_model_constraints;"
+    )
+
+    # Switch raster_type_id = 'model' to 'reanalysis' where model = 'reanalysis-era-5-land' and to 'forecast' where model = 'HRDPS' and to 'reanalysis' where model = 'HRDPA' and to 'reanalysis' where model = 'CaLDAS'
+    DBI::dbExecute(
+      con,
+      "UPDATE rasters_reference SET raster_type_id = 'reanalysis' WHERE raster_type_id = 'model' AND model = 'reanalysis-era-5-land';"
+    )
+    DBI::dbExecute(
+      con,
+      "UPDATE rasters_reference SET raster_type_id = 'reanalysis' WHERE raster_type_id = 'model' AND model = 'reanalysis-era5-land';"
+    )
+    DBI::dbExecute(
+      con,
+      "UPDATE rasters_reference SET raster_type_id = 'forecast' WHERE raster_type_id = 'model' AND model = 'HRDPS';"
+    )
+    DBI::dbExecute(
+      con,
+      "UPDATE rasters_reference SET raster_type_id = 'reanalysis' WHERE raster_type_id = 'model' AND model = 'HRDPA';"
+    )
+    DBI::dbExecute(
+      con,
+      "UPDATE rasters_reference SET raster_type_id = 'reanalysis' WHERE raster_type_id = 'model' AND model = 'CaLDAS';"
+    )
+
+    DBI::dbExecute(
+      con,
+      "UPDATE spatial.rasters_reference
+      SET raster_type_id = rt.raster_type_id
+      FROM spatial.raster_types rt
+      WHERE spatial.rasters_reference.raster_type_id = rt.raster_type_name;"
+    )
+
+    # Alter column to be INT now
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index
+      ALTER COLUMN raster_type_id TYPE INT USING raster_type_id::INT;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference
+      ALTER COLUMN raster_type_id TYPE INT USING raster_type_id::INT;"
+    )
+    # FK to raster_types
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index
+      ADD CONSTRAINT fk_raster_type
+      FOREIGN KEY (raster_type_id)
+      REFERENCES spatial.raster_types(raster_type_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference
+      ADD CONSTRAINT fk_raster_type
+      FOREIGN KEY (raster_type_id)
+      REFERENCES spatial.raster_types(raster_type_id);"
+    )
+
+    # Redo the check but using raster_type_ids instead of names. For raster types forecast and reanalysis, valid_from and valid_to must be filled in. For raster type 'other', description must be filled in.
+    ids <- DBI::dbGetQuery(
+      con,
+      "
+    SELECT raster_type_name, raster_type_id
+    FROM spatial.raster_types
+    WHERE raster_type_name IN ('forecast','reanalysis','other');
+  "
+    )
+
+    id_forecast <- ids$raster_type_id[ids$raster_type_name == "forecast"]
+    id_reanalysis <- ids$raster_type_id[ids$raster_type_name == "reanalysis"]
+    id_other <- ids$raster_type_id[ids$raster_type_name == "other"]
+
+    sql <- sprintf(
+      "
+    ALTER TABLE spatial.rasters_reference
+    ADD CONSTRAINT check_model_constraints
+    CHECK (
+      (
+        raster_type_id IN (%d, %d)
+        AND valid_from IS NOT NULL
+        AND valid_to   IS NOT NULL
+      )
+      OR
+      (
+        raster_type_id = %d
+        AND description IS NOT NULL
+      )
+    );
+  ",
+      id_forecast,
+      id_reanalysis,
+      id_other
+    )
+
+    DBI::dbExecute(con, sql)
+
+    # Index
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_raster_series_index_raster_type_id ON spatial.raster_series_index(raster_type_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_rasters_reference_raster_type_id ON spatial.rasters_reference(raster_type_id);"
+    )
+
+    # Add column for 'parameter_id', links to public.parameters.parameter_id
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index ADD COLUMN IF NOT EXISTS parameter_id INT REFERENCES public.parameters(parameter_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference ADD COLUMN IF NOT EXISTS parameter_id INT REFERENCES public.parameters(parameter_id);"
+    )
+    ## Index
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_raster_series_index_parameter_id ON spatial.raster_series_index(parameter_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_rasters_reference_parameter_id ON spatial.rasters_reference(parameter_id);"
+    )
+    ## Comments
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.raster_series_index.parameter_id IS 'References public.parameters.parameter_id to define the parameter represented by the raster series.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.parameter_id IS 'References public.parameters.parameter_id to define the parameter represented by the raster.';"
+    )
+
+    # Aggregation type
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index ADD COLUMN IF NOT EXISTS aggregation_type_id INT REFERENCES continuous.aggregation_types(aggregation_type_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference ADD COLUMN IF NOT EXISTS aggregation_type_id INT REFERENCES continuous.aggregation_types(aggregation_type_id);"
+    )
+    ## Comments
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.raster_series_index.aggregation_type_id IS 'References continuous.aggregation_types.aggregation_type_id to define the type of aggregation applied to the parameter for the raster series.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.aggregation_type_id IS 'References continuous.aggregation_types.aggregation_type_id to define the type of aggregation applied to the parameter for the raster.';"
+    )
+    ## Indexes
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_raster_series_index_aggregation_type_id ON spatial.raster_series_index(aggregation_type_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_rasters_reference_aggregation_type_id ON spatial.rasters_reference(aggregation_type_id);"
+    )
+
+    # Media
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index ADD COLUMN IF NOT EXISTS media_id INTEGER REFERENCES public.media_types(media_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference ADD COLUMN IF NOT EXISTS media_id INTEGER REFERENCES public.media_types(media_id);"
+    )
+    ## Comments
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.raster_series_index.media_id IS 'References public.media_types.media_id to define the media type (atmospheric, surface water, soil, etc.) of the parameter for the raster series.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.media_id IS 'References public.media_types.media_id to define the media type (atmospheric, surface water, soil, etc.) of the parameter for the raster.';"
+    )
+    ## Indexes
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_raster_series_index_media_id ON spatial.raster_series_index(media_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_rasters_reference_media_id ON spatial.rasters_reference(media_id);"
+    )
+
+    # Capture the z(elevation, pressure level, depth) information
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index ADD COLUMN IF NOT EXISTS z_value NUMERIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference ADD COLUMN IF NOT EXISTS z_value NUMERIC;"
+    )
+    ## Comments
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.raster_series_index.z_value IS 'The z value (elevation, pressure level, depth, etc.) associated with the raster series, if applicable.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.z_value IS 'The z value (elevation, pressure level, depth, etc.) associated with the raster, if applicable.';"
+    )
+    ## Indexes
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_raster_series_index_z_value ON spatial.raster_series_index(z_value);"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX idx_rasters_reference_z_value ON spatial.rasters_reference(z_value);"
+    )
+
+    # Capture z units
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.raster_series_index ADD COLUMN IF NOT EXISTS z_units TEXT;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference ADD COLUMN IF NOT EXISTS z_units TEXT;"
+    )
+    ## Comments
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.raster_series_index.z_units IS 'The units of the z value (elevation, pressure level, depth, etc.) associated with the raster series, if applicable.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.z_units IS 'The units of the z value (elevation, pressure level, depth, etc.) associated with the raster, if applicable.';"
+    )
+
     # Wrap things up ##################
     # Update the version_info table
     DBI::dbExecute(
