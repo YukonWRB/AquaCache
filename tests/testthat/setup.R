@@ -18,3 +18,25 @@ if (Sys.getenv("CI") == "true") {
 }
 
 set.seed(123) # Set seed for reproducibility in tests
+
+
+# Check for Postgres credentials; skip tests if not available
+skip_if_no_postgres <- function() {
+  testthat::skip_if_not_installed("RPostgres")
+  required <- c(
+    "aquacacheName",
+    "aquacacheHost",
+    "aquacachePort",
+    "aquacacheAdminUser",
+    "aquacacheAdminPass"
+  )
+  missing <- required[Sys.getenv(required, unset = "") == ""]
+  if (length(missing) > 0) {
+    testthat::skip(
+      paste(
+        "Postgres test database credentials not available:",
+        paste(missing, collapse = ", ")
+      )
+    )
+  }
+}
