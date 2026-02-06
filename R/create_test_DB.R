@@ -261,7 +261,9 @@ create_test_db <- function(
     "public.parameter_groups",
     "public.parameter_sub_groups",
     "public.qualifier_types",
-    "public.organizations"
+    "public.organizations",
+    "public.languages",
+    "spatial.raster_types"
   )
 
   # Load the ancillary tables into the test database using DBI
@@ -269,7 +271,7 @@ create_test_db <- function(
     message("Loading table ", tbl, " into the test database...")
 
     # Read the table from the original database
-    data <- DBI::dbGetQuery(con, "SELECT * FROM $1;", params = list(tbl))
+    data <- DBI::dbGetQuery(con, paste0("SELECT * FROM ", tbl))
 
     # Write the table to the test database
     DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
@@ -447,10 +449,36 @@ create_test_db <- function(
 
       corr <- DBI::dbGetQuery(
         con,
-        sprintf("SELECT * FROM corrections WHERE timeseries_id IN (%s)", ts_ids)
+        sprintf(
+          "SELECT * FROM continuous.corrections WHERE timeseries_id IN (%s)",
+          ts_ids
+        )
       )
       message("Loading table continuous.corrections into the test database")
       DBI::dbAppendTable(test_con, "corrections", corr)
+
+      message(
+        "Loading public.timeseries_data_sharing_agreements into the test database"
+      )
+      agreements <- DBI::dbGetQuery(
+        con,
+        "SELECT * FROM public.timeseries_data_sharing_agreements"
+      )
+      DBI::dbAppendTable(
+        test_con,
+        "timeseries_data_sharing_agreements",
+        agreements
+      )
+
+      message("Loading public.location_names into the test database")
+      location_names <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT * FROM public.location_names WHERE location_id IN (%s)",
+          paste(locations, collapse = ",")
+        )
+      )
+      DBI::dbAppendTable(test_con, "location_names", location_names)
     } else {
       warning("No continuous timeseries found for the specified locations.")
     }
