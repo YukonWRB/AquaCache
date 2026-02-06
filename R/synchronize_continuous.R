@@ -127,7 +127,7 @@ synchronize_continuous <- function(
     all_timeseries <- DBI::dbGetQuery(
       con,
       "SELECT 
-      `  t.parameter_id, 
+        t.parameter_id, 
         t.timeseries_id, 
         t.source_fx, 
         t.source_fx_args, 
