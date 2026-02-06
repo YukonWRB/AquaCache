@@ -1408,6 +1408,120 @@ tryCatch(
       "COMMENT ON COLUMN spatial.rasters_reference.z_units IS 'The units of the z value (elevation, pressure level, depth, etc.) associated with the raster, if applicable.';"
     )
 
+    # Redo function get_csw_layer() so it no longer references the old l.location column
+    DBI::dbExecute(con, "DROP FUNCTION IF EXISTS public.get_csw_layer();")
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.get_csw_layer()
+        RETURNS TABLE(location text, station_name text, station_name_fr text, latitude numeric, longitude numeric, type text, owner text, owner_fr text, timeseries_id integer, parameter_id integer, param_name text, param_name_fr text, param_units text, date date, value numeric, percent_historic_range numeric, mean numeric, min numeric, max numeric, doy_count integer, drainage_area_km2 numeric, datum_name_en text, datum_name_fr text)
+        LANGUAGE plpgsql
+      AS $function$
+      BEGIN
+      RETURN QUERY
+      SELECT 
+      l.location_code, 
+      CASE 
+      WHEN sl.sub_location_name IS NOT NULL 
+      THEN CONCAT(l.name, ' - ', sl.sub_location_name) 
+      ELSE l.name 
+      END AS station_name,
+      CASE 
+      WHEN sl.sub_location_name_fr IS NOT NULL 
+      THEN CONCAT(l.name_fr, ' - ', sl.sub_location_name_fr) 
+      ELSE l.name_fr 
+      END AS station_name_fr, 
+      l.latitude, 
+      l.longitude, 
+      lt.type,
+      loc_owner.owner_name AS owner,
+      loc_owner.owner_name_fr AS owner_fr,
+      t.timeseries_id, 
+      t.parameter_id, 
+      p.param_name,
+      p.param_name_fr,
+      p.unit_default,
+      mcdc.date, 
+      CASE 
+        WHEN p.param_name = 'water level' THEN mcdc.value + COALESCE(dc.conversion_m, 0) 
+        ELSE mcdc.value 
+      END AS value, 
+      mcdc.percent_historic_range, 
+      CASE 
+        WHEN p.param_name = 'water level' THEN mcdc.mean + COALESCE(dc.conversion_m, 0) 
+        ELSE mcdc.mean 
+      END AS mean, 
+      CASE 
+        WHEN p.param_name = 'water level' THEN mcdc.min + COALESCE(dc.conversion_m, 0) 
+        ELSE mcdc.min 
+      END AS min, 
+      CASE 
+        WHEN p.param_name = 'water level' THEN mcdc.max + COALESCE(dc.conversion_m, 0) 
+        ELSE mcdc.max 
+      END AS max,
+      mcdc.doy_count,
+      d.drainage_area_km2,
+      CASE 
+        WHEN p.param_name = 'water level' THEN dl.datum_name_en 
+        ELSE NULL 
+      END AS datum_name_en,
+      CASE 
+        WHEN p.param_name = 'water level' THEN dl.datum_name_fr 
+        ELSE NULL 
+      END AS datum_name_fr
+      FROM 
+      public.locations l
+      INNER JOIN 
+      public.location_types lt ON l.location_type = lt.type_id
+      INNER JOIN 
+      continuous.timeseries t ON t.location_id = l.location_id
+      FULL JOIN 
+      public.sub_locations sl ON sl.sub_location_id = t.sub_location_id 
+      INNER JOIN 
+      public.parameters p ON p.parameter_id = t.parameter_id 
+      INNER JOIN 
+      continuous.measurements_calculated_daily_corrected mcdc ON mcdc.timeseries_id = t.timeseries_id
+      LEFT JOIN (
+      SELECT DISTINCT feature_name, (ST_Area(geom::geography)/1000000)::numeric AS drainage_area_km2
+      FROM vectors 
+      WHERE layer_name = 'Drainage basins'
+      ) d ON d.feature_name = l.location_code
+      LEFT JOIN public.datum_conversions dc 
+      ON dc.location_id = l.location_id AND dc.current IS TRUE
+      LEFT JOIN public.datum_list dl 
+      ON dc.datum_id_to = dl.datum_id
+      -- add in ownership. If there are multiple relevant owners for a location, take the most recent one based on start_dt and end_dt.
+      LEFT JOIN LATERAL (
+        SELECT
+          org.name AS owner_name,
+          org.name_fr as owner_name_fr,
+          o.organization_id,
+          o.start_dt,
+          o.end_dt
+        FROM continuous.timeseries t2
+        JOIN continuous.owners o
+          ON o.timeseries_id = t2.timeseries_id
+        JOIN public.organizations org
+          ON org.organization_id = o.organization_id
+        WHERE t2.location_id = l.location_id
+        ORDER BY o.start_dt DESC, o.end_dt DESC
+        LIMIT 1
+      ) loc_owner ON TRUE      
+      WHERE 
+      lt.type_id IN (1, 2, 16)
+      AND l.jurisdictional_relevance IS TRUE
+      AND p.parameter_id IN(1150, 1165, 21, 1220)
+      AND mcdc.date >= NOW() - INTERVAL '30 days'
+      ORDER BY l.location_code, p.param_name, mcdc.date;
+      END;
+      $function$
+      ;"
+    )
+    # Make owner 'admin'
+    DBI::dbExecute(
+      con,
+      "ALTER FUNCTION public.get_csw_layer() OWNER TO admin;"
+    )
+
     # Wrap things up ##################
     # Update the version_info table
     DBI::dbExecute(

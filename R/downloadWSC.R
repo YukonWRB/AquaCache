@@ -2,7 +2,7 @@
 #'
 #'@description
 #'
-#' A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat and tidyhydat.ws options). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
+#' A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
 #'
 #' @param location A WSC station number.
 #' @param parameter A WSC parameter code. 47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46 for level, 5 for water temperature, 4 for air temperature. See the full list using [tidyhydat::param_id].

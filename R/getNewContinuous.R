@@ -222,14 +222,14 @@ getNewContinuous <- function(
           }
 
           if ("data_sharing_agreement_id" %in% names(ts)) {
-            if (!is.na(default_data_sharing_agreement_id)) {
+            if (!is.na(data_sharing_agreement_id)) {
               ts$data_sharing_agreement_id[
                 is.na(ts$data_sharing_agreement_id)
-              ] <- default_data_sharing_agreement_id
+              ] <- data_sharing_agreement_id
             }
           } else {
-            if (!is.na(default_data_sharing_agreement_id)) {
-              ts$data_sharing_agreement_id <- default_data_sharing_agreement_id
+            if (!is.na(data_sharing_agreement_id)) {
+              ts$data_sharing_agreement_id <- data_sharing_agreement_id
             }
           }
 
