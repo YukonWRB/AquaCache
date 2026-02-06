@@ -1413,7 +1413,7 @@ tryCatch(
     DBI::dbExecute(
       con,
       "CREATE OR REPLACE FUNCTION public.get_csw_layer()
-        RETURNS TABLE(location text, station_name text, station_name_fr text, latitude numeric, longitude numeric, type text, owner text, owner_fr text, timeseries_id integer, parameter_id integer, param_name text, param_name_fr text, param_units text, date date, value numeric, percent_historic_range numeric, mean numeric, min numeric, max numeric, doy_count integer, drainage_area_km2 numeric, datum_name_en text, datum_name_fr text)
+        RETURNS TABLE(location text, station_name text, station_name_fr text, latitude numeric, longitude numeric, type text, owner_name text, owner_name_fr text, timeseries_id integer, parameter_id integer, param_name text, param_name_fr text, param_units text, date date, value numeric, percent_historic_range numeric, mean numeric, min numeric, max numeric, doy_count integer, drainage_area_km2 numeric, datum_name_en text, datum_name_fr text)
         LANGUAGE plpgsql
       AS $function$
       BEGIN
@@ -1433,8 +1433,8 @@ tryCatch(
       l.latitude, 
       l.longitude, 
       lt.type,
-      loc_owner.owner_name AS owner,
-      loc_owner.owner_name_fr AS owner_fr,
+      loc_owner.owner_name,
+      loc_owner.owner_name_fr,
       t.timeseries_id, 
       t.parameter_id, 
       p.param_name,
