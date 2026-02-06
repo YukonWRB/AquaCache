@@ -228,12 +228,12 @@ create_test_db <- function(
   # Set the search path (takes effect at next connection)
   DBI::dbExecute(
     test_con,
-    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, boreholes, instruments, information;"
+    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
   )
   # Update the search path for this session
   DBI::dbExecute(
     test_con,
-    "SET search_path TO public, continuous, discrete, spatial, files, boreholes, instruments, information;"
+    "SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
   )
 
   message("Loading ancillary tables...")
@@ -269,8 +269,7 @@ create_test_db <- function(
     message("Loading table ", tbl, " into the test database...")
 
     # Read the table from the original database
-    query <- paste0("SELECT * FROM ", tbl, ";")
-    data <- DBI::dbGetQuery(con, query)
+    data <- DBI::dbGetQuery(con, "SELECT * FROM $1;", params = list(tbl))
 
     # Write the table to the test database
     DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
@@ -548,7 +547,7 @@ create_test_db <- function(
     "-- ensure search_path is set when restoring the database",
     "DO $$",
     "BEGIN",
-    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete,spatial, files,  boreholes, instruments, information;', current_database());",
+    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;', current_database());",
     "END$$;",
     sep = "\n"
   )
