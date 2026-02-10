@@ -430,6 +430,10 @@ synchronize_discrete <- function(
               ## Check sample metadata ##############
               updated_samples_flag <- FALSE
               for (k in intersect(names_inRemote_samp, valid_sample_names)) {
+                # Keep local visibility unchanged for existing samples.
+                if (k == "share_with") {
+                  next
+                }
                 inDB_k <- inDB_sample[[k]]
                 inRemote_k <- inRemote_sample[[k]]
                 # Attempt numeric conversion where possible
