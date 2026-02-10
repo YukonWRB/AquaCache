@@ -42,10 +42,10 @@ jobs:
           extra-packages: any::rcmdcheck any::R.utils
           needs: check
 
-      - name: Set up PostgreSQL 17
-        uses: ikalnytskyi/action-setup-postgres@v7
+      - name: Set up PostgreSQL 18
+        uses: ikalnytskyi/action-setup-postgres@v8
         with:
-          postgres-version: '17'
+          postgres-version: '18'
           username: runner
           password: runner
           database: testdb
