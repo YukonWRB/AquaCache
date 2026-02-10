@@ -3,7 +3,9 @@
 #' Generates location codes for new locations based on the National Hydro Network
 #' drainage basins polygons, downloading the layer if it is missing from the
 #' database. Location codes use the first two digits and two or three letters of
-#' the polygon name, the location type suffix, and a numeric sequence.
+#' the polygon name, the location type suffix, and a numeric sequence. The
+#' numeric sequence is left-padded to 5 digits (e.g., `00001`) and will expand to
+#' 6+ digits automatically once values exceed `99999`.
 #'
 #' @param latitude Numeric vector of latitude values in decimal degrees.
 #' @param longitude Numeric vector of longitude values in decimal degrees.
@@ -103,6 +105,16 @@ generateACLocationCode <- function(
     result
   }
 
+  format_suffix <- function(num) {
+    if (is.na(num)) {
+      return(NA_character_)
+    }
+    if (num <= 99999) {
+      return(sprintf("%05d", num))
+    }
+    as.character(num)
+  }
+
   generated_codes <- character(length(latitude))
 
   for (i in seq_along(latitude)) {
@@ -171,7 +183,7 @@ generateACLocationCode <- function(
       next_suffix <- max(suffix_max, na.rm = TRUE) + 1
     }
 
-    generated_codes[i] <- paste0(prefix, "-", sprintf("%05d", next_suffix))
+    generated_codes[i] <- paste0(prefix, "-", format_suffix(next_suffix))
   }
 
   generated_codes

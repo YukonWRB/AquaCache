@@ -54,5 +54,5 @@ test_that("generateACLocationCode returns NHN-based codes", {
   expect_type(codes, "character")
   expect_length(codes, 1)
   expected_prefix <- paste0(prefix, "-", location_type$type_suffix)
-  expect_match(codes, paste0("^", expected_prefix, "-\\d{5}$"))
+  expect_match(codes, paste0("^", expected_prefix, "-\\d{5,}$"))
 })
