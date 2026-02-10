@@ -378,6 +378,20 @@ getNewDiscrete <- function(
             if (!is.na(contributor)) sample$contributor <- contributor
           }
 
+          # Use share_with from the source function when supplied, otherwise
+          # fall back to the sample_series share_with value.
+          if ("share_with" %in% names_samp) {
+            if (!is.list(sample$share_with) && length(sample$share_with) > 1) {
+              sample$share_with <- paste0(
+                "{",
+                paste(sample$share_with, collapse = ", "),
+                "}"
+              )
+            }
+          } else if (!is.na(share_with)) {
+            sample$share_with <- share_with
+          }
+
           # Checks on sample results ############
           # Ensure the results have required minimum columns
           results <- data[[j]][["results"]]
