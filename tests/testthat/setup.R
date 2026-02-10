@@ -67,7 +67,8 @@ connect_test <- function() {
   )
 }
 
+
 cleanup_postgres_session <- function(con) {
-  try(DBI::dbExecute(con, "ROLLBACK;"), silent = TRUE)
+  suppressMessages(try((DBI::dbExecute(con, "ROLLBACK;")), silent = TRUE))
   DBI::dbDisconnect(con)
 }
