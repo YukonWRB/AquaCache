@@ -95,20 +95,6 @@ tryCatch(
     # - Use a policy that permits access only when linked timeseries rows are visible to
     #   the caller via share_with (public_reader or one of caller memberships).
 
-    tables <- c(
-      "boreholes.wells",
-      "continuous.timeseries",
-      "discrete.results",
-      "discrete.samples",
-      "field.field_visits",
-      "files.documents",
-      "files.image_series",
-      "files.documents",
-      "files.images",
-      "public.locations",
-      "public.sub_locations",
-      "boreholes.boreholes"
-    )
     DBI::dbExecute(
       con,
       "ALTER TABLE continuous.measurements_continuous ENABLE ROW LEVEL SECURITY;"
@@ -376,6 +362,19 @@ tryCatch(
     RESET
     logged_in_user.username"
     )
+
+    remaining <- DBI::dbGetQuery(
+      con,
+      "
+    SELECT count(*)
+    FROM pg_depend d
+    JOIN pg_proc p ON p.oid = d.refobjid
+    WHERE p.proname = 'current_user_roles'
+      AND p.pronamespace = 'public'::regnamespace;
+    "
+    )
+
+    ### CODEX: Find any remaining dependencies on current_user_roles and replace them with the RLS policies used above
 
     remaining <- DBI::dbGetQuery(
       con,
