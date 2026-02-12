@@ -81,6 +81,26 @@ tryCatch(
        SET (security_invoker = true, security_barrier = true);"
     )
 
+    # SECURITY INVOKER views require callers to have permissions on all
+    # referenced relations. Grant SELECT broadly and rely on RLS to enforce
+    # per-row visibility from share_with.
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE continuous.measurements_calculated_daily TO PUBLIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE continuous.measurements_continuous TO PUBLIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE continuous.timeseries TO PUBLIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE continuous.corrections TO PUBLIC;"
+    )
+
     # -------------------------------------------------------------------------
     # 3) Add direct RLS protection to source measurement tables
     # -------------------------------------------------------------------------
@@ -363,18 +383,54 @@ tryCatch(
     logged_in_user.username"
     )
 
-    remaining <- DBI::dbGetQuery(
+    # Replace any remaining policy references to current_user_roles() with direct
+    # pg_has_role(...) checks on share_with, then verify no dependency remains.
+    DBI::dbExecute(
       con,
-      "
-    SELECT count(*)
-    FROM pg_depend d
-    JOIN pg_proc p ON p.oid = d.refobjid
-    WHERE p.proname = 'current_user_roles'
-      AND p.pronamespace = 'public'::regnamespace;
-    "
-    )
+      "DO $$
+       DECLARE
+         rec RECORD;
+       BEGIN
+         FOR rec IN
+           SELECT
+             n.nspname AS table_schema,
+             c.relname AS table_name,
+             p.polname AS policy_name,
+             p.polwithcheck IS NOT NULL AS has_with_check
+           FROM pg_policy p
+           JOIN pg_class c
+             ON c.oid = p.polrelid
+           JOIN pg_namespace n
+             ON n.oid = c.relnamespace
+           JOIN pg_attribute a
+             ON a.attrelid = c.oid
+            AND a.attname = 'share_with'
+            AND a.attnum > 0
+            AND NOT a.attisdropped
+           WHERE (
+             pg_get_expr(p.polqual, p.polrelid) ILIKE '%current_user_roles%'
+             OR COALESCE(pg_get_expr(p.polwithcheck, p.polrelid), '') ILIKE '%current_user_roles%'
+           )
+         LOOP
+           EXECUTE format(
+             'ALTER POLICY %I ON %I.%I USING (share_with @> ARRAY[''public_reader''::text] OR EXISTS (SELECT 1 FROM unnest(share_with) AS s(role_name) WHERE pg_has_role(current_user, s.role_name, ''member'')));',
+             rec.policy_name,
+             rec.table_schema,
+             rec.table_name
+           );
 
-    ### CODEX: Find any remaining dependencies on current_user_roles and replace them with the RLS policies used above
+           IF rec.has_with_check THEN
+             EXECUTE format(
+               'ALTER POLICY %I ON %I.%I WITH CHECK (share_with @> ARRAY[''public_reader''::text] OR EXISTS (SELECT 1 FROM unnest(share_with) AS s(role_name) WHERE pg_has_role(current_user, s.role_name, ''member'')));',
+               rec.policy_name,
+               rec.table_schema,
+               rec.table_name
+             );
+           END IF;
+         END LOOP;
+       END
+       $$;"
+    )
 
     remaining <- DBI::dbGetQuery(
       con,
