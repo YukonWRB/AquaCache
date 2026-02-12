@@ -448,6 +448,39 @@ downloadAquarius <- function(
       )
     }
 
+    # Collapse overlapping qualifier intervals of the same level
+    collapse_overlaps <- function(intervals) {
+      intervals <- intervals[order(intervals$start_time, intervals$end_time), ]
+      if (nrow(intervals) <= 1) {
+        return(intervals)
+      }
+
+      collapsed <- vector("list", nrow(intervals))
+      idx <- 1
+      current <- intervals[1, ]
+
+      for (i in 2:nrow(intervals)) {
+        if (intervals$start_time[i] <= current$end_time) {
+          if (intervals$end_time[i] > current$end_time) {
+            current$end_time <- intervals$end_time[i]
+          }
+        } else {
+          collapsed[[idx]] <- current
+          idx <- idx + 1
+          current <- intervals[i, ]
+        }
+      }
+
+      collapsed[[idx]] <- current
+      do.call(rbind, collapsed[seq_len(idx)])
+    }
+
+    qualifiers <- do.call(
+      rbind,
+      lapply(split(qualifiers, qualifiers$level), collapse_overlaps)
+    )
+    rownames(qualifiers) <- NULL
+
     # Add in grades, approval, and qualifier columns
     # Get the row indices in ts corresponding to qualifier/approval/grade start and end times.
     # For each row, if the time is before ts_min, use the first index.
