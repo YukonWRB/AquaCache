@@ -12,7 +12,7 @@ The AquaCache R package is a collection of functions that facilitate the creatio
 It integrates the Water Survey of Canada's realtime (5 minute) hydrometric data with published historical daily means, and facilitates the automated import of data from a variety of sources.
 
 In addition, the package provides functions for the creation and administration of a snow survey database as well as a database intended for instrument maintenance/calibration records.
-The later works with the Shiny application packaged with the WRBcalibrates package, created by the Yukon Department of Environment Water Resources Branch.
+The later works with the Shiny application packaged with the WRBcalibrates package, created by the Yukon Department of Environment Water Science and Stewardship Branch.
 
 # Installation
 
@@ -23,13 +23,13 @@ Note that we state "attempt to initialize" here: it's been a long while since an
 
 An alternative to initializing the database is to restore a backup of the aquacache database.
 This is the preferred method, as it will ensure that the database is in a known state.
-The backup file is available by contacting the Water Resources Branch data scientist, Ghislain de Laplante, who can also help you out with the installation process in general.
+The backup file is available by contacting the Water Science and Stewardship Branch data scientist, Ghislain de Laplante, who can also help you out with the installation process in general.
 
 # Collaboration and contributions
 
 Are you part of an organization that needs to store and manage water or climate related data, documents, images, and instrument metadata in one location?
 If so, you may find the AquaCache package useful and the alternatives lacking.
-We designed this R package and associated database to meet the needs of the Yukon Department of Environment Water Resources Branch, but we believe that it could be useful to other organizations as well.
+We designed this R package and associated database to meet the needs of the Yukon Department of Environment Water Science and Stewardship Branch, but we believe that it could be useful to other organizations as well.
 
 We welcome contributions to the package, and encourage you to contact the project creator and coordinator, Ghislain de Laplante if you wish to collaborate on the development of the package.
 We are particularly interested in collaborating with organizations that have a need for a database like aquacache, and that are willing to contribute to the development of the package.
