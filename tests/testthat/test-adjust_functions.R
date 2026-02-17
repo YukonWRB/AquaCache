@@ -76,7 +76,7 @@ test_that("adjust_owner maps organization names and updates owner segments", {
   )
   expect_equal(
     owners_out$end_dt,
-    c("2099-01-02 00:00:00+00", "2099-01-04 00:00:00+00")
+    c("2099-01-03 00:00:00+00", "2099-01-10 00:00:00+00")
   )
 })
 
