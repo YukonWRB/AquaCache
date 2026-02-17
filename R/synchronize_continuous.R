@@ -640,13 +640,9 @@ synchronize_continuous <- function(
           error = function(e) {
             DBI::dbExecute(con, "ROLLBACK;")
             warning(
-              "synchronize failed to make database changes for ",
-              loc,
-              " and parameter code ",
-              parameter,
-              " (timeseries_id ",
+              "synchronize failed to make database changes for timeseries_id ",
               tsid,
-              ") with message: ",
+              " with message: ",
               e$message,
               "."
             )

@@ -155,8 +155,7 @@ tryCatch(
     #
     # Implementation details:
     # - Discover single-column FKs pointing at any parent table with share_with
-    #   that should govern dependent visibility (locations, timeseries, boreholes,
-    #   wells, and documents).
+    #   that should govern dependent visibility (locations, timeseries, boreholes).
     # - Build one restrictive SELECT policy per child table that ANDs all relevant
     #   parent-visibility checks.
     # - Enable RLS on those child tables.
@@ -260,7 +259,7 @@ tryCatch(
                      )',
                      child_table, child_column
                    )
-                  WHEN 'sample' THEN
+                 WHEN 'sample' THEN
                    format(
                      'EXISTS (
                       SELECT 1 FROM discrete.samples s 

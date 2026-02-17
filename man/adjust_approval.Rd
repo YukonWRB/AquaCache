@@ -13,7 +13,7 @@ adjust_approval(con, timeseries_id, data, delete = FALSE)
 
 \item{data}{A data.frame with columns for 'datetime' and 'approval'. 'datetime' should be POSIXct and 'approval' should either character (in which case it must refer to entries in column 'approval_type_code' of table 'approval_types' or integer/numeric, in which case it must refer to column 'approval_type_id' of the same table.}
 
-\item{delete}{Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.}
+\item{delete}{Logical. If TRUE, the function will delete approvals which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.}
 }
 \value{
 Modifies the 'approvals' table in the database.

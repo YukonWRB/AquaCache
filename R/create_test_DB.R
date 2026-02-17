@@ -458,11 +458,11 @@ create_test_db <- function(
       DBI::dbAppendTable(test_con, "corrections", corr)
 
       message(
-        "Loading public.timeseries_data_sharing_agreements into the test database"
+        "Loading continuous.timeseries_data_sharing_agreements into the test database"
       )
       agreements <- DBI::dbGetQuery(
         con,
-        "SELECT * FROM public.timeseries_data_sharing_agreements"
+        "SELECT * FROM continuous.timeseries_data_sharing_agreements"
       )
       DBI::dbAppendTable(
         test_con,
