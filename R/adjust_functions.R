@@ -1,13 +1,22 @@
 # Functions to adjust the grade, qualifier, approval, owner, and contributor, and data sharing agreement of continuous-type data as it's appended to the database.
 
-
-collapse_segments_with_split <- function(exist, new_segments, value_col, id_col, timeseries_id) {
+collapse_segments_with_split <- function(
+  exist,
+  new_segments,
+  value_col,
+  id_col,
+  timeseries_id
+) {
   if (nrow(new_segments) == 0) {
     return(exist)
   }
 
   exist <- exist[order(exist$start_dt, exist$end_dt), , drop = FALSE]
-  new_segments <- new_segments[order(new_segments$start_dt, new_segments$end_dt), , drop = FALSE]
+  new_segments <- new_segments[
+    order(new_segments$start_dt, new_segments$end_dt),
+    ,
+    drop = FALSE
+  ]
 
   boundaries <- sort(unique(c(
     as.POSIXct(exist$start_dt, tz = "UTC"),
@@ -31,12 +40,18 @@ collapse_segments_with_split <- function(exist, new_segments, value_col, id_col,
         next
       }
 
-      new_match <- which(new_segments$start_dt <= start_i & new_segments$end_dt >= end_i)
+      new_match <- which(
+        new_segments$start_dt <= start_i & new_segments$end_dt >= end_i
+      )
       if (length(new_match) > 0) {
         value_i <- new_segments[[value_col]][new_match[1]]
       } else {
         old_match <- which(exist$start_dt <= start_i & exist$end_dt >= end_i)
-        value_i <- if (length(old_match) > 0) exist[[value_col]][old_match[1]] else NA
+        value_i <- if (length(old_match) > 0) {
+          exist[[value_col]][old_match[1]]
+        } else {
+          NA
+        }
       }
 
       if (!is.na(value_i)) {
@@ -85,7 +100,10 @@ collapse_segments_with_split <- function(exist, new_segments, value_col, id_col,
   }
 
   if (nrow(exist) > nrow(final)) {
-    remove_rows <- exist[(nrow(final) + 1):nrow(exist), c(id_col, "timeseries_id", value_col, "start_dt", "end_dt")]
+    remove_rows <- exist[
+      (nrow(final) + 1):nrow(exist),
+      c(id_col, "timeseries_id", value_col, "start_dt", "end_dt")
+    ]
     remove_rows$timeseries_id <- -1
     final <- rbind(final, remove_rows)
   }
@@ -164,26 +182,26 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         con,
         sprintf(
           "WITH matched AS (
-    SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
-      FROM grades
-     WHERE timeseries_id = %s
-       AND (
-         (end_dt   BETWEEN '%s' AND '%s')
-      OR (start_dt BETWEEN '%s' AND '%s')
-      OR (start_dt <= '%s' AND end_dt >= '%s')
-       )
-    ), fallback AS (
-        SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
-          FROM grades
-         WHERE timeseries_id = %s
-         ORDER BY end_dt DESC
-         LIMIT 1
-    )
-    SELECT * FROM matched
-    UNION ALL
-    SELECT * FROM fallback
-     WHERE NOT EXISTS (SELECT 1 FROM matched)
-    ORDER BY start_dt ASC;",
+          SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
+            FROM grades
+          WHERE timeseries_id = %s
+            AND (
+              (end_dt   BETWEEN '%s' AND '%s')
+            OR (start_dt BETWEEN '%s' AND '%s')
+            OR (start_dt <= '%s' AND end_dt >= '%s')
+            )
+          ), fallback AS (
+              SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
+                FROM grades
+              WHERE timeseries_id = %s
+              ORDER BY end_dt DESC
+              LIMIT 1
+          )
+          SELECT * FROM matched
+          UNION ALL
+          SELECT * FROM fallback
+          WHERE NOT EXISTS (SELECT 1 FROM matched)
+          ORDER BY start_dt ASC;",
           timeseries_id,
           min_datetime,
           max_datetime,
@@ -428,70 +446,70 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           )
         }
         # Collapse consecutive rows with the same qualifier using run-length encoding
-      data <- data[order(data$datetime), ]
-      runs <- rle(data$qualifier)
-      ends <- cumsum(runs$lengths)
-      starts <- c(1, utils::head(ends, -1) + 1)
-      new_segments <- data.frame(
-        qualifier_id = NA,
-        timeseries_id = timeseries_id,
-        qualifier_type_id = runs$values,
-        start_dt = data$datetime[starts],
-        end_dt = data$datetime[ends],
-        stringsAsFactors = FALSE
-      )
+        data <- data[order(data$datetime), ]
+        runs <- rle(data$qualifier)
+        ends <- cumsum(runs$lengths)
+        starts <- c(1, utils::head(ends, -1) + 1)
+        new_segments <- data.frame(
+          qualifier_id = NA,
+          timeseries_id = timeseries_id,
+          qualifier_type_id = runs$values,
+          start_dt = data$datetime[starts],
+          end_dt = data$datetime[ends],
+          stringsAsFactors = FALSE
+        )
 
-      exist <- collapse_segments_with_split(
-        exist = exist,
-        new_segments = new_segments,
-        value_col = "qualifier_type_id",
-        id_col = "qualifier_id",
-        timeseries_id = timeseries_id
-      )
+        exist <- collapse_segments_with_split(
+          exist = exist,
+          new_segments = new_segments,
+          value_col = "qualifier_type_id",
+          id_col = "qualifier_id",
+          timeseries_id = timeseries_id
+        )
 
-      # Now commit the changes to the database
-      commit_fx <- function(con, exist) {
-        remove <- exist[exist$timeseries_id == -1, "qualifier_id"]
-        exist <- exist[exist$timeseries_id != -1, ]
-        if (length(remove) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM qualifiers WHERE qualifier_id IN (",
-              paste(remove, collapse = ", "),
-              ");"
-            )
-          )
-        }
-        for (i in 1:nrow(exist)) {
-          if (!is.na(exist$qualifier_id[i])) {
-            # Means that we need to update rows
+        # Now commit the changes to the database
+        commit_fx <- function(con, exist) {
+          remove <- exist[exist$timeseries_id == -1, "qualifier_id"]
+          exist <- exist[exist$timeseries_id != -1, ]
+          if (length(remove) > 0) {
             DBI::dbExecute(
               con,
               paste0(
-                "UPDATE qualifiers SET qualifier_type_id = ",
-                exist$qualifier_type_id[i],
-                ", start_dt = '",
-                exist$start_dt[i],
-                "', end_dt = '",
-                exist$end_dt[i],
-                "' WHERE qualifier_id = ",
-                exist$qualifier_id[i],
-                ";"
+                "DELETE FROM qualifiers WHERE qualifier_id IN (",
+                paste(remove, collapse = ", "),
+                ");"
               )
             )
-          } else {
-            # Means that we need to insert new rows
-            DBI::dbAppendTable(
-              con,
-              "qualifiers",
-              exist[i, -which(names(exist) == "qualifier_id")]
-            )
+          }
+          for (i in 1:nrow(exist)) {
+            if (!is.na(exist$qualifier_id[i])) {
+              # Means that we need to update rows
+              DBI::dbExecute(
+                con,
+                paste0(
+                  "UPDATE qualifiers SET qualifier_type_id = ",
+                  exist$qualifier_type_id[i],
+                  ", start_dt = '",
+                  exist$start_dt[i],
+                  "', end_dt = '",
+                  exist$end_dt[i],
+                  "' WHERE qualifier_id = ",
+                  exist$qualifier_id[i],
+                  ";"
+                )
+              )
+            } else {
+              # Means that we need to insert new rows
+              DBI::dbAppendTable(
+                con,
+                "qualifiers",
+                exist[i, -which(names(exist) == "qualifier_id")]
+              )
+            }
           }
         }
-      }
 
-      commit_fx(con, exist)
+        commit_fx(con, exist)
       } # End of for loop iterating on tables
 
       if (active) {
