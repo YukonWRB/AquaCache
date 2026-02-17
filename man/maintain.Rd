@@ -24,7 +24,7 @@ maintain(
 
 \item{locations_check}{Runs checks on the data present in the locations table: Ensures that each location is used somewhere in the database (warns if not) and makes sure that each location has an associated point in the 'vectors' table.}
 
-\item{visibility_check}{Checks all tables that have colums for 'whare_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.}
+\item{visibility_check}{Checks all tables that have colums for 'share_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.}
 }
 \value{
 TRUE if completed successfully, possibly with messages and warnings printed to the console.

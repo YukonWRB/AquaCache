@@ -5,7 +5,6 @@
 #' Brings in pared-down snow course data to the database. Can automatically calculate an offset value where locations have operated in parallel in anticipation of replacing the old location with a nearby new one, updating the calculation with each new data point (see parameter old_loc).
 #'
 #' @param location The location code associated with the snow course in the snow database,  should match locations.location_code in the aquacache database (locations.alias is checked as a fallback).
-#' @param sub_location The sub-location code associated with the snow course (leave NULL if not applicable).
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
@@ -20,7 +19,6 @@
 
 downloadSnowCourse <- function(
   location,
-  sub_location = NULL,
   start_datetime,
   end_datetime = Sys.time(),
   old_loc = NULL,
@@ -105,11 +103,11 @@ downloadSnowCourse <- function(
   )[1, 1]
   sample_owner <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';"
+    "SELECT organization_id FROM organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship';"
   )[1, 1]
   sample_contributor <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';"
+    "SELECT organization_id FROM organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship%';"
   )[1, 1]
   sample_collect_method <- DBI::dbGetQuery(
     con,
@@ -730,6 +728,7 @@ downloadSnowCourse <- function(
     sample$contributor <- sample_contributor
     sample$collection_method <- sample_collect_method
     sample$media_id <- media_id
+    sample$location <- NULL # Don't need to return location as it's already in the database and we have the location_id
 
     ls[[i]] <- list(sample = sample, results = meas)
   }

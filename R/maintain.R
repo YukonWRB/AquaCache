@@ -9,7 +9,7 @@
 #' @param vacuum_full Performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space. Default FALSE.
 #' @param timeseries_check Runs checks on data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables and adjusts if needed.
 #' @param locations_check Runs checks on the data present in the locations table: Ensures that each location is used somewhere in the database (warns if not) and makes sure that each location has an associated point in the 'vectors' table.
-#' @param visibility_check Checks all tables that have colums for 'whare_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.
+#' @param visibility_check Checks all tables that have colums for 'share_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.
 #'
 #' @return TRUE if completed successfully, possibly with messages and warnings printed to the console.
 #' @export
@@ -250,13 +250,13 @@ maintain <- function(
   if (visibility_check) {
     # get tables that have BOTH share_with (text[]) and private_expiry (date)
     sql <- "
-SELECT table_schema, table_name
-FROM information_schema.columns
-WHERE (column_name IN ('share_with','private_expiry'))
-  AND table_schema NOT IN ('pg_catalog','information_schema')
-GROUP BY table_schema, table_name
-HAVING COUNT(DISTINCT column_name) = 2;
-"
+      SELECT table_schema, table_name
+      FROM information_schema.columns
+      WHERE (column_name IN ('share_with','private_expiry'))
+        AND table_schema NOT IN ('pg_catalog','information_schema')
+      GROUP BY table_schema, table_name
+      HAVING COUNT(DISTINCT column_name) = 2;
+      "
     tbls <- DBI::dbGetQuery(con, sql)
 
     for (k in seq_len(nrow(tbls))) {

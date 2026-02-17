@@ -115,6 +115,7 @@ tryCatch(
     # - Use a policy that permits access only when linked timeseries rows are visible to
     #   the caller via share_with (public_reader or one of caller memberships).
 
+    # Drop possible FKs on measurements_xxx tables that could interfere with RLS policy creation. New policies are created later down that treat these tables a 'children' of 'timeseries'
     DBI::dbExecute(
       con,
       "ALTER TABLE continuous.measurements_continuous ENABLE ROW LEVEL SECURITY;"
@@ -126,42 +127,6 @@ tryCatch(
     DBI::dbExecute(
       con,
       "DROP POLICY IF EXISTS rls ON continuous.measurements_continuous;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE POLICY measurements_continuous_rls
-       ON continuous.measurements_continuous
-       FOR ALL
-       USING (
-         EXISTS (
-           SELECT 1
-           FROM continuous.timeseries ts
-           WHERE ts.timeseries_id = measurements_continuous.timeseries_id
-            AND (
-              EXISTS (
-                SELECT 1
-                FROM unnest(ts.share_with) AS s(role_name)
-                WHERE s.role_name = 'public_reader'
-                  OR pg_has_role(current_user, s.role_name, 'member')
-              )
-            )
-         )
-       )
-       WITH CHECK (
-         EXISTS (
-           SELECT 1
-           FROM continuous.timeseries ts
-           WHERE ts.timeseries_id = measurements_continuous.timeseries_id
-           AND (
-            EXISTS (
-              SELECT 1
-              FROM unnest(ts.share_with) AS s(role_name)
-              WHERE s.role_name = 'public_reader'
-                 OR pg_has_role(current_user, s.role_name, 'member')
-            )
-          )
-         )
-       );"
     )
 
     DBI::dbExecute(
@@ -175,42 +140,6 @@ tryCatch(
     DBI::dbExecute(
       con,
       "DROP POLICY IF EXISTS rls ON continuous.measurements_calculated_daily;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE POLICY measurements_calculated_daily_rls
-       ON continuous.measurements_calculated_daily
-       FOR ALL
-       USING (
-         EXISTS (
-           SELECT 1
-           FROM continuous.timeseries ts
-           WHERE ts.timeseries_id = measurements_calculated_daily.timeseries_id
-            AND (
-              EXISTS (
-                SELECT 1
-                FROM unnest(ts.share_with) AS s(role_name)
-                WHERE s.role_name = 'public_reader'
-                  OR pg_has_role(current_user, s.role_name, 'member')
-              )
-            )
-         )
-       )
-       WITH CHECK (
-         EXISTS (
-           SELECT 1
-           FROM continuous.timeseries ts
-           WHERE ts.timeseries_id = measurements_calculated_daily.timeseries_id
-           AND (
-            EXISTS (
-              SELECT 1
-              FROM unnest(ts.share_with) AS s(role_name)
-              WHERE s.role_name = 'public_reader'
-                 OR pg_has_role(current_user, s.role_name, 'member')
-            )
-          )
-         )
-       );"
     )
 
     # -------------------------------------------------------------------------
@@ -248,9 +177,7 @@ tryCatch(
              UNION ALL
              SELECT 'boreholes.boreholes'::regclass, 'borehole_id', 'borehole'
              UNION ALL
-             SELECT 'boreholes.wells'::regclass, 'well_id', 'well'
-             UNION ALL
-             SELECT 'files.documents'::regclass, 'document_id', 'document'
+             SELECT 'discrete.samples'::regclass, 'sample_id', 'sample'
            ),
            parent_fks AS (
              SELECT
@@ -276,10 +203,8 @@ tryCatch(
                AND array_length(con.confkey, 1) = 1
                AND pa.attname = pc.parent_key
                AND NOT (n.nspname = 'public' AND c.relname = 'locations')
-               AND NOT (n.nspname = 'continuous' AND c.relname = 'timeseries')
+               AND NOT (n.nspname = 'discrete' AND c.relname = 'samples')
                AND NOT (n.nspname = 'boreholes' AND c.relname = 'boreholes')
-               AND NOT (n.nspname = 'boreholes' AND c.relname = 'wells')
-               AND NOT (n.nspname = 'files' AND c.relname = 'documents')
            )
            SELECT
              child_schema,
@@ -288,28 +213,67 @@ tryCatch(
                CASE parent_type
                  WHEN 'location' THEN
                    format(
-                     'EXISTS (SELECT 1 FROM public.locations l WHERE l.location_id = %I AND EXISTS (SELECT 1 FROM unnest(l.share_with) AS s(role_name) WHERE s.role_name = ''public_reader'' OR pg_has_role(current_user, s.role_name, ''member'')))',
-                     child_column
+                     'EXISTS (
+                      SELECT 1 FROM public.locations l 
+                      WHERE l.location_id = %I.%I
+                      AND (
+                        l.share_with @> ARRAY[''public_reader''::text]
+                        OR EXISTS (
+                          SELECT 1
+                          FROM unnest(l.share_with) AS r(role_name)
+                          WHERE pg_has_role(current_user, r.role_name, ''member'')
+                        )
+                      )
+                     )',
+                     child_table, child_column
                    )
                  WHEN 'timeseries' THEN
                    format(
-                     'EXISTS (SELECT 1 FROM continuous.timeseries ts WHERE ts.timeseries_id = %I AND EXISTS (SELECT 1 FROM unnest(ts.share_with) AS s(role_name) WHERE s.role_name = ''public_reader'' OR pg_has_role(current_user, s.role_name, ''member'')))',
-                     child_column
+                     'EXISTS (
+                      SELECT 1 FROM continuous.timeseries ts 
+                      WHERE ts.timeseries_id = %I.%I
+                      AND (
+                        ts.share_with @> ARRAY[''public_reader''::text]
+                        OR EXISTS (
+                          SELECT 1
+                          FROM unnest(ts.share_with) AS r(role_name)
+                          WHERE pg_has_role(current_user, r.role_name, ''member'')
+                        )
+                       )
+                     )',
+                     child_table, child_column
                    )
                  WHEN 'borehole' THEN
                    format(
-                     'EXISTS (SELECT 1 FROM boreholes.boreholes b WHERE b.borehole_id = %I AND EXISTS (SELECT 1 FROM unnest(b.share_with) AS s(role_name) WHERE s.role_name = ''public_reader'' OR pg_has_role(current_user, s.role_name, ''member'')))',
-                     child_column
+                     'EXISTS (
+                      SELECT 1 FROM boreholes.boreholes b 
+                      WHERE b.borehole_id = %I.%I
+                      AND (
+                        b.share_with @> ARRAY[''public_reader''::text]
+                        OR EXISTS (
+                          SELECT 1
+                          FROM unnest(b.share_with) AS r(role_name)
+                          WHERE pg_has_role(current_user, r.role_name, ''member'')
+                        )
+                      )
+                     )',
+                     child_table, child_column
                    )
-                 WHEN 'well' THEN
+                  WHEN 'sample' THEN
                    format(
-                     'EXISTS (SELECT 1 FROM boreholes.wells w WHERE w.well_id = %I AND EXISTS (SELECT 1 FROM unnest(w.share_with) AS s(role_name) WHERE s.role_name = ''public_reader'' OR pg_has_role(current_user, s.role_name, ''member'')))',
-                     child_column
-                   )
-                 WHEN 'document' THEN
-                   format(
-                     'EXISTS (SELECT 1 FROM files.documents d WHERE d.document_id = %I AND EXISTS (SELECT 1 FROM unnest(d.share_with) AS s(role_name) WHERE s.role_name = ''public_reader'' OR pg_has_role(current_user, s.role_name, ''member'')))',
-                     child_column
+                     'EXISTS (
+                      SELECT 1 FROM discrete.samples s 
+                      WHERE s.sample_id = %I.%I
+                      AND (
+                        s.share_with @> ARRAY[''public_reader''::text]
+                        OR EXISTS (
+                          SELECT 1
+                          FROM unnest(s.share_with) AS r(role_name)
+                          WHERE pg_has_role(current_user, r.role_name, ''member'')
+                        )
+                      )
+                     )',
+                     child_table, child_column
                    )
                END,
                ' AND '
@@ -383,8 +347,7 @@ tryCatch(
     logged_in_user.username"
     )
 
-    # Replace any remaining policy references to current_user_roles() with direct
-    # pg_has_role(...) checks on share_with, then verify no dependency remains.
+    # Replace any remaining policy references to current_user_roles() with direct pg_has_role(...) checks on share_with, then verify no dependency remains.
     DBI::dbExecute(
       con,
       "DO $$
@@ -455,6 +418,155 @@ tryCatch(
     DBI::dbExecute(
       con,
       "ALTER TABLE timeseries_data_sharing_agreements SET SCHEMA continuous;"
+    )
+
+    # Now modify the raster tables to improve usability in future ################
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference
+       ADD COLUMN IF NOT EXISTS cell_size_x_deg numeric;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters_reference
+       ADD COLUMN IF NOT EXISTS cell_size_y_deg numeric;"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.cell_size_x_deg IS 'Pixel width (degrees) for the raster tiles associated with this reference_id.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN spatial.rasters_reference.cell_size_y_deg IS 'Pixel height (degrees) for the raster tiles associated with this reference_id.';"
+    )
+
+    message(
+      "Populating cell size for existing rasters in the rasters_reference table. This can take a while if you have many rasters, please be patient!"
+    )
+    DBI::dbExecute(
+      con,
+      "
+      UPDATE spatial.rasters_reference rr
+      SET cell_size_x_deg = s.cell_size_x_deg,
+          cell_size_y_deg = s.cell_size_y_deg
+      FROM (
+        SELECT
+          reference_id,
+          MIN(ABS(ST_ScaleX(rast))) AS cell_size_x_deg,
+          MIN(ABS(ST_ScaleY(rast))) AS cell_size_y_deg
+        FROM spatial.rasters
+        WHERE reference_id IS NOT NULL
+        GROUP BY reference_id
+      ) s
+      WHERE rr.reference_id = s.reference_id;
+      "
+    )
+
+    DBI::dbExecute(
+      con,
+      "
+      CREATE OR REPLACE FUNCTION spatial.sync_rr_cell_size_deg_ins()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        UPDATE spatial.rasters_reference rr
+        SET cell_size_x_deg = s.cell_size_x_deg,
+            cell_size_y_deg = s.cell_size_y_deg
+        FROM (
+          SELECT
+            r.reference_id,
+            MIN(ABS(ST_ScaleX(r.rast))) AS cell_size_x_deg,
+            MIN(ABS(ST_ScaleY(r.rast))) AS cell_size_y_deg
+          FROM spatial.rasters r
+          WHERE r.reference_id IN (
+            SELECT DISTINCT nr.reference_id
+            FROM new_rows nr
+            WHERE nr.reference_id IS NOT NULL
+          )
+          GROUP BY r.reference_id
+        ) s
+        WHERE rr.reference_id = s.reference_id;
+
+        RETURN NULL;
+      END;
+      $$;
+      "
+    )
+
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS trg_sync_rr_cell_size_ins ON spatial.rasters;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "
+      CREATE TRIGGER trg_sync_rr_cell_size_ins
+      AFTER INSERT ON spatial.rasters
+      REFERENCING NEW TABLE AS new_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION spatial.sync_rr_cell_size_deg_ins();
+      "
+    )
+
+    DBI::dbExecute(
+      con,
+      "
+      CREATE OR REPLACE FUNCTION spatial.sync_rr_cell_size_deg_upd()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        UPDATE spatial.rasters_reference rr
+        SET cell_size_x_deg = s.cell_size_x_deg,
+            cell_size_y_deg = s.cell_size_y_deg
+        FROM (
+          SELECT
+            r.reference_id,
+            MIN(ABS(ST_ScaleX(r.rast))) AS cell_size_x_deg,
+            MIN(ABS(ST_ScaleY(r.rast))) AS cell_size_y_deg
+          FROM spatial.rasters r
+          WHERE r.reference_id IN (
+            SELECT DISTINCT reference_id
+            FROM (
+              SELECT nr.reference_id FROM new_rows nr
+              UNION
+              SELECT orr.reference_id FROM old_rows orr
+            ) x
+            WHERE reference_id IS NOT NULL
+          )
+          GROUP BY r.reference_id
+        ) s
+        WHERE rr.reference_id = s.reference_id;
+
+        RETURN NULL;
+      END;
+      $$;
+      "
+    )
+
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS trg_sync_rr_cell_size_upd ON spatial.rasters;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "
+      CREATE TRIGGER trg_sync_rr_cell_size_upd
+      AFTER UPDATE ON spatial.rasters
+      REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION spatial.sync_rr_cell_size_deg_upd();
+      "
+    )
+
+    # Add a new approval type for automatically screened data #####
+    DBI::dbExecute(
+      con,
+      "INSERT INTO public.approval_types (approval_type_code, approval_type_description, approval_type_description_fr, color_code)
+       VALUES ('S', 'auto screened, no human review', 'auto filtré, pas de révision humaine', '#FFA500');"
     )
 
     # Wrap things up ##################

@@ -78,9 +78,27 @@ addNewDiscrete <- function(con, sample, results) {
           " AND z IS NULL",
           paste0(" AND z = ", sample$z)
         ),
-        " AND import_source = '",
-        sample$import_source,
-        "';"
+        ifelse(
+          is.null(sample$target_datetime) || is.na(sample$target_datetime),
+          " AND target_datetime IS NULL",
+          paste0(" AND target_datetime = '", sample$target_datetime, " UTC'")
+        ),
+        ifelse(
+          is.null(sample[["import_source"]]) ||
+            is.na(sample[["import_source"]]),
+          " AND import_source IS NULL",
+          paste0(" AND import_source = '", sample[["import_source"]], "';")
+        ),
+        ifelse(
+          is.null(sample[["import_source_id"]]) ||
+            is.na(sample[["import_source_id"]]),
+          " AND import_source_id IS NULL",
+          paste0(
+            " AND import_source_id = '",
+            sample[["import_source_id"]],
+            "';"
+          )
+        )
       )
     )[1, 1]
 
