@@ -202,9 +202,10 @@ tryCatch(
                AND array_length(con.conkey, 1) = 1
                AND array_length(con.confkey, 1) = 1
                AND pa.attname = pc.parent_key
-               AND NOT (n.nspname = 'public' AND c.relname = 'locations')
-               AND NOT (n.nspname = 'discrete' AND c.relname = 'samples')
-               AND NOT (n.nspname = 'boreholes' AND c.relname = 'boreholes')
+               AND con.conrelid <> con.confrelid          -- exclude self-FKs
+               --AND NOT (n.nspname = 'public' AND c.relname = 'locations')
+               --AND NOT (n.nspname = 'discrete' AND c.relname = 'samples')
+               --AND NOT (n.nspname = 'boreholes' AND c.relname = 'boreholes')
            )
            SELECT
              child_schema,
@@ -282,6 +283,7 @@ tryCatch(
            FROM parent_fks
            GROUP BY child_schema, child_table
          LOOP
+         BEGIN
            EXECUTE format(
              'ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY',
              rec.child_schema,
@@ -326,6 +328,10 @@ tryCatch(
                rec.child_table
              );
            END IF;
+
+           EXCEPTION WHEN OTHERS THEN
+            RAISE WARNING 'Failed on %.%: %', rec.child_schema, rec.child_table, SQLERRM;
+          END;
          END LOOP;
        END
        $$;"
@@ -563,11 +569,18 @@ tryCatch(
     )
 
     # Add a new approval type for automatically screened data #####
-    DBI::dbExecute(
+    # Check if the approval type already exists to avoid duplicates if the patch is accidentally applied more than once
+    existing <- DBI::dbGetQuery(
       con,
-      "INSERT INTO public.approval_types (approval_type_code, approval_type_description, approval_type_description_fr, color_code)
-       VALUES ('S', 'auto screened, no human review', 'auto filtré, pas de révision humaine', '#FFA500');"
+      "SELECT approval_type_id FROM public.approval_types WHERE approval_type_code = 'S';"
     )
+    if (nrow(existing) == 0) {
+      DBI::dbExecute(
+        con,
+        "INSERT INTO public.approval_types (approval_type_code, approval_type_description, approval_type_description_fr, color_code)
+       VALUES ('S', 'auto screened, no human review', 'auto filtré, pas de révision humaine', '#FFA500');"
+      )
+    }
 
     # Wrap things up ##################
     # Update the version_info table
