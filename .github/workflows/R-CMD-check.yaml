@@ -49,6 +49,18 @@ jobs:
           username: runner
           password: runner
           database: testdb
+
+                - name: Install PostGIS (incl. raster)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgis postgresql-18-postgis-3 postgresql-18-postgis-3-scripts
+
+      - name: Enable PostGIS extensions in testdb
+        env:
+          PGPASSWORD: runner
+        run: |
+          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis_raster;"
           
       - name: Decompress CI seed database (Uses R for cross-platform functionality)
         run: |
