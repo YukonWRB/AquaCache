@@ -597,7 +597,7 @@ tryCatch(
     DBI::dbExecute(
       con,
       "CREATE TABLE IF NOT EXISTS public.languages (
-        language_code INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        language_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
         language_name_en TEXT NOT NULL,
         language_name_fr TEXT,
         created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -663,13 +663,13 @@ tryCatch(
       "
       CREATE TABLE IF NOT EXISTS public.location_names (
         location_id INTEGER NOT NULL REFERENCES public.locations (location_id) ON DELETE CASCADE ON UPDATE CASCADE,
-        language_code INTEGER NOT NULL REFERENCES public.languages (language_code) ON DELETE CASCADE ON UPDATE CASCADE,
+        language_id INTEGER NOT NULL REFERENCES public.languages (language_id) ON DELETE CASCADE ON UPDATE CASCADE,
         name TEXT NOT NULL,
         created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         created_by TEXT DEFAULT current_user,
         modified TIMESTAMP WITH TIME ZONE,
         modified_by TEXT,
-        PRIMARY KEY (location_id, language_code)
+        PRIMARY KEY (location_id, language_id)
       );"
     )
     # Triggers
@@ -693,7 +693,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "CREATE INDEX IF NOT EXISTS idx_location_names_language_code ON public.location_names (language_code);"
+      "CREATE INDEX IF NOT EXISTS idx_location_names_language_id ON public.location_names (language_id);"
     )
 
     DBI::dbExecute(
@@ -729,7 +729,7 @@ tryCatch(
         COALESCE(
           jsonb_agg(
             DISTINCT jsonb_build_object(
-              'language_code', lng.language_code,
+              'language_id', lng.language_id,
               'language_name_en', lng.language_name_en,
               'name', ln.name
             )
@@ -744,7 +744,7 @@ tryCatch(
         LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
         LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
         LEFT JOIN public.location_names ln ON loc.location_id = ln.location_id
-        LEFT JOIN public.languages lng ON ln.language_code = lng.language_code
+        LEFT JOIN public.languages lng ON ln.language_id = lng.language_id
       GROUP BY loc.location_id, loc.location_code, loc.name, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_en;"
     )
 
@@ -775,7 +775,7 @@ tryCatch(
           COALESCE(
             jsonb_agg(
               DISTINCT jsonb_build_object(
-                'language_code', lng.language_code,
+                'language_id', lng.language_id,
                 'language_name_fr', lng.language_name_fr,
                 'name', ln.name
               )
@@ -790,7 +790,7 @@ tryCatch(
           LEFT JOIN public.datum_conversions dc ON (((loc.location_id = dc.location_id) AND (dc.current = true))))
           LEFT JOIN public.datum_list dl ON ((dc.datum_id_to = dl.datum_id)))
           LEFT JOIN public.location_names ln ON loc.location_id = ln.location_id
-          LEFT JOIN public.languages lng ON ln.language_code = lng.language_code
+          LEFT JOIN public.languages lng ON ln.language_id = lng.language_id
         GROUP BY loc.location_id, loc.location_code, loc.name_fr, loc.latitude, loc.longitude, loc.note, dc.conversion_m, dl.datum_name_fr;"
     )
 
