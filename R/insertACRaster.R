@@ -41,7 +41,7 @@ insertACRaster <- function(
       DBI::dbExecute(
         con,
         "CREATE TABLE rasters_reference (
-                   reference_id SERIAL PRIMARY KEY,
+                   reference_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
                    raster_series_id INTEGER,
                    type TEXT CHECK(type IN ('model', 'other')),
                    model TEXT,
