@@ -29,27 +29,27 @@ tryCatch(
   {
     # Add tables in schema 'application' to track API use and use of Shiny applications
 
-    # DBI::dbExecute(
-    #   con,
-    #   "CREATE TABLE IF NOT EXISTS application.api_requests (
-    #         id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    #         session_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    #         session_end TIMESTAMPTZ,
-    #         endpoint TEXT NOT NULL, -- the API endpoint that was hit
-    #         parameters JSONB, -- the parameters provided with the API request, stored as JSON
-    #         user_id TEXT, -- The user's authentication name, if provided
-    #         user_ip INET,
-    #         status_code INTEGER,
-    #         success BOOLEAN DEFAULT FALSE, -- gets flipped to TRUE upon request completion if the request was successful
-    #         response_time_ms INTEGER GENERATED ALWAYS AS (
-    #           CASE
-    #             WHEN session_end IS NOT NULL
-    #             THEN (EXTRACT(EPOCH FROM (session_end - session_start)) * 1000)::integer
-    #             ELSE NULL
-    #           END
-    #         ) STORED -- the time it took to process the request, in milliseconds
-    #       );"
-    # )
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE IF NOT EXISTS application.api_requests (
+            id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            session_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            session_end TIMESTAMPTZ,
+            endpoint TEXT NOT NULL, -- the API endpoint that was hit
+            parameters JSONB, -- the parameters provided with the API request, stored as JSON
+            user_id TEXT, -- The user's authentication name, if provided
+            user_ip INET,
+            status_code INTEGER,
+            success BOOLEAN DEFAULT FALSE, -- gets flipped to TRUE upon request completion if the request was successful
+            response_time_ms INTEGER GENERATED ALWAYS AS (
+              CASE
+                WHEN session_end IS NOT NULL
+                THEN (EXTRACT(EPOCH FROM (session_end - session_start)) * 1000)::integer
+                ELSE NULL
+              END
+            ) STORED -- the time it took to process the request, in milliseconds
+          );"
+    )
 
     DBI::dbExecute(
       con,
@@ -66,10 +66,10 @@ tryCatch(
     )
 
     # Make owners 'admin'
-    # DBI::dbExecute(
-    #   con,
-    #   "ALTER TABLE application.api_requests OWNER TO admin;"
-    # )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE application.api_requests OWNER TO admin;"
+    )
     DBI::dbExecute(
       con,
       "ALTER TABLE application.shiny_app_usage OWNER TO admin;"
@@ -87,16 +87,31 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "GRANT UPDATE (session_end, login_to)
-    ON application.shiny_app_usage
-    TO PUBLIC;"
+      "GRANT UPDATE (session_end, login_to, error_message)
+      ON application.shiny_app_usage
+      TO PUBLIC;"
     )
     # Technically not necessary because the apps use RETURNING id and select isn't needed for that
     DBI::dbExecute(
       con,
       "GRANT SELECT (id)
-    ON application.shiny_app_usage
-    TO PUBLIC;"
+      ON application.shiny_app_usage
+      TO PUBLIC;"
+    )
+
+    DBI::dbExecute(
+      con,
+      "REVOKE ALL ON application.api_requests FROM PUBLIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT INSERT ON application.api_requests TO PUBLIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT UPDATE (session_end, status_code, success)
+      ON application.api_requests
+      TO PUBLIC;"
     )
 
     message("Tracking tables created successfully.")
@@ -231,7 +246,7 @@ tryCatch(
           seq_name   := split_part(r.seq, '.', 2);
 
           -- Rename the old serial sequence to free the original name
-        old_seq_tmp := seq_name || '_old';
+        old_seq_tmp := '_old_sequence_';
           EXECUTE format('ALTER SEQUENCE %s RENAME TO %I', r.seq, old_seq_tmp);
 
           -- Drop the DEFAULT and add IDENTITY with the original sequence name
@@ -253,10 +268,10 @@ tryCatch(
     )
 
     # rename public.languages.language_code to language_id if it's not already done
-    DBI::dbGetQuery(
+    check <- DBI::dbGetQuery(
       con,
       "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'languages' AND column_name = 'language_id';"
-    ) -> check
+    )
     if (nrow(check) == 0) {
       # Deal with views
       # Drop view and recreate in English
@@ -273,6 +288,10 @@ tryCatch(
       DBI::dbExecute(
         con,
         "ALTER TABLE public.languages RENAME COLUMN language_code TO language_id;"
+      )
+      DBI::dbExecute(
+        con,
+        "ALTER TABLE public.location_names RENAME COLUMN language_code TO language_id;"
       )
 
       DBI::dbExecute(
