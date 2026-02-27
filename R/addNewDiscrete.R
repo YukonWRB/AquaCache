@@ -87,7 +87,7 @@ addNewDiscrete <- function(con, sample, results) {
           is.null(sample[["import_source"]]) ||
             is.na(sample[["import_source"]]),
           " AND import_source IS NULL",
-          paste0(" AND import_source = '", sample[["import_source"]], "';")
+          paste0(" AND import_source = '", sample[["import_source"]], "'")
         ),
         ifelse(
           is.null(sample[["import_source_id"]]) ||

@@ -27,14 +27,8 @@
 #' @export
 #'
 #'
-#' @examples
-#' \dontrun{
-#' # Synchronize all active timeseries from 2020-01-01 onwards
-#' synchronize_continuous(
-#' start_datetime = as.Date("2020-01-01")
-#' )
-#' }
-#'
+#TODO: incorporate a way to use the parameter "modifiedSince" for data from NWIS, and look into if this is possible for Aquarius and WSC (don't think so, but hey)
+
 synchronize_continuous <- function(
   con = NULL,
   timeseries_id = "all",
@@ -112,7 +106,7 @@ synchronize_continuous <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
-  # Check length of start_datetime is either 1 of same as timeseries_id
+  #Check length of start_datetime is either 1 of same as timeseries_id
   if (length(start_datetime) != 1) {
     if (length(start_datetime) != length(timeseries_id)) {
       stop(
@@ -126,39 +120,13 @@ synchronize_continuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT 
-        t.parameter_id, 
-        t.timeseries_id, 
-        t.source_fx, 
-        t.source_fx_args, 
-        t.last_daily_calculation, 
-        at.aggregation_type, 
-        t.default_owner,
-        t.default_data_sharing_agreement_id,
-        t.active, 
-        t.sync_remote
-      FROM timeseries t 
-      JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id 
-      WHERE source_fx IS NOT NULL"
+      "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT 
-          t.parameter_id, 
-          t.timeseries_id, 
-          t.source_fx, 
-          t.source_fx_args, 
-          t.last_daily_calculation, 
-          at.aggregation_type, 
-          t.default_owner,
-          t.default_data_sharing_agreement_id,
-          t.active, 
-          t.sync_remote 
-        FROM timeseries t 
-        JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id 
-        WHERE timeseries_id IN (",
+        "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN (",
         paste(timeseries_id, collapse = ", "),
         ") AND source_fx IS NOT NULL;"
       )
@@ -226,51 +194,18 @@ synchronize_continuous <- function(
     parallel,
     con
   ) {
-    tsid <- all_timeseries$timeseries_id[i]
-
-    # Set a lock for this timeseries to prevent concurrent updates, notably by getNewContinuous.
-    # IMPORTANT: This lock waits until it can acquire the lock, so if two processes are trying to sync the same timeseries at the same time, one will wait until the other is done. getNewContinuous on the other hand just skips to the next timeseries if it can't get the lock right away.
-    lock_namespace <- "aquacache_timeseries"
-    DBI::dbExecute(
-      con,
-      paste0(
-        "SELECT pg_advisory_lock(",
-        "hashtext('",
-        lock_namespace,
-        "'), ",
-        tsid,
-        ");"
-      )
-    )
-    on.exit(
-      DBI::dbExecute(
-        con,
-        paste0(
-          "SELECT pg_advisory_unlock(",
-          "hashtext('",
-          lock_namespace,
-          "'), ",
-          tsid,
-          ");"
-        )
-      ),
-      add = TRUE
-    )
-
+    loc <- all_timeseries$location[i]
     parameter <- all_timeseries$parameter_id[i]
     aggregation_type <- all_timeseries$aggregation_type[i]
+    tsid <- all_timeseries$timeseries_id[i]
     source_fx <- all_timeseries$source_fx[i]
     owner <- all_timeseries$default_owner[i]
-    default_data_sharing_agreement_id <-
-      all_timeseries$default_data_sharing_agreement_id[i]
     source_fx_args <- all_timeseries$source_fx_args[i]
     start_dt <- if (length(start_datetime) > 1) {
       start_datetime[i]
     } else {
       start_datetime
     }
-
-    mismatch <- FALSE
 
     args_list <- list(start_datetime = start_dt, con = con)
     if (!is.na(source_fx_args)) {
@@ -286,8 +221,13 @@ synchronize_continuous <- function(
       # There was no data in remote for the date range specified
       DBI::dbExecute(
         con,
-        "UPDATE timeseries SET last_synchronize = NOW() WHERE timeseries_id = $1",
-        params = list(tsid)
+        paste0(
+          "UPDATE timeseries SET last_synchronize = '",
+          .POSIXct(Sys.time(), "UTC"),
+          "' WHERE timeseries_id = ",
+          tsid,
+          ";"
+        )
       )
       return()
     } else if (!all(c("value", "datetime") %in% names(inRemote))) {
@@ -334,16 +274,10 @@ synchronize_continuous <- function(
     if (!("qualifier" %in% names(inRemote))) {
       inRemote$qualifier <- qualifier_unknown
     }
-
-    if (!("owner" %in% names(inRemote))) {
-      if (!is.na(owner)) {
+    if (!is.null(owner)) {
+      # There may not be an owner assigned in table timeseries
+      if (!("owner" %in% names(inRemote))) {
         inRemote$owner <- owner
-      }
-    }
-
-    if (!("data_sharing_agreement_id" %in% names(inRemote))) {
-      if (!is.na(default_data_sharing_agreement_id)) {
-        inRemote$data_sharing_agreement_id <- default_data_sharing_agreement_id
       }
     }
 
@@ -361,16 +295,6 @@ synchronize_continuous <- function(
       )
       inRemote$contributor <- NULL # Drop the contributor column as it's already taken care of
     }
-    if ("data_sharing_agreement_id" %in% names(inRemote)) {
-      adjust_data_sharing_agreement(
-        con,
-        tsid,
-        inRemote[, c("datetime", "data_sharing_agreement_id")],
-        delete = TRUE
-      )
-      inRemote$data_sharing_agreement_id <- NULL # Drop the data_sharing_agreement_id column as it's already taken care of
-    }
-
     if ("grade" %in% names(inRemote)) {
       adjust_grade(con, tsid, inRemote[, c("datetime", "grade")], delete = TRUE)
       inRemote$grade <- NULL # Drop the grade column as it's already taken care of
@@ -594,8 +518,17 @@ synchronize_continuous <- function(
         )
         DBI::dbExecute(
           con,
-          "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW(), last_synchronize = NOW() WHERE timeseries_id = $2",
-          params = list(end, tsid)
+          paste0(
+            "UPDATE timeseries SET end_datetime = '",
+            end,
+            "', last_new_data = '",
+            .POSIXct(Sys.time(), "UTC"),
+            "', last_synchronize = '",
+            .POSIXct(Sys.time(), "UTC"),
+            "' WHERE timeseries_id = ",
+            tsid,
+            ";"
+          )
         )
         earliest <- min(
           DBI::dbGetQuery(
@@ -640,9 +573,13 @@ synchronize_continuous <- function(
           error = function(e) {
             DBI::dbExecute(con, "ROLLBACK;")
             warning(
-              "synchronize failed to make database changes for timeseries_id ",
+              "synchronize failed to make database changes for ",
+              loc,
+              " and parameter code ",
+              parameter,
+              " (timeseries_id ",
               tsid,
-              " with message: ",
+              ") with message: ",
               e$message,
               "."
             )
@@ -656,8 +593,13 @@ synchronize_continuous <- function(
       # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
       DBI::dbExecute(
         con,
-        "UPDATE timeseries SET last_synchronize = NOW() WHERE timeseries_id = $1",
-        params = list(tsid)
+        paste0(
+          "UPDATE timeseries SET last_synchronize = '",
+          .POSIXct(Sys.time(), "UTC"),
+          "' WHERE timeseries_id = ",
+          tsid,
+          ";"
+        )
       )
       # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
 
@@ -919,15 +861,13 @@ synchronize_continuous <- function(
     close(pb)
   }
 
-  try(
-    # In a try in case the user doesn't have update permissions on internal_status
-    {
-      DBI::dbExecute(
-        con,
-        "UPDATE internal_status SET value = NOW() WHERE event = 'last_sync_continuous';"
-      )
-    },
-    silent = TRUE
+  DBI::dbExecute(
+    con,
+    paste0(
+      "UPDATE internal_status SET value = '",
+      .POSIXct(Sys.time(), "UTC"),
+      "' WHERE event = 'last_sync_continuous';"
+    )
   )
   message(
     "Successfully checked ",
@@ -947,4 +887,4 @@ synchronize_continuous <- function(
     ". End of function."
   )
   return(updated)
-} # End of function
+} #End of function

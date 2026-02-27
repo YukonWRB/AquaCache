@@ -156,7 +156,6 @@ synchronize_discrete <- function(
         synch_to <- all_series$synch_to[i]
         source_fx <- all_series$source_fx[i]
         source_fx_args <- all_series$source_fx_args[i]
-        share_with <- all_series$share_with[i]
         default_owner <- all_series$default_owner[i]
         default_contributor <- all_series$default_contributor[i]
 
@@ -905,21 +904,15 @@ synchronize_discrete <- function(
                 }
               }
 
-              # Use share_with from the source function when supplied,
-              # otherwise fall back to sample_series share_with.
+              # Use share_with from the source function when supplied, otherwise fall back to datatabase default
               if ("share_with" %in% names_inRemote_samp) {
-                if (
-                  !is.list(inRemote_sample$share_with) &&
-                    length(inRemote_sample$share_with) > 1
-                ) {
+                if (!is.list(inRemote_sample$share_with)) {
                   inRemote_sample$share_with <- paste0(
                     "{",
                     paste(inRemote_sample$share_with, collapse = ", "),
                     "}"
                   )
                 }
-              } else if (!is.na(share_with)) {
-                inRemote_sample$share_with <- share_with
               }
 
               ## Checks on results ###########

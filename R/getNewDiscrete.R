@@ -159,8 +159,8 @@ getNewDiscrete <- function(
   for (i in 1:nrow(all_series)) {
     sid <- all_series$sample_series_id[i]
 
-    # Acquire a lock for this timeseries to prevent concurrent updates, notably by synchronize_discrete
-    # IMPORTANT: this lock does not wait if another process has it, it just skips to the next timeseries. synchronize_discrete **will** wait for the lock to be released, on the other hand.
+    # Acquire a lock for this sample series to prevent concurrent updates, notably by synchronize_discrete
+    # IMPORTANT: this lock does not wait if another process has it, it just skips to the next sample series synchronize_discrete **will** wait for the lock to be released, on the other hand.
     lock_namespace <- "aquacache_sample_series"
     lock_acquired <- DBI::dbGetQuery(
       con,
@@ -188,7 +188,6 @@ getNewDiscrete <- function(
         sub_loc_id <- all_series$sub_location_id[i]
         source_fx <- all_series$source_fx[i]
         source_fx_args <- all_series$source_fx_args[i]
-        share_with <- all_series$share_with[i]
         owner <- all_series$default_owner[i]
         contributor <- all_series$default_contributor[i]
         range_start <- all_series$synch_from[i]
@@ -378,18 +377,15 @@ getNewDiscrete <- function(
             if (!is.na(contributor)) sample$contributor <- contributor
           }
 
-          # Use share_with from the source function when supplied, otherwise
-          # fall back to the sample_series share_with value.
+          # Use share_with from the source function when supplied, otherwise it'll fall back to the database default
           if ("share_with" %in% names_samp) {
-            if (!is.list(sample$share_with) && length(sample$share_with) > 1) {
+            if (!is.list(sample$share_with)) {
               sample$share_with <- paste0(
                 "{",
                 paste(sample$share_with, collapse = ", "),
                 "}"
               )
             }
-          } else if (!is.na(share_with)) {
-            sample$share_with <- share_with
           }
 
           # Checks on sample results ############
