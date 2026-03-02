@@ -276,11 +276,16 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
               )
             )
           } else {
-            # Means that we need to insert new rows
-            DBI::dbAppendTable(
+            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
+            DBI::dbExecute(
               con,
-              "grades",
-              exist[i, -which(names(exist) == "grade_id")]
+              "INSERT INTO grades (timeseries_id, grade_type_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+              params = list(
+                exist$timeseries_id[i],
+                exist$grade_type_id[i],
+                exist$start_dt[i],
+                exist$end_dt[i]
+              )
             )
           }
         }
@@ -499,11 +504,16 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
                 )
               )
             } else {
-              # Means that we need to insert new rows
-              DBI::dbAppendTable(
+              # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
+              DBI::dbExecute(
                 con,
-                "qualifiers",
-                exist[i, -which(names(exist) == "qualifier_id")]
+                "INSERT INTO qualifiers (timeseries_id, qualifier_type_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+                params = list(
+                  exist$timeseries_id[i],
+                  exist$qualifier_type_id[i],
+                  exist$start_dt[i],
+                  exist$end_dt[i]
+                )
               )
             }
           }
@@ -694,11 +704,16 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
               )
             )
           } else {
-            # Means that we need to insert new rows
-            DBI::dbAppendTable(
+            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
+            DBI::dbExecute(
               con,
-              "approvals",
-              exist[i, -which(names(exist) == "approval_id")]
+              "INSERT INTO approvals (timeseries_id, approval_type_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+              params = list(
+                exist$timeseries_id[i],
+                exist$approval_type_id[i],
+                exist$start_dt[i],
+                exist$end_dt[i]
+              )
             )
           }
         }
@@ -889,11 +904,16 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
               )
             )
           } else {
-            # Means that we need to insert new rows
-            DBI::dbAppendTable(
+            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
+            DBI::dbExecute(
               con,
-              "owners",
-              exist[i, -which(names(exist) == "owner_id")]
+              "INSERT INTO owners (timeseries_id, organization_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+              params = list(
+                exist$timeseries_id[i],
+                exist$organization_id[i],
+                exist$start_dt[i],
+                exist$end_dt[i]
+              )
             )
           }
         }
@@ -1084,11 +1104,16 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
               )
             )
           } else {
-            # Means that we need to insert new rows
-            DBI::dbAppendTable(
+            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
+            DBI::dbExecute(
               con,
-              "contributors",
-              exist[i, -which(names(exist) == "contributor_id")]
+              "INSERT INTO contributors (timeseries_id, organization_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+              params = list(
+                exist$timeseries_id[i],
+                exist$organization_id[i],
+                exist$start_dt[i],
+                exist$end_dt[i]
+              )
             )
           }
         }
@@ -1298,16 +1323,16 @@ adjust_data_sharing_agreement <- function(
               )
             )
           } else {
-            # Means that we need to insert new rows
-            DBI::dbAppendTable(
+            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
+            DBI::dbExecute(
               con,
-              "timeseries_data_sharing_agreements",
-              exist[
-                i,
-                -which(
-                  names(exist) == "timeseries_data_sharing_agreement_id"
-                )
-              ]
+              "INSERT INTO timeseries_data_sharing_agreements (timeseries_id, data_sharing_agreement_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+              params = list(
+                exist$timeseries_id[i],
+                exist$data_sharing_agreement_id[i],
+                exist$start_dt[i],
+                exist$end_dt[i]
+              )
             )
           }
         }

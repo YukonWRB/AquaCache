@@ -259,7 +259,11 @@ updateHydrometDocument <- function(
       id,
       ";"
     )
-    DBI::dbAppendTable(con, "documents_spatial", docs_spat)
+    DBI::dbExecute(
+      con,
+      "INSERT INTO documents_spatial (document_id, geom_id) VALUES ($1, $2);",
+      params = list(docs_spat$document_id, docs_spat$geom_id)
+    )
   }
   message("Document updated successfully.")
 }
