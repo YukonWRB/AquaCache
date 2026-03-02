@@ -11,7 +11,7 @@ downloadSnowCourse(
   old_loc = NULL,
   adjust_start = NULL,
   adjust_end = NULL,
-  share_with = "yg_reader",
+  share_with = "yg_reader_group",
   con = NULL,
   snowCon = snowConnect()
 )
@@ -29,7 +29,7 @@ downloadSnowCourse(
 
 \item{adjust_end}{The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.}
 
-\item{share_with}{Which user groups to share the data with. Default is 'yg_reader'; set to 'public_reader' to share publicly.}
+\item{share_with}{Which user groups to share the data with. Default is 'yg_reader_group'; set to 'public_reader' to share publicly. This does not affect samples which already exist and are being refreshed/replaced.}
 
 \item{con}{A connection to the aquacache database. a connection will be attempted using AquaConnect().}
 

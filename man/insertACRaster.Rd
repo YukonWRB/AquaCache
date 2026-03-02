@@ -31,6 +31,8 @@ insertACRaster(
 \item{bit.depth}{The bit depth of the raster. 32-bit float is '32BF', 32-bit unsigned integer is '32BUI', 32-bit signed integer is '32BSI'. Default to NULL which will parse the data to determine which 32-bit flavor to choose. You \strong{must} specify if your data is greater than 32 bit.}
 
 \item{blocks}{The number of blocks in which to break the raster apart. If NULL blocks will be automatically determined, as per \code{\link[rpostgis:pgWriteRast]{rpostgis::pgWriteRast()}}. Blocks (tiles) can be useful to speed up queries that only need a small subset of the raster, but lengthen write time.}
+
+\item{pyramid_levels}{The number of pyramid levels to create for the raster. If NULL, no pyramids will be created. Pyramids can speed up queries that only need a small subset of the raster, but lengthen write time and increase storage requirements. Function}
 }
 \value{
 The reference_id of the newly appended raster.
@@ -38,5 +40,7 @@ The reference_id of the newly appended raster.
 \description{
 Use this function to add a raster file to the database that wasn't created by a model (use \code{\link[=insertACModelRaster]{insertACModelRaster()}} for that). Ensures that database constraints are met. If you need to replace or delete a raster for any reason you'll have to use SQL (perhaps via R using the DBI package) to delete it first, remembering to delete the matching entries in the rasters and rasters_model_output tables.
 
-Depending on size, rasters might be broken up into many tiles. Because of this and the database's spatial capabilities, it's possible to only fetch the tiles you need using \code{\link[rpostgis:pgGetRast]{rpostgis::pgGetRast()}}. You'll have to specify which reference_id to use as a clause; find the right one in the 'rasters_reference' table. Look at the parameter \code{boundary} to specify a limited spatial extent, and at \code{bands} to only fetch certain bands. The rasters themselves live in the 'rasters' table, but the reference id in in the 'rasters_reference' table.
+Depending on size, rasters might be broken up into many tiles. Because of this and the database's spatial capabilities, it's possible to only fetch the tiles you need using \code{\link[rpostgis:pgGetRast]{rpostgis::pgGetRast()}}. You'll have to specify which reference_id to use as a clause; find the right one in the 'rasters_reference' table. Look at the parameter \code{boundary} to specify a limited spatial extent, and at \code{bands} to only fetch certain bands.
+
+A note about raster organization: the rasters themselves live in the 'rasters' table, but the reference id in in the 'rasters_reference' table. This is in contrast to some PostGIS implementations where rasters are stored either in a single table - one row per raster - or in separate tables for each raster. The first approach doesn't allow for tiling, which is a big deal on large rasters, and the second approach makes the management of rasters difficult, especially with our approach of auto-fetching raster series. The AquaCache approach takes the good from both methods: rasters are stored in a single table, but the reference_id allows for multiple rows to be linked to the same raster, which allows for tiling. The rasters_reference table also allows us to store metadata about the rasters, such as the model they came from, their valid time range, and so on.
 }
