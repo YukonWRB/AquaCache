@@ -97,8 +97,14 @@ update_hydat <- function(
       "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'"
     )[1, 1]
     if (is.na(organization_id)) {
-      df <- data.frame(name = 'Water Survey of Canada')
-      DBI::dbAppendTable(con, "organizations", df)
+      organization_id <- DBI::dbGetQuery(
+        con,
+        "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
+        params = list(
+          'Water Survey of Canada',
+          'Relev\u00E9 hydrom\u00E9trique du Canada'
+        )
+      )[1, 1]
     }
 
     grade_unspecified <- DBI::dbGetQuery(
@@ -243,7 +249,7 @@ update_hydat <- function(
                 "owner" = 1,
                 "source_fx" = "downloadWSC"
               )
-              DBI::dbAppendTable(con, "timeseries", new_entry)
+              dbAppendTableRLS(con, "timeseries", new_entry)
               tsid_flow <- DBI::dbGetQuery(
                 con,
                 paste0(
@@ -256,7 +262,7 @@ update_hydat <- function(
               )[1, 1]
               new_flow$timeseries_id <- tsid_flow
 
-              DBI::dbAppendTable(
+              dbAppendTableRLS(
                 con,
                 "measurements_calculated_daily",
                 new_flow[, c("date", "value", "imputed", "timeseries_id")]
@@ -414,7 +420,7 @@ update_hydat <- function(
                           "');"
                         )
                       )
-                      DBI::dbAppendTable(
+                      dbAppendTableRLS(
                         con,
                         "measurements_calculated_daily",
                         new_flow[, c(
@@ -437,7 +443,7 @@ update_hydat <- function(
                           "';"
                         )
                       )
-                      DBI::dbAppendTable(
+                      dbAppendTableRLS(
                         con,
                         "measurements_calculated_daily",
                         new_flow[, c(
@@ -518,7 +524,7 @@ update_hydat <- function(
                 new_flow$timeseries_id <- tsid_flow
 
                 commit_fx2 <- function(con, tsid_flow, new_flow) {
-                  DBI::dbAppendTable(
+                  dbAppendTableRLS(
                     con,
                     "measurements_calculated_daily",
                     new_flow[, c("date", "value", "timeseries_id", "imputed")]
@@ -702,7 +708,7 @@ update_hydat <- function(
                 "owner" = 1,
                 "source_fx" = "downloadWSC"
               )
-              DBI::dbAppendTable(con, "timeseries", new_entry)
+              dbAppendTableRLS(con, "timeseries", new_entry)
               tsid_level <- DBI::dbGetQuery(
                 con,
                 "SELECT timeseries_id FROM timeseries WHERE location_id = $1 AND parameter_id = $2 AND source_fx = 'downloadWSC';",
@@ -710,7 +716,7 @@ update_hydat <- function(
               )[1, 1]
               new_level$timeseries_id <- tsid_level
 
-              DBI::dbAppendTable(
+              dbAppendTableRLS(
                 con,
                 "measurements_calculated_daily",
                 new_level[, c("date", "value", "imputed", "timeseries_id")]
@@ -876,7 +882,7 @@ update_hydat <- function(
                           "');"
                         )
                       )
-                      DBI::dbAppendTable(
+                      dbAppendTableRLS(
                         con,
                         "measurements_calculated_daily",
                         new_level[, c(
@@ -896,7 +902,7 @@ update_hydat <- function(
                           max(new_level$date)
                         )
                       )
-                      DBI::dbAppendTable(
+                      dbAppendTableRLS(
                         con,
                         "measurements_calculated_daily",
                         new_level[, c(
@@ -967,7 +973,7 @@ update_hydat <- function(
                 new_level$timeseries_id <- tsid_level
 
                 commit_fx4 <- function(con, tsid_level, new_level) {
-                  DBI::dbAppendTable(
+                  dbAppendTableRLS(
                     con,
                     "measurements_calculated_daily",
                     new_level[, c("date", "value", "timeseries_id", "imputed")]

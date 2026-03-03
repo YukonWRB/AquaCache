@@ -51,7 +51,7 @@ addNewDiscrete <- function(con, sample, results) {
   # Define a commit function that will be run within a transaction
   commit_fx <- function(con, sample, results) {
     # Insert the sample data
-    DBI::dbAppendTable(con, "samples", sample)
+    dbAppendTableRLS(con, "samples", sample)
 
     # Get the sample_id using all fields that define a unique sample
     sample_id <- DBI::dbGetQuery(
@@ -104,7 +104,7 @@ addNewDiscrete <- function(con, sample, results) {
 
     # Insert the results data
     results$sample_id <- sample_id
-    DBI::dbAppendTable(con, "results", results)
+    dbAppendTableRLS(con, "results", results)
 
     return(sample_id)
   }

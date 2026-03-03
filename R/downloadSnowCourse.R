@@ -361,7 +361,7 @@ downloadSnowCourse <- function(
             import_source = "downloadSnowCourse",
             share_with = paste0("{", share_with, "}")
           )
-          DBI::dbAppendTable(con, "samples", df)
+          dbAppendTableRLS(con, "samples", df)
 
           # Fetch the new id
           adj_sample_id <- DBI::dbGetQuery(
@@ -539,7 +539,7 @@ downloadSnowCourse <- function(
             media_id = media_id,
             import_source = "downloadSnowCourse"
           )
-          DBI::dbAppendTable(con, "samples", df)
+          dbAppendTableRLS(con, "samples", df)
 
           # Fetch the new id
           adj_sample_id <- DBI::dbGetQuery(

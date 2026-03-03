@@ -512,7 +512,11 @@ addACTimeseries <- function(
           )
           try({
             # This may fail if the z value already exists for this location/sub_location combo
-            DBI::dbAppendTable(con, "locations_z", z_df)
+            DBI::dbExecute(
+              con,
+              "INSERT INTO locations_z (location_id, z_meters, sub_location_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+              params = list(loc_id, zi, sub_location[i])
+            )
           })
           zi <- DBI::dbGetQuery(
             con,
@@ -551,7 +555,27 @@ addACTimeseries <- function(
 
         tryCatch(
           {
-            DBI::dbAppendTable(con, "timeseries", add) # This is in the tryCatch because the timeseries might already have been added by update_hydat, which searches for level + flow for each location, or by a failed attempt at adding earlier on.
+            new_tsid <- DBI::dbGetQuery(
+              con,
+              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note, end_datetime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10, $11, $12::jsonb, $13) RETURNING timeseries_id;",
+              params = list(
+                add$location_id,
+                add$sub_location_id,
+                add$z_id,
+                add$parameter_id,
+                add$media_id,
+                add$sensor_priority,
+                add$aggregation_type_id,
+                add$record_rate,
+                add$share_with[i],
+                add$default_owner,
+                add$source_fx,
+                args,
+                add$note,
+                add$end_datetime
+              )
+            )[1, 1]
+
             message(
               "Added a new entry to the timeseries table for location ",
               loc_label,
@@ -563,20 +587,6 @@ addACTimeseries <- function(
               add$aggregation_type_id,
               "."
             )
-            new_tsid <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT timeseries_id FROM timeseries WHERE location_id = '",
-                add$location_id,
-                "' AND parameter_id = ",
-                add$parameter_id,
-                " AND aggregation_type_id = '",
-                add$aggregation_type_id,
-                "' AND record_rate = '",
-                add$record_rate,
-                "';"
-              )
-            )[1, 1]
           },
           error = function(e) {
             message(

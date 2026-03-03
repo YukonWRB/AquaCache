@@ -84,24 +84,19 @@ addACImageSeries <- function(
   # convert to JSON
   args <- jsonlite::toJSON(args, auto_unbox = TRUE)
 
-  insert <- data.frame(
-    location_id = location_id,
-    first_img = start_datetime,
-    last_img = start_datetime,
-    source_fx = source_fx,
-    source_fx_args = args,
-    share_with = paste0("{", paste(share_with, collapse = ","), "}"),
-    active = TRUE,
-    description = "Image series automatically taken from a web or server location."
-  )
-
-  DBI::dbAppendTable(con, "image_series", insert)
+  # Insert the new entry into the image_series table
   res <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT img_series_id FROM image_series WHERE location_id = ",
+    "INSERT INTO image_series (location_id, first_img, last_img, source_fx, source_fx_args, share_with, active, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING img_series_id;",
+    params = list(
       location_id,
-      ";"
+      start_datetime,
+      start_datetime,
+      source_fx,
+      args,
+      paste0("{", paste(share_with, collapse = ","), "}"),
+      TRUE,
+      "Image series automatically taken from a web or server location."
     )
   )[1, 1]
   added <- getNewImages(image_series_ids = res, con = con)

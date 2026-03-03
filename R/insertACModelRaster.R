@@ -167,23 +167,22 @@ insertACModelRaster <- function(
       con,
       paste0("{{", paste(names(raster), collapse = "},{"), "}}")
     )
-    entry <- data.frame(
-      "raster_series_id" = raster_series_id,
-      "type" = "model",
-      "model" = model,
-      "band_names" = bnds,
-      "units" = units,
-      "valid_from" = valid_from,
-      "valid_to" = valid_to,
-      "issued" = issued,
-      "source" = source,
-      "description" = description,
-      "flag" = flag
-    )
-    DBI::dbAppendTable(con, "rasters_reference", entry)
     new_id <- DBI::dbGetQuery(
       con,
-      "SELECT max(reference_id) FROM rasters_reference"
+      "INSERT INTO spatial.rasters_reference (raster_series_id, type, model, band_names, units, valid_from, valid_to, issued, source, description, flag) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING reference_id;",
+      params = list(
+        raster_series_id,
+        "model",
+        model,
+        bnds,
+        units,
+        valid_from,
+        valid_to,
+        issued,
+        source,
+        description,
+        flag
+      )
     )[1, 1]
 
     DBI::dbExecute(

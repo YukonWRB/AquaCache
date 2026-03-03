@@ -284,7 +284,7 @@ getNewContinuous <- function(
                 )
               )
             }
-            DBI::dbAppendTable(con, "measurements_continuous", ts)
+            dbAppendTableRLS(con, "measurements_continuous", ts)
             # make the new entry into table timeseries
             DBI::dbExecute(
               con,

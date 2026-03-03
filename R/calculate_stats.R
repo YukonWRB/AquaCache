@@ -921,7 +921,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     "')"
                   )
                 )
-                DBI::dbAppendTable(
+                dbAppendTableRLS(
                   con,
                   "measurements_calculated_daily",
                   first_instance_no_stats
@@ -1137,7 +1137,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           # Now commit the changes to the database
           commit_fx2 <- function(con, delete_query, missing_stats, i) {
             DBI::dbExecute(con, delete_query)
-            DBI::dbAppendTable(
+            dbAppendTableRLS(
               con,
               "measurements_calculated_daily",
               missing_stats

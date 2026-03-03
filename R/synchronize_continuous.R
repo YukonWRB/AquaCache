@@ -467,7 +467,7 @@ synchronize_continuous <- function(
         }
 
         if (nrow(inRemote) > 0) {
-          DBI::dbAppendTable(
+          dbAppendTableRLS(
             con,
             "measurements_continuous",
             inRemote[, c(

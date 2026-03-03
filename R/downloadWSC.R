@@ -212,8 +212,14 @@ downloadWSC <- function(
       "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'"
     )[1, 1]
     if (is.na(organization_id)) {
-      df <- data.frame(name = 'Water Survey of Canada')
-      DBI::dbAppendTable(con, "organizations", df)
+      organization_id <- DBI::dbGetQuery(
+        con,
+        "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
+        params = list(
+          'Water Survey of Canada',
+          'Relev\u00E9 hydrom\u00E9trique du Canada'
+        )
+      )[1, 1]
     }
 
     data$owner <- organization_id

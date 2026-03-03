@@ -70,26 +70,12 @@ addACOrg <- function(
   }
 
   # Insert the new owner/contributor group
-  insert <- data.frame(
-    name = name,
-    name_fr = name_fr,
-    contact_name = contact_name,
-    phone = phone,
-    email = email,
-    note = note
-  )
-
-  DBI::dbAppendTable(con, "organizations", insert)
-
-  # Retrieve the new organization_id and return
   new_id <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT organization_id FROM organizations WHERE name = '",
-      name,
-      "';"
-    )
+    "INSERT INTO organizations (name, name_fr, contact_name, phone, email, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING organization_id;",
+    params = list(name, name_fr, contact_name, phone, email, note)
   )[1, 1]
+
   message(
     "Added new owner/contributor with name ",
     name,

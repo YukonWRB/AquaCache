@@ -328,7 +328,7 @@ addNewContinuous <- function(
           df <- df[!df$datetime %in% existing_datetimes, ]
         }
       }
-      DBI::dbAppendTable(con, "measurements_continuous", df)
+      dbAppendTableRLS(con, "measurements_continuous", df)
 
       tryCatch(
         {
@@ -450,7 +450,7 @@ addNewContinuous <- function(
       } else {
         # If overwrite is "no", we do not delete any existing data, so we just append
       }
-      DBI::dbAppendTable(con, "measurements_calculated_daily", df)
+      dbAppendTableRLS(con, "measurements_calculated_daily", df)
       #make the new entry into table timeseries
       if (max(df$date) > last_data_point) {
         DBI::dbExecute(

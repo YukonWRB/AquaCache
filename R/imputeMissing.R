@@ -1298,7 +1298,7 @@ imputeMissing <- function(
         )
       ) #delete is here in case previously imputed values are being over-written
 
-      DBI::dbAppendTable(
+      dbAppendTableRLS(
         con,
         "measurements_calculated_daily",
         to_push[, c("timeseries_id", "date", "value", "imputed")]
@@ -1361,7 +1361,7 @@ imputeMissing <- function(
           "')"
         )
       ) #delete is here in case previously imputed values are being over-written
-      DBI::dbAppendTable(
+      dbAppendTableRLS(
         con,
         "measurements_continuous",
         to_push[, c("timeseries_id", "datetime", "value", "imputed", "period")]

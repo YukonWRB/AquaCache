@@ -730,7 +730,7 @@ synchronize_discrete <- function(
 
                   # Append new values
                   sub$sample_id <- inDB_sample$sample_id
-                  DBI::dbAppendTable(con, "results", sub)
+                  dbAppendTableRLS(con, "results", sub)
 
                   new_results <- new_results + 1
                 } else if (nrow(inDB_sub) == 1) {
