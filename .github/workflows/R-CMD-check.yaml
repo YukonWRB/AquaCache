@@ -49,8 +49,8 @@ jobs:
           username: runner
           password: runner
           database: testdb
-
-                - name: Install PostGIS (incl. raster)
+                    
+      - name: Install PostGIS (incl. raster extension)
         run: |
           sudo apt-get update
           sudo apt-get install -y postgis postgresql-18-postgis-3 postgresql-18-postgis-3-scripts

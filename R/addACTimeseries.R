@@ -557,7 +557,7 @@ addACTimeseries <- function(
           {
             new_tsid <- DBI::dbGetQuery(
               con,
-              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note, end_datetime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10, $11, $12::jsonb, $13) RETURNING timeseries_id;",
+              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note, end_datetime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10, $11, $12::jsonb, $13, $14) RETURNING timeseries_id;",
               params = list(
                 add$location_id,
                 add$sub_location_id,
@@ -567,10 +567,10 @@ addACTimeseries <- function(
                 add$sensor_priority,
                 add$aggregation_type_id,
                 add$record_rate,
-                add$share_with[i],
+                add$share_with,
                 add$default_owner,
                 add$source_fx,
-                args,
+                add$args,
                 add$note,
                 add$end_datetime
               )
