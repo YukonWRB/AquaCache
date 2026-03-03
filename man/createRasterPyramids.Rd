@@ -4,25 +4,16 @@
 \alias{createRasterPyramids}
 \title{Create raster pyramids for an existing raster reference}
 \usage{
-createRasterPyramids(
-  con,
-  reference_id,
-  factors = c(2, 4, 8),
-  method = NULL,
-  description_suffix = " (x\%s)"
-)
+createRasterPyramids(con, reference_id, factors = c(2, 4, 8), method = NULL)
 }
 \arguments{
 \item{con}{A connection to the database.}
 
-\item{reference_id}{The \code{reference_id} in \code{spatial.rasters_reference}
-to use as the source raster.}
+\item{reference_id}{The \code{reference_id} in \code{spatial.rasters_reference} to use as the source raster.}
 
-\item{factors}{A numeric or integer vector of integer multiples of the existing cell
-size to generate (e.g., \code{c(2, 4, 8)}).}
+\item{factors}{A numeric or integer vector of integer multiples of the existing cell size to generate (e.g., \code{c(2, 4, 8)}).}
 
-\item{method}{Optional resampling method passed through to PostGIS function ST_Resample. If NULL,
-the default PostGIS resampling behavior (nearest neighbor) is used. See \href{https://postgis.net/docs/RT_ST_Resample.html}{PostGIS documentation} for details.}
+\item{method}{Optional resampling method passed through to PostGIS function ST_Resample. If NULL, the default PostGIS resampling behavior (nearest neighbor) is used. See \href{https://postgis.net/docs/RT_ST_Resample.html}{PostGIS documentation} for details.}
 }
 \value{
 A data.frame mapping each factor to the newly created

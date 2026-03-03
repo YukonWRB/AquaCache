@@ -9,14 +9,9 @@
 #' in meters. The source raster data never leaves the database.
 #'
 #' @param con A connection to the database.
-#' @param reference_id The \code{reference_id} in \code{spatial.rasters_reference}
-#'   to use as the source raster.
-#' @param factors A numeric or integer vector of integer multiples of the existing cell
-#'   size to generate (e.g., \code{c(2, 4, 8)}).
-#' @param method Optional resampling method passed through to PostGIS function ST_Resample. If NULL,
-#'   the default PostGIS resampling behavior (nearest neighbor) is used. See [PostGIS documentation](https://postgis.net/docs/RT_ST_Resample.html) for details.
-#' @param description_suffix Text appended to the source description for each
-#'   new pyramid level. Use \code{\"%s\"} to insert the factor value.
+#' @param reference_id The \code{reference_id} in \code{spatial.rasters_reference} to use as the source raster.
+#' @param factors A numeric or integer vector of integer multiples of the existing cell size to generate (e.g., \code{c(2, 4, 8)}).
+#' @param method Optional resampling method passed through to PostGIS function ST_Resample. If NULL, the default PostGIS resampling behavior (nearest neighbor) is used. See [PostGIS documentation](https://postgis.net/docs/RT_ST_Resample.html) for details.
 #'
 #' @return A data.frame mapping each factor to the newly created
 #'   \code{reference_id}.
@@ -26,8 +21,7 @@ createRasterPyramids <- function(
   con,
   reference_id,
   factors = c(2, 4, 8),
-  method = NULL,
-  description_suffix = " (x%s)"
+  method = NULL
 ) {
   # validate factors - should be integers only and greater than 1
   if (
@@ -94,7 +88,7 @@ createRasterPyramids <- function(
     factor <- factors[i]
     new_desc <- meta$description[1]
     if (!is.na(new_desc)) {
-      new_desc <- paste0(new_desc, sprintf(description_suffix, factor))
+      new_desc <- paste0(new_desc, sprintf("%s", factor))
     }
 
     insert_reference <- paste0(
