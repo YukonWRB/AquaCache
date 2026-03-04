@@ -57,15 +57,37 @@ getNewRasters <- function(
   if (raster_series_ids[1] == "all") {
     meta_ids <- DBI::dbGetQuery(
       con,
-      "SELECT raster_series_id, end_datetime, last_issue, type, source_fx, source_fx_args, parameter, active FROM raster_series_index WHERE source_fx IS NOT NULL;"
+      "SELECT 
+        rs.raster_series_id, 
+        rs.end_datetime, 
+        rs.last_issue, 
+        rt.raster_type_name AS type, 
+        rs.source_fx, 
+        rs.source_fx_args, 
+        rs.parameter, 
+        rs.active 
+      FROM raster_series_index rs
+      JOIN raster_types rt ON rt.raster_type_id = rs.raster_type_id
+      WHERE rs.source_fx IS NOT NULL;"
     )
   } else {
     meta_ids <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT raster_series_id, end_datetime, last_issue, type, source_fx, source_fx_args, parameter, active FROM raster_series_index WHERE raster_series_id IN ('",
+        "SELECT 
+          rs.raster_series_id, 
+          rs.end_datetime, 
+          rs.last_issue, 
+          rt.raster_type_name AS type, 
+          rs.source_fx, 
+          rs.source_fx_args, 
+          rs.parameter, 
+          rs.active 
+        FROM raster_series_index rs
+        JOIN raster_types rt ON rt.raster_type_id = rs.raster_type_id
+        WHERE rs.raster_series_id IN ('",
         paste(raster_series_ids, collapse = "', '"),
-        "') AND source_fx IS NOT NULL;"
+        "') AND rs.source_fx IS NOT NULL;"
       )
     )
     if (length(raster_series_ids) != nrow(meta_ids)) {
@@ -160,6 +182,16 @@ getNewRasters <- function(
       if (is.na(next_instant)) {
         # If there is no last_issue, we fetch from the last raster end_datetime. This could happen when creating a new series.
         next_instant <- meta_ids[i, "end_datetime"] + 1 # one second after the last raster end_datetime
+      }
+    } else {
+      # For other types of rasters, we fetch from the last raster end_datetime + 1 second, or from start_datetime if it is specified.
+      if (!is.null(start_datetime_i)) {
+        next_instant <- start_datetime_i
+      } else {
+        next_instant <- meta_ids[i, "end_datetime"] + 1 # one second after the last raster end_datetime
+        if (is.na(next_instant)) {
+          next_instant <- meta_ids[i, "end_datetime"]
+        }
       }
     }
 
