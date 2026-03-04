@@ -10,7 +10,7 @@
 #' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
 #' @param adjust_start The start date or datetime to use for the adjustment of the old location data. If NULL, the start date of the new location will be used. To have no adjustment, set adjust_start and adjust_end to the same date/datetime
 #' @param adjust_end The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.
-#' @param share_with Which user groups to share the data with. Default is 'yg_reader_group'; set to 'public_reader' to share publicly. This does not affect samples which already exist and are being refreshed/replaced.
+#' @param share_with Which user groups to share the data with. Default is 'yg_reader_group'; set to 'public_reader' to share publicly. This does not affect samples which already exist and are being refreshed/replaced. For multiple groups, specify as a character vector, e.g. c('yg_reader_group', 'public_reader').
 #' @param con A connection to the aquacache database. a connection will be attempted using AquaConnect().
 #' @param snowCon A connection to the snow database.
 #'
@@ -359,7 +359,7 @@ downloadSnowCourse <- function(
             collection_method = sample_collect_method,
             media_id = media_id,
             import_source = "downloadSnowCourse",
-            share_with = paste0("{", share_with, "}")
+            share_with = paste0("{", paste(share_with, collapse = ","), "}")
           )
           dbAppendTableRLS(con, "samples", df)
 
@@ -728,7 +728,7 @@ downloadSnowCourse <- function(
     sample$contributor <- sample_contributor
     sample$collection_method <- sample_collect_method
     sample$media_id <- media_id
-    sample$share_with <- share_with
+    sample$share_with <- paste0("{", paste(share_with, collapse = ","), "}")
     sample$location <- NULL # Don't need to return location as it's already in the database and we have the location_id
 
     ls[[i]] <- list(sample = sample, results = meas)
