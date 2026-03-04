@@ -327,7 +327,7 @@ writeRaster <- function(
     {
       info <- DBI::dbGetQuery(
         con,
-        "SELECT is_identity = 'YES' AS is_identity\n           FROM information_schema.columns\n          WHERE table_schema = $1\n            AND table_name = $2\n            AND column_name = 'rid';",
+        "SELECT is_identity = 'YES' AS is_identity FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = 'rid';",
         params = list(schema_for_constraints, table_plain)
       )
       if (nrow(info) == 0) {
