@@ -206,6 +206,35 @@ synchronize_continuous <- function(
       start_datetime
     }
 
+    # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewContinuous
+    # IMPORTANT: this lock will wait for other processes to release the lock, so if another process is stuck, this will be stuck too.
+    lock_namespace <- "aquacache_timeseries"
+    DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT pg_advisory_lock(",
+        "hashtext('",
+        lock_namespace,
+        "'), ",
+        tsid,
+        ");"
+      )
+    )
+    on.exit(
+      DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT pg_advisory_unlock(",
+          "hashtext('",
+          lock_namespace,
+          "'), ",
+          tsid,
+          ");"
+        )
+      ),
+      add = TRUE
+    )
+
     args_list <- list(start_datetime = start_dt, con = con)
     if (!is.na(source_fx_args)) {
       #add some arguments if they are specified

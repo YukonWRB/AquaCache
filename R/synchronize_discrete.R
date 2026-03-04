@@ -136,7 +136,7 @@ synchronize_discrete <- function(
     # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewDiscrete
     # IMPORTANT: this lock will wait for other processes to release the lock, so if another process is stuck, this will be stuck too.
     lock_namespace <- "aquacache_sample_series"
-    lock_acquired <- DBI::dbExecute(
+    DBI::dbGetQuery(
       con,
       paste0(
         "SELECT pg_advisory_lock(",
@@ -1162,7 +1162,7 @@ synchronize_discrete <- function(
       },
       finally = {
         # Release the lock
-        DBI::dbExecute(
+        DBI::dbGetQuery(
           con,
           paste0(
             "SELECT pg_advisory_unlock(",

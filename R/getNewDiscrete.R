@@ -614,7 +614,7 @@ getNewDiscrete <- function(
       },
       finally = {
         # Release the lock
-        DBI::dbExecute(
+        DBI::dbGetQuery(
           con,
           paste0(
             "SELECT pg_advisory_unlock(",
