@@ -1,4 +1,4 @@
-# Patch 34
+# Patch 35
 
 # Initial checks #################
 # Ensure the user is postgres as this patch requires it
@@ -11,7 +11,7 @@ if (check$session_user != "postgres") {
 }
 
 message(
-  "Working on Patch 34. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?)."
+  "Working on Patch 35. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state (but you have a backup, right?)."
 )
 
 # Begin a transaction
@@ -27,7 +27,7 @@ active <- dbTransBegin(con)
 
 tryCatch(
   {
-    # DRop + re-create timeseries view with more information
+    # Drop + re-create timeseries views with more information
     DBI::dbExecute(con, "DROP VIEW IF EXISTS timeseries_metadata_en;")
     DBI::dbExecute(con, "DROP VIEW IF EXISTS timeseries_metadata_fr;")
 
@@ -111,7 +111,7 @@ tryCatch(
     # Start by wiping the guidelines table, there should be nothing in there anyways at this point and it will make it easier to work with the new structure. If there are guidelines in there, they should be re-added after the patch is applied.
     DBI::dbExecute(con, "DELETE FROM discrete.guidelines;")
 
-    # Create a new table for 'publisher' information for guidelines; link the current column 'publisher' to this new table
+    # Create a new table for publisher information for guidelines
     DBI::dbExecute(
       con,
       "CREATE TABLE IF NOT EXISTS discrete.guideline_publishers (
@@ -122,44 +122,82 @@ tryCatch(
         prov_terr_state TEXT
       );"
     )
-    # Alter the current publishers column to reference the new table
-    # Check if exists first, if not, add it and then link it to the new table.
+
+    # Alter guidelines.publisher to reference guideline_publishers
     exist <- DBI::dbGetQuery(
       con,
-      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'guidelines' AND column_name = 'publisher';"
+      "SELECT data_type
+       FROM information_schema.columns
+       WHERE table_schema = 'discrete'
+         AND table_name = 'guidelines'
+         AND column_name = 'publisher';"
     )
-    if (nrow(exist) == 0) {
-      DBI::dbExecute(
+
+    if (nrow(exist) > 0) {
+      if (!identical(exist$data_type[[1]], "integer")) {
+        DBI::dbExecute(
+          con,
+          "ALTER TABLE discrete.guidelines
+           ALTER COLUMN publisher TYPE INTEGER USING (publisher::INTEGER);"
+        )
+      }
+
+      fk_exist <- DBI::dbGetQuery(
         con,
-        "ALTER TABLE discrete.guidelines
-       ALTER COLUMN publisher TYPE INTEGER USING (publisher::INTEGER),
-       ADD CONSTRAINT fk_publisher FOREIGN KEY (publisher) REFERENCES discrete.guideline_publishers(publisher_id) ON UPDATE CASCADE ON DELETE CASCADE;"
+        "SELECT 1
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+         WHERE n.nspname = 'discrete'
+           AND t.relname = 'guidelines'
+           AND c.conname = 'fk_guidelines_publisher';"
       )
+
+      if (nrow(fk_exist) == 0) {
+        DBI::dbExecute(
+          con,
+          "ALTER TABLE discrete.guidelines
+           ADD CONSTRAINT fk_guidelines_publisher
+           FOREIGN KEY (publisher)
+           REFERENCES discrete.guideline_publishers(publisher_id)
+           ON UPDATE CASCADE
+           ON DELETE CASCADE;"
+        )
+      }
     }
 
-    # Create a new table to hold 'series' information for guidelines; link the current column 'series' to this new table. Series are associated with a publisher.
+    # Create a new table to hold series information for guidelines
     DBI::dbExecute(
       con,
       "CREATE TABLE IF NOT EXISTS discrete.guideline_series (
-        series_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY ,
+        series_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
         series_name TEXT UNIQUE NOT NULL,
         series_name_fr TEXT UNIQUE,
         publisher_id INTEGER NOT NULL REFERENCES discrete.guideline_publishers(publisher_id) ON UPDATE CASCADE ON DELETE CASCADE
       );"
     )
 
+    # Add the new FK column to guidelines to link to the series table (a guideline can belong to one series, but a series can have multiple guidelines)
     check <- DBI::dbGetQuery(
       con,
-      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'guidelines' AND column_name = 'series';"
+      "SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'discrete'
+         AND table_name = 'guidelines'
+         AND column_name = 'series';"
     )
     if (nrow(check) == 0) {
       DBI::dbExecute(
         con,
-        "ALTER TABLE discrete.guidelines ADD COLUMN IF NOT EXISTS series INTEGER REFERENCES discrete.guideline_series(series_id) ON UPDATE CASCADE ON DELETE CASCADE;"
+        "ALTER TABLE discrete.guidelines
+         ADD COLUMN IF NOT EXISTS series INTEGER
+         REFERENCES discrete.guideline_series(series_id)
+         ON UPDATE CASCADE
+         ON DELETE CASCADE;"
       )
     }
 
-    # Guidelines can apply to multiple media types, so we need a linking table for that
+    # Guidelines can apply to multiple media types
     DBI::dbExecute(
       con,
       "CREATE TABLE IF NOT EXISTS discrete.guidelines_media_types (
@@ -173,7 +211,7 @@ tryCatch(
       "COMMENT ON TABLE discrete.guidelines_media_types IS 'Linking table to associate guidelines with media types. A guideline can apply to multiple media types, and a media type can have multiple guidelines.';"
     )
 
-    # Guidelines can also apply to multiple fractions (i.e. dissolved, total, etc.), so we need a linking table for that as well
+    # Guidelines can also apply to multiple fractions
     DBI::dbExecute(
       con,
       "CREATE TABLE IF NOT EXISTS discrete.guidelines_fractions (
@@ -187,10 +225,14 @@ tryCatch(
       "COMMENT ON TABLE discrete.guidelines_fractions IS 'Linking table to associate guidelines with sample fractions. A guideline can apply to multiple fractions, and a fraction can have multiple guidelines.';"
     )
 
-    # Drop the guidlines.sample_fraction_id column as this is now being handled in the new linking table
+    # Drop guidelines.sample_fraction_id column if present (now handled by linking table)
     check <- DBI::dbGetQuery(
       con,
-      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'guidelines' AND column_name = 'sample_fraction_id';"
+      "SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'discrete'
+         AND table_name = 'guidelines'
+         AND column_name = 'sample_fraction_id';"
     )
     if (nrow(check) > 0) {
       DBI::dbExecute(
@@ -204,11 +246,48 @@ tryCatch(
       "DROP TRIGGER IF EXISTS trg_enforce_sample_fraction ON discrete.guidelines;"
     )
 
+    # Add a column specifically for notes on guideline applicability (e.g. if a guideline only applies under certain conditions, that can be noted here)
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE discrete.guidelines
+       ADD COLUMN IF NOT EXISTS applicability_notes TEXT;"
+    )
+    #Rename the old 'notes' column to 'general_notes' to make it clear that it's for general notes about the guideline, not specific to applicability
+    exists <- DBI::dbGetQuery(
+      con,
+      "SELECT column_name
+       FROM information_schema.columns       
+       WHERE table_schema = 'discrete'
+         AND table_name = 'guidelines'
+         AND column_name = 'note';"
+    )
+    if (nrow(exists) > 0) {
+      DBI::dbExecute(
+        con,
+        "ALTER TABLE discrete.guidelines
+       RENAME COLUMN note TO general_notes;"
+      )
+    }
+
+    # Grants #################
+    DBI::dbExecute(
+      con,
+      "GRANT EXECUTE ON FUNCTION discrete.get_guideline_value(INTEGER, INTEGER) TO PUBLIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE discrete.guidelines, discrete.guideline_publishers, discrete.guideline_series TO PUBLIC;"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE discrete.guidelines_media_types, discrete.guidelines_fractions TO PUBLIC;"
+    )
+
     # Wrap things up ##################
     # Update the version_info table
     DBI::dbExecute(
       con,
-      "UPDATE information.version_info SET version = '34' WHERE item = 'Last patch number';"
+      "UPDATE information.version_info SET version = '35' WHERE item = 'Last patch number';"
     )
     DBI::dbExecute(
       con,
@@ -218,16 +297,17 @@ tryCatch(
         "' WHERE item = 'AquaCache R package used for last patch';"
       )
     )
+
     # Commit the transaction
     DBI::dbExecute(con, "COMMIT;")
 
-    message("Patch 34 applied successfully, transaction closed.")
+    message("Patch 35 applied successfully, transaction closed.")
   },
   error = function(e) {
     # Rollback the transaction
     DBI::dbExecute(con, "ROLLBACK;")
     stop(
-      "Patch 34 failed and the DB has been rolled back to its earlier state. ",
+      "Patch 35 failed and the DB has been rolled back to its earlier state. ",
       e$message
     )
   }

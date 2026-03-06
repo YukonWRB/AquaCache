@@ -162,17 +162,12 @@ getNewDiscrete <- function(
     # Acquire a lock for this sample series to prevent concurrent updates, notably by synchronize_discrete
     # IMPORTANT: this lock does not wait if another process has it, it just skips to the next sample series synchronize_discrete **will** wait for the lock to be released, on the other hand.
     lock_namespace <- "aquacache_sample_series"
-    lock_acquired <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT pg_try_advisory_lock(",
-        "hashtext('",
-        lock_namespace,
-        "'), ",
-        sid,
-        ") AS locked;"
-      )
-    )[[1]]
+    lock_acquired <- advisory_lock_acquire(
+      con = con,
+      namespace = lock_namespace,
+      key = sid,
+      wait = FALSE
+    )
     if (!isTRUE(lock_acquired)) {
       warning(
         "getNewDiscrete: Skipping sample_series_id ",
@@ -614,17 +609,7 @@ getNewDiscrete <- function(
       },
       finally = {
         # Release the lock
-        DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT pg_advisory_unlock(",
-            "hashtext('",
-            lock_namespace,
-            "'), ",
-            sid,
-            ");"
-          )
-        )
+        advisory_lock_release(con, lock_namespace, sid)
       }
     ) #End of tryCatch
 

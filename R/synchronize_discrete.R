@@ -136,16 +136,11 @@ synchronize_discrete <- function(
     # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewDiscrete
     # IMPORTANT: this lock will wait for other processes to release the lock, so if another process is stuck, this will be stuck too.
     lock_namespace <- "aquacache_sample_series"
-    DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT pg_advisory_lock(",
-        "hashtext('",
-        lock_namespace,
-        "'), ",
-        sid,
-        ");"
-      )
+    advisory_lock_acquire(
+      con = con,
+      namespace = lock_namespace,
+      key = sid,
+      wait = TRUE
     )
 
     tryCatch(
@@ -1162,17 +1157,7 @@ synchronize_discrete <- function(
       },
       finally = {
         # Release the lock
-        DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT pg_advisory_unlock(",
-            "hashtext('",
-            lock_namespace,
-            "'), ",
-            sid,
-            ");"
-          )
-        )
+        advisory_lock_release(con, lock_namespace, sid)
       }
     ) # End of tryCatch
 

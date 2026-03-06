@@ -134,17 +134,12 @@ getNewContinuous <- function(
     # Acquire a lock for this timeseries to prevent concurrent updates, notably by synchronize_continuous
     # IMPORTANT: this lock does not wait if another process has it, it just skips to the next timeseries. Synchronize_continuous **will** wait for the lock to be released, on the other hand.
     lock_namespace <- "aquacache_timeseries"
-    lock_acquired <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT pg_try_advisory_lock(",
-        "hashtext('",
-        lock_namespace,
-        "'), ",
-        tsid,
-        ") AS locked;"
-      )
-    )[[1]]
+    lock_acquired <- advisory_lock_acquire(
+      con = con,
+      namespace = lock_namespace,
+      key = tsid,
+      wait = FALSE
+    )
     if (!isTRUE(lock_acquired)) {
       warning(
         "getNewContinuous: Skipping timeseries_id ",
@@ -341,17 +336,7 @@ getNewContinuous <- function(
       },
       finally = {
         # Release the lock
-        DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT pg_advisory_unlock(",
-            "hashtext('",
-            lock_namespace,
-            "'), ",
-            tsid,
-            ");"
-          )
-        )
+        advisory_lock_release(con, lock_namespace, tsid)
       }
     ) # End of tryCatch
 
