@@ -18,14 +18,15 @@
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
-#'
+#' @param verbose If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 
 getNewContinuous <- function(
   con = NULL,
   timeseries_id = "all",
-  active = 'default'
+  active = 'default',
+  verbose = FALSE
 ) {
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -130,6 +131,9 @@ getNewContinuous <- function(
   # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)) {
     tsid <- all_timeseries$timeseries_id[i]
+    if (verbose) {
+      message("Processing iteration ", i, " timeseries_id: ", tsid)
+    }
 
     # Acquire a lock for this timeseries to prevent concurrent updates, notably by synchronize_continuous
     # IMPORTANT: this lock does not wait if another process has it, it just skips to the next timeseries. Synchronize_continuous **will** wait for the lock to be released, on the other hand.
