@@ -252,7 +252,7 @@ tryCatch(
       "ALTER TABLE discrete.guidelines
        ADD COLUMN IF NOT EXISTS applicability_notes TEXT;"
     )
-    #Rename the old 'notes' column to 'general_notes' to make it clear that it's for general notes about the guideline, not specific to applicability
+    # Rename the old 'notes' column to 'general_notes' to make it clear that it's for general notes about the guideline, not specific to applicability
     exists <- DBI::dbGetQuery(
       con,
       "SELECT column_name
@@ -281,6 +281,332 @@ tryCatch(
     DBI::dbExecute(
       con,
       "GRANT SELECT ON TABLE discrete.guidelines_media_types, discrete.guidelines_fractions TO PUBLIC;"
+    )
+
+    # Now rejig the CSW query that was hanging after RLS changes
+
+    # Keep supporting indexes for role-filtered access paths
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX IF NOT EXISTS idx_timeseries_location_id
+       ON continuous.timeseries (location_id);"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX IF NOT EXISTS idx_vectors_layer_feature_name
+       ON spatial.vectors (layer_name, feature_name);"
+    )
+
+    # Rebuild get_csw_layer() to avoid global scans and per-row owner lookups.
+    # Scope expensive work (owners, drainage, datum) to only the already-filtered result set.
+
+    # Old function was:
+    # DBI::dbExecute(
+    #   con,
+    #   "CREATE OR REPLACE FUNCTION public.get_csw_layer()
+    #     RETURNS TABLE(location text, station_name text, station_name_fr text, latitude numeric, longitude numeric, type text, owner_name text, owner_name_fr text, timeseries_id integer, parameter_id integer, param_name text, param_name_fr text, param_units text, date date, value numeric, percent_historic_range numeric, mean numeric, min numeric, max numeric, doy_count integer, drainage_area_km2 numeric, datum_name_en text, datum_name_fr text)
+    #     LANGUAGE plpgsql
+    #   AS $function$
+    #   BEGIN
+    #   RETURN QUERY
+    #   SELECT
+    #   l.location_code,
+    #   CASE
+    #   WHEN sl.sub_location_name IS NOT NULL
+    #   THEN CONCAT(l.name, ' - ', sl.sub_location_name)
+    #   ELSE l.name
+    #   END AS station_name,
+    #   CASE
+    #   WHEN sl.sub_location_name_fr IS NOT NULL
+    #   THEN CONCAT(l.name_fr, ' - ', sl.sub_location_name_fr)
+    #   ELSE l.name_fr
+    #   END AS station_name_fr,
+    #   l.latitude,
+    #   l.longitude,
+    #   lt.type,
+    #   loc_owner.owner_name,
+    #   loc_owner.owner_name_fr,
+    #   t.timeseries_id,
+    #   t.parameter_id,
+    #   p.param_name,
+    #   p.param_name_fr,
+    #   p.unit_default,
+    #   mcdc.date,
+    #   CASE
+    #     WHEN p.param_name = 'water level' THEN mcdc.value + COALESCE(dc.conversion_m, 0)
+    #     ELSE mcdc.value
+    #   END AS value,
+    #   mcdc.percent_historic_range,
+    #   CASE
+    #     WHEN p.param_name = 'water level' THEN mcdc.mean + COALESCE(dc.conversion_m, 0)
+    #     ELSE mcdc.mean
+    #   END AS mean,
+    #   CASE
+    #     WHEN p.param_name = 'water level' THEN mcdc.min + COALESCE(dc.conversion_m, 0)
+    #     ELSE mcdc.min
+    #   END AS min,
+    #   CASE
+    #     WHEN p.param_name = 'water level' THEN mcdc.max + COALESCE(dc.conversion_m, 0)
+    #     ELSE mcdc.max
+    #   END AS max,
+    #   mcdc.doy_count,
+    #   d.drainage_area_km2,
+    #   CASE
+    #     WHEN p.param_name = 'water level' THEN dl.datum_name_en
+    #     ELSE NULL
+    #   END AS datum_name_en,
+    #   CASE
+    #     WHEN p.param_name = 'water level' THEN dl.datum_name_fr
+    #     ELSE NULL
+    #   END AS datum_name_fr
+    #   FROM
+    #   public.locations l
+    #   INNER JOIN
+    #   public.location_types lt ON l.location_type = lt.type_id
+    #   INNER JOIN
+    #   continuous.timeseries t ON t.location_id = l.location_id
+    #   FULL JOIN
+    #   public.sub_locations sl ON sl.sub_location_id = t.sub_location_id
+    #   INNER JOIN
+    #   public.parameters p ON p.parameter_id = t.parameter_id
+    #   INNER JOIN
+    #   continuous.measurements_calculated_daily_corrected mcdc ON mcdc.timeseries_id = t.timeseries_id
+    #   LEFT JOIN (
+    #   SELECT DISTINCT feature_name, (ST_Area(geom::geography)/1000000)::numeric AS drainage_area_km2
+    #   FROM vectors
+    #   WHERE layer_name = 'Drainage basins'
+    #   ) d ON d.feature_name = l.location_code
+    #   LEFT JOIN public.datum_conversions dc
+    #   ON dc.location_id = l.location_id AND dc.current IS TRUE
+    #   LEFT JOIN public.datum_list dl
+    #   ON dc.datum_id_to = dl.datum_id
+    #   -- add in ownership. If there are multiple relevant owners for a location, take the most recent one based on start_dt and end_dt.
+    #   LEFT JOIN LATERAL (
+    #     SELECT
+    #       org.name AS owner_name,
+    #       org.name_fr as owner_name_fr,
+    #       o.organization_id,
+    #       o.start_dt,
+    #       o.end_dt
+    #     FROM continuous.timeseries t2
+    #     JOIN continuous.owners o
+    #       ON o.timeseries_id = t2.timeseries_id
+    #     JOIN public.organizations org
+    #       ON org.organization_id = o.organization_id
+    #     WHERE t2.location_id = l.location_id
+    #     ORDER BY o.start_dt DESC, o.end_dt DESC
+    #     LIMIT 1
+    #   ) loc_owner ON TRUE
+    #   WHERE
+    #   lt.type_id IN (1, 2, 16)
+    #   AND l.jurisdictional_relevance IS TRUE
+    #   AND p.parameter_id IN(1150, 1165, 21, 1220)
+    #   AND mcdc.date >= NOW() - INTERVAL '30 days'
+    #   ORDER BY l.location_code, p.param_name, mcdc.date;
+    #   END;
+    #   $function$
+    #   ;"
+    # )
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.get_csw_layer()
+       RETURNS TABLE(
+         location text,
+         station_name text,
+         station_name_fr text,
+         latitude numeric,
+         longitude numeric,
+         type text,
+         owner_name text,
+         owner_name_fr text,
+         timeseries_id integer,
+         parameter_id integer,
+         param_name text,
+         param_name_fr text,
+         param_units text,
+         date date,
+         value numeric,
+         percent_historic_range numeric,
+         mean numeric,
+         min numeric,
+         max numeric,
+         doy_count integer,
+         drainage_area_km2 numeric,
+         datum_name_en text,
+         datum_name_fr text
+       )
+       LANGUAGE sql
+       AS $$
+       WITH core AS (
+         SELECT
+           l.location_id,
+           l.location_code,
+           l.name,
+           l.name_fr,
+           l.latitude,
+           l.longitude,
+           lt.type,
+           t.timeseries_id,
+           t.parameter_id,
+           t.sub_location_id,
+           p.param_name,
+           p.param_name_fr,
+           p.unit_default AS param_units,
+           mcd.date,
+           mcd.value,
+           mcd.percent_historic_range,
+           mcd.mean,
+           mcd.min,
+           mcd.max,
+           mcd.doy_count
+         FROM public.locations l
+         JOIN public.location_types lt
+           ON l.location_type = lt.type_id
+         JOIN continuous.timeseries t
+           ON t.location_id = l.location_id
+         JOIN public.parameters p
+           ON p.parameter_id = t.parameter_id
+         JOIN continuous.measurements_calculated_daily mcd
+           ON mcd.timeseries_id = t.timeseries_id
+         WHERE
+           lt.type_id IN (1, 2, 16)
+           AND l.jurisdictional_relevance IS TRUE
+           AND p.parameter_id IN (1150, 1165, 21, 1220)
+           AND mcd.date >= NOW() - INTERVAL '30 days'
+       ),
+       core_locs AS (
+         SELECT DISTINCT
+           c.location_id,
+           c.location_code
+         FROM core c
+       ),
+       loc_owner AS (
+         SELECT DISTINCT ON (t2.location_id)
+           t2.location_id,
+           org.name AS owner_name,
+           org.name_fr AS owner_name_fr
+         FROM continuous.timeseries t2
+         JOIN core_locs cl
+           ON cl.location_id = t2.location_id
+         JOIN continuous.owners o
+           ON o.timeseries_id = t2.timeseries_id
+         JOIN public.organizations org
+           ON org.organization_id = o.organization_id
+         ORDER BY
+           t2.location_id,
+           o.start_dt DESC,
+           o.end_dt DESC,
+           o.owner_id DESC
+       ),
+       datum_current AS (
+         SELECT DISTINCT ON (dc.location_id)
+           dc.location_id,
+           dc.conversion_m,
+           dl.datum_name_en,
+           dl.datum_name_fr
+         FROM public.datum_conversions dc
+         JOIN core_locs cl
+           ON cl.location_id = dc.location_id
+         LEFT JOIN public.datum_list dl
+           ON dl.datum_id = dc.datum_id_to
+         WHERE dc.current IS TRUE
+         ORDER BY
+           dc.location_id,
+           dc.modified DESC NULLS LAST,
+           dc.conversion_id DESC
+       ),
+       drainage AS (
+         SELECT
+           v.feature_name,
+           MIN((ST_Area(v.geom::geography) / 1000000)::numeric) AS drainage_area_km2
+         FROM spatial.vectors v
+         JOIN core_locs cl
+           ON cl.location_code = v.feature_name
+         WHERE v.layer_name = 'Drainage basins'
+         GROUP BY v.feature_name
+       )
+       SELECT
+         c.location_code AS location,
+         CASE
+           WHEN sl.sub_location_name IS NOT NULL
+             THEN CONCAT(c.name, ' - ', sl.sub_location_name)
+           ELSE c.name
+         END AS station_name,
+         CASE
+           WHEN sl.sub_location_name_fr IS NOT NULL
+             THEN CONCAT(c.name_fr, ' - ', sl.sub_location_name_fr)
+           ELSE c.name_fr
+         END AS station_name_fr,
+         c.latitude,
+         c.longitude,
+         c.type,
+         lo.owner_name,
+         lo.owner_name_fr,
+         c.timeseries_id,
+         c.parameter_id,
+         c.param_name,
+         c.param_name_fr,
+         c.param_units,
+         c.date,
+         CASE
+           WHEN c.param_name = 'water level'
+             THEN c.value + COALESCE(dc.conversion_m, 0)
+           ELSE c.value
+         END AS value,
+         c.percent_historic_range,
+         CASE
+           WHEN c.param_name = 'water level'
+             THEN c.mean + COALESCE(dc.conversion_m, 0)
+           ELSE c.mean
+         END AS mean,
+         CASE
+           WHEN c.param_name = 'water level'
+             THEN c.min + COALESCE(dc.conversion_m, 0)
+           ELSE c.min
+         END AS min,
+         CASE
+           WHEN c.param_name = 'water level'
+             THEN c.max + COALESCE(dc.conversion_m, 0)
+           ELSE c.max
+         END AS max,
+         c.doy_count,
+         d.drainage_area_km2,
+         CASE
+           WHEN c.param_name = 'water level'
+             THEN dc.datum_name_en
+           ELSE NULL
+         END AS datum_name_en,
+         CASE
+           WHEN c.param_name = 'water level'
+             THEN dc.datum_name_fr
+           ELSE NULL
+         END AS datum_name_fr
+       FROM core c
+       LEFT JOIN public.sub_locations sl
+         ON sl.sub_location_id = c.sub_location_id
+       LEFT JOIN loc_owner lo
+         ON lo.location_id = c.location_id
+       LEFT JOIN datum_current dc
+         ON dc.location_id = c.location_id
+       LEFT JOIN drainage d
+         ON d.feature_name = c.location_code
+       ORDER BY
+         c.location_code,
+         c.param_name,
+         c.date;
+       $$;"
+    )
+
+    # Keep ownership consistent with previous behavior
+    DBI::dbExecute(
+      con,
+      "ALTER FUNCTION public.get_csw_layer() OWNER TO admin;"
+    )
+    # Grant to everyone
+    DBI::dbExecute(
+      con,
+      "GRANT EXECUTE ON FUNCTION public.get_csw_layer() TO public;"
     )
 
     # Wrap things up ##################
