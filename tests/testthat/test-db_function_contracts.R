@@ -24,16 +24,16 @@ test_that("DB function manifest matches live catalog and contract coverage", {
   missing_in_manifest <- setdiff(live$signature, manifest$signature)
   stale_in_manifest <- setdiff(manifest$signature, live$signature)
 
-  expect_length(
-    missing_in_manifest,
+  expect_equal(
+    length(missing_in_manifest),
     0,
     info = paste(
       "Missing functions in manifest:",
       paste(missing_in_manifest, collapse = ", ")
     )
   )
-  expect_length(
-    stale_in_manifest,
+  expect_equal(
+    length(stale_in_manifest),
     0,
     info = paste(
       "Stale manifest entries not found in DB:",
@@ -51,8 +51,8 @@ test_that("DB function manifest matches live catalog and contract coverage", {
   kind_mismatch <- merged$signature[
     merged$function_kind_live != merged$function_kind_manifest
   ]
-  expect_length(
-    kind_mismatch,
+  expect_equal(
+    length(kind_mismatch),
     0,
     info = paste(
       "Function kind mismatch between DB and manifest:",
@@ -71,16 +71,16 @@ test_that("DB function manifest matches live catalog and contract coverage", {
   missing_coverage <- setdiff(manifest$signature, unique(coverage$signature))
   extra_coverage <- setdiff(unique(coverage$signature), manifest$signature)
 
-  expect_length(
-    missing_coverage,
+  expect_equal(
+    length(missing_coverage),
     0,
     info = paste(
       "Missing @covers entries for manifest signatures:",
       paste(missing_coverage, collapse = ", ")
     )
   )
-  expect_length(
-    extra_coverage,
+  expect_equal(
+    length(extra_coverage),
     0,
     info = paste(
       "@covers entries refer to unknown signatures:",
@@ -100,8 +100,8 @@ test_that("DB function manifest matches live catalog and contract coverage", {
   ))
   missing_pairs <- setdiff(manifest_pairs, coverage_pairs)
 
-  expect_length(
-    missing_pairs,
+  expect_equal(
+    length(missing_pairs),
     0,
     info = paste(
       "Manifest signatures missing @covers in their declared smoke contract:",

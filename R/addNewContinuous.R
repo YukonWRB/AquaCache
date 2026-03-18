@@ -330,6 +330,12 @@ addNewContinuous <- function(
       }
       dbAppendTableRLS(con, "measurements_continuous", df)
 
+      stats_savepoint <- paste0(
+        "ac_add_new_continuous_stats_",
+        as.integer(stats::runif(1, 1e7, 9e7))
+      )
+      DBI::dbExecute(con, paste0("SAVEPOINT ", stats_savepoint))
+      stats_error <- NULL
       tryCatch(
         {
           calculate_stats(
@@ -339,15 +345,29 @@ addNewContinuous <- function(
           )
         },
         error = function(e) {
-          message(
-            "addNewContinuous: Failed to recalculate statistics for timeseries_id ",
-            tsid,
-            ". Error message: '",
-            e$message,
-            "'."
-          )
+          stats_error <<- e$message
+          suppressWarnings(try(
+            DBI::dbExecute(
+              con,
+              paste0("ROLLBACK TO SAVEPOINT ", stats_savepoint)
+            ),
+            silent = TRUE
+          ))
         }
       )
+      suppressWarnings(try(
+        DBI::dbExecute(con, paste0("RELEASE SAVEPOINT ", stats_savepoint)),
+        silent = TRUE
+      ))
+      if (!is.null(stats_error)) {
+        message(
+          "addNewContinuous: Failed to recalculate statistics for timeseries_id ",
+          tsid,
+          ". Error message: '",
+          stats_error,
+          "'."
+        )
+      }
 
       # make the new entry into table timeseries
       exist_times <- DBI::dbGetQuery(

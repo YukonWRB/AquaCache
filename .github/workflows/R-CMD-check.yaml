@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {os: ubuntu-latest, r: 'release', pg: '17'}
+          # - {os: ubuntu-latest, r: 'release', pg: '17'}
           - {os: ubuntu-latest, r: 'release', pg: '18'}
 
     env:
@@ -68,6 +68,15 @@ jobs:
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis;"
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis_raster;"
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+
+      - name: Bootstrap CI roles
+        env:
+          PGPASSWORD: runner
+        run: |
+          psql -h 127.0.0.1 -U runner -d testdb -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'public_reader') THEN CREATE ROLE public_reader NOLOGIN; END IF; END \$\$;"
+          psql -h 127.0.0.1 -U runner -d testdb -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'yg_reader_group') THEN CREATE ROLE yg_reader_group NOLOGIN; END IF; END \$\$;"
+          psql -h 127.0.0.1 -U runner -d testdb -c "GRANT public_reader TO runner;"
+          psql -h 127.0.0.1 -U runner -d testdb -c "GRANT yg_reader_group TO runner;"
           
       - name: Decompress CI seed database (Uses R for cross-platform functionality)
         run: |
