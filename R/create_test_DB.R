@@ -44,8 +44,9 @@ create_test_db <- function(
   # host <- Sys.getenv("aquacacheHost")
   # port <- Sys.getenv("aquacachePort")
   # username <- "postgres"
+  # replace <- TRUE
   # password <- Sys.getenv("aquacacheAdminPass")
-  # outpath <- "choose"
+  # outpath <- testthat::test_path("fixtures")
   # pg_dump <- "C:/Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe"
   # psql <- "C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe"
   # continuous_locations <- NULL

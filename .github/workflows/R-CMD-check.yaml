@@ -14,17 +14,19 @@ jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+    name: ${{ matrix.config.os }} (R ${{ matrix.config.r }}, PG ${{ matrix.config.pg }})
 
     strategy:
       fail-fast: false
       matrix:
         config:
-          - {os: ubuntu-latest,   r: 'release'}
+          - {os: ubuntu-latest, r: 'release', pg: '17'}
+          - {os: ubuntu-latest, r: 'release', pg: '18'}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+      AQUACACHE_RUN_DB_CONTRACTS: true
 
     steps:
       - uses: actions/checkout@v4
@@ -42,25 +44,30 @@ jobs:
           extra-packages: any::rcmdcheck any::R.utils
           needs: check
 
-      - name: Set up PostgreSQL 18
+      - name: Set up PostgreSQL
         uses: ikalnytskyi/action-setup-postgres@v8
         with:
-          postgres-version: '18'
+          postgres-version: ${{ matrix.config.pg }}
           username: runner
           password: runner
           database: testdb
                     
-      - name: Install PostGIS (incl. raster extension)
+      - name: Install PostGIS + pgTAP
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgis postgresql-18-postgis-3 postgresql-18-postgis-3-scripts
+          sudo apt-get install -y \
+            postgis \
+            postgresql-${{ matrix.config.pg }}-postgis-3 \
+            postgresql-${{ matrix.config.pg }}-postgis-3-scripts \
+            postgresql-${{ matrix.config.pg }}-pgtap
 
-      - name: Enable PostGIS extensions in testdb
+      - name: Enable DB extensions in testdb
         env:
           PGPASSWORD: runner
         run: |
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis;"
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis_raster;"
+          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
           
       - name: Decompress CI seed database (Uses R for cross-platform functionality)
         run: |
