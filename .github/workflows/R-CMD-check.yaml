@@ -59,6 +59,8 @@ jobs:
         env:
           PGPASSWORD: runner
         run: |
+        # Create spatial schema if it doesn't exist and install PostGIS extensions there to avoid cluttering the public schema
+          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS spatial;"
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis SCHEMA spatial;"
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis_raster SCHEMA spatial;"
 
