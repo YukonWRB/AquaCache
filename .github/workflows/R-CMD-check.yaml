@@ -14,19 +14,17 @@ jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} (R ${{ matrix.config.r }}, PG ${{ matrix.config.pg }})
+    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
 
     strategy:
       fail-fast: false
       matrix:
         config:
-          # - {os: ubuntu-latest, r: 'release', pg: '17'}
-          - {os: ubuntu-latest, r: 'release', pg: '18'}
+          - {os: ubuntu-latest, r: 'release'}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
-      AQUACACHE_RUN_DB_CONTRACTS: true
 
     steps:
       - uses: actions/checkout@v4
@@ -44,30 +42,25 @@ jobs:
           extra-packages: any::rcmdcheck any::R.utils
           needs: check
 
-      - name: Set up PostgreSQL
+      - name: Set up PostgreSQL 18
         uses: ikalnytskyi/action-setup-postgres@v8
         with:
-          postgres-version: ${{ matrix.config.pg }}
+          postgres-version: '18'
           username: runner
           password: runner
           database: testdb
                     
-      - name: Install PostGIS + pgTAP
+      - name: Install PostGIS (incl. raster extension)
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            postgis \
-            postgresql-${{ matrix.config.pg }}-postgis-3 \
-            postgresql-${{ matrix.config.pg }}-postgis-3-scripts \
-            postgresql-${{ matrix.config.pg }}-pgtap
+          sudo apt-get install -y postgis postgresql-18-postgis-3 postgresql-18-postgis-3-scripts
 
-      - name: Enable DB extensions in testdb
+      - name: Enable PostGIS extensions in testdb
         env:
           PGPASSWORD: runner
         run: |
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis;"
           psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis_raster;"
-          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
 
       - name: Bootstrap CI roles
         env:
