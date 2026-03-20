@@ -31,8 +31,6 @@ insertACRaster(
 \item{bit.depth}{The bit depth of the raster. 32-bit float is '32BF', 32-bit unsigned integer is '32BUI', 32-bit signed integer is '32BSI'. Default to NULL which will parse the data to determine which 32-bit flavor to choose. You \strong{must} specify if your data is greater than 32 bit.}
 
 \item{blocks}{The number of blocks in which to break the raster apart. If NULL blocks will be automatically determined, as per \code{\link[rpostgis:pgWriteRast]{rpostgis::pgWriteRast()}}. Blocks (tiles) can be useful to speed up queries that only need a small subset of the raster, but lengthen write time.}
-
-\item{pyramid_levels}{The number of pyramid levels to create for the raster. If NULL, no pyramids will be created. Pyramids can speed up queries that only need a small subset of the raster, but lengthen write time and increase storage requirements. Function}
 }
 \value{
 The reference_id of the newly appended raster.
