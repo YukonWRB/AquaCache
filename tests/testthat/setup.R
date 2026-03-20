@@ -19,6 +19,10 @@ if (Sys.getenv("CI") == "true") {
 
 set.seed(123) # Set seed for reproducibility in tests
 
+# The SQL fixture can contain explicit primary key values with stale backing sequences.
+test_db_state <- new.env(parent = emptyenv())
+test_db_state$sequences_synced <- FALSE
+
 
 # Check for Postgres credentials; skip tests if not available
 skip_if_no_postgres <- function() {
@@ -42,22 +46,64 @@ skip_if_no_postgres <- function() {
 }
 
 
+sync_test_sequences <- function(con) {
+  DBI::dbExecute(
+    con,
+    "
+    DO $$
+    DECLARE
+      rec record;
+      max_id bigint;
+    BEGIN
+      FOR rec IN
+        SELECT
+          cols.table_schema,
+          cols.table_name,
+          cols.column_name,
+          pg_get_serial_sequence(
+            format('%I.%I', cols.table_schema, cols.table_name),
+            cols.column_name
+          ) AS sequence_name
+        FROM information_schema.columns cols
+        WHERE cols.table_schema NOT IN ('pg_catalog', 'information_schema')
+          AND pg_get_serial_sequence(
+            format('%I.%I', cols.table_schema, cols.table_name),
+            cols.column_name
+          ) IS NOT NULL
+      LOOP
+        EXECUTE format(
+          'SELECT COALESCE(MAX(%1$I), 0) FROM %2$I.%3$I',
+          rec.column_name,
+          rec.table_schema,
+          rec.table_name
+        ) INTO max_id;
+
+        EXECUTE format(
+          'SELECT setval(%L::regclass, %s, %s);',
+          rec.sequence_name,
+          GREATEST(max_id, 1),
+          CASE WHEN max_id > 0 THEN 'true' ELSE 'false' END
+        );
+      END LOOP;
+    END
+    $$;
+    "
+  )
+}
+
+
 # Helper function to connect to the test database; will skip tests if connection fails
 connect_test <- function() {
   skip_if_no_postgres()
-  tryCatch(
-    {
-      con <- DBI::dbConnect(
-        RPostgres::Postgres(),
-        dbname = Sys.getenv("aquacacheName"),
-        host = Sys.getenv("aquacacheHost"),
-        port = Sys.getenv("aquacachePort"),
-        user = Sys.getenv("aquacacheAdminUser"),
-        password = Sys.getenv("aquacacheAdminPass")
-      )
-      DBI::dbExecute(con, "SET timezone = 'UTC'")
-      con
-    },
+  con <- tryCatch(
+    DBI::dbConnect(
+      RPostgres::Postgres(),
+      dbname = Sys.getenv("aquacacheName"),
+      host = Sys.getenv("aquacacheHost"),
+      port = Sys.getenv("aquacachePort"),
+      user = Sys.getenv("aquacacheAdminUser"),
+      password = Sys.getenv("aquacacheAdminPass")
+    ),
     error = function(err) {
       testthat::skip(paste(
         "Unable to connect to Postgres test database:",
@@ -65,6 +111,12 @@ connect_test <- function() {
       ))
     }
   )
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+  if (!isTRUE(test_db_state$sequences_synced)) {
+    sync_test_sequences(con)
+    test_db_state$sequences_synced <- TRUE
+  }
+  con
 }
 
 
