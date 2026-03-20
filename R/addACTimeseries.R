@@ -479,19 +479,16 @@ addACTimeseries <- function(
     tryCatch(
       {
         args <- source_fx_args[i]
-
-        # split into "argument1: value1" etc.
-        args <- strsplit(args, ",\\s*")[[1]]
-
-        # split only on first colon
-        keys <- sub(":.*", "", args)
-        vals <- sub("^[^:]+:\\s*", "", args)
-
-        # build named list
-        args <- stats::setNames(as.list(vals), keys)
-
-        # convert to JSON
-        args <- jsonlite::toJSON(args, auto_unbox = TRUE)
+        if (is.na(args) || identical(trimws(args), "")) {
+          args <- NA_character_
+        } else {
+          # Split a single "key: value, key2: value2" string into JSON.
+          args <- strsplit(args, ",\\s*")[[1]]
+          keys <- sub(":.*", "", args)
+          vals <- sub("^[^:]+:\\s*", "", args)
+          args <- stats::setNames(as.list(vals), keys)
+          args <- jsonlite::toJSON(args, auto_unbox = TRUE)
+        }
 
         aggregation_type_id <- DBI::dbGetQuery(
           con,
@@ -570,7 +567,7 @@ addACTimeseries <- function(
                 add$share_with,
                 add$default_owner,
                 add$source_fx,
-                add$args,
+                add$source_fx_args,
                 add$note,
                 add$end_datetime
               )
