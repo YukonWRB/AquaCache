@@ -53,7 +53,7 @@ To store login credentials in your .renviron file call \code{\link[usethis:edit]
 
 \subsection{Grades, approvals, qualifiers:}{
 
-This function will attempt to map Aquarius grades, approvals, and qualifiers to the database defaults. The function was designed around the Yukon Water Resources Branch Aquarius schemes, but 'forks' can be implemented for each based on the server URL. If you need to implement a fork, see the commented-out example in the function at line 116.
+This function will attempt to map Aquarius grades, approvals, and qualifiers to the database defaults. The function was designed around the Yukon Water Science and Stewardship Branch Aquarius schema, but 'forks' can be implemented for each based on the server URL. If you need to implement a fork, see the commented-out example in the function at line 116.
 }
 
 \subsection{'difference' parameter:}{

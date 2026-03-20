@@ -511,13 +511,8 @@ insertACImage <- function(
         }
         DBI::dbExecute(
           con,
-          paste0(
-            "UPDATE image_series SET last_new_img = '",
-            as.POSIXct(Sys.time(), tz = "UTC"),
-            "' WHERE img_series_id = ",
-            img_series_id,
-            ";"
-          )
+          "UPDATE image_series SET last_new_img = NOW() WHERE img_series_id = $1",
+          params = list(img_series_id)
         )
       } else {
         # Not working with an img_series_id

@@ -240,7 +240,7 @@ downloadECCCwq <- function(
   )[1, 1]
   collect_method <- DBI::dbGetQuery(
     con,
-    "SELECT collection_method_id FROM collection_methods WHERE collection_method = 'Water Bottle';"
+    "SELECT collection_method_id FROM collection_methods WHERE collection_method LIKE ('Water Bottle%');"
   )[1, 1]
   result_conditions <- DBI::dbGetQuery(
     con,

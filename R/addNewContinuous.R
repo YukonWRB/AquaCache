@@ -3,7 +3,7 @@
 #' This function can be used to append new contiuous type data directly to the database without downloading it from a remote source. Differs from [getNewContinuous()] as the later is used to pull data from a remote before append.
 #'
 #' @param tsid The timeseries_id to which the data will be appended. This is a required parameter.
-#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'imputed'; see the `adjust_` series of functions to see how these are used.
+#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'data_sharing_agreement_id', 'imputed'; see the `adjust_` series of functions to see how these are used.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #' @param target One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.
 #' @param overwrite Select one of "no", "all", "conflict". Default is "no", which will not overwrite any existing data (and fail if there is a conflict). "all" will wipe and replace all database entries for the target timeseries in the temporal range of `df`, while "conflict" will overwrite only those entries that conflict with the data in `df` (i.e. have the same datetime or date).
@@ -27,7 +27,8 @@ addNewContinuous <- function(
   # Check that the timeseries_id is valid
   check <- DBI::dbGetQuery(
     con,
-    paste0("SELECT timeseries_id FROM timeseries WHERE timeseries_id = ", tsid)
+    "SELECT timeseries_id FROM timeseries WHERE timeseries_id = $1",
+    params = list(tsid)
   )[1, 1]
   if (is.na(check)) {
     stop("addNewContinuous: The timeseries_id you specified does not exist.")
@@ -105,27 +106,29 @@ addNewContinuous <- function(
 
   info <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT at.aggregation_type, t.default_owner AS owner FROM timeseries AS t JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id WHERE timeseries_id = ",
-      tsid,
-      ";"
-    )
+    "SELECT 
+      at.aggregation_type, 
+      t.default_owner AS owner, 
+      t.default_data_sharing_agreement_id 
+    FROM timeseries AS t 
+    JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id 
+    WHERE timeseries_id = $1;",
+    params = list(tsid)
   )
   end_datetime_realtime <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-      tsid,
-      ";"
-    )
+    "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1;",
+    params = list(tsid)
   )[[1]]
   end_datetime_daily <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-      tsid,
-      ";"
-    )
+    "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = $1;",
+    params = list(tsid)
+  )[[1]]
+  end_datetime_daily <- DBI::dbGetQuery(
+    con,
+    "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = $1;",
+    params = list(tsid)
   )[[1]]
 
   if (is.na(end_datetime_realtime) && is.na(end_datetime_daily)) {
@@ -170,6 +173,17 @@ addNewContinuous <- function(
     df$no_update <- FALSE
   }
 
+  if ("data_sharing_agreement_id" %in% names(df)) {
+    if (!is.na(info$default_data_sharing_agreement_id)) {
+      df$data_sharing_agreement_id[is.na(df$data_sharing_agreement_id)] <-
+        info$default_data_sharing_agreement_id
+    }
+  } else {
+    if (!is.na(info$default_data_sharing_agreement_id)) {
+      df$data_sharing_agreement_id <- info$default_data_sharing_agreement_id
+    }
+  }
+
   # Append the data ##########################################################
   if (target == "realtime") {
     if (!inherits(df$datetime, "POSIXct")) {
@@ -187,11 +201,8 @@ addNewContinuous <- function(
     if (is.na(last_data_point)) {
       last_data_point <- DBI::dbGetQuery(
         con,
-        paste0(
-          "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
+        "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1;",
+        params = list(tsid)
       )[1, 1]
     }
     if (is.na(last_data_point)) {
@@ -207,6 +218,13 @@ addNewContinuous <- function(
       }
       if ("contributor" %in% names(df)) {
         adjust_contributor(con, tsid, df[, c("datetime", "contributor")])
+      }
+      if ("data_sharing_agreement_id" %in% names(df)) {
+        adjust_data_sharing_agreement(
+          con,
+          tsid,
+          df[, c("datetime", "data_sharing_agreement_id")]
+        )
       }
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
@@ -253,14 +271,11 @@ addNewContinuous <- function(
           for (i in seq_len(nrow(no_period))) {
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE measurements_continuous SET period = '",
+              "UPDATE measurements_continuous SET period = $1 WHERE datetime = $2 AND timeseries_id = $3",
+              params = list(
                 no_period$period[i],
-                "' WHERE datetime = '",
                 no_period$datetime[i],
-                "' AND timeseries_id = ",
-                tsid,
-                ";"
+                tsid
               )
             )
           }
@@ -279,14 +294,11 @@ addNewContinuous <- function(
       if (overwrite == "all") {
         DBI::dbExecute(
           con,
-          paste0(
-            "DELETE FROM measurements_continuous WHERE datetime BETWEEN '",
+          "DELETE FROM measurements_continuous WHERE datetime BETWEEN $1 AND $2 AND timeseries_id = $3;",
+          params = list(
             min(df$datetime),
-            "' AND '",
             max(df$datetime),
-            "' AND timeseries_id = ",
-            tsid,
-            ";"
+            tsid
           )
         )
       } else if (overwrite == "conflict") {
@@ -316,8 +328,14 @@ addNewContinuous <- function(
           df <- df[!df$datetime %in% existing_datetimes, ]
         }
       }
-      DBI::dbAppendTable(con, "measurements_continuous", df)
+      dbAppendTableRLS(con, "measurements_continuous", df)
 
+      stats_savepoint <- paste0(
+        "ac_add_new_continuous_stats_",
+        as.integer(stats::runif(1, 1e7, 9e7))
+      )
+      DBI::dbExecute(con, paste0("SAVEPOINT ", stats_savepoint))
+      stats_error <- NULL
       tryCatch(
         {
           calculate_stats(
@@ -327,15 +345,29 @@ addNewContinuous <- function(
           )
         },
         error = function(e) {
-          message(
-            "addNewContinuous: Failed to recalculate statistics for timeseries_id ",
-            tsid,
-            ". Error message: '",
-            e$message,
-            "'."
-          )
+          stats_error <<- e$message
+          suppressWarnings(try(
+            DBI::dbExecute(
+              con,
+              paste0("ROLLBACK TO SAVEPOINT ", stats_savepoint)
+            ),
+            silent = TRUE
+          ))
         }
       )
+      suppressWarnings(try(
+        DBI::dbExecute(con, paste0("RELEASE SAVEPOINT ", stats_savepoint)),
+        silent = TRUE
+      ))
+      if (!is.null(stats_error)) {
+        message(
+          "addNewContinuous: Failed to recalculate statistics for timeseries_id ",
+          tsid,
+          ". Error message: '",
+          stats_error,
+          "'."
+        )
+      }
 
       # make the new entry into table timeseries
       exist_times <- DBI::dbGetQuery(
@@ -347,11 +379,10 @@ addNewContinuous <- function(
       new_end <- max(c(exist_times$end_datetime, df$datetime), na.rm = TRUE)
       DBI::dbExecute(
         con,
-        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = $3 WHERE timeseries_id = $4",
+        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = NOW() WHERE timeseries_id = $3",
         params = list(
           new_end,
           new_start,
-          .POSIXct(Sys.time(), "UTC"),
           tsid
         )
       )
@@ -384,11 +415,8 @@ addNewContinuous <- function(
     if (is.na(last_data_point)) {
       last_data_point <- DBI::dbGetQuery(
         con,
-        paste0(
-          "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
+        "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = $1;",
+        params = list(tsid)
       )[1, 1]
     }
     if (is.na(last_data_point)) {
@@ -406,6 +434,14 @@ addNewContinuous <- function(
         adjust_contributor(con, tsid, df[, c("date", "contributor")])
       }
 
+      if ("data_sharing_agreement_id" %in% names(df)) {
+        adjust_data_sharing_agreement(
+          con,
+          tsid,
+          df[, c("date", "data_sharing_agreement_id")]
+        )
+      }
+
       df$timeseries_id <- tsid
       # Drop columns no longer necessary
       df <- df[, c("date", "value", "timeseries_id", "imputed", "no_update")]
@@ -413,14 +449,11 @@ addNewContinuous <- function(
       if (overwrite == "all") {
         DBI::dbExecute(
           con,
-          paste0(
-            "DELETE FROM measurements_calculated_daily WHERE date BETWEEN ('",
+          "DELETE FROM measurements_calculated_daily WHERE date BETWEEN $1 AND $2 AND timeseries_id = $3",
+          params = list(
             min(df$date),
-            "' AND '",
             max(df$date),
-            "') AND timeseries_id = ",
-            tsid,
-            ";"
+            tsid
           )
         )
       } else if (overwrite == "conflict") {
@@ -437,31 +470,19 @@ addNewContinuous <- function(
       } else {
         # If overwrite is "no", we do not delete any existing data, so we just append
       }
-      DBI::dbAppendTable(con, "measurements_calculated_daily", df)
+      dbAppendTableRLS(con, "measurements_calculated_daily", df)
       #make the new entry into table timeseries
       if (max(df$date) > last_data_point) {
         DBI::dbExecute(
           con,
-          paste0(
-            "UPDATE timeseries SET end_datetime = '",
-            max(df$date),
-            "', last_new_data = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
+          "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
+          params = list(max(df$date), tsid)
         )
       } else {
         DBI::dbExecute(
           con,
-          paste0(
-            "UPDATE timeseries SET last_new_data = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
+          "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
+          params = list(tsid)
         )
       }
     }

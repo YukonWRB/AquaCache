@@ -6,7 +6,7 @@
 #' ## Passwords and server credentials:
 #' To store login credentials in your .renviron file call [usethis::edit_r_environ()] and enter your username and password as value pairs, as AQUSER="your username" and AQPASS="your password". The server should be entered at server="your_server_url". You can also store credentials in the timeseries table in the column source_fx_args, but beware that these credentials are then sitting in the database un-encrypted.
 #' ## Grades, approvals, qualifiers:
-#' This function will attempt to map Aquarius grades, approvals, and qualifiers to the database defaults. The function was designed around the Yukon Water Resources Branch Aquarius schemes, but 'forks' can be implemented for each based on the server URL. If you need to implement a fork, see the commented-out example in the function at line 116.
+#' This function will attempt to map Aquarius grades, approvals, and qualifiers to the database defaults. The function was designed around the Yukon Water Science and Stewardship Branch Aquarius schema, but 'forks' can be implemented for each based on the server URL. If you need to implement a fork, see the commented-out example in the function at line 116.
 #'
 #' ## 'difference' parameter:
 #' The difference parameter takes cumulative values, such as increasing standpipe readings, and returns the difference between consecutive values rather than the values themselves. This is useful for converting cumulative measurements into interval measurements. To do this, the function will ignore any negative differences (which may occur due to equipment resets or normal instrument fluctations) and record positive values only when the next increment value is greater than the previous non-negative value. The 'start_datetime' parameter will be automatically adjusted within the function to fetch the necessary prior value to calculate the first difference; this value will not be included in the returned data.frame, ensuring consistent performance with or without the difference parameter set to TRUE.
@@ -105,7 +105,12 @@ downloadAquarius <- function(
   end <- paste0(end, "-00:00") # For UTC offset of 0
 
   if (difference) {
-    old_start <- start
+    # Start's format is 2026-01-25T09:00:01-00:00
+    old_start <- as.POSIXct(
+      gsub("-00:00", "", start),
+      format = "%Y-%m-%dT%H:%M:%S",
+      tz = "UTC"
+    )
     # Adjust start time back by one day + 1 second to get prior values for difference calculation (it was passed in as 1 second after the last data point present in the database, so the point should exist in Aquarius). If there are enough data points in the prior day, great, otherwise a later check will fail gracefully until enough data exists.
     start <- as.POSIXct(
       gsub("-00:00", "", start),
@@ -442,6 +447,39 @@ downloadAquarius <- function(
         ]
       )
     }
+
+    # Collapse overlapping qualifier intervals of the same level
+    collapse_overlaps <- function(intervals) {
+      intervals <- intervals[order(intervals$start_time, intervals$end_time), ]
+      if (nrow(intervals) <= 1) {
+        return(intervals)
+      }
+
+      collapsed <- vector("list", nrow(intervals))
+      idx <- 1
+      current <- intervals[1, ]
+
+      for (i in 2:nrow(intervals)) {
+        if (intervals$start_time[i] <= current$end_time) {
+          if (intervals$end_time[i] > current$end_time) {
+            current$end_time <- intervals$end_time[i]
+          }
+        } else {
+          collapsed[[idx]] <- current
+          idx <- idx + 1
+          current <- intervals[i, ]
+        }
+      }
+
+      collapsed[[idx]] <- current
+      do.call(rbind, collapsed[seq_len(idx)])
+    }
+
+    qualifiers <- do.call(
+      rbind,
+      lapply(split(qualifiers, qualifiers$level), collapse_overlaps)
+    )
+    rownames(qualifiers) <- NULL
 
     # Add in grades, approval, and qualifier columns
     # Get the row indices in ts corresponding to qualifier/approval/grade start and end times.

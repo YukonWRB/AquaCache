@@ -27,5 +27,5 @@ downloadWSC(
 A data.table object of hydrometric data, with datetimes in UTC-0.
 }
 \description{
-A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat and tidyhydat.ws options). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
+A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
 }

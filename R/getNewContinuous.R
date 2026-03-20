@@ -18,14 +18,15 @@
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
-#'
+#' @param verbose If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
 
 getNewContinuous <- function(
   con = NULL,
   timeseries_id = "all",
-  active = 'default'
+  active = 'default',
+  verbose = FALSE
 ) {
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -42,13 +43,35 @@ getNewContinuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL;"
+      "SELECT 
+        t.parameter_id, 
+        t.timeseries_id, 
+        t.source_fx, 
+        t.source_fx_args, 
+        at.aggregation_type, 
+        t.default_owner, 
+        t.default_data_sharing_agreement_id,
+        t.active 
+      FROM timeseries t 
+      JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id 
+      WHERE source_fx IS NOT NULL;"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.location, t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, at.aggregation_type, t.default_owner, t.active FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN ('",
+        "SELECT 
+          t.parameter_id, 
+          t.timeseries_id, 
+          t.source_fx, 
+          t.source_fx_args, 
+          at.aggregation_type, 
+          t.default_owner,
+          t.default_data_sharing_agreement_id,
+          t.active 
+        FROM timeseries t 
+        JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
+         WHERE timeseries_id IN ('",
         paste(timeseries_id, collapse = "', '"),
         "') AND source_fx IS NOT NULL;"
       )
@@ -70,8 +93,6 @@ getNewContinuous <- function(
 
   count <- 0 #counter for number of successful new pulls
   success <- data.frame(
-    "location" = NULL,
-    "parameter_id" = NULL,
     "timeseries" = NULL
   )
 
@@ -109,40 +130,61 @@ getNewContinuous <- function(
   }
   # Run for loop over timeseries rows
   for (i in 1:nrow(all_timeseries)) {
-    loc <- all_timeseries$location[i]
-    parameter <- all_timeseries$parameter_id[i]
-    aggregation_type <- all_timeseries$aggregation_type[i]
     tsid <- all_timeseries$timeseries_id[i]
-    source_fx <- all_timeseries$source_fx[i]
-    source_fx_args <- all_timeseries$source_fx_args[i]
-    owner <- all_timeseries$default_owner[i]
-    # Find the last data point in measurements_continuous
-    # Not using column in 'timeseries' table in case it's out of sync
-    last_data_point <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT MAX(datetime) AS last_datetime FROM measurements_continuous WHERE timeseries_id = ",
-        tsid,
-        ";"
-      )
-    )[1, 1] +
-      1 # one second after the last data point
+    if (verbose) {
+      message("Processing iteration ", i, " timeseries_id: ", tsid)
+    }
 
-    # Some timeseries only have data in calculated_daily table (HYDAT timeseries), but let's do a cursory check of them in case they're ever reactivated.
-    if (is.na(last_data_point)) {
-      last_data_point <- as.POSIXct("1970-01-01 00:00:00", "UTC")
+    # Acquire a lock for this timeseries to prevent concurrent updates, notably by synchronize_continuous
+    # IMPORTANT: this lock does not wait if another process has it, it just skips to the next timeseries. Synchronize_continuous **will** wait for the lock to be released, on the other hand.
+    lock_namespace <- "aquacache_timeseries"
+    lock_acquired <- advisory_lock_acquire(
+      con = con,
+      namespace = lock_namespace,
+      key = tsid,
+      wait = FALSE
+    )
+    if (!isTRUE(lock_acquired)) {
+      warning(
+        "getNewContinuous: Skipping timeseries_id ",
+        tsid,
+        " because it is locked by another process."
+      )
+      next
     }
 
     tryCatch(
       {
+        parameter <- all_timeseries$parameter_id[i]
+        aggregation_type <- all_timeseries$aggregation_type[i]
+        source_fx <- all_timeseries$source_fx[i]
+        source_fx_args <- all_timeseries$source_fx_args[i]
+        owner <- all_timeseries$default_owner[i]
+        data_sharing_agreement_id <-
+          all_timeseries$default_data_sharing_agreement_id[i]
+
+        # Find the last data point in measurements_continuous
+        # Not using column in 'timeseries' table in case it's out of sync
+        last_data_point <- DBI::dbGetQuery(
+          con,
+          "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1",
+          params = list(tsid)
+        )[1, 1] +
+          1 # one second after the last data point
+
+        # Some timeseries only have data in calculated_daily table (HYDAT timeseries), but let's do a cursory check of them in case they're ever reactivated.
+        if (is.na(last_data_point)) {
+          last_data_point <- as.POSIXct("1970-01-01 00:00:00", "UTC")
+        }
+
         args_list <- list(start_datetime = last_data_point, con = con)
         if (!is.na(source_fx_args)) {
-          #add some arguments if they are specified
+          # add some arguments if they are specified
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
         }
 
-        ts <- do.call(source_fx, args_list) #Get the data using the args_list
+        ts <- do.call(source_fx, args_list) # Get the data using the args_list
         ts <- ts[!is.na(ts$value), ]
 
         if (nrow(ts) > 0) {
@@ -178,6 +220,18 @@ getNewContinuous <- function(
             ts$qualifier <- qualifier_unknown
           }
 
+          if ("data_sharing_agreement_id" %in% names(ts)) {
+            if (!is.na(data_sharing_agreement_id)) {
+              ts$data_sharing_agreement_id[
+                is.na(ts$data_sharing_agreement_id)
+              ] <- data_sharing_agreement_id
+            }
+          } else {
+            if (!is.na(data_sharing_agreement_id)) {
+              ts$data_sharing_agreement_id <- data_sharing_agreement_id
+            }
+          }
+
           commit_fx <- function(con, ts, last_data_point, tsid) {
             adjust_grade(con, tsid, ts[, c("datetime", "grade")])
             adjust_approval(con, tsid, ts[, c("datetime", "approval")])
@@ -189,20 +243,28 @@ getNewContinuous <- function(
               adjust_contributor(con, tsid, ts[, c("datetime", "contributor")])
             }
 
+            if ("data_sharing_agreement_id" %in% names(ts)) {
+              adjust_data_sharing_agreement(
+                con,
+                tsid,
+                ts[, c("datetime", "data_sharing_agreement_id")]
+              )
+            }
+
             # Drop columns no longer necessary
             ts <- ts[, c("datetime", "value", "timeseries_id", "imputed")]
 
-            #assign a period to the data
+            # assign a period to the data
             if (aggregation_type == "instantaneous") {
-              #Period is always 0 for instantaneous data
+              # Period is always 0 for instantaneous data
               ts$period <- "00:00:00"
             } else if (
               (aggregation_type != "instantaneous") & !("period" %in% names(ts))
             ) {
-              #aggregation_types of mean, median, min, max should all have a period
+              # aggregation_types of mean, median, min, max should all have a period
               ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
             } else {
-              #Check to make sure that the supplied period can actually be coerced to a period
+              # Check to make sure that the supplied period can actually be coerced to a period
               check <- lubridate::period(unique(ts$period))
               if (NA %in% check) {
                 ts$period <- NA
@@ -221,19 +283,12 @@ getNewContinuous <- function(
                 )
               )
             }
-            DBI::dbAppendTable(con, "measurements_continuous", ts)
-            #make the new entry into table timeseries
+            dbAppendTableRLS(con, "measurements_continuous", ts)
+            # make the new entry into table timeseries
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET end_datetime = '",
-                max(ts$datetime),
-                "', last_new_data = '",
-                .POSIXct(Sys.time(), "UTC"),
-                "' WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
+              "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
+              params = list(max(ts$datetime), tsid)
             )
           } # End of commit_fx function
 
@@ -247,8 +302,6 @@ getNewContinuous <- function(
                 success <- rbind(
                   success,
                   data.frame(
-                    "location" = loc,
-                    "parameter_id" = parameter,
                     "timeseries_id" = tsid
                   )
                 )
@@ -256,13 +309,9 @@ getNewContinuous <- function(
               error = function(e) {
                 DBI::dbExecute(con, "ROLLBACK;")
                 warning(
-                  "getNewContinuous: Failed to append new data at location ",
-                  loc,
-                  " and parameter ",
-                  parameter,
-                  " (timeseries_id ",
+                  "getNewContinuous: Failed to append new data at timeseries_id ",
                   all_timeseries$timeseries_id[i],
-                  "). Returned error '",
+                  ". Returned error '",
                   e$message,
                   "'."
                 )
@@ -274,8 +323,6 @@ getNewContinuous <- function(
             success <- rbind(
               success,
               data.frame(
-                "location" = loc,
-                "parameter_id" = parameter,
                 "timeseries_id" = tsid
               )
             )
@@ -284,18 +331,18 @@ getNewContinuous <- function(
       },
       error = function(e) {
         warning(
-          "getNewContinuous: Failed to get new data or to append new data at location ",
-          loc,
-          " and parameter ",
-          parameter,
-          " (timeseries_id ",
+          "getNewContinuous: Failed to get new data or to append new data at timeseries_id ",
           all_timeseries$timeseries_id[i],
-          "). Returned error '",
+          ". Returned error '",
           e$message,
           "'."
         )
+      },
+      finally = {
+        # Release the lock
+        advisory_lock_release(con, lock_namespace, tsid)
       }
-    ) #End of tryCatch
+    ) # End of tryCatch
 
     if (interactive()) {
       utils::setTxtProgressBar(pb, i)
@@ -307,16 +354,19 @@ getNewContinuous <- function(
   }
 
   message(count, " out of ", nrow(all_timeseries), " timeseries were updated.")
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_new_continuous'"
-    )
+
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_new_continuous'"
+      )
+    },
+    silent = TRUE
   )
 
   if (nrow(success) > 0) {
     return(success)
   }
-} #End of function
+} # End of function

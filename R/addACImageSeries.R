@@ -5,7 +5,7 @@
 #' @details
 #' #' Additional arguments to pass to the function specified in `source_fx` go in argument `source_fx_args` and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
 #'
-#' @param location The location or location_id associated with the image series. Pass a location code as text and a location_id as a numeric.
+#' @param location_id The location_id associated with the image series.
 #' @param start_datetime The datetime (as POSIXct) from which to look for images
 #' @param source_fx The function to use for fetching new images. Must be an existing function in this package.
 #' @param source_fx_args Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.
@@ -17,7 +17,7 @@
 #'
 
 addACImageSeries <- function(
-  location,
+  location_id,
   start_datetime,
   source_fx,
   source_fx_args = NA,
@@ -31,35 +31,24 @@ addACImageSeries <- function(
     on.exit(DBI::dbDisconnect(con))
   }
 
-  if (inherits(location, "character")) {
-    location_id <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT location_id FROM locations WHERE location = '",
-        location,
-        "';"
-      )
-    )[1, 1]
-    if (is.na(location_id)) {
-      stop(
-        "The location you specified does not exist. Reminder that you should specify the location code (text) or location_id (numeric), not the name."
-      )
-    }
-  } else if (inherits(location, "numeric")) {
-    location_id <- location
-    check <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT location_id FROM locations WHERE location_id = ",
-        location_id
-      )
-    )[1, 1]
-    if (is.na(check)) {
-      stop("The location_id you specified does not exist.")
-    }
+  # Confirm the location_id exists, tell the user the location 'name' that corresponds
+  loc_check <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT name FROM locations WHERE location_id = ",
+      location_id,
+      ";"
+    )
+  )
+  if (nrow(loc_check) == 0) {
+    stop("The specified location_id does not exist in the locations table.")
   } else {
-    stop(
-      "Parameter 'location' must be either a character or numeric vector of length 1."
+    message(
+      "Adding image series for location '",
+      loc_check$name[1],
+      "' (location_id ",
+      location_id,
+      ")."
     )
   }
 
@@ -95,24 +84,19 @@ addACImageSeries <- function(
   # convert to JSON
   args <- jsonlite::toJSON(args, auto_unbox = TRUE)
 
-  insert <- data.frame(
-    location_id = location_id,
-    first_img = start_datetime,
-    last_img = start_datetime,
-    source_fx = source_fx,
-    source_fx_args = args,
-    share_with = paste0("{", paste(share_with, collapse = ","), "}"),
-    active = TRUE,
-    description = "Image series automatically taken from a web or server location."
-  )
-
-  DBI::dbAppendTable(con, "image_series", insert)
+  # Insert the new entry into the image_series table
   res <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT img_series_id FROM image_series WHERE location_id = ",
+    "INSERT INTO image_series (location_id, first_img, last_img, source_fx, source_fx_args, share_with, active, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING img_series_id;",
+    params = list(
       location_id,
-      ";"
+      start_datetime,
+      start_datetime,
+      source_fx,
+      args,
+      paste0("{", paste(share_with, collapse = ","), "}"),
+      TRUE,
+      "Image series automatically taken from a web or server location."
     )
   )[1, 1]
   added <- getNewImages(image_series_ids = res, con = con)

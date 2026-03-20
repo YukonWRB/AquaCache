@@ -6,21 +6,18 @@
 \usage{
 downloadSnowCourse(
   location,
-  sub_location = NULL,
   start_datetime,
   end_datetime = Sys.time(),
   old_loc = NULL,
   adjust_start = NULL,
   adjust_end = NULL,
-  share_with = "yg_reader",
+  share_with = "yg_reader_group",
   con = NULL,
   snowCon = snowConnect()
 )
 }
 \arguments{
-\item{location}{The location code associated with the snow course.}
-
-\item{sub_location}{The sub-location code associated with the snow course (leave NULL if not applicable).}
+\item{location}{The location code associated with the snow course in the snow database,  should match locations.location_code in the aquacache database (locations.alias is checked as a fallback).}
 
 \item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
 
@@ -32,9 +29,9 @@ downloadSnowCourse(
 
 \item{adjust_end}{The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.}
 
-\item{share_with}{Which user groups to share the data with. Default is 'yg_reader'; set to 'public_reader' to share publicly.}
+\item{share_with}{Which user groups to share the data with. Default is 'yg_reader_group'; set to 'public_reader' to share publicly. This does not affect samples which already exist and are being refreshed/replaced. For multiple groups, specify as a character vector, e.g. c('yg_reader_group', 'public_reader').}
 
-\item{con}{A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().}
+\item{con}{A connection to the aquacache database. a connection will be attempted using AquaConnect().}
 
 \item{snowCon}{A connection to the snow database.}
 }

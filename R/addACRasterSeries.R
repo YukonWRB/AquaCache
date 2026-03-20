@@ -74,30 +74,23 @@ addACRasterSeries <- function(
   # convert to JSON
   args <- jsonlite::toJSON(args, auto_unbox = TRUE)
 
-  insert <- data.frame(
-    model = model,
-    parameter = parameter,
-    start_datetime = start_datetime,
-    last_new_raster = start_datetime,
-    end_datetime = start_datetime,
-    source_fx = source_fx,
-    type = type,
-    source_fx_args = args,
-    active = TRUE
-  )
-
-  DBI::dbAppendTable(con, "raster_series_index", insert)
-  # Get the newly created id
+  # Insert new entry into raster_series_index and get the new raster_series_id
   res <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT raster_series_id FROM raster_series_index WHERE model = '",
+    "INSERT INTO raster_series_index (model, parameter, start_datetime, last_new_raster, end_datetime, source_fx, type, source_fx_args, active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING raster_series_id;",
+    params = list(
       model,
-      "' AND parameter = '",
       parameter,
-      "';"
+      start_datetime,
+      start_datetime,
+      start_datetime,
+      source_fx,
+      type,
+      args,
+      TRUE
     )
-  )[1, 1]
+  )[[1]]
+
   added <- getNewRasters(raster_series_ids = res, con = con)
   if (length(added) == 0) {
     DBI::dbExecute(

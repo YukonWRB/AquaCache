@@ -73,6 +73,134 @@ dbTransCheck <- function(con) {
 }
 
 
+#' @title Acquire a PostgreSQL advisory lock for a namespaced key.
+#' @description
+#' Attempts to acquire a PostgreSQL advisory lock for a given namespace and key. If `wait` is TRUE, will block until the lock is acquired. If `wait` is FALSE, will return immediately with a boolean indicating whether the lock was acquired.
+#' @param con A database connection object.
+#' @param namespace The namespace for the lock.
+#' @param key The key for the lock.
+#' @param wait A boolean indicating whether to wait for the lock (default: TRUE).
+#' @return A boolean indicating whether the lock was acquired.
+#' @export
+
+advisory_lock_acquire <- function(con, namespace, key, wait = TRUE) {
+  if (wait) {
+    DBI::dbExecute(
+      con,
+      "SELECT pg_advisory_lock(hashtext($1), $2);",
+      params = list(namespace, key)
+    )
+    return(TRUE)
+  }
+
+  isTRUE(
+    DBI::dbGetQuery(
+      con,
+      "SELECT pg_try_advisory_lock(hashtext($1), $2) AS locked;",
+      params = list(namespace, key)
+    )[[1]]
+  )
+}
+
+
+#' @title Release a PostgreSQL advisory lock for a namespaced key.
+#' @description
+#' Includes a recovery path for aborted transactions and a final fallback to unlock all session advisory locks.
+#' @param con A database connection object.
+#' @param namespace The namespace for the lock.
+#' @param key The key for the lock.
+#' @return A boolean indicating whether the lock was released.
+#' @export
+
+advisory_lock_release <- function(con, namespace, key) {
+  unlock_query <- "SELECT pg_advisory_unlock(hashtext($1), $2) AS unlocked;"
+  unlock_once <- function() {
+    DBI::dbGetQuery(
+      con,
+      unlock_query,
+      params = list(namespace, key)
+    )[[1]]
+  }
+
+  unlock_error <- NULL
+  unlocked <- tryCatch(
+    unlock_once(),
+    error = function(e) {
+      unlock_error <<- e
+      NA
+    }
+  )
+
+  if (
+    !is.null(unlock_error) &&
+      grepl(
+        "current transaction is aborted",
+        conditionMessage(unlock_error),
+        fixed = TRUE
+      )
+  ) {
+    # Clear aborted transaction state before trying unlock again.
+    try(DBI::dbExecute(con, "ROLLBACK;"), silent = TRUE)
+    unlock_error <- NULL
+    unlocked <- tryCatch(
+      unlock_once(),
+      error = function(e) {
+        unlock_error <<- e
+        NA
+      }
+    )
+  }
+
+  if (isTRUE(unlocked)) {
+    return(TRUE)
+  }
+
+  if (isFALSE(unlocked)) {
+    warning(
+      "advisory_lock_release: Lock was not held for namespace '",
+      namespace,
+      "' and key ",
+      key,
+      ".",
+      call. = FALSE
+    )
+    return(FALSE)
+  }
+
+  err_text <- if (is.null(unlock_error)) {
+    "Unknown unlock failure."
+  } else {
+    conditionMessage(unlock_error)
+  }
+
+  warning(
+    "advisory_lock_release: Failed to release lock for namespace '",
+    namespace,
+    "' and key ",
+    key,
+    ". Error: ",
+    err_text,
+    ". Attempting fallback pg_advisory_unlock_all().",
+    call. = FALSE
+  )
+
+  tryCatch(
+    {
+      DBI::dbGetQuery(con, "SELECT pg_advisory_unlock_all();")
+    },
+    error = function(e) {
+      warning(
+        "advisory_lock_release: Fallback pg_advisory_unlock_all() also failed. Error: ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    }
+  )
+
+  FALSE
+}
+
+
 #' Replace infinite or NaN values with NA
 #'
 #' Utility function to replace `Inf`, `-Inf`, and `NaN` values with `NA`.

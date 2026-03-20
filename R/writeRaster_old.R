@@ -74,7 +74,7 @@ writeRaster_old <- function(
       rast.tmp.query <- paste0(
         "CREATE TABLE ",
         rast_table,
-        " (rid SERIAL PRIMARY KEY,
+        " (rid INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
                              reference_id INTEGER,
                              r_class TEXT,
                              r_proj4 TEXT,

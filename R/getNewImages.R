@@ -158,13 +158,16 @@ getNewImages <- function(
 
   message(count, " out of ", nrow(series_ids), " img_series_ids were updated.")
   message(image_count, " images were added in total.")
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_new_images'"
-    )
+
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'lastet_new_images';"
+      )
+    },
+    silent = TRUE
   )
   return(success)
 }

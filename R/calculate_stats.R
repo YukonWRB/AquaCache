@@ -418,12 +418,17 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             }
             tmp <- DBI::dbGetQuery(
               con,
-              paste0(
-                "SELECT t.location, t.parameter_id, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter_id = p.parameter_id WHERE t.timeseries_id = ",
-                i,
-                ";"
-              )
+              "SELECT t.parameter_id, p.param_name FROM timeseries AS t JOIN parameters AS p ON t.parameter_id = p.parameter_id WHERE t.timeseries_id = $1",
+              params = list(i)
             )
+            tmp.location <- DBI::dbGetQuery(
+              con,
+              "SELECT source_fx_args FROM timeseries WHERE timeseries_id = $1;",
+              params = list(i)
+            )[1, 1]
+            tmp.location <- jsonlite::fromJSON(tmp.location)$location
+            tmp$location <- tmp.location
+
             hydat_con <- DBI::dbConnect(
               RSQLite::SQLite(),
               tidyhydat::hy_downloaded_db()
@@ -916,7 +921,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                     "')"
                   )
                 )
-                DBI::dbAppendTable(
+                dbAppendTableRLS(
                   con,
                   "measurements_calculated_daily",
                   first_instance_no_stats
@@ -925,13 +930,8 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                   # If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
                   DBI::dbExecute(
                     con,
-                    paste0(
-                      "UPDATE timeseries SET last_daily_calculation = '",
-                      .POSIXct(Sys.time(), "UTC"),
-                      "' WHERE timeseries_id = ",
-                      i,
-                      ";"
-                    )
+                    "UPDATE timeseries SET last_daily_calculation = NOW() WHERE timeseries_id = $1",
+                    params = list(i)
                   )
                 }
               }
@@ -1137,20 +1137,15 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           # Now commit the changes to the database
           commit_fx2 <- function(con, delete_query, missing_stats, i) {
             DBI::dbExecute(con, delete_query)
-            DBI::dbAppendTable(
+            dbAppendTableRLS(
               con,
               "measurements_calculated_daily",
               missing_stats
             ) # Append the missing_stats data to the measurements_calculated_daily table
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET last_daily_calculation = '",
-                .POSIXct(Sys.time(), "UTC"),
-                "' WHERE timeseries_id = ",
-                i,
-                ";"
-              )
+              "UPDATE timeseries SET last_daily_calculation = NOW() WHERE timeseries_id = $1",
+              params = list(i)
             )
           }
 

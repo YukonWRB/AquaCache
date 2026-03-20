@@ -2,15 +2,14 @@
 #'
 #' Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
-#' @param df A data.frame containing the following columns: location, name, name_fr, latitude, longitude, share_with, owner, data_sharing_agreement_id, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
-#' @param location A character vector of the location code(s).
+#' @param df A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French.
+#' @param alias A character vector of the location alias(es). This is optional, leave NA if not needed.
+#' @param location_code A character vector of the location code(s). Note that in most cases this should be auto-generated when by adding a new location using the YGwater Shiny application!
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
 #' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default public group is "public_reader".
-#' @param owner A numeric vector of the owner(s) of the location(s).
-#' @param data_sharing_agreement_id A numeric vector of the data sharing agreement(s) for the location(s) from column 'document_id' of the 'documents' table.
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
 #' @param note A character vector of notes for the location(s) (optional).
 #' @param contact A character vector of the contact(s) for the location(s) (optional).
@@ -27,14 +26,13 @@
 
 addACLocation <- function(
   df = NULL,
-  location = NA,
   name = NA,
   name_fr = NA,
+  alias = NA,
+  location_code = NA,
   latitude = NA,
   longitude = NA,
   share_with = NA,
-  owner = NA,
-  data_sharing_agreement_id = NA,
   location_type = NA,
   note = NA,
   contact = NA,
@@ -47,13 +45,13 @@ addACLocation <- function(
   con = NULL
 ) {
   # df = NULL
-  # location = "TEST02"
   # name = "Test location2"
   # name_fr = "Endroit test2"
+  # alias = "TL2"
+  # location_code = "TL002"
   # latitude = 66.60114
   # longitude = -138.85132
   # share_with = 'public_reader'
-  # owner = 2
   # location_type = 15
   # datum_id_from = 10
   # datum_id_to = 35
@@ -64,7 +62,6 @@ addACLocation <- function(
   # con = con
   # note = NA
   # contact = NA
-  # data_sharing_agreement_id = NA
 
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -75,14 +72,13 @@ addACLocation <- function(
     # Check that all other parameters are NA
     if (
       !all(is.na(c(
-        location,
         name,
         name_fr,
+        alias,
+        location_code,
         latitude,
         longitude,
         share_with,
-        owner,
-        data_sharing_agreement_id,
         location_type,
         note,
         contact,
@@ -101,14 +97,13 @@ addACLocation <- function(
     if (
       !all(
         c(
-          "location",
           "name",
           "name_fr",
+          "alias",
+          "location_code",
           "latitude",
           "longitude",
           "share_with",
-          "owner",
-          "data_sharing_agreement_id",
           "location_type",
           "note",
           "contact",
@@ -122,14 +117,13 @@ addACLocation <- function(
     ) {
       missing <- setdiff(
         c(
-          "location",
           "name",
           "name_fr",
+          "alias",
+          "location_code",
           "latitude",
           "longitude",
           "share_with",
-          "owner",
-          "data_sharing_agreement_id",
           "location_type",
           "note",
           "contact",
@@ -151,14 +145,13 @@ addACLocation <- function(
       stop("The data.frame provided is empty.")
     }
     # Assign each column of the data.frame to the corresponding function parameter
-    location <- df$location
     name <- df$name
     name_fr <- df$name_fr
+    alias <- df$alias
+    location_code <- df$location_code
     latitude <- df$latitude
     longitude <- df$longitude
     share_with <- df$share_with
-    owner <- df$owner
-    data_sharing_agreement_id <- df$data_sharing_agreement_id
     location_type <- df$location_type
     note <- df$note
     contact <- df$contact
@@ -176,14 +169,13 @@ addACLocation <- function(
 
   # Begin checks ############################
   lengths <- c(
-    length(location),
     length(name),
     length(name_fr),
+    length(alias),
+    length(location_code),
     length(latitude),
     length(longitude),
     length(share_with),
-    length(owner),
-    length(data_sharing_agreement_id),
     length(location_type),
     length(note),
     length(contact),
@@ -201,6 +193,22 @@ addACLocation <- function(
   }
 
   # Some parameters can be NA, in which case they get default values
+
+  missing_code <- is.na(location_code) | trimws(location_code) == ""
+  if (any(missing_code)) {
+    location_code[missing_code] <- generateACLocationCode(
+      latitude = latitude[missing_code],
+      longitude = longitude[missing_code],
+      location_type = location_type[missing_code],
+      con = con
+    )
+  }
+  if (any(is.na(location_code) | trimws(location_code) == "")) {
+    stop(
+      "location_code cannot contain NA values. It is typically auto-generated by the YGwater Shiny application; provide a valid value if adding locations directly."
+    )
+  }
+
   if (any(is.na(share_with))) {
     share_with[is.na(share_with)] <- "public_reader"
   }
@@ -228,14 +236,11 @@ addACLocation <- function(
   }
 
   # Check that the location code does not already exist
-  for (i in location) {
+  for (i in location_code) {
     exists <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT location_id FROM locations WHERE LOWER(location) = '",
-        tolower(i),
-        "';"
-      )
+      "SELECT location_id FROM locations WHERE LOWER(location_code) = $1;",
+      params = list(tolower(i))
     )[1, 1]
     if (!is.na(exists)) {
       stop("There is already a location with the code ", i, ".")
@@ -246,11 +251,8 @@ addACLocation <- function(
   for (i in name) {
     exists <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT location_id FROM locations WHERE LOWER(name) = '",
-        tolower(i),
-        "';"
-      )
+      "SELECT location_id FROM locations WHERE LOWER(name) = $1;",
+      params = list(tolower(i))
     )[1, 1]
     if (!is.na(exists)) {
       stop("There is already a location with the name ", i, ".")
@@ -271,13 +273,8 @@ addACLocation <- function(
   for (i in 1:length(latitude)) {
     exists <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT location_id FROM locations WHERE latitude = ",
-        latitude[i],
-        " AND longitude = ",
-        longitude[i],
-        ";"
-      )
+      "SELECT location_id FROM locations WHERE latitude = $1 AND longitude = $2;",
+      params = list(latitude[i], longitude[i])
     )[1, 1]
     if (!is.na(exists)) {
       stop(
@@ -334,11 +331,8 @@ addACLocation <- function(
   } else {
     exists <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT datum_id FROM datum_list WHERE datum_id = ",
-        unique_datums,
-        ";"
-      )
+      "SELECT datum_id FROM datum_list WHERE datum_id = $1;",
+      params = list(unique_datums)
     )
   }
   if (length(unique_datums) != nrow(exists)) {
@@ -359,74 +353,15 @@ addACLocation <- function(
   } else {
     exists <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT type_id FROM location_types WHERE type_id = ",
-        unique_location_types,
-        ";"
-      )
+      "SELECT type_id FROM location_types WHERE type_id = $1;",
+      params = list(unique_location_types)
     )
   }
   if (length(unique_location_types) != nrow(exists)) {
     stop("At least one of the location type IDs you specified does not exist.")
   }
 
-  # Check that owner exists in the 'organizations' table
-  unique_owners <- unique(owner)
-  if (length(unique_owners) > 1) {
-    exists <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT organization_id FROM organizations WHERE organization_id IN (",
-        paste(unique_owners, collapse = ", "),
-        ");"
-      )
-    )
-  } else {
-    exists <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT organization_id FROM organizations WHERE organization_id = ",
-        unique_owners,
-        ";"
-      )
-    )
-  }
-  if (length(unique_owners) != nrow(exists)) {
-    stop(
-      "At least one of the owner IDs you specified does not exist. You can add it with function addACOrg()."
-    )
-  }
-
-  # Check that data_sharing_agreement_id exists in the 'documents' table
-  unique_data_sharing_agreements <- unique(data_sharing_agreement_id)
-  if (!is.na(unique_data_sharing_agreements)) {
-    if (length(unique_data_sharing_agreements) > 1) {
-      exists <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT document_id FROM documents WHERE document_id IN (",
-          paste(unique_data_sharing_agreements, collapse = ", "),
-          ");"
-        )
-      )
-    } else {
-      exists <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT document_id FROM documents WHERE document_id = ",
-          unique_data_sharing_agreements,
-          ";"
-        )
-      )
-    }
-    if (length(unique_data_sharing_agreements) != nrow(exists)) {
-      stop(
-        "At least one of the data sharing agreement IDs you specified does not exist."
-      )
-    }
-  }
-
-  for (i in 1:length(location)) {
+  for (i in 1:length(location_code)) {
     tryCatch(
       {
         # A transaction is NOT started here because insertACVector calls rpostgis which starts and ends its own transaction. Transaction is started after that if the vector insert was successful.
@@ -437,17 +372,14 @@ addACLocation <- function(
         # Check if there's already a point with the exact same name
         exists <- DBI::dbGetQuery(
           con,
-          paste0(
-            "SELECT geom_id, ST_Y(geom) AS latitude, ST_X(geom) AS longitude FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = '",
-            tolower(location[i]),
-            "';"
-          )
+          "SELECT geom_id, ST_Y(geom) AS latitude, ST_X(geom) AS longitude FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = $1;",
+          params = list(tolower(location_code[i]))
         )
 
         if (nrow(exists) == 0) {
           # Add the point to the table
           point <- data.frame(
-            "feature_name" = location[i],
+            "feature_name" = location_code[i],
             "description" = name[i],
             "latitude" = latitude[i],
             "longitude" = longitude[i]
@@ -469,15 +401,15 @@ addACLocation <- function(
             con,
             paste0(
               "SELECT geom_id FROM spatial.vectors WHERE layer_name = 'Locations' AND feature_name = '",
-              location[i],
+              location_code[i],
               "';"
             )
           )[1, 1]
         } else {
           geom_id <- exists$geom_id
           message(
-            "Location ",
-            location[i],
+            "Location code",
+            location_code[i],
             " already exists in the 'vectors' table."
           )
         }
@@ -488,33 +420,21 @@ addACLocation <- function(
         # Add the location to the 'locations' table ############################
         location_id <- DBI::dbGetQuery(
           con,
-          "INSERT INTO locations (location, name, name_fr, latitude, longitude, share_with, data_sharing_agreement_id, location_type, note, contact, geom_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING location_id;",
+          "INSERT INTO locations (location_code, name, name_fr, alias, latitude, longitude, share_with, location_type, note, contact, geom_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING location_id;",
           params = list(
-            location[i],
+            location_code[i],
             name[i],
             name_fr[i],
+            alias[i],
             latitude[i],
             longitude[i],
             paste0("{", paste(share_with, collapse = ", "), "}"),
-            data_sharing_agreement_id[i],
             location_type[i],
             note[i],
             contact[i],
             geom_id
           )
         )[1, 1]
-
-        # Deal with ownership information ############################
-        DBI::dbExecute(
-          con,
-          "INSERT INTO locations_metadata_owners_operators (location_id, owner, operator, start_datetime) VALUES ($1, $2, $3, $4);",
-          params = list(
-            location_id,
-            owner[i],
-            owner[i],
-            "1970-01-01"
-          )
-        )
 
         # Add the location's datum information to the 'datums' table ############################
         DBI::dbExecute(
@@ -554,7 +474,7 @@ addACLocation <- function(
 
         message(
           "Added a new entry to the locations table for location ",
-          location[i],
+          name[i],
           "."
         )
 
@@ -566,7 +486,7 @@ addACLocation <- function(
         if (active) {
           DBI::dbExecute(con, "ROLLBACK;")
         }
-        stop("Error adding location ", location[i], ": ", e$message)
+        stop("Error adding location ", name[i], ": ", e$message)
       }
     ) # end tryCatch
   } # end for loop

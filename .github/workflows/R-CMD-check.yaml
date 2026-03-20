@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {os: ubuntu-latest,   r: 'release'}
+          - {os: ubuntu-latest, r: 'release'}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -42,14 +42,40 @@ jobs:
           extra-packages: any::rcmdcheck any::R.utils
           needs: check
 
-      - name: Set up PostgreSQL 17
-        uses: ikalnytskyi/action-setup-postgres@v7
+      - name: Set up PostgreSQL 18
+        uses: ikalnytskyi/action-setup-postgres@v8
         with:
-          postgres-version: '17'
+          postgres-version: '18'
           username: runner
           password: runner
           database: testdb
-          
+                    
+      - name: Install PostGIS (incl. raster extension)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgis postgresql-18-postgis-3 postgresql-18-postgis-3-scripts
+
+      - name: Enable PostGIS extensions in testdb
+        env:
+          PGPASSWORD: runner
+        run: |
+          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS spatial;"
+          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis SCHEMA spatial;"
+          psql -h 127.0.0.1 -U runner -d testdb -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis_raster SCHEMA spatial;"
+
+      - name: Bootstrap CI roles
+        env:
+          PGPASSWORD: runner
+        run: |
+          psql -h 127.0.0.1 -U runner -d testdb -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'public_reader') THEN CREATE ROLE public_reader NOLOGIN; END IF; END \$\$;"
+          psql -h 127.0.0.1 -U runner -d testdb -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'admin') THEN CREATE ROLE admin NOLOGIN SUPERUSER; END IF; END \$\$;"
+          # Setup  postgres user as supersuser with no login to avoid issues with some CI environments that have a default postgres user
+          psql -h 127.0.0.1 -U runner -d testdb -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN CREATE ROLE postgres NOLOGIN SUPERUSER; END IF; END \$\$;"
+
+          psql -h 127.0.0.1 -U runner -d testdb -c "GRANT public_reader TO runner;"
+          psql -h 127.0.0.1 -U runner -d testdb -c "GRANT admin TO runner;"
+          psql -h 127.0.0.1 -U runner -d testdb -c "GRANT postgres TO runner;"
+
       - name: Decompress CI seed database (Uses R for cross-platform functionality)
         run: |
           Rscript -e "R.utils::gunzip('tests/testthat/fixtures/test_db.sql.gz')"

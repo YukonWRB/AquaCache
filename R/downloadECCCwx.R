@@ -173,14 +173,14 @@ downloadECCCwx <- function(
         "SELECT organization_id FROM organizations WHERE name = 'Environment and Climate Change Canada'"
       )[1, 1]
       if (is.na(organization_id)) {
-        df <- data.frame(
-          name = 'Environment and Climate Change Canada',
-          name_fr = 'Environnement et Changement Climatique Canada'
-        )
-        DBI::dbAppendTable(con, "organizations", df)
+        # Create a new organization entry for ECCC if it doesn't already exist, and get the new organization_id
         organization_id <- DBI::dbGetQuery(
           con,
-          "SELECT organization_id FROM organizations WHERE name = 'Environment and Climate Change Canada'"
+          "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
+          params = list(
+            'Environment and Climate Change Canada',
+            'Environnement et Changement Climatique Canada'
+          )
         )[1, 1]
       }
 

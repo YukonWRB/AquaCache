@@ -51,7 +51,7 @@ addNewDiscrete <- function(con, sample, results) {
   # Define a commit function that will be run within a transaction
   commit_fx <- function(con, sample, results) {
     # Insert the sample data
-    DBI::dbAppendTable(con, "samples", sample)
+    dbAppendTableRLS(con, "samples", sample)
 
     # Get the sample_id using all fields that define a unique sample
     sample_id <- DBI::dbGetQuery(
@@ -78,15 +78,33 @@ addNewDiscrete <- function(con, sample, results) {
           " AND z IS NULL",
           paste0(" AND z = ", sample$z)
         ),
-        " AND import_source = '",
-        sample$import_source,
-        "';"
+        ifelse(
+          is.null(sample$target_datetime) || is.na(sample$target_datetime),
+          " AND target_datetime IS NULL",
+          paste0(" AND target_datetime = '", sample$target_datetime, " UTC'")
+        ),
+        ifelse(
+          is.null(sample[["import_source"]]) ||
+            is.na(sample[["import_source"]]),
+          " AND import_source IS NULL",
+          paste0(" AND import_source = '", sample[["import_source"]], "'")
+        ),
+        ifelse(
+          is.null(sample[["import_source_id"]]) ||
+            is.na(sample[["import_source_id"]]),
+          " AND import_source_id IS NULL",
+          paste0(
+            " AND import_source_id = '",
+            sample[["import_source_id"]],
+            "';"
+          )
+        )
       )
     )[1, 1]
 
     # Insert the results data
     results$sample_id <- sample_id
-    DBI::dbAppendTable(con, "results", results)
+    dbAppendTableRLS(con, "results", results)
 
     return(sample_id)
   }

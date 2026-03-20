@@ -23,6 +23,7 @@
 #' @param schema The schema in which the target 'table' is located. Default is 'spatial'. Note that this is NOT the default for [rpostgis::pgWriteGeom()].
 #' @param geom_col The name of the database table column in which to insert the geometry object.
 #' @param overwrite If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?
+#' @param ask Whether to ask for user confirmation when creating a new layer_name or overwriting existing entries. Default TRUE.
 #' @param con A connection to the database. Default NULL will use the utility function [AquaConnect()] and disconnect afterwards.
 #'
 #' @return A boolean vector, one element per feature.Messages will also be printed to the console.
@@ -39,6 +40,7 @@ insertACVector <- function(
   schema = "spatial",
   geom_col = "geom",
   overwrite = FALSE,
+  ask = TRUE,
   con = NULL
 ) {
   if (is.null(con)) {
@@ -54,18 +56,22 @@ insertACVector <- function(
   )
 
   if (!layer_name %in% exist_layer_names$layer_name) {
-    message(
-      "The layer_name you specified does not exist yet. Are you sure you want to create it? The current entries are:\n",
-      paste(exist_layer_names$layer_name, collapse = "\n")
-    )
-    commit <- readline(
-      prompt = writeLines(paste(
-        "\n1: Definitely not",
-        "\n2: Maybe?",
-        "\n3: Yes, I want to create it."
-      ))
-    )
-    commit <- as.numeric(commit)
+    if (ask) {
+      message(
+        "The layer_name you specified does not exist yet. Are you sure you want to create it? The current entries are:\n",
+        paste(exist_layer_names$layer_name, collapse = "\n")
+      )
+      commit <- readline(
+        prompt = writeLines(paste(
+          "\n1: Definitely not",
+          "\n2: Maybe?",
+          "\n3: Yes, I want to create it."
+        ))
+      )
+      commit <- as.numeric(commit)
+    } else {
+      commit <- 3
+    }
     if (commit != 3) {
       stop("Allright, come back when you're ready.")
     }
@@ -245,25 +251,31 @@ insertACVector <- function(
             )
           )
           if (nrow(exist) != 0) {
-            message(
-              "There is already an entry for layer_name = ",
-              layer_name,
-              " and feature_name = ",
-              feat_name,
-              " but you didn't ask to overwrite it. Would you like to delete the old feature and replace it with the new one?"
-            )
-            agg <- readline(
-              prompt = writeLines(paste("\n1: Yes", "\n2: No way!"))
-            )
+            if (ask) {
+              message(
+                "There is already an entry for layer_name = ",
+                layer_name,
+                " and feature_name = ",
+                feat_name,
+                " but you didn't ask to overwrite it. Would you like to delete the old feature and replace it with the new one?"
+              )
+              agg <- readline(
+                prompt = writeLines(paste("\n1: Yes", "\n2: No way!"))
+              )
+            } else {
+              agg <- 2
+            }
             agg <- as.numeric(agg)
             if (agg != 1) {
-              warning(
-                "Not writing layer_name = ",
-                layer_name,
-                ", feature_name = ",
-                feat_name,
-                ". There is already an entry matching this but parameter overwrite is FALSE."
-              )
+              if (ask) {
+                warning(
+                  "Not writing layer_name = ",
+                  layer_name,
+                  ", feature_name = ",
+                  feat_name,
+                  ". There is already an entry matching this but parameter overwrite is FALSE."
+                )
+              }
               success[[i]] <- FALSE
             } else {
               DBI::dbExecute(

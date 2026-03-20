@@ -4,7 +4,12 @@
 \alias{getNewContinuous}
 \title{Get new continuous-category data}
 \usage{
-getNewContinuous(con = NULL, timeseries_id = "all", active = "default")
+getNewContinuous(
+  con = NULL,
+  timeseries_id = "all",
+  active = "default",
+  verbose = FALSE
+)
 }
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
@@ -12,6 +17,8 @@ getNewContinuous(con = NULL, timeseries_id = "all", active = "default")
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.}
 
 \item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
+
+\item{verbose}{If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.}
 }
 \value{
 The database is updated in-place, and a data.frame is generated with one row per updated location.

@@ -132,48 +132,63 @@ synchronize_discrete <- function(
   # Start of for loop ########################################################
   for (i in 1:nrow(all_series)) {
     sid <- all_series$sample_series_id[i]
-    loc_id <- all_series$location_id[i]
-    sub_loc_id <- all_series$sub_location_id[i]
-    synch_from <- all_series$synch_from[i]
-    synch_to <- all_series$synch_to[i]
-    source_fx <- all_series$source_fx[i]
-    source_fx_args <- all_series$source_fx_args[i]
-    default_owner <- all_series$default_owner[i]
-    default_contributor <- all_series$default_contributor[i]
 
-    # start/end datetime for the sample series
-    start_i <- if (!is.na(synch_from)) {
-      min(start_datetime, synch_from)
-    } else {
-      start_datetime
-    }
-    end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
-
-    # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
-    if (source_fx == "downloadEQWin" & is.null(EQCon)) {
-      EQCon <- EQConnect(silent = TRUE)
-      on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
-    }
-
-    if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
-      # Try with the same host and port as the AquaCache connection
-      dets <- DBI::dbGetQuery(
-        con,
-        "SELECT inet_server_addr() AS ip, inet_server_port() AS port"
-      )
-      snowCon <- snowConnect(host = dets$ip, port = dets$port, silent = TRUE)
-      on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
-    }
+    # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewDiscrete
+    # IMPORTANT: this lock will wait for other processes to release the lock, so if another process is stuck, this will be stuck too.
+    lock_namespace <- "aquacache_sample_series"
+    advisory_lock_acquire(
+      con = con,
+      namespace = lock_namespace,
+      key = sid,
+      wait = TRUE
+    )
 
     tryCatch(
       {
+        loc_id <- all_series$location_id[i]
+        sub_loc_id <- all_series$sub_location_id[i]
+        synch_from <- all_series$synch_from[i]
+        synch_to <- all_series$synch_to[i]
+        source_fx <- all_series$source_fx[i]
+        source_fx_args <- all_series$source_fx_args[i]
+        default_owner <- all_series$default_owner[i]
+        default_contributor <- all_series$default_contributor[i]
+
+        # start/end datetime for the sample series
+        start_i <- if (!is.na(synch_from)) {
+          min(start_datetime, synch_from)
+        } else {
+          start_datetime
+        }
+        end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
+
+        # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
+        if (source_fx == "downloadEQWin" & is.null(EQCon)) {
+          EQCon <- EQConnect(silent = TRUE)
+          on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
+        }
+
+        if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
+          # Try with the same host and port as the AquaCache connection
+          dets <- DBI::dbGetQuery(
+            con,
+            "SELECT inet_server_addr() AS ip, inet_server_port() AS port"
+          )
+          snowCon <- snowConnect(
+            host = dets$ip,
+            port = dets$port,
+            silent = TRUE
+          )
+          on.exit(DBI::dbDisconnect(snowCon), add = TRUE)
+        }
+
         args_list <- list(
           start_datetime = start_i,
           end_datetime = end_i,
           con = con
         )
         if (!is.na(source_fx_args)) {
-          #add some arguments if they are specified
+          # add some arguments if they are specified
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
         }
@@ -191,13 +206,8 @@ synchronize_discrete <- function(
           # There was no data in remote for the date range specified
           DBI::dbExecute(
             con,
-            paste0(
-              "UPDATE sample_series SET last_synchronize = '",
-              .POSIXct(Sys.time(), "UTC"),
-              "' WHERE sample_series_id = ",
-              sid,
-              ";"
-            )
+            "UPDATE sample_series SET last_synchronize = NOW() WHERE sample_series_id = $1",
+            params = list(sid)
           )
 
           next
@@ -414,6 +424,10 @@ synchronize_discrete <- function(
               ## Check sample metadata ##############
               updated_samples_flag <- FALSE
               for (k in intersect(names_inRemote_samp, valid_sample_names)) {
+                # Keep local visibility unchanged for existing samples.
+                if (k == "share_with") {
+                  next
+                }
                 inDB_k <- inDB_sample[[k]]
                 inRemote_k <- inRemote_sample[[k]]
                 # Attempt numeric conversion where possible
@@ -711,7 +725,7 @@ synchronize_discrete <- function(
 
                   # Append new values
                   sub$sample_id <- inDB_sample$sample_id
-                  DBI::dbAppendTable(con, "results", sub)
+                  dbAppendTableRLS(con, "results", sub)
 
                   new_results <- new_results + 1
                 } else if (nrow(inDB_sub) == 1) {
@@ -882,6 +896,17 @@ synchronize_discrete <- function(
               ) {
                 if (!is.na(default_contributor)) {
                   inRemote_sample$contributor <- default_contributor
+                }
+              }
+
+              # Use share_with from the source function when supplied, otherwise fall back to datatabase default
+              if ("share_with" %in% names_inRemote_samp) {
+                if (!is.list(inRemote_sample$share_with)) {
+                  inRemote_sample$share_with <- paste0(
+                    "{",
+                    paste(inRemote_sample$share_with, collapse = ", "),
+                    "}"
+                  )
                 }
               }
 
@@ -1129,6 +1154,10 @@ synchronize_discrete <- function(
           " with message: ",
           m$message
         )
+      },
+      finally = {
+        # Release the lock
+        advisory_lock_release(con, lock_namespace, sid)
       }
     ) # End of tryCatch
 
@@ -1141,14 +1170,17 @@ synchronize_discrete <- function(
     close(pb)
   }
 
-  DBI::dbExecute(
-    con,
-    paste0(
-      "UPDATE internal_status SET value = '",
-      .POSIXct(Sys.time(), "UTC"),
-      "' WHERE event = 'last_synchronize_discrete';"
-    )
+  try(
+    # In a try in case the user doesn't have update permissions on internal_status
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = NOW() WHERE event = 'last_synchronize_discrete';"
+      )
+    },
+    silent = TRUE
   )
+
   message(
     "Found ",
     new_samples,

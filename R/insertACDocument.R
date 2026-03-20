@@ -199,9 +199,11 @@ insertACDocument <- function(
   }
 
   if (!is.null(geoms)) {
-    docs_spat <- data.frame("document_id" = id, "geom_id" = exist_geoms$geom_id)
-
-    DBI::dbAppendTable(con, "documents_spatial", docs_spat)
+    DBI::dbExecute(
+      con,
+      "INSERT INTO files.documents_spatial (document_id, geom_id) VALUES ($1, $2);",
+      params = list(id, exist_geoms$geom_id)
+    )
 
     return(list(
       "success" = TRUE,

@@ -43,9 +43,9 @@ AquaConnect <- function(
       DBI::dbExecute(con, "SET timezone = 'UTC'")
 
       user <- DBI::dbGetQuery(con, "SELECT current_user;")
-      if (!user[1, 1] %in% c("postgres", "admin")) {
+      if (!user[1, 1] %in% c("postgres", "admin") && !silent) {
         message(
-          "You are not connecting to the database as a supersuer or admin. Many functions in this package require at least the 'admin' privileges."
+          "You are not connecting to the database as a superuser or admin. Many functions in this package require at least the 'admin' privileges."
         )
       }
     },
@@ -80,64 +80,58 @@ AquaConnect <- function(
     last_patch_file <- max(as.numeric(gsub("patch_|.R", "", patch_files)))
 
     if (last_patch < last_patch_file) {
-      # Check if the user is 'postgres' or 'admin', either of which should work for most patches
-      user <- DBI::dbGetQuery(con, "SELECT current_user;")
-      if (!user[1, 1] %in% c("postgres", "admin")) {
-        warning(
-          "You are not connecting as 'admin' or 'postgres' user. Please contact your database administrator to apply patches. Queries may not work as expected until patches are applied."
-        )
-      } else {
+      message(
+        "There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recommend doing so before running any functions from this package. \n 1 = apply patches now \n 2 = continue without applying patches  \n"
+      )
+      choice <- readline(prompt = "Enter 1 or 2: ")
+
+      if (choice == 1) {
         message(
-          "There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recomment doing so before running any functions from this package. \n 1 = apply patches now \n 2 = continue without applying patches  \n"
+          "It is HIGHLY recommended that your database is backed up. Take the time to do this now or make sure your automatic workflow actually did its job. \n Hit enter to continue."
         )
-        choice <- readline(prompt = "Enter 1 or 2: ")
+        readline(prompt = "")
 
-        if (choice == 1) {
-          message(
-            "It is HIGHLY recommended that your database is backed up. Take the time to do this now or make sure your automatic workflow actually did its job. \n Hit enter to continue."
-          )
-          readline(prompt = "")
-
-          # Apply patches in order
-          tryCatch(
-            {
-              for (patch in (last_patch + 1):last_patch_file) {
-                source(
-                  system.file(
-                    "patches",
-                    paste0("patch_", patch, ".R"),
-                    package = "AquaCache"
-                  ),
-                  local = TRUE
-                )
-              }
-              message("Patches applied successfully.\n")
-            },
-            error = function(e) {
-              stop(
-                "Patches not applied. An error occurred in patch ",
-                patch,
-                " : ",
-                e$message,
-                "\n"
+        # Apply patches in order
+        tryCatch(
+          {
+            for (patch in (last_patch + 1):last_patch_file) {
+              source(
+                system.file(
+                  "patches",
+                  paste0("patch_", patch, ".R"),
+                  package = "AquaCache"
+                ),
+                local = TRUE
               )
             }
-          )
-        } else if (choice == 2) {
-          warning(
-            "Patches not applied. Please apply patches before running any functions from this package.\n"
-          )
-        } else {
-          warning(
-            "Invalid choice. Patches not applied. Please apply patches before running any functions from this package.\n"
-          )
-        }
+            message("Patches applied successfully.\n")
+          },
+          error = function(e) {
+            stop(
+              "Patches not applied. An error occurred in patch ",
+              patch,
+              " : ",
+              e$message,
+              "\n"
+            )
+          }
+        )
+      } else if (choice == 2) {
+        warning(
+          "Patches not applied. Please apply patches before running any functions from this package.\n"
+        )
+      } else {
+        warning(
+          "Invalid choice. Patches not applied. Please apply patches before running any functions from this package.\n"
+        )
       }
     }
   } else {
-    warning(
-      "You are not connecting as 'admin' or 'postgres' user so no checks for applicable patches could be done.\n"
-    )
+    if (!silent) {
+      message(
+        "You are not connecting to the database as a superuser or admin, so no checks for applicable patches will be done.\n"
+      )
+    }
   }
 
   if (!silent) {

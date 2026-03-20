@@ -7,16 +7,16 @@
 adjust_grade(con, timeseries_id, data, delete = FALSE)
 }
 \arguments{
-\item{con}{A connection to the database with write privileges to the 'approvals' and 'measurements_continuous' tables.}
+\item{con}{A connection to the database with write privileges to the 'grades' and 'measurements_continuous' tables.}
 
 \item{timeseries_id}{The target timeseries_id}
 
 \item{data}{A data.frame with columns for 'datetime' and 'grade'. 'datetime' should be POSIXct and 'grade' should either character (in which case it must refer to entries in column 'grade_type_code' of table 'grade_types' or integer/numeric, in which case it must refer to column 'grade_type_id' of the same table.}
 
-\item{delete}{Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.}
+\item{delete}{Logical. If TRUE, the function will delete grades which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.}
 }
 \value{
-Modifies the 'approvals' table in the database.
+Modifies the 'grades' table in the database.
 }
 \description{
 Adjust the grade of a timeseries in the database

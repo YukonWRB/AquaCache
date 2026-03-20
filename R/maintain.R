@@ -9,7 +9,7 @@
 #' @param vacuum_full Performs a full vacuum. This takes longer and requires an exclusive lock, but can reclaim more space as tables are re-written without dead space. Default FALSE.
 #' @param timeseries_check Runs checks on data present in the timeseries table: ensures that each timeseries_id is used somewhere in the database (warns if not) and checks start and end datetimes against the data in measurement tables and adjusts if needed.
 #' @param locations_check Runs checks on the data present in the locations table: Ensures that each location is used somewhere in the database (warns if not) and makes sure that each location has an associated point in the 'vectors' table.
-#' @param visibility_check Checks all tables that have colums for 'whare_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.
+#' @param visibility_check Checks all tables that have colums for 'share_with' AND 'private_expiry'. For rows where share_with != 'public_reader' AND private_expiry is NOT NULL, a check is made if the expiry datetime has been reached. If after the private_expiry date, the record visibility is modified to 'public_reader' and private_expiry set to NULL.
 #'
 #' @return TRUE if completed successfully, possibly with messages and warnings printed to the console.
 #' @export
@@ -33,14 +33,18 @@ maintain <- function(
     } else {
       DBI::dbExecute(con, "VACUUM (ANALYZE)")
     }
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE internal_status SET value = '",
-        .POSIXct(Sys.time(), "UTC"),
-        "' WHERE event = 'last_vacuum';"
-      )
+
+    try(
+      # In a try in case the user doesn't have update permissions on internal_status
+      {
+        DBI::dbExecute(
+          con,
+          "UPDATE internal_status SET value = NOW() WHERE event = 'last_vacuum';"
+        )
+      },
+      silent = TRUE
     )
+
     message("Database vacuum completed")
   }
 
@@ -164,7 +168,7 @@ maintain <- function(
 
     for (i in 1:nrow(loc_tbl)) {
       locid <- loc_tbl$location_id[i]
-      loc_name <- loc_tbl$location[i]
+      loc_name <- loc_tbl$name[i]
 
       # Check if location is used in any other table
       # Loop over all tables listed in 'refs' until a reference to 'locid' is found
@@ -207,7 +211,7 @@ maintain <- function(
         con,
         paste0(
           "SELECT COUNT(*) FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = '",
-          tolower(loc_tbl$location[i]),
+          tolower(loc_tbl$location_code[i]),
           "';"
         )
       )
@@ -221,7 +225,7 @@ maintain <- function(
         )
         # Create a new entry in the vectors table
         point <- data.frame(
-          "feature_name" = loc_tbl$location[i],
+          "feature_name" = loc_tbl$location_code[i],
           "description" = loc_tbl$name[i],
           "latitude" = loc_tbl$latitude[i],
           "longitude" = loc_tbl$longitude[i]
@@ -246,13 +250,13 @@ maintain <- function(
   if (visibility_check) {
     # get tables that have BOTH share_with (text[]) and private_expiry (date)
     sql <- "
-SELECT table_schema, table_name
-FROM information_schema.columns
-WHERE (column_name IN ('share_with','private_expiry'))
-  AND table_schema NOT IN ('pg_catalog','information_schema')
-GROUP BY table_schema, table_name
-HAVING COUNT(DISTINCT column_name) = 2;
-"
+      SELECT table_schema, table_name
+      FROM information_schema.columns
+      WHERE (column_name IN ('share_with','private_expiry'))
+        AND table_schema NOT IN ('pg_catalog','information_schema')
+      GROUP BY table_schema, table_name
+      HAVING COUNT(DISTINCT column_name) = 2;
+      "
     tbls <- DBI::dbGetQuery(con, sql)
 
     for (k in seq_len(nrow(tbls))) {

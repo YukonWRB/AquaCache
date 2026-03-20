@@ -267,7 +267,7 @@ insertACBorehole <- function(
     ifelse(
       is.null(purpose_of_borehole),
       "NULL",
-      paste0("'", purpose_of_borehole, "'")
+      purpose_of_borehole
     ),
     ", ",
     purpose_borehole_inferred,
@@ -316,7 +316,7 @@ insertACBorehole <- function(
       ifelse(
         is.null(purpose_of_well),
         "NULL",
-        paste0("'", purpose_of_well, "'")
+        purpose_of_well
       ),
       ", ",
       purpose_well_inferred,

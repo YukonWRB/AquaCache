@@ -5,7 +5,7 @@
 \title{Add new image series (auto-fetched)}
 \usage{
 addACImageSeries(
-  location,
+  location_id,
   start_datetime,
   source_fx,
   source_fx_args = NA,
@@ -14,7 +14,7 @@ addACImageSeries(
 )
 }
 \arguments{
-\item{location}{The location or location_id associated with the image series. Pass a location code as text and a location_id as a numeric.}
+\item{location_id}{The location_id associated with the image series.}
 
 \item{start_datetime}{The datetime (as POSIXct) from which to look for images}
 

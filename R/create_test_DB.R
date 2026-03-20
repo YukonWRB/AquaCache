@@ -44,8 +44,9 @@ create_test_db <- function(
   # host <- Sys.getenv("aquacacheHost")
   # port <- Sys.getenv("aquacachePort")
   # username <- "postgres"
+  # replace <- TRUE
   # password <- Sys.getenv("aquacacheAdminPass")
-  # outpath <- "choose"
+  # outpath <- testthat::test_path("fixtures")
   # pg_dump <- "C:/Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe"
   # psql <- "C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe"
   # continuous_locations <- NULL
@@ -228,12 +229,12 @@ create_test_db <- function(
   # Set the search path (takes effect at next connection)
   DBI::dbExecute(
     test_con,
-    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, instruments, information;"
+    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
   )
   # Update the search path for this session
   DBI::dbExecute(
     test_con,
-    "SET search_path TO public, continuous, discrete, spatial, files, instruments, information;"
+    "SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
   )
 
   message("Loading ancillary tables...")
@@ -261,7 +262,9 @@ create_test_db <- function(
     "public.parameter_groups",
     "public.parameter_sub_groups",
     "public.qualifier_types",
-    "public.organizations"
+    "public.organizations",
+    "public.languages",
+    "spatial.raster_types"
   )
 
   # Load the ancillary tables into the test database using DBI
@@ -269,8 +272,7 @@ create_test_db <- function(
     message("Loading table ", tbl, " into the test database...")
 
     # Read the table from the original database
-    query <- paste0("SELECT * FROM ", tbl, ";")
-    data <- DBI::dbGetQuery(con, query)
+    data <- DBI::dbGetQuery(con, paste0("SELECT * FROM ", tbl))
 
     # Write the table to the test database
     DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
@@ -281,7 +283,7 @@ create_test_db <- function(
     # Find the locations for the Liard River at upper crossing and Marsh Lake, plus Tagish meteorological
     continuous_locations <- DBI::dbGetQuery(
       con,
-      "SELECT DISTINCT(location_id) FROM timeseries WHERE location IN ('09EA004', '09AB004', '09AA-M1', '48168')"
+      "SELECT DISTINCT(t.location_id) FROM timeseries t JOIN locations l ON t.location_id = l.location_id WHERE l.location_code IN ('09EA004', '09AB004', '09AA-M1', '48168') OR l.alias IN ('09EA004', '09AB004', '09AA-M1', '48168')"
     )$location_id
   }
   if (is.null(discrete_locations)) {
@@ -448,10 +450,36 @@ create_test_db <- function(
 
       corr <- DBI::dbGetQuery(
         con,
-        sprintf("SELECT * FROM corrections WHERE timeseries_id IN (%s)", ts_ids)
+        sprintf(
+          "SELECT * FROM continuous.corrections WHERE timeseries_id IN (%s)",
+          ts_ids
+        )
       )
       message("Loading table continuous.corrections into the test database")
       DBI::dbAppendTable(test_con, "corrections", corr)
+
+      message(
+        "Loading continuous.timeseries_data_sharing_agreements into the test database"
+      )
+      agreements <- DBI::dbGetQuery(
+        con,
+        "SELECT * FROM continuous.timeseries_data_sharing_agreements"
+      )
+      DBI::dbAppendTable(
+        test_con,
+        "timeseries_data_sharing_agreements",
+        agreements
+      )
+
+      message("Loading public.location_names into the test database")
+      location_names <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT * FROM public.location_names WHERE location_id IN (%s)",
+          paste(locations, collapse = ",")
+        )
+      )
+      DBI::dbAppendTable(test_con, "location_names", location_names)
     } else {
       warning("No continuous timeseries found for the specified locations.")
     }
@@ -548,7 +576,7 @@ create_test_db <- function(
     "-- ensure search_path is set when restoring the database",
     "DO $$",
     "BEGIN",
-    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete,spatial, files,  boreholes, instruments, information;', current_database());",
+    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;', current_database());",
     "END$$;",
     sep = "\n"
   )

@@ -58,7 +58,7 @@ insertACModelRaster <- function(
   tryCatch(
     {
       if (inherits(valid_from, "character") & nchar(valid_from) > 10) {
-        #Does not necessarily default to 0 hour.
+        # Does not necessarily default to 0 hour.
         valid_from <- as.POSIXct(valid_from, tz = "UTC")
       } else if (inherits(valid_from, "POSIXct")) {
         attr(valid_from, "tzone") <- "UTC"
@@ -66,7 +66,7 @@ insertACModelRaster <- function(
         inherits(valid_from, "Date") |
           (inherits(valid_from, "character") & nchar(valid_from) == 10)
       ) {
-        #defaults to 0 hour
+        # defaults to 0 hour
         valid_from <- as.POSIXct(valid_from, tz = "UTC")
       } else {
         stop("Parameter valid_from could not be coerced to POSIXct.")
@@ -81,7 +81,7 @@ insertACModelRaster <- function(
   tryCatch(
     {
       if (inherits(valid_to, "character") & nchar(valid_to) > 10) {
-        #Does not necessarily default to 0 hour.
+        # Does not necessarily default to 0 hour.
         valid_to <- as.POSIXct(valid_to, tz = "UTC")
       } else if (inherits(valid_to, "POSIXct")) {
         attr(valid_to, "tzone") <- "UTC"
@@ -89,7 +89,7 @@ insertACModelRaster <- function(
         inherits(valid_to, "Date") |
           (inherits(valid_to, "character") & nchar(valid_to) == 10)
       ) {
-        #defaults to very end of day
+        # defaults to very end of day
         valid_to <- as.POSIXct(valid_to, tz = "UTC")
         valid_to <- valid_to + 60 * 60 * 23.9999
       } else {
@@ -106,7 +106,7 @@ insertACModelRaster <- function(
     tryCatch(
       {
         if (inherits(issued, "character") & nchar(issued) > 10) {
-          #Does not necessarily default to 0 hour.
+          # Does not necessarily default to 0 hour.
           issued <- as.POSIXct(issued, tz = "UTC")
         } else if (inherits(issued, "POSIXct")) {
           attr(issued, "tzone") <- "UTC"
@@ -114,7 +114,7 @@ insertACModelRaster <- function(
           inherits(issued, "Date") |
             (inherits(issued, "character") & nchar(issued) == 10)
         ) {
-          #defaults to very end of day
+          # defaults to very end of day
           issued <- as.POSIXct(issued, tz = "UTC")
           issued <- issued + 60 * 60 * 23.9999
         } else {
@@ -134,7 +134,7 @@ insertACModelRaster <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
-  #Make sure that if units are provided that there's either one total or 1 per band
+  # Make sure that if units are provided that there's either one total or 1 per band
   if (!is.null(units)) {
     if (!inherits(units, "character")) {
       stop("Parameter units must be specified as a character vector.")
@@ -167,23 +167,23 @@ insertACModelRaster <- function(
       con,
       paste0("{{", paste(names(raster), collapse = "},{"), "}}")
     )
-    entry <- data.frame(
-      "raster_series_id" = raster_series_id,
-      "type" = "model",
-      "model" = model,
-      "band_names" = bnds,
-      "units" = units,
-      "valid_from" = valid_from,
-      "valid_to" = valid_to,
-      "issued" = issued,
-      "source" = source,
-      "description" = description,
-      "flag" = flag
-    )
-    DBI::dbAppendTable(con, "rasters_reference", entry)
+    type_id <- DBI::dbGetQuery(con, paste0("SELECT raster_type_id FROM raster_series_index WHERE raster_series_id = ", raster_series_id))
     new_id <- DBI::dbGetQuery(
       con,
-      "SELECT max(reference_id) FROM rasters_reference"
+      "INSERT INTO spatial.rasters_reference (raster_series_id, raster_type_id, model, band_names, units, valid_from, valid_to, issued, source, description, flag) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING reference_id;",
+      params = list(
+        raster_series_id,
+        type_id,
+        model,
+        bnds,
+        units,
+        valid_from,
+        valid_to,
+        issued,
+        source,
+        description,
+        flag
+      )
     )[1, 1]
 
     DBI::dbExecute(

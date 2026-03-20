@@ -4,15 +4,14 @@
 #'
 #' Brings in pared-down snow course data to the database. Can automatically calculate an offset value where locations have operated in parallel in anticipation of replacing the old location with a nearby new one, updating the calculation with each new data point (see parameter old_loc).
 #'
-#' @param location The location code associated with the snow course.
-#' @param sub_location The sub-location code associated with the snow course (leave NULL if not applicable).
+#' @param location The location code associated with the snow course in the snow database,  should match locations.location_code in the aquacache database (locations.alias is checked as a fallback).
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param old_loc In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.
 #' @param adjust_start The start date or datetime to use for the adjustment of the old location data. If NULL, the start date of the new location will be used. To have no adjustment, set adjust_start and adjust_end to the same date/datetime
 #' @param adjust_end The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.
-#' @param share_with Which user groups to share the data with. Default is 'yg_reader'; set to 'public_reader' to share publicly.
-#' @param con A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
+#' @param share_with Which user groups to share the data with. Default is 'yg_reader_group'; set to 'public_reader' to share publicly. This does not affect samples which already exist and are being refreshed/replaced. For multiple groups, specify as a character vector, e.g. c('yg_reader_group', 'public_reader').
+#' @param con A connection to the aquacache database. a connection will be attempted using AquaConnect().
 #' @param snowCon A connection to the snow database.
 #'
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
@@ -20,13 +19,12 @@
 
 downloadSnowCourse <- function(
   location,
-  sub_location = NULL,
   start_datetime,
   end_datetime = Sys.time(),
   old_loc = NULL,
   adjust_start = NULL,
   adjust_end = NULL,
-  share_with = 'yg_reader',
+  share_with = 'yg_reader_group',
   con = NULL,
   snowCon = snowConnect()
 ) {
@@ -105,11 +103,11 @@ downloadSnowCourse <- function(
   )[1, 1]
   sample_owner <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';"
+    "SELECT organization_id FROM organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship';"
   )[1, 1]
   sample_contributor <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE LOWER(name) = 'yukon department of environment, water resources branch';"
+    "SELECT organization_id FROM organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship%';"
   )[1, 1]
   sample_collect_method <- DBI::dbGetQuery(
     con,
@@ -130,11 +128,8 @@ downloadSnowCourse <- function(
 
   location_id <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT location_id FROM locations WHERE location = '",
-      location,
-      "';"
-    )
+    "SELECT location_id FROM locations WHERE LOWER(location_code) = $1 OR LOWER(alias) = $1;",
+    params = list(tolower(location))
   )[1, 1]
 
   # See if we need to adjust the old location data ############################
@@ -364,9 +359,9 @@ downloadSnowCourse <- function(
             collection_method = sample_collect_method,
             media_id = media_id,
             import_source = "downloadSnowCourse",
-            share_with = paste0("{", share_with, "}")
+            share_with = paste0("{", paste(share_with, collapse = ","), "}")
           )
-          DBI::dbAppendTable(con, "samples", df)
+          dbAppendTableRLS(con, "samples", df)
 
           # Fetch the new id
           adj_sample_id <- DBI::dbGetQuery(
@@ -544,7 +539,7 @@ downloadSnowCourse <- function(
             media_id = media_id,
             import_source = "downloadSnowCourse"
           )
-          DBI::dbAppendTable(con, "samples", df)
+          dbAppendTableRLS(con, "samples", df)
 
           # Fetch the new id
           adj_sample_id <- DBI::dbGetQuery(
@@ -700,7 +695,7 @@ downloadSnowCourse <- function(
   ls <- list()
   for (i in 1:nrow(new_surveys)) {
     sample <- new_surveys[i, ]
-    #Get the measurements for each survey
+    # Get the measurements for each survey
     meas <- DBI::dbGetQuery(
       snowCon,
       paste0(
@@ -733,6 +728,8 @@ downloadSnowCourse <- function(
     sample$contributor <- sample_contributor
     sample$collection_method <- sample_collect_method
     sample$media_id <- media_id
+    sample$share_with <- paste0("{", paste(share_with, collapse = ","), "}")
+    sample$location <- NULL # Don't need to return location as it's already in the database and we have the location_id
 
     ls[[i]] <- list(sample = sample, results = meas)
   }
