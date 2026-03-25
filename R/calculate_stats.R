@@ -903,6 +903,11 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
               first_instance_no_stats$timeseries_id <- i
               first_instance_no_stats$max <- first_instance_no_stats$min <- first_instance_no_stats$value
               first_instance_no_stats$doy_count <- 1
+              first_instance_no_stats <- select_changed_daily_stats(
+                con,
+                i,
+                first_instance_no_stats
+              )
 
               # Now commit the changes to the database
               commit_fx1 <- function(
@@ -911,21 +916,23 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
                 first_instance_no_stats,
                 missing_stats
               ) {
-                DBI::dbExecute(
-                  con,
-                  paste0(
-                    "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-                    i,
-                    " AND date IN ('",
-                    paste(first_instance_no_stats$date, collapse = "', '"),
-                    "')"
+                if (nrow(first_instance_no_stats) > 0) {
+                  DBI::dbExecute(
+                    con,
+                    paste0(
+                      "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
+                      i,
+                      " AND date IN ('",
+                      paste(first_instance_no_stats$date, collapse = "', '"),
+                      "')"
+                    )
                   )
-                )
-                dbAppendTableRLS(
-                  con,
-                  "measurements_calculated_daily",
-                  first_instance_no_stats
-                )
+                  dbAppendTableRLS(
+                    con,
+                    "measurements_calculated_daily",
+                    first_instance_no_stats
+                  )
+                }
                 if (nrow(missing_stats) == 0) {
                   # If < 1 year of data exists, there might not be anything left in missing_stats but first instance data is still being appended.
                   DBI::dbExecute(
@@ -1104,44 +1111,31 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
         {
           missing_stats <- missing_stats[order(missing_stats$date), ]
           missing_stats <- inf_to_na(missing_stats) # Occasionally % historic range is dividing by zero (snowpack), so this replaces Inf, -Inf with NAs
-          # Construct the SQL DELETE query. This is done in a manner that can't delete rows where there are no calculated stats even if they are between the start and end date of missing_stats.
-          delete_query <- paste0(
-            "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
+          missing_stats_to_write <- select_changed_daily_stats(
+            con,
             i,
-            " AND date BETWEEN '",
-            min(missing_stats$date),
-            "' AND '",
-            max(missing_stats$date),
-            "'"
+            missing_stats
           )
-          remaining_dates <- as.Date(
-            setdiff(
-              seq.Date(
-                min(as.Date(missing_stats$date)),
-                max(as.Date(missing_stats$date)),
-                by = "day"
-              ),
-              as.Date(missing_stats$date)
-            ),
-            origin = "1970-01-01"
-          )
-          if (length(remaining_dates) > 0) {
-            delete_query <- paste0(
-              delete_query,
-              " AND date NOT IN ('",
-              paste(remaining_dates, collapse = "','"),
-              "')"
-            )
-          }
 
           # Now commit the changes to the database
-          commit_fx2 <- function(con, delete_query, missing_stats, i) {
-            DBI::dbExecute(con, delete_query)
-            dbAppendTableRLS(
-              con,
-              "measurements_calculated_daily",
-              missing_stats
-            ) # Append the missing_stats data to the measurements_calculated_daily table
+          commit_fx2 <- function(con, missing_stats_to_write, i) {
+            if (nrow(missing_stats_to_write) > 0) {
+              DBI::dbExecute(
+                con,
+                paste0(
+                  "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
+                  i,
+                  " AND date IN ('",
+                  paste(missing_stats_to_write$date, collapse = "', '"),
+                  "')"
+                )
+              )
+              dbAppendTableRLS(
+                con,
+                "measurements_calculated_daily",
+                missing_stats_to_write
+              ) # Append the recalculated stats that actually changed
+            }
             DBI::dbExecute(
               con,
               "UPDATE timeseries SET last_daily_calculation = NOW() WHERE timeseries_id = $1",
@@ -1154,7 +1148,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
           if (active) {
             tryCatch(
               {
-                commit_fx2(con, delete_query, missing_stats, i)
+                commit_fx2(con, missing_stats_to_write, i)
                 DBI::dbExecute(con, "COMMIT;")
               },
               error = function(e) {
@@ -1163,7 +1157,7 @@ calculate_stats <- function(con = NULL, timeseries_id, start_recalc = NULL) {
             )
           } else {
             # we're already in a transaction
-            commit_fx2(con, delete_query, missing_stats, i)
+            commit_fx2(con, missing_stats_to_write, i)
           }
         },
         error = function(e) {
