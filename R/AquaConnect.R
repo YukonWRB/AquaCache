@@ -141,5 +141,14 @@ AquaConnect <- function(
     message("Remember to disconnect using DBI::dbDisconnect when finished!")
   }
 
+  if (interactive) {
+    DBI::dbExecute(con, "SET application_name = 'R interactive - AquaCache';")
+  } else {
+    DBI::dbExecute(
+      con,
+      "SET application_name = 'R non-interactive - AquaCache';"
+    )
+  }
+
   return(con)
 }
