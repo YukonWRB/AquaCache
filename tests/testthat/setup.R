@@ -56,20 +56,26 @@ sync_test_sequences <- function(con) {
       max_id bigint;
     BEGIN
       FOR rec IN
+        WITH sequence_columns AS (
+          SELECT
+            cols.table_schema,
+            cols.table_name,
+            cols.column_name,
+            pg_get_serial_sequence(
+              format('%I.%I', cols.table_schema, cols.table_name),
+              cols.column_name
+            ) AS sequence_name
+          FROM information_schema.columns cols
+          WHERE cols.table_schema NOT IN ('pg_catalog', 'information_schema')
+        )
         SELECT
-          cols.table_schema,
-          cols.table_name,
-          cols.column_name,
-          pg_get_serial_sequence(
-            format('%I.%I', cols.table_schema, cols.table_name),
-            cols.column_name
-          ) AS sequence_name
-        FROM information_schema.columns cols
-        WHERE cols.table_schema NOT IN ('pg_catalog', 'information_schema')
-          AND pg_get_serial_sequence(
-            format('%I.%I', cols.table_schema, cols.table_name),
-            cols.column_name
-          ) IS NOT NULL
+          table_schema,
+          table_name,
+          column_name,
+          sequence_name
+        FROM sequence_columns
+        WHERE sequence_name IS NOT NULL
+          AND has_sequence_privilege(sequence_name, 'UPDATE')
       LOOP
         EXECUTE format(
           'SELECT COALESCE(MAX(%1$I), 0) FROM %2$I.%3$I',
