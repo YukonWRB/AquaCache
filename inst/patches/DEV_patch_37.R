@@ -2402,8 +2402,14 @@ tryCatch(
     DBI::dbExecute(con, "REVOKE ALL ON SCHEMA audit FROM PUBLIC;")
 
     audit_roles <- DBI::dbGetQuery(con, "SELECT rolname FROM pg_roles;")$rolname # Used later on to target role-specific permissions
-    audit_editor_roles <- intersect(c("yg_editor_group", "yg_editor"), audit_roles)
-    audit_reader_roles <- intersect(c("yg_reader_group", "yg_reader"), audit_roles)
+    audit_editor_roles <- intersect(
+      c("yg_editor_group", "yg_editor"),
+      audit_roles
+    )
+    audit_reader_roles <- intersect(
+      c("yg_reader_group", "yg_reader"),
+      audit_roles
+    )
 
     DBI::dbExecute(
       con,
@@ -2794,9 +2800,9 @@ tryCatch(
          -- Ignore automatically maintained sync timestamps on timeseries
          IF TG_TABLE_SCHEMA = 'continuous' AND TG_TABLE_NAME = 'timeseries' THEN
            v_old_data := v_old_data
-             - 'last_new_data' - 'last_synchronize' - 'last_daily_calculation';
+             - 'last_new_data' - 'last_synchronize' - 'last_daily_calculation' - 'end_datetime' - 'start_datetime' - 'last_synchronize' - 'last_new_data' - 'last_daily_calculation';
            v_new_data := v_new_data
-             - 'last_new_data' - 'last_synchronize' - 'last_daily_calculation';
+             - 'last_new_data' - 'last_synchronize' - 'last_daily_calculation' - 'end_datetime' - 'start_datetime' - 'last_synchronize' - 'last_new_data' - 'last_daily_calculation';
          END IF;
 
          v_changed_fields := audit.jsonb_changed_fields(v_old_data, v_new_data);

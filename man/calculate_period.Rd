@@ -7,14 +7,14 @@
 calculate_period(data, timeseries_id, con = NULL)
 }
 \arguments{
-\item{data}{The data.frame or data.table for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value' and 'timeseries'. Other columns will be ignored as these are not found in the database.}
+\item{data}{The data.frame or data.table for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value' and 'timeseries'. Other columns will be dropped as these are not found in the database.}
 
 \item{timeseries_id}{The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided \code{data}. This CAN be NA for the edge use case of creating a new timeseries.}
 
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. Used to fetch any rows that don't have a period calculated yet, or to fetch additional rows if too few exist to conclusively calculate a period.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. Used to fetch any rows that don't have a period calculated yet, or to fetch additional rows if too few exist to conclusively calculate a period. If you don't want to connect to the database, specify \code{timeseries_id = NA}.}
 }
 \value{
-A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
+A data.table or data.frame (depending on input) with calculated periods as ISO8601 formatted strings in a column named 'period'. Extra data fetched from the database, if applicable, is not returned \strong{unless} it was missing a period, in which case it is returned with the newly calculated period. The returned data.table/data.frame has the same columns as the input \code{data} (with the addition of 'period') and is ordered by datetime.
 }
 \description{
 Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the aquacache DB to fetch missing data points or to pull additional data in case of ambiguity.

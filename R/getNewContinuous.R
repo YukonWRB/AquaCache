@@ -195,6 +195,13 @@ getNewContinuous <- function(
             )
           }
 
+          # Keep getNewContinuous limited to truly new rows even if the source
+          # rounds the request boundary or calculate_period later needs history.
+          ts <- ts[ts$datetime >= last_data_point, , drop = FALSE]
+        }
+
+        if (nrow(ts) > 0) {
+
           ts$timeseries_id <- tsid
           ts$imputed <- FALSE
 
@@ -262,7 +269,47 @@ getNewContinuous <- function(
               (aggregation_type != "instantaneous") & !("period" %in% names(ts))
             ) {
               # aggregation_types of mean, median, min, max should all have a period
-              ts <- calculate_period(data = ts, timeseries_id = tsid, con = con)
+              requested_datetimes <- ts$datetime
+              ts_period <- calculate_period(
+                data = ts,
+                timeseries_id = tsid,
+                con = con
+              )
+              # calculate_period may pull existing rows for context; update
+              # their missing periods in place, then keep only fetched rows.
+              no_period <- dbGetQueryDT(
+                con,
+                paste0(
+                  "SELECT datetime FROM measurements_continuous WHERE timeseries_id = ",
+                  tsid,
+                  " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ",
+                  tsid,
+                  ") AND datetime NOT IN ('",
+                  paste(requested_datetimes, collapse = "', '"),
+                  "');"
+                )
+              )
+              if (nrow(no_period) > 0 && "period" %in% names(ts_period)) {
+                no_period$period <- ts_period$period[match(
+                  no_period$datetime,
+                  ts_period$datetime
+                )]
+                no_period <- no_period[!is.na(no_period$period), , drop = FALSE]
+                if (nrow(no_period) > 0) {
+                  for (j in seq_len(nrow(no_period))) {
+                    DBI::dbExecute(
+                      con,
+                      "UPDATE measurements_continuous SET period = $1 WHERE datetime = $2 AND timeseries_id = $3",
+                      params = list(
+                        no_period$period[j],
+                        no_period$datetime[j],
+                        tsid
+                      )
+                    )
+                  }
+                }
+              }
+              ts <- ts_period[ts_period$datetime %in% requested_datetimes, , drop = FALSE]
             } else {
               # Check to make sure that the supplied period can actually be coerced to a period
               check <- lubridate::period(unique(ts$period))
@@ -271,18 +318,6 @@ getNewContinuous <- function(
               }
             }
 
-            if (min(ts$datetime) < last_data_point - 1) {
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "DELETE FROM measurements_continuous WHERE datetime >= '",
-                  min(ts$datetime),
-                  "' AND timeseries_id = ",
-                  tsid,
-                  ";"
-                )
-              )
-            }
             dbAppendTableRLS(con, "measurements_continuous", ts)
             # make the new entry into table timeseries
             DBI::dbExecute(
