@@ -446,3 +446,34 @@ select_changed_daily_stats <- function(con, timeseries_id, rows) {
 
   rows[changed, , drop = FALSE]
 }
+
+#' @title Resolve matrix state ID for discrete results
+#' @description
+#' Utility function to resolve the matrix state ID for discrete results based on the sample_media_id, parameter_id, and optionally an existing matrix_state_id. If the matrix_state_id is provided and not NA, it is returned as is. If the matrix_state_id is NA, the function calls a database function `public.resolve_matrix_state_id` to determine the appropriate matrix_state_id based on the sample_media_id and parameter_id. This is used to ensure that discrete results have the correct matrix state ID assigned, which may be necessary for certain calculations or analyses.
+#' @param con A database connection object.
+#' @param sample_media_id The sample_media_id for the discrete result.
+#' @param parameter_id The parameter_id for the discrete result.
+#' @param matrix_state_id An optional existing matrix_state_id for the discrete result. If provided and not NA, this value will be returned as is. If NA, the function will attempt to resolve the matrix_state_id using the database function.
+#' @return An integer matrix_state_id for the discrete result, either the provided matrix_state_id if it was not NA, or the resolved matrix_state_id from the database function if the provided matrix_state_id was NA.
+#' @noRd
+#' @keywords internal
+resolve_discrete_result_matrix_state <- function(
+  con,
+  sample_media_id,
+  parameter_id,
+  matrix_state_id = NA_integer_
+) {
+  sample_media_id <- suppressWarnings(as.integer(sample_media_id))
+  parameter_id <- suppressWarnings(as.integer(parameter_id))
+  matrix_state_id <- suppressWarnings(as.integer(matrix_state_id))
+
+  if (!is.na(matrix_state_id)) {
+    return(matrix_state_id)
+  }
+
+  DBI::dbGetQuery(
+    con,
+    "SELECT public.resolve_matrix_state_id($1, $2, $3) AS matrix_state_id;",
+    params = list(sample_media_id, parameter_id, matrix_state_id)
+  )[1, 1]
+}

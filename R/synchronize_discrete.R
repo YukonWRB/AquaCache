@@ -489,10 +489,30 @@ synchronize_discrete <- function(
               for (k in 1:nrow(inRemote_results)) {
                 sub <- inRemote_results[k, ]
                 names_inRemote_sub <- names(sub)
-                # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, sample_fraction_id, result_value_type, result_speciation_id, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
+                resolved_sub_matrix_state_id <-
+                  resolve_discrete_result_matrix_state(
+                    con = con,
+                    sample_media_id = inDB_sample$media_id,
+                    parameter_id = sub$parameter_id,
+                    matrix_state_id = if (
+                      "matrix_state_id" %in% names_inRemote_sub
+                    ) {
+                      sub$matrix_state_id
+                    } else {
+                      NA_integer_
+                    }
+                  )
+                # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, matrix_state_id, sample_fraction_id, result_value_type, result_speciation_id, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
 
                 idx <- inDB_results$result_type == sub$result_type &
                   inDB_results$parameter_id == sub$parameter_id
+                idx <- idx &
+                  if (!is.na(resolved_sub_matrix_state_id)) {
+                    inDB_results$matrix_state_id ==
+                      resolved_sub_matrix_state_id
+                  } else {
+                    is.na(inDB_results$matrix_state_id)
+                  }
                 idx <- idx &
                   (if (
                     "result_value_type" %in%
@@ -725,6 +745,7 @@ synchronize_discrete <- function(
 
                   # Append new values
                   sub$sample_id <- inDB_sample$sample_id
+                  sub$matrix_state_id <- resolved_sub_matrix_state_id
                   dbAppendTableRLS(con, "results", sub)
 
                   new_results <- new_results + 1
