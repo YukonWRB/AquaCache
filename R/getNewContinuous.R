@@ -195,13 +195,11 @@ getNewContinuous <- function(
             )
           }
 
-          # Keep getNewContinuous limited to truly new rows even if the source
-          # rounds the request boundary or calculate_period later needs history.
+          # Keep getNewContinuous limited to truly new rows even if the source rounds the request boundary or calculate_period later needs history.
           ts <- ts[ts$datetime >= last_data_point, , drop = FALSE]
         }
 
         if (nrow(ts) > 0) {
-
           ts$timeseries_id <- tsid
           ts$imputed <- FALSE
 
@@ -309,7 +307,11 @@ getNewContinuous <- function(
                   }
                 }
               }
-              ts <- ts_period[ts_period$datetime %in% requested_datetimes, , drop = FALSE]
+              ts <- ts_period[
+                ts_period$datetime %in% requested_datetimes,
+                ,
+                drop = FALSE
+              ]
             } else {
               # Check to make sure that the supplied period can actually be coerced to a period
               check <- lubridate::period(unique(ts$period))
