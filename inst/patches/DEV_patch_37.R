@@ -2356,6 +2356,42 @@ tryCatch(
        EXECUTE FUNCTION public.check_instrument_transmission_capabilities();"
     )
 
+    # Clean up some legacy columns called 'updated', which duplicate column 'modified' and cause confusion and bloat. These are all not necessary.
+    # Find all tables where there's a column called 'updated' AND a column called 'modified'
+    updated <- DBI::dbGetQuery(
+      con,
+      "SELECT table_schema, table_name
+                             FROM information_schema.columns
+                             WHERE column_name = 'updated';"
+    )
+    modified <- DBI::dbGetQuery(
+      con,
+      "SELECT table_schema, table_name
+                             FROM information_schema.columns
+                             WHERE column_name = 'modified';"
+    )
+    modified <- modified[modified$table_name %in% updated$table_name, ]
+
+    # Delete the 'updated' columns from the offending tables
+    for (i in seq_len(nrow(modified))) {
+      schema <- modified$table_schema[i]
+      table <- modified$table_name[i]
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER TABLE %s.%s DROP COLUMN IF EXISTS updated;",
+          schema,
+          table
+        )
+      )
+    }
+
+    # Drop function 'public.update_updated'
+    DBI::dbExecute(
+      con,
+      "DROP FUNCTION IF EXISTS public.update_updated() CASCADE;"
+    )
+
     # Add audit tables for key data ###########
     # Two-part approach:
     # 1) a generic audit table for moderate-volume metadata tables, and
@@ -2365,7 +2401,9 @@ tryCatch(
     DBI::dbExecute(con, "ALTER SCHEMA audit OWNER TO admin;")
     DBI::dbExecute(con, "REVOKE ALL ON SCHEMA audit FROM PUBLIC;")
 
-    audit_roles <- DBI::dbGetQuery(con, "SELECT rolname FROM pg_roles;")$rolname # Used later on to target 'yg_XXX' roles with permissions
+    audit_roles <- DBI::dbGetQuery(con, "SELECT rolname FROM pg_roles;")$rolname # Used later on to target role-specific permissions
+    audit_editor_roles <- intersect(c("yg_editor_group", "yg_editor"), audit_roles)
+    audit_reader_roles <- intersect(c("yg_reader_group", "yg_reader"), audit_roles)
 
     DBI::dbExecute(
       con,
@@ -2624,28 +2662,48 @@ tryCatch(
        REVOKE ALL ON SEQUENCES FROM PUBLIC;"
     )
 
-    if ("yg_editor" %in% audit_roles) {
-      DBI::dbExecute(con, "GRANT USAGE ON SCHEMA audit TO yg_editor;")
+    for (role_name in audit_editor_roles) {
+      quoted_role <- as.character(DBI::dbQuoteIdentifier(con, role_name))
       DBI::dbExecute(
         con,
-        "GRANT SELECT ON ALL TABLES IN SCHEMA audit TO yg_editor;"
+        sprintf("GRANT USAGE ON SCHEMA audit TO %s;", quoted_role)
       )
       DBI::dbExecute(
         con,
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA audit
-         GRANT SELECT ON TABLES TO yg_editor;"
+        sprintf(
+          "GRANT SELECT ON ALL TABLES IN SCHEMA audit TO %s;",
+          quoted_role
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER DEFAULT PRIVILEGES IN SCHEMA audit
+           GRANT SELECT ON TABLES TO %s;",
+          quoted_role
+        )
       )
     }
-    if ("yg_reader" %in% audit_roles) {
-      DBI::dbExecute(con, "GRANT USAGE ON SCHEMA audit TO yg_reader;")
+    for (role_name in audit_reader_roles) {
+      quoted_role <- as.character(DBI::dbQuoteIdentifier(con, role_name))
       DBI::dbExecute(
         con,
-        "GRANT SELECT ON ALL TABLES IN SCHEMA audit TO yg_reader;"
+        sprintf("GRANT USAGE ON SCHEMA audit TO %s;", quoted_role)
       )
       DBI::dbExecute(
         con,
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA audit
-         GRANT SELECT ON TABLES TO yg_reader;"
+        sprintf(
+          "GRANT SELECT ON ALL TABLES IN SCHEMA audit TO %s;",
+          quoted_role
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER DEFAULT PRIVILEGES IN SCHEMA audit
+           GRANT SELECT ON TABLES TO %s;",
+          quoted_role
+        )
       )
     }
 
@@ -3053,10 +3111,6 @@ tryCatch(
         "borehole_well_purposes",
         "timeseries",
         "corrections",
-        "owners",
-        "qualifiers",
-        "grades",
-        "approvals",
         "thresholds",
         "extrema",
         "forecasts",
@@ -3167,6 +3221,95 @@ tryCatch(
        FOR EACH ROW
        EXECUTE FUNCTION audit.log_measurements_calculated_daily_change();"
     )
+
+    # Correct overly broad correction_types grants from patch 27 and ensure
+    # editor roles can use the backing sequence when inserting new rows.
+    DBI::dbExecute(
+      con,
+      "REVOKE ALL ON TABLE continuous.correction_types FROM PUBLIC;"
+    )
+    correction_types_reader_roles <- intersect(
+      c("public_reader", "yg_reader_group", "yg_reader"),
+      audit_roles
+    )
+    for (role_name in correction_types_reader_roles) {
+      quoted_role <- as.character(DBI::dbQuoteIdentifier(con, role_name))
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "GRANT SELECT ON TABLE continuous.correction_types TO %s;",
+          quoted_role
+        )
+      )
+    }
+
+    correction_types_editor_roles <- intersect(
+      c("yg_editor_group", "yg_editor"),
+      audit_roles
+    )
+    for (role_name in correction_types_editor_roles) {
+      quoted_role <- as.character(DBI::dbQuoteIdentifier(con, role_name))
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE continuous.correction_types TO %s;",
+          quoted_role
+        )
+      )
+    }
+
+    DBI::dbExecute(
+      con,
+      "
+      DO $$
+      DECLARE
+        correction_seq REGCLASS;
+      BEGIN
+        SELECT pg_get_serial_sequence(
+          'continuous.correction_types',
+          'correction_type_id'
+        )::regclass
+        INTO correction_seq;
+
+        IF correction_seq IS NOT NULL THEN
+          EXECUTE format(
+            'REVOKE ALL ON SEQUENCE %s FROM PUBLIC;',
+            correction_seq
+          );
+        END IF;
+      END
+      $$;
+      "
+    )
+    for (role_name in correction_types_editor_roles) {
+      quoted_role <- as.character(DBI::dbQuoteIdentifier(con, role_name))
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "
+          DO $$
+          DECLARE
+            correction_seq REGCLASS;
+          BEGIN
+            SELECT pg_get_serial_sequence(
+              'continuous.correction_types',
+              'correction_type_id'
+            )::regclass
+            INTO correction_seq;
+
+            IF correction_seq IS NOT NULL THEN
+              EXECUTE format(
+                'GRANT USAGE, SELECT, UPDATE ON SEQUENCE %%s TO %s;',
+                correction_seq
+              );
+            END IF;
+          END
+          $$;
+          ",
+          quoted_role
+        )
+      )
+    }
 
     # Wrap things up ########################################################
     DBI::dbExecute(
