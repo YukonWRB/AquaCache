@@ -74,6 +74,16 @@ tryCatch(
     # that can legitimately act as dataloggers from ordinary sensors.
     DBI::dbExecute(
       con,
+      "DROP TRIGGER IF EXISTS check_instrument_logger_capability
+       ON instruments.instruments;"
+    )
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS check_instrument_transmission_capabilities
+       ON instruments.instruments;"
+    )
+    DBI::dbExecute(
+      con,
       "ALTER TABLE instruments.instruments
        ADD COLUMN IF NOT EXISTS can_be_logger BOOLEAN;"
     )
@@ -1155,11 +1165,6 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "DROP TRIGGER IF EXISTS check_instrument_logger_capability
-       ON instruments.instruments;"
-    )
-    DBI::dbExecute(
-      con,
       "DROP TRIGGER IF EXISTS check_communication_protocol_dependents
        ON instruments.communication_protocols;"
     )
@@ -1185,15 +1190,6 @@ tryCatch(
        DEFERRABLE INITIALLY DEFERRED
        FOR EACH ROW
        EXECUTE FUNCTION public.check_timeseries_dependents();"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE CONSTRAINT TRIGGER check_instrument_logger_capability
-       AFTER UPDATE
-       ON instruments.instruments
-       DEFERRABLE INITIALLY DEFERRED
-       FOR EACH ROW
-       EXECUTE FUNCTION public.check_instrument_logger_capability();"
     )
     DBI::dbExecute(
       con,
@@ -1286,6 +1282,15 @@ tryCatch(
       con,
       "ALTER TABLE instruments.instruments
        ALTER COLUMN can_be_telemetry_component SET NOT NULL;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE CONSTRAINT TRIGGER check_instrument_logger_capability
+       AFTER UPDATE
+       ON instruments.instruments
+       DEFERRABLE INITIALLY DEFERRED
+       FOR EACH ROW
+       EXECUTE FUNCTION public.check_instrument_logger_capability();"
     )
 
     # Transmission method lookups ##########################################
@@ -2422,6 +2427,8 @@ tryCatch(
          application_name TEXT,
          action TEXT NOT NULL CHECK (action IN ('UPDATE', 'DELETE')),
          action_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         row_created TIMESTAMPTZ,
+         row_modified TIMESTAMPTZ,
          original_data JSONB NOT NULL,
          new_data JSONB,
          changed_fields JSONB,
@@ -2429,6 +2436,16 @@ tryCatch(
        );"
     )
     DBI::dbExecute(con, "ALTER TABLE audit.general_log OWNER TO admin;")
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE audit.general_log
+       ADD COLUMN IF NOT EXISTS row_created TIMESTAMPTZ;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE audit.general_log
+       ADD COLUMN IF NOT EXISTS row_modified TIMESTAMPTZ;"
+    )
 
     # Constraint to enforce that new_data and changed_fields are only populated for UPDATE actions, and are NULL for DELETE actions.
     DBI::dbExecute(
@@ -2508,6 +2525,16 @@ tryCatch(
       con,
       "COMMENT ON COLUMN audit.general_log.original_data IS
        'JSONB payload capturing the row state before the change.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN audit.general_log.row_created IS
+       'Value of the source row created column, when present, captured separately so historical reconstruction can determine whether a row existed at a requested as-of timestamp.';"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN audit.general_log.row_modified IS
+       'Value of the source row modified column, when present, captured separately so historical reconstruction can recover the last modification timestamp without polluting changed_fields.';"
     )
     DBI::dbExecute(
       con,
@@ -2755,11 +2782,15 @@ tryCatch(
            current_setting('application_name', true),
            ''
          );
+         v_row_created TIMESTAMPTZ;
+         v_row_modified TIMESTAMPTZ;
          v_old_data JSONB;
          v_new_data JSONB;
          v_changed_fields JSONB;
        BEGIN
          IF TG_OP = 'DELETE' THEN
+           v_row_created := (to_jsonb(OLD) ->> 'created')::timestamptz;
+           v_row_modified := (to_jsonb(OLD) ->> 'modified')::timestamptz;
            v_old_data := to_jsonb(OLD)
              - 'created' - 'modified' - 'created_by' - 'modified_by';
 
@@ -2770,6 +2801,8 @@ tryCatch(
              actor_user,
              application_name,
              action,
+             row_created,
+             row_modified,
              original_data,
              new_data,
              changed_fields,
@@ -2782,16 +2815,26 @@ tryCatch(
              v_actor_user,
              v_application_name,
              TG_OP,
+             v_row_created,
+             v_row_modified,
              v_old_data,
              NULL,
              NULL,
-             CURRENT_TIMESTAMP,
+             clock_timestamp(),
              txid_current()
            );
 
            RETURN OLD;
          END IF;
 
+         v_row_created := COALESCE(
+           (to_jsonb(NEW) ->> 'created')::timestamptz,
+           (to_jsonb(OLD) ->> 'created')::timestamptz
+         );
+         v_row_modified := COALESCE(
+           (to_jsonb(NEW) ->> 'modified')::timestamptz,
+           (to_jsonb(OLD) ->> 'modified')::timestamptz
+         );
          v_old_data := to_jsonb(OLD)
            - 'created' - 'modified' - 'created_by' - 'modified_by';
          v_new_data := to_jsonb(NEW)
@@ -2818,6 +2861,8 @@ tryCatch(
            actor_user,
            application_name,
            action,
+           row_created,
+           row_modified,
            original_data,
            new_data,
            changed_fields,
@@ -2830,10 +2875,12 @@ tryCatch(
            v_actor_user,
            v_application_name,
            TG_OP,
+           v_row_created,
+           v_row_modified,
            v_old_data,
            v_new_data,
            v_changed_fields,
-           CURRENT_TIMESTAMP,
+           clock_timestamp(),
            txid_current()
          );
 
@@ -2897,7 +2944,7 @@ tryCatch(
              v_actor_user,
              v_application_name,
              TG_OP,
-             CURRENT_TIMESTAMP,
+             clock_timestamp(),
              to_jsonb(OLD),
              NULL,
              NULL,
@@ -2909,8 +2956,8 @@ tryCatch(
 
          v_old_data := to_jsonb(OLD);
          v_new_data := to_jsonb(NEW);
-         v_timeseries_id := NEW.timeseries_id;
-         v_measurement_datetime := NEW.datetime;
+         v_timeseries_id := OLD.timeseries_id;
+         v_measurement_datetime := OLD.datetime;
          v_changed_fields := audit.jsonb_changed_fields(v_old_data, v_new_data);
 
          IF v_changed_fields = '{}'::jsonb THEN
@@ -2936,7 +2983,7 @@ tryCatch(
            v_actor_user,
            v_application_name,
            TG_OP,
-           CURRENT_TIMESTAMP,
+           clock_timestamp(),
            v_old_data,
            v_new_data,
            v_changed_fields,
@@ -2998,7 +3045,7 @@ tryCatch(
              v_actor_user,
              v_application_name,
              TG_OP,
-             CURRENT_TIMESTAMP,
+             clock_timestamp(),
              to_jsonb(OLD),
              NULL,
              NULL,
@@ -3010,8 +3057,8 @@ tryCatch(
 
          v_old_data := to_jsonb(OLD);
          v_new_data := to_jsonb(NEW);
-         v_timeseries_id := NEW.timeseries_id;
-         v_measurement_date := NEW.date;
+         v_timeseries_id := OLD.timeseries_id;
+         v_measurement_date := OLD.date;
          v_changed_fields := audit.jsonb_changed_fields(v_old_data, v_new_data);
 
          IF v_changed_fields = '{}'::jsonb THEN
@@ -3037,7 +3084,7 @@ tryCatch(
            v_actor_user,
            v_application_name,
            TG_OP,
-           CURRENT_TIMESTAMP,
+           clock_timestamp(),
            v_old_data,
            v_new_data,
            v_changed_fields,
@@ -3054,107 +3101,74 @@ tryCatch(
     )
 
     # Attach triggers to tables
+    general_audit_table_names <- c(
+      "boreholes",
+      "wells",
+      "permafrost",
+      "geology",
+      "boreholes_documents",
+      "casing_materials",
+      "borehole_well_purposes",
+      "timeseries",
+      "corrections",
+      "thresholds",
+      "extrema",
+      "forecasts",
+      "timeseries_data_sharing_agreements",
+      "correction_types",
+      "samples",
+      "results",
+      "guidelines",
+      "sample_series",
+      "field_visit_images",
+      "field_visit_instruments",
+      "field_visits",
+      "instruments",
+      "calibrations",
+      "calibrate_orp",
+      "calibrate_ph",
+      "calibrate_specific_conductance",
+      "calibrate_temperature",
+      "calibrate_turbidity",
+      "instrument_maintenance",
+      "sensors",
+      "array_maintenance_changes",
+      "communication_protocol_families",
+      "communication_protocols",
+      "transmission_method_families",
+      "transmission_methods",
+      "transmission_component_roles",
+      "locations",
+      "parameters",
+      "datum_conversions",
+      "locations_z",
+      "sub_locations",
+      "locations_metadata_instruments",
+      "locations_metadata_instrument_connections",
+      "locations_metadata_instrument_connection_signals",
+      "locations_metadata_transmission_setups",
+      "locations_metadata_transmission_routes",
+      "locations_metadata_transmission_components"
+    )
+    general_audit_table_schemas <- c(
+      rep("boreholes", 7),
+      rep("continuous", 7),
+      rep("discrete", 4),
+      rep("field", 3),
+      rep("instruments", 15),
+      rep("public", 11)
+    )
+
+    if (length(general_audit_table_schemas) != length(general_audit_table_names)) {
+      stop(
+        "Patch 37 internal error: general_audit_table_schemas and ",
+        "general_audit_table_names must have the same length."
+      )
+    }
+
     general_audit_tables <- data.frame(
-      schema = c(
-        "boreholes",
-        "boreholes",
-        "boreholes",
-        "boreholes",
-        "boreholes",
-        "boreholes",
-        "boreholes",
-        "continuous",
-        "continuous",
-        "continuous",
-        "continuous",
-        "continuous",
-        "continuous",
-        "continuous",
-        "continuous",
-        "continuous",
-        "continuous",
-        "discrete",
-        "discrete",
-        "discrete",
-        "discrete",
-        "field",
-        "field",
-        "field",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "instruments",
-        "public",
-        "public",
-        "public",
-        "public",
-        "public",
-        "public",
-        "public",
-        "public",
-        "public",
-        "public",
-        "public"
-      ),
-      table = c(
-        "boreholes",
-        "wells",
-        "permafrost",
-        "geology",
-        "boreholes_documents",
-        "casing_materials",
-        "borehole_well_purposes",
-        "timeseries",
-        "corrections",
-        "thresholds",
-        "extrema",
-        "forecasts",
-        "timeseries_data_sharing_agreements",
-        "samples",
-        "results",
-        "guidelines",
-        "sample_series",
-        "field_visit_images",
-        "field_visit_instruments",
-        "field_visits",
-        "instruments",
-        "calibrations",
-        "calibrate_orp",
-        "calibrate_ph",
-        "calibrate_specific_conductance",
-        "calibrate_temperature",
-        "calibrate_turbidity",
-        "instrument_maintenance",
-        "sensors",
-        "array_maintenance_changes",
-        "communication_protocol_families",
-        "communication_protocols",
-        "transmission_method_families",
-        "transmission_methods",
-        "transmission_component_roles",
-        "locations",
-        "parameters",
-        "datum_conversions",
-        "locations_z",
-        "sub_locations",
-        "locations_metadata_instruments",
-        "locations_metadata_instrument_connections",
-        "locations_metadata_instrument_connection_signals",
-        "locations_metadata_transmission_setups",
-        "locations_metadata_transmission_routes",
-        "locations_metadata_transmission_components"
-      ),
+      schema = general_audit_table_schemas,
+      table = general_audit_table_names,
       stringsAsFactors = FALSE
     )
 
