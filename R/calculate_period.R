@@ -10,6 +10,8 @@
 #' @export
 
 calculate_period <- function(data, timeseries_id, con = NULL) {
+  datetime <- NULL # To prevent "no visible binding for global variable" notes
+
   if (!inherits(data, "data.frame")) {
     # Also valid for data.tables
     # Then it might be a vector
