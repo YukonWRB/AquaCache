@@ -2406,6 +2406,19 @@ tryCatch(
     DBI::dbExecute(con, "ALTER SCHEMA audit OWNER TO admin;")
     DBI::dbExecute(con, "REVOKE ALL ON SCHEMA audit FROM PUBLIC;")
 
+    # modify the seach path to include the new schema
+    # Fetch the DB name from the connection
+    name <- DBI::dbGetQuery(con, "SELECT current_database()")[1, 1]
+
+    DBI::dbExecute(
+      con,
+      paste0(
+        "ALTER DATABASE ",
+        name,
+        " SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application, audit;"
+      )
+    )
+
     audit_roles <- DBI::dbGetQuery(con, "SELECT rolname FROM pg_roles;")$rolname # Used later on to target role-specific permissions
     audit_editor_roles <- intersect(
       c("yg_editor_group", "yg_editor"),
@@ -3159,7 +3172,9 @@ tryCatch(
       rep("public", 11)
     )
 
-    if (length(general_audit_table_schemas) != length(general_audit_table_names)) {
+    if (
+      length(general_audit_table_schemas) != length(general_audit_table_names)
+    ) {
       stop(
         "Patch 37 internal error: general_audit_table_schemas and ",
         "general_audit_table_names must have the same length."
