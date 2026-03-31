@@ -1,11 +1,27 @@
 # Functions to adjust the grade, qualifier, approval, owner, and contributor, and data sharing agreement of continuous-type data as it's appended to the database.
 
+# Helper functions; not exported
+
+#' @title Collapse segments with split
+#' @description
+#'  Collapse existing segments with new segments, splitting at boundaries and optionally bridging the latest existing segment to the next new segment if they have the same value.
+#' @param exist A data.frame of existing segments with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param new_segments A data.frame of new segments with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param value_col The name of the column containing the value to compare for collapsing.
+#' @param id_col The name of the column containing the unique identifier for segments.
+#' @param timeseries_id The timeseries_id to assign to the final segments.
+#' @param bridge_latest_extension Logical. If TRUE, if the latest existing segment ends before the earliest new segment starts and they have the same value, treat the existing segment as continuing through the start of the new segment instead of creating a brand-new trailing segment.
+#' @return A data.frame of segments with columns for id, timeseries_id, value, start_dt, and end_dt, where consecutive segments with the same value have been collapsed and the new segments have been integrated with the existing segments.
+#' @noRd
+#' @keywords internal
+
 collapse_segments_with_split <- function(
   exist,
   new_segments,
   value_col,
   id_col,
-  timeseries_id
+  timeseries_id,
+  bridge_latest_extension = FALSE
 ) {
   if (nrow(new_segments) == 0) {
     return(exist)
@@ -17,6 +33,27 @@ collapse_segments_with_split <- function(
     ,
     drop = FALSE
   ]
+
+  if (bridge_latest_extension && nrow(exist) > 0) {
+    latest_existing_idx <- which.max(exist$end_dt)
+    first_new_idx <- which.min(new_segments$start_dt)
+
+    if (
+      length(latest_existing_idx) == 1 &&
+        length(first_new_idx) == 1 &&
+        exist$end_dt[latest_existing_idx] <
+          new_segments$start_dt[first_new_idx] &&
+        identical(
+          exist[[value_col]][latest_existing_idx],
+          new_segments[[value_col]][first_new_idx]
+        )
+    ) {
+      # When appending new data with the same qualifying value, treat the
+      # latest existing segment as continuing through the next imported block
+      # instead of creating a brand-new trailing row.
+      exist$end_dt[latest_existing_idx] <- new_segments$start_dt[first_new_idx]
+    }
+  }
 
   boundaries <- sort(unique(c(
     as.POSIXct(exist$start_dt, tz = "UTC"),
@@ -111,6 +148,14 @@ collapse_segments_with_split <- function(
   final
 }
 
+#' @title Segment state key
+#' @description Create a unique key for a set of segments based on the id, timeseries_id, value, start_dt, and end_dt columns, to facilitate comparison of segment states.
+#' @param data A data.frame of segments with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param id_col The name of the column containing the unique identifier for segments.
+#' @param value_col The name of the column containing the value to compare for segment state.
+#' @return A character vector where each element is a unique key representing the state of the segments in the input data.frame, constructed by concatenating the id, timeseries_id, value, start_dt, and end_dt for each segment.
+#' @noRd
+#' @keywords internal
 segment_state_key <- function(data, id_col, value_col) {
   if (nrow(data) == 0) {
     return(character())
@@ -140,6 +185,15 @@ segment_state_key <- function(data, id_col, value_col) {
   )
 }
 
+#' @title Segment state identical
+#' @description Check if the state of two sets of segments is identical.
+#' @param current A data.frame of the current segment state.
+#' @param proposed A data.frame of the proposed segment state.
+#' @param id_col The name of the column containing the unique identifier for segments.
+#' @param value_col The name of the column containing the value to compare for segment state.
+#' @return TRUE if the segment states are identical, FALSE otherwise.
+#' @noRd
+#' @keywords internal
 segments_identical <- function(current, proposed, id_col, value_col) {
   identical(
     segment_state_key(current, id_col, value_col),
@@ -147,6 +201,16 @@ segments_identical <- function(current, proposed, id_col, value_col) {
   )
 }
 
+#' @title Get IDs for synchronization deletion
+#' @description Retrieve the IDs of segments that should be deleted to synchronize with a remote data store, based on the timeseries_id and a minimum datetime threshold.
+#' @param con A connection to the database.
+#' @param table_name The name of the table to query for segments (e.g., "grades", "qualifiers", "approvals").
+#' @param id_col The name of the column containing the unique identifier for segments in the specified table.
+#' @param timeseries_id The timeseries_id for which to retrieve segment IDs.
+#' @param min_datetime The minimum datetime threshold; segments with a start_dt greater than or equal to this value will be considered for deletion.
+#' @return An integer vector of segment IDs that should be deleted to synchronize with the remote data store. If no segments meet the criteria, an empty integer vector is returned.
+#' @noRd
+#' @keywords internal
 get_sync_delete_ids <- function(
   con,
   table_name,
@@ -171,6 +235,19 @@ get_sync_delete_ids <- function(
   ids[[1]]
 }
 
+#' @title Reconcile segment changes
+#' @description Reconcile the changes between the existing state and proposed state of segments by performing the necessary deletions, updates, and insertions in the database to align with the proposed state.
+#' @param con A connection to the database.
+#' @param table_name The name of the table to update segments in (e.g., "grades", "qualifiers", "approvals").
+#' @param id_col The name of the column containing the unique identifier for segments in the specified table.
+#' @param value_col The name of the column containing the value to compare for segment state in the input data.frames.
+#' @param db_value_col The name of the column containing the value to update in the database table.
+#' @param existing_state A data.frame representing the existing state of segments, with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param proposed_state A data.frame representing the proposed state of segments, with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param delete_ids An integer vector of segment IDs that should be deleted as part of the reconciliation process, in addition to any deletions determined by comparing the existing and proposed states.
+#' @return TRUE if any changes were made to the database, FALSE if the existing state and proposed state are identical and no changes were necessary. The function performs the necessary deletions, updates, and insertions in the database to align with the proposed state.
+#' @noRd
+#' @keywords internal
 reconcile_segment_changes <- function(
   con,
   table_name,
@@ -181,8 +258,15 @@ reconcile_segment_changes <- function(
   proposed_state,
   delete_ids = integer()
 ) {
-  proposed_delete_ids <- proposed_state[proposed_state$timeseries_id == -1, id_col]
-  proposed_state <- proposed_state[proposed_state$timeseries_id != -1, , drop = FALSE]
+  proposed_delete_ids <- proposed_state[
+    proposed_state$timeseries_id == -1,
+    id_col
+  ]
+  proposed_state <- proposed_state[
+    proposed_state$timeseries_id != -1,
+    ,
+    drop = FALSE
+  ]
 
   delete_ids <- unique(c(delete_ids, proposed_delete_ids))
   delete_ids <- delete_ids[!is.na(delete_ids)]
@@ -402,7 +486,8 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "grade_type_id",
         id_col = "grade_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database
@@ -605,7 +690,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           new_segments = new_segments,
           value_col = "qualifier_type_id",
           id_col = "qualifier_id",
-          timeseries_id = timeseries_id
+          timeseries_id = timeseries_id,
+          bridge_latest_extension = TRUE
         )
 
         proposed_state_all <- rbind(proposed_state_all, exist)
@@ -620,8 +706,16 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
       }
 
       if (nrow(proposed_state_all) > 0) {
-        proposed_existing_ids <- proposed_state_all[!is.na(proposed_state_all$qualifier_id), , drop = FALSE]
-        proposed_new_ids <- proposed_state_all[is.na(proposed_state_all$qualifier_id), , drop = FALSE]
+        proposed_existing_ids <- proposed_state_all[
+          !is.na(proposed_state_all$qualifier_id),
+          ,
+          drop = FALSE
+        ]
+        proposed_new_ids <- proposed_state_all[
+          is.na(proposed_state_all$qualifier_id),
+          ,
+          drop = FALSE
+        ]
         if (nrow(proposed_existing_ids) > 0) {
           proposed_existing_ids <- proposed_existing_ids[
             !duplicated(proposed_existing_ids$qualifier_id),
@@ -789,7 +883,8 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "approval_type_id",
         id_col = "approval_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database
@@ -955,7 +1050,8 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "organization_id",
         id_col = "owner_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database
@@ -1121,7 +1217,8 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "organization_id",
         id_col = "contributor_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database

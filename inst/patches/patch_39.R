@@ -2009,6 +2009,146 @@ tryCatch(
       )
     )
 
+    # Collapse consecutive same-value qualifying rows into continuous periods before purging the audit tables, so the cleanup itself does not leave a large volume of noise in the logs.
+    # The adjust_* functions have been modified to stop producing new rows unecessarily.
+    collapse_same_value_segments <- function(table_sql, id_col, value_col) {
+      collapse_sql <- sprintf(
+        paste(
+          "WITH sequenced AS (",
+          "  SELECT",
+          "    %1$s AS row_id,",
+          "    timeseries_id,",
+          "    %2$s AS value_id,",
+          "    start_dt,",
+          "    end_dt,",
+          "    ROW_NUMBER() OVER (",
+          "      PARTITION BY timeseries_id",
+          "      ORDER BY start_dt, end_dt, %1$s",
+          "    ) AS rn,",
+          "    LAG(%2$s) OVER (",
+          "      PARTITION BY timeseries_id",
+          "      ORDER BY start_dt, end_dt, %1$s",
+          "    ) AS prev_value_id",
+          "  FROM %3$s",
+          "),",
+          "ordered AS (",
+          "  SELECT",
+          "    row_id,",
+          "    timeseries_id,",
+          "    start_dt,",
+          "    end_dt,",
+          "    SUM(",
+          "      CASE WHEN rn = 1 OR prev_value_id IS DISTINCT FROM value_id THEN 1 ELSE 0 END",
+          "    ) OVER (",
+          "      PARTITION BY timeseries_id",
+          "      ORDER BY start_dt, end_dt, row_id",
+          "      ROWS UNBOUNDED PRECEDING",
+          "    ) AS grp",
+          "  FROM sequenced",
+          "),",
+          "group_bounds AS (",
+          "  SELECT",
+          "    timeseries_id,",
+          "    grp,",
+          "    MAX(end_dt) AS grp_end,",
+          "    COUNT(*) AS grp_rows",
+          "  FROM ordered",
+          "  GROUP BY timeseries_id, grp",
+          "  HAVING COUNT(*) > 1",
+          "),",
+          "keepers AS (",
+          "  SELECT DISTINCT ON (o.timeseries_id, o.grp)",
+          "    o.row_id,",
+          "    o.timeseries_id,",
+          "    o.grp",
+          "  FROM ordered o",
+          "  JOIN group_bounds gb",
+          "    ON gb.timeseries_id = o.timeseries_id",
+          "   AND gb.grp = o.grp",
+          "  ORDER BY o.timeseries_id, o.grp, o.start_dt, o.end_dt, o.row_id",
+          "),",
+          "updated AS (",
+          "  UPDATE %3$s t",
+          "  SET",
+          "    end_dt = gb.grp_end,",
+          "    modified = CURRENT_TIMESTAMP,",
+          "    modified_by = SESSION_USER",
+          "  FROM keepers k",
+          "  JOIN group_bounds gb",
+          "    ON gb.timeseries_id = k.timeseries_id",
+          "   AND gb.grp = k.grp",
+          "  WHERE t.%1$s = k.row_id",
+          "    AND t.end_dt IS DISTINCT FROM gb.grp_end",
+          "  RETURNING 1",
+          "),",
+          "deleted AS (",
+          "  DELETE FROM %3$s t",
+          "  USING ordered o",
+          "  JOIN keepers k",
+          "    ON k.timeseries_id = o.timeseries_id",
+          "   AND k.grp = o.grp",
+          "  WHERE t.%1$s = o.row_id",
+          "    AND t.%1$s <> k.row_id",
+          "  RETURNING 1",
+          ")",
+          "SELECT",
+          "  COALESCE((SELECT COUNT(*) FROM updated), 0) AS rows_extended,",
+          "  COALESCE((SELECT COUNT(*) FROM deleted), 0) AS rows_deleted;",
+          sep = "\n"
+        ),
+        id_col,
+        value_col,
+        table_sql
+      )
+
+      result <- DBI::dbGetQuery(con, collapse_sql)
+      message(
+        sprintf(
+          paste(
+            "Collapsed consecutive same-value rows in %s:",
+            "%s rows extended, %s rows deleted."
+          ),
+          table_sql,
+          result$rows_extended[[1]],
+          result$rows_deleted[[1]]
+        )
+      )
+    }
+
+    message(
+      "Collapsing consecutive same-value segments in the continuous schema..."
+    )
+    collapse_same_value_segments(
+      table_sql = "continuous.grades",
+      id_col = "grade_id",
+      value_col = "grade_type_id"
+    )
+    collapse_same_value_segments(
+      table_sql = "continuous.approvals",
+      id_col = "approval_id",
+      value_col = "approval_type_id"
+    )
+    collapse_same_value_segments(
+      table_sql = "continuous.qualifiers",
+      id_col = "qualifier_id",
+      value_col = "qualifier_type_id"
+    )
+    collapse_same_value_segments(
+      table_sql = "continuous.owners",
+      id_col = "owner_id",
+      value_col = "organization_id"
+    )
+    collapse_same_value_segments(
+      table_sql = "continuous.contributors",
+      id_col = "contributor_id",
+      value_col = "organization_id"
+    )
+
+    # Wipe the audit tables since the data changes in this patch will cause a large number of audit records to be generated that aren't meaningful to retain.
+    DBI::dbExecute(con, "DELETE FROM audit.measurements_calculated_daily_log")
+    DBI::dbExecute(con, "DELETE FROM audit.measurements_continuous_log")
+    DBI::dbExecute(con, "DELETE FROM audit.general_log")
+
     # Wrap things up ########################################################
     DBI::dbExecute(
       con,

@@ -310,11 +310,16 @@ tryCatch(
            current_setting('application_name', true),
            ''
          );
+         v_skip_audit BOOLEAN := FALSE;
          v_row_created TIMESTAMPTZ;
          v_row_modified TIMESTAMPTZ;
          v_old_data JSONB;
          v_new_data JSONB;
          v_changed_fields JSONB;
+         v_old_end_dt TIMESTAMPTZ;
+         v_new_end_dt TIMESTAMPTZ;
+         v_segment_start_dt TIMESTAMPTZ;
+         v_timeseries_id INTEGER;
        BEGIN
          IF TG_OP = 'DELETE' THEN
            v_row_created := (to_jsonb(OLD) ->> 'created')::timestamptz;
@@ -378,7 +383,47 @@ tryCatch(
 
          v_changed_fields := audit.jsonb_changed_fields(v_old_data, v_new_data);
 
+         -- Skip noisy sync-style updates that only extend the latest
+         -- temporal segment on qualifying metadata tables.
+         IF
+           TG_OP = 'UPDATE' AND
+             TG_TABLE_SCHEMA = 'continuous' AND
+             TG_TABLE_NAME = ANY(ARRAY[
+               'approvals',
+               'grades',
+               'qualifiers',
+               'owners',
+               'contributors'
+             ]) AND
+             jsonb_object_length(v_changed_fields) = 1 AND
+             v_changed_fields ? 'end_dt'
+         THEN
+           v_old_end_dt := (to_jsonb(OLD) ->> 'end_dt')::timestamptz;
+           v_new_end_dt := (to_jsonb(NEW) ->> 'end_dt')::timestamptz;
+           v_segment_start_dt := (to_jsonb(NEW) ->> 'start_dt')::timestamptz;
+           v_timeseries_id := (to_jsonb(NEW) ->> 'timeseries_id')::integer;
+
+           IF v_new_end_dt > v_old_end_dt THEN
+             EXECUTE format(
+               'SELECT NOT EXISTS (
+                  SELECT 1
+                  FROM %I.%I t
+                  WHERE t.timeseries_id = $1
+                    AND t.start_dt > $2
+                )',
+               TG_TABLE_SCHEMA,
+               TG_TABLE_NAME
+             )
+             INTO v_skip_audit
+             USING v_timeseries_id, v_segment_start_dt;
+           END IF;
+         END IF;
+
          IF v_changed_fields = '{}'::jsonb THEN
+           RETURN NEW;
+         END IF;
+
+         IF v_skip_audit THEN
            RETURN NEW;
          END IF;
 
