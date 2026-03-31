@@ -2,28 +2,35 @@
 #'
 #' Calculates a period for continuous-type temporal data and prepares a column named 'period' with ISO8601 formatted periods for import to postgreSQL database. Will identify changes to periodicity within data, for example moving from 1-hour intervals to 6-hour intervals. MUST be able to connect to the aquacache DB to fetch missing data points or to pull additional data in case of ambiguity.
 #'
-#' @param data The data.frame or data.table for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value' and 'timeseries'. Other columns will be ignored as these are not found in the database.
+#' @param data The data.frame or data.table for which to calculate periodicity. Must contain at minimum a column named 'datetime' (in POSIXct format) with no missing values, can also contain a column for 'value' and 'timeseries'. Other columns will be dropped as these are not found in the database.
 #' @param timeseries_id The ID of the timeseries for which to calculate periodicity. Used to fetch any data points lacking a period, as well as to search for additional data points if there are too few to calculate a period in the provided `data`. This CAN be NA for the edge use case of creating a new timeseries.
-#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. Used to fetch any rows that don't have a period calculated yet, or to fetch additional rows if too few exist to conclusively calculate a period.
+#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. Used to fetch any rows that don't have a period calculated yet, or to fetch additional rows if too few exist to conclusively calculate a period. If you don't want to connect to the database, specify `timeseries_id = NA`.
 #'
-#' @return A data.frame with calculated periods as ISO8601 formatted strings in a column named 'period'.
+#' @return A data.table or data.frame (depending on input) with calculated periods as ISO8601 formatted strings in a column named 'period'. Extra data fetched from the database, if applicable, is not returned **unless** it was missing a period, in which case it is returned with the newly calculated period. The returned data.table/data.frame has the same columns as the input `data` (with the addition of 'period') and is ordered by datetime.
 #' @export
 
 calculate_period <- function(data, timeseries_id, con = NULL) {
+  datetime <- NULL # To prevent "no visible binding for global variable" notes
+
   if (!inherits(data, "data.frame")) {
     # Also valid for data.tables
     # Then it might be a vector
     if (!inherits(data, "POSIXct")) {
       stop(
-        "The 'data' parameter must be a data.frame with a column named 'datetime' in POSIXct format OR a POSIXct vector."
+        "The 'data' parameter must be a data.frame or data.table with a column named 'datetime' in POSIXct format OR a POSIXct vector."
       )
     } else {
-      data <- data.frame(datetime = data)
+      data <- data.table::data.table(datetime = data)
     }
   }
 
   if (!("datetime" %in% names(data))) {
     stop("The 'data' parameter must contain a column named 'datetime'.")
+  }
+
+  if (is.null(con) && !is.na(timeseries_id)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con))
   }
 
   # Drop columns not called 'datetime' 'value', 'timeseries_id' as these can't be found in the database
@@ -33,6 +40,9 @@ calculate_period <- function(data, timeseries_id, con = NULL) {
   } else {
     data <- data[, cols, drop = FALSE]
   }
+
+  # Get the earliest datetime in the data to trim the returned data.table
+  in_min_dt <- min(data$datetime, na.rm = TRUE)
 
   # Get datetimes from the earliest missing period to calculate necessary values, as some might be missing
   col_names <- names(data) # Get all columns in data so as to return a data.frame with the same columns as input
@@ -57,6 +67,11 @@ calculate_period <- function(data, timeseries_id, con = NULL) {
       } else {
         data <- rbind(data, no_period)
       }
+      in_min_dt <- min(
+        in_min_dt,
+        min(no_period$datetime, na.rm = TRUE),
+        na.rm = TRUE
+      )
     }
   }
   if (data.table::is.data.table(data)) {
@@ -113,13 +128,13 @@ calculate_period <- function(data, timeseries_id, con = NULL) {
         sep = ""
       )
     }
-    #carry non-na's forward and backwards, if applicable
+    # carry non-na's forward and backwards, if applicable
     data$period <- zoo::na.locf(
       zoo::na.locf(data$period, na.rm = FALSE),
       fromLast = TRUE
     )
   } else {
-    #In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
+    # In this case there were too few measurements to conclusively determine a period so pull a few from the DB and redo the calculation
     if (is.na(timeseries_id)) {
       stop(
         "There were too few measurements to calculate a period and no timeseries_id was provided to fetch additional data."
@@ -186,7 +201,7 @@ calculate_period <- function(data, timeseries_id, con = NULL) {
           sep = ""
         )
       }
-      #carry non-na's forward and backwards, if applicable
+      # carry non-na's forward and backwards, if applicable
       data$period <- zoo::na.locf(
         zoo::na.locf(data$period, na.rm = FALSE),
         fromLast = TRUE
@@ -194,6 +209,12 @@ calculate_period <- function(data, timeseries_id, con = NULL) {
     } else {
       data$period <- NULL
     }
+  }
+  # Trim by in_min_dt
+  if (data.table::is.data.table(data)) {
+    data <- data[datetime >= in_min_dt]
+  } else {
+    data <- data[data$datetime >= in_min_dt, , drop = FALSE]
   }
   return(data)
 } # End of function

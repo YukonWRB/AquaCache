@@ -183,6 +183,19 @@ synchronize_continuous <- function(
     )
   }
 
+  build_status_row <- function(
+    timeseries_id,
+    success,
+    message = NA_character_
+  ) {
+    data.frame(
+      timeseries_id = timeseries_id,
+      success = success,
+      message = if (isTRUE(success)) NA_character_ else as.character(message),
+      stringsAsFactors = FALSE
+    )
+  }
+
   # Define a worker function that either gets passed to parallel or sequential for loops over rows in all_timeseries
   worker <- function(
     i,
@@ -220,28 +233,110 @@ synchronize_continuous <- function(
       add = TRUE
     )
 
+    run_db_updates <- function(write_fx) {
+      active_trans <- dbTransBegin(con)
+      execute_write_fx <- function() {
+        withCallingHandlers(
+          write_fx(),
+          warning = function(w) {
+            stop(structure(
+              list(message = conditionMessage(w), call = NULL),
+              class = c("synchronize_worker_warning", "error", "condition")
+            ))
+          }
+        )
+      }
+
+      if (active_trans) {
+        tryCatch(
+          {
+            execute_write_fx()
+            DBI::dbExecute(con, "COMMIT;")
+          },
+          error = function(e) {
+            DBI::dbExecute(con, "ROLLBACK;")
+            stop(e)
+          }
+        )
+      } else {
+        execute_write_fx()
+      }
+    }
+
+    apply_remote_attributes <- function(write_remote) {
+      if ("owner" %in% names(write_remote)) {
+        adjust_owner(
+          con,
+          tsid,
+          write_remote[, c("datetime", "owner")],
+          delete = TRUE
+        )
+        write_remote$owner <- NULL
+      }
+      if ("contributor" %in% names(write_remote)) {
+        adjust_contributor(
+          con,
+          tsid,
+          write_remote[, c("datetime", "contributor")],
+          delete = TRUE
+        )
+        write_remote$contributor <- NULL
+      }
+      if ("grade" %in% names(write_remote)) {
+        adjust_grade(
+          con,
+          tsid,
+          write_remote[, c("datetime", "grade")],
+          delete = TRUE
+        )
+        write_remote$grade <- NULL
+      }
+      if ("approval" %in% names(write_remote)) {
+        adjust_approval(
+          con,
+          tsid,
+          write_remote[, c("datetime", "approval")],
+          delete = TRUE
+        )
+        write_remote$approval <- NULL
+      }
+      if ("qualifier" %in% names(write_remote)) {
+        adjust_qualifier(
+          con,
+          tsid,
+          write_remote[, c("datetime", "qualifier")],
+          delete = TRUE
+        )
+        write_remote$qualifier <- NULL
+      }
+
+      write_remote
+    }
+
     args_list <- list(start_datetime = start_dt, con = con)
     if (!is.na(source_fx_args)) {
-      #add some arguments if they are specified
+      # add some arguments if they are specified
       args <- jsonlite::fromJSON(source_fx_args)
       args_list <- c(args_list, lapply(args, as.character))
     }
 
-    inRemote <- do.call(source_fx, args_list) #Get the data using the args_list
+    inRemote <- do.call(source_fx, args_list) # Get the data using the args_list
     inRemote <- inRemote[!is.na(inRemote$value), ]
 
     if (nrow(inRemote) == 0) {
       # There was no data in remote for the date range specified
-      DBI::dbExecute(
-        con,
-        paste0(
-          "UPDATE timeseries SET last_synchronize = '",
-          .POSIXct(Sys.time(), "UTC"),
-          "' WHERE timeseries_id = ",
-          tsid,
-          ";"
+      run_db_updates(function() {
+        DBI::dbExecute(
+          con,
+          paste0(
+            "UPDATE timeseries SET last_synchronize = '",
+            .POSIXct(Sys.time(), "UTC"),
+            "' WHERE timeseries_id = ",
+            tsid,
+            ";"
+          )
         )
-      )
+      })
       return()
     } else if (!all(c("value", "datetime") %in% names(inRemote))) {
       stop(
@@ -252,7 +347,7 @@ synchronize_continuous <- function(
     inDB <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT no_update, datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+        "SELECT no_update, datetime, value, period, imputed FROM measurements_continuous WHERE timeseries_id = ",
         tsid,
         " AND datetime >= '",
         min(inRemote$datetime),
@@ -265,7 +360,7 @@ synchronize_continuous <- function(
     # Drop no_update columns
     inDB$no_update <- NULL
     no_update$no_update <- NULL
-    #Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
+    # Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
     imputed <- inDB[inDB$imputed, ]
     imputed.remains <- data.frame()
     if (nrow(imputed) > 0) {
@@ -294,58 +389,21 @@ synchronize_continuous <- function(
       }
     }
 
-    # Check changes in attributes
-    if ("owner" %in% names(inRemote)) {
-      adjust_owner(con, tsid, inRemote[, c("datetime", "owner")], delete = TRUE)
-      inRemote$owner <- NULL # Drop the owner column as it's already taken care of
-    }
-    if ("contributor" %in% names(inRemote)) {
-      adjust_contributor(
-        con,
-        tsid,
-        inRemote[, c("datetime", "contributor")],
-        delete = TRUE
-      )
-      inRemote$contributor <- NULL # Drop the contributor column as it's already taken care of
-    }
-    if ("grade" %in% names(inRemote)) {
-      adjust_grade(con, tsid, inRemote[, c("datetime", "grade")], delete = TRUE)
-      inRemote$grade <- NULL # Drop the grade column as it's already taken care of
-    }
-    if ("approval" %in% names(inRemote)) {
-      adjust_approval(
-        con,
-        tsid,
-        inRemote[, c("datetime", "approval")],
-        delete = TRUE
-      )
-      inRemote$approval <- NULL # Drop the approval column as it's already taken care of
-    }
-    if ("qualifier" %in% names(inRemote)) {
-      adjust_qualifier(
-        con,
-        tsid,
-        inRemote[, c("datetime", "qualifier")],
-        delete = TRUE
-      )
-      inRemote$qualifier <- NULL # Drop the qualifier column as it's already taken care of
-    }
-
     if (nrow(inDB) > 0) {
       # If nothing inDB it's an automatic mismatch so this is skipped
       min_inRemote <- min(inRemote$datetime)
       min_inDB <- min(inDB$datetime)
       if (min_inRemote > min_inDB) {
-        #if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
+        # if TRUE means that the DB has older data than the remote, which happens notably for the WSC. This older data can't be compared and is thus discarded.
         inDB <- inDB[inDB$datetime >= min_inRemote, ]
       }
 
       if (min_inRemote < min_inDB) {
-        #if TRUE means that the remote has older data than the DB, so immediately declare mismatch = TRUE.
+        # if TRUE means that the remote has older data than the DB, so immediately declare mismatch = TRUE.
         mismatch <- TRUE
         cutoff <- min_inRemote
       } else {
-        #order both timeseries to compare them
+        # order both timeseries to compare them
         inDB <- inDB[order(inDB$datetime), ]
         inRemote <- inRemote[order(inRemote$datetime), ]
 
@@ -431,60 +489,102 @@ synchronize_continuous <- function(
       }
 
       # Now commit the changes to the database
-      commit_fx <- function(con, no_update, tsid, inRemote, cutoff, inDB) {
-        # delete entries in measurements_continuous and measurements_calculated_daily that are no longer in the remote data and/or that need to be replaced
-        if (nrow(no_update) > 0) {
-          # Don't delete imputed data points unless there's new data to replace it!
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM measurements_continuous WHERE timeseries_id = ",
-              tsid,
-              " AND datetime >= '",
-              cutoff,
-              "' AND datetime NOT IN ('",
-              paste(no_update$datetime, collapse = "', '"),
-              "');"
-            )
-          )
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-              tsid,
-              " AND date > '",
-              substr(cutoff, 1, 10),
-              "';"
-            )
-          )
+      commit_fx <- function(con, tsid, inRemote, cutoff, inDB) {
+        same_or_na <- function(x, y) {
+          both_na <- is.na(x) & is.na(y)
+          same <- rep(FALSE, length(x))
+          same[both_na] <- TRUE
+
+          both_present <- !is.na(x) & !is.na(y)
+          same[both_present] <- x[both_present] == y[both_present]
+          same
+        }
+
+        existing_measurements <- inDB[
+          inDB$datetime >= cutoff,
+          c("datetime", "value", "period", "imputed"),
+          drop = FALSE
+        ]
+        remote_measurements <- if (nrow(inRemote) > 0) {
+          inRemote[, c("datetime", "value", "period", "imputed"), drop = FALSE]
         } else {
+          data.frame(
+            datetime = as.POSIXct(character(), tz = "UTC"),
+            value = numeric(),
+            period = character(),
+            imputed = logical()
+          )
+        }
+
+        comparison <- merge(
+          existing_measurements,
+          remote_measurements,
+          by = "datetime",
+          all = TRUE,
+          suffixes = c("_db", "_remote")
+        )
+
+        same_value <- same_or_na(comparison$value_db, comparison$value_remote)
+        same_period <- same_or_na(
+          as.character(comparison$period_db),
+          as.character(comparison$period_remote)
+        )
+        same_imputed <- same_or_na(
+          comparison$imputed_db,
+          comparison$imputed_remote
+        )
+        row_changed <- !(same_value & same_period & same_imputed)
+
+        delete_datetimes <- sort(unique(comparison$datetime[
+          !is.na(comparison$value_db) &
+            (is.na(comparison$value_remote) | row_changed)
+        ]))
+        append_datetimes <- sort(unique(comparison$datetime[
+          !is.na(comparison$value_remote) &
+            (is.na(comparison$value_db) | row_changed)
+        ]))
+        append_rows <- remote_measurements[
+          remote_measurements$datetime %in% append_datetimes,
+          c("datetime", "value", "period", "imputed"),
+          drop = FALSE
+        ]
+        affected_dates <- sort(unique(as.Date(c(
+          delete_datetimes,
+          append_rows$datetime
+        ))))
+
+        if (length(delete_datetimes) > 0) {
           DBI::dbExecute(
             con,
             paste0(
               "DELETE FROM measurements_continuous WHERE timeseries_id = ",
               tsid,
-              " AND datetime >= '",
-              cutoff,
-              "';"
-            )
-          )
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-              tsid,
-              " AND date > '",
-              substr(cutoff, 1, 10),
-              "';"
+              " AND datetime IN ('",
+              paste(fmt(delete_datetimes), collapse = "', '"),
+              "');"
             )
           )
         }
 
-        if (nrow(inRemote) > 0) {
+        if (length(affected_dates) > 0) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
+              tsid,
+              " AND date IN ('",
+              paste(affected_dates, collapse = "', '"),
+              "');"
+            )
+          )
+        }
+
+        if (nrow(append_rows) > 0) {
+          append_rows$timeseries_id <- tsid
           dbAppendTableRLS(
             con,
             "measurements_continuous",
-            inRemote[, c(
+            append_rows[, c(
               "datetime",
               "value",
               "period",
@@ -492,19 +592,14 @@ synchronize_continuous <- function(
               "imputed"
             )]
           )
+        }
 
+        if (length(affected_dates) > 0) {
           #Recalculate daily means and statistics
           calculate_stats(
             timeseries_id = tsid,
             con = con,
-            start_recalc = as.Date(substr(cutoff, 1, 10))
-          )
-        } else {
-          #Recalculate daily means and statistics
-          calculate_stats(
-            timeseries_id = tsid,
-            con = con,
-            start_recalc = as.Date(substr(cutoff, 1, 10))
+            start_recalc = min(affected_dates)
           )
         }
         # adjust entries in table 'timeseries' to reflect the new data
@@ -575,79 +670,135 @@ synchronize_continuous <- function(
           )
         )
       }
-
-      activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
-      if (activeTrans) {
-        tryCatch(
-          {
-            commit_fx(con, no_update, tsid, inRemote, cutoff, inDB)
-            DBI::dbExecute(con, "COMMIT;")
-          },
-          error = function(e) {
-            DBI::dbExecute(con, "ROLLBACK;")
-            warning(
-              "synchronize failed to make database changes for timeseries_id ",
-              tsid,
-              " with message: ",
-              e$message,
-              "."
+      run_db_updates(function() {
+        write_remote <- apply_remote_attributes(inRemote)
+        write_remote <- write_remote[write_remote$datetime >= cutoff, ]
+        if (nrow(write_remote) > 0) {
+          #assign a period to the data
+          if (aggregation_type == "instantaneous") {
+            #Period is always 0 for instantaneous data
+            write_remote$period <- "00:00:00"
+          } else if (
+            (aggregation_type != "instantaneous") &
+              !("period" %in% names(write_remote))
+          ) {
+            #aggregation_types of mean, median, min, max should all have a period
+            period <- calculate_period(
+              data = write_remote[, "datetime"],
+              timeseries_id = tsid,
+              con = con
             )
+            write_remote <- merge(
+              write_remote,
+              period,
+              by = "datetime",
+              all.x = TRUE
+            )
+          } else {
+            #Check to make sure that the supplied period can actually be coerced to a period
+            check <- lubridate::period(unique(write_remote$period))
+            if (NA %in% check) {
+              write_remote$period <- NA
+            }
           }
-        )
-      } else {
-        # we're already in a transaction
-        commit_fx(con, no_update, tsid, inRemote, cutoff, inDB)
-      }
+          write_remote$imputed <- FALSE
+          write_remote$timeseries_id <- tsid
+        }
+
+        commit_fx(con, tsid, write_remote, cutoff, inDB)
+      })
     } else {
       # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
-      DBI::dbExecute(
-        con,
-        paste0(
-          "UPDATE timeseries SET last_synchronize = '",
-          .POSIXct(Sys.time(), "UTC"),
-          "' WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
-      )
-      # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
+      run_db_updates(function() {
+        write_remote <- apply_remote_attributes(inRemote)
 
-      # double check the earliest time in DB in case there's an error in the timeseries table
-      earliest <- min(
-        min(inRemote$datetime),
-        DBI::dbGetQuery(
+        DBI::dbExecute(
           con,
           paste0(
-            "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+            "UPDATE timeseries SET last_synchronize = '",
+            .POSIXct(Sys.time(), "UTC"),
+            "' WHERE timeseries_id = ",
             tsid,
             ";"
           )
-        )[[1]],
-        as.POSIXct(
+        )
+
+        # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
+
+        # double check the earliest time in DB in case there's an error in the timeseries table
+        earliest <- min(
+          min(write_remote$datetime),
           DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+              "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
               tsid,
               ";"
             )
           )[[1]],
-          tz = "UTC"
+          as.POSIXct(
+            DBI::dbGetQuery(
+              con,
+              paste0(
+                "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+                tsid,
+                ";"
+              )
+            )[[1]],
+            tz = "UTC"
+          )
         )
-      )
 
-      DBI::dbExecute(
-        con,
-        paste0(
-          "UPDATE timeseries SET start_datetime = '",
-          fmt(earliest),
-          "' WHERE timeseries_id = ",
-          tsid,
-          ";"
+        DBI::dbExecute(
+          con,
+          paste0(
+            "UPDATE timeseries SET start_datetime = '",
+            fmt(earliest),
+            "' WHERE timeseries_id = ",
+            tsid,
+            ";"
+          )
         )
-      )
+      })
     }
   } # End of worker function
+
+  run_worker_iteration <- function(i, con, parallel) {
+    tryCatch(
+      {
+        worker(
+          i,
+          all_timeseries,
+          approval_unknown,
+          grade_unknown,
+          qualifier_unknown,
+          start_datetime,
+          parallel = parallel,
+          con = con
+        )
+        build_status_row(all_timeseries$timeseries_id[i], TRUE)
+      },
+      warning = function(w) {
+        build_status_row(
+          all_timeseries$timeseries_id[i],
+          FALSE,
+          paste0("Warning: ", conditionMessage(w))
+        )
+      },
+      error = function(e) {
+        prefix <- if (inherits(e, "synchronize_worker_warning")) {
+          "Warning: "
+        } else {
+          "Error: "
+        }
+        build_status_row(
+          all_timeseries$timeseries_id[i],
+          FALSE,
+          paste0(prefix, conditionMessage(e))
+        )
+      }
+    )
+  }
 
   start <- Sys.time()
 
@@ -657,7 +808,9 @@ synchronize_continuous <- function(
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_timeseries), style = 3)
   }
 
-  if (parallel) {
+  if (nrow(all_timeseries) == 0) {
+    updated <- build_status_row(numeric(), logical(), character())
+  } else if (parallel) {
     # !Important note when troubleshooting parallel stuff: load_all() doesn't work, as the .packages argument of foreach::foreach attaches the installed version of AquaCache.
     n.cores <- parallel::detectCores() - 2
     # Limit the number of cores to the number of timeseries so as to free up resources
@@ -706,7 +859,7 @@ synchronize_continuous <- function(
       opts <- list(progress = progress)
 
       updated <- foreach::foreach(
-        i = 1:nrow(all_timeseries),
+        i = seq_len(nrow(all_timeseries)),
         .packages = c(
           "DBI",
           "jsonlite",
@@ -720,6 +873,7 @@ synchronize_continuous <- function(
         .errorhandling = "pass"
       ) %dopar%
         {
+          parcon <- NULL
           tryCatch(
             {
               parcon <- AquaCache::AquaConnect(
@@ -730,29 +884,11 @@ synchronize_continuous <- function(
                 password = dbPass,
                 silent = TRUE
               )
-              worker(
-                i,
-                all_timeseries,
-                approval_unknown,
-                grade_unknown,
-                qualifier_unknown,
-                start_datetime,
-                parallel = TRUE,
-                con = parcon
-              )
-              return("Success")
-            },
-            warning = function(w) {
-              msg <- paste0("Warning: ", conditionMessage(w))
-              return(msg)
-            },
-            error = function(e) {
-              msg <- paste0("Error: ", conditionMessage(e))
-              return(msg)
+              run_worker_iteration(i, con = parcon, parallel = TRUE)
             },
             finally = {
               # Close the connection if it was opened in this iteration
-              if (exists("parcon")) {
+              if (!is.null(parcon)) {
                 DBI::dbDisconnect(parcon)
               }
             }
@@ -760,7 +896,7 @@ synchronize_continuous <- function(
         }
     } else {
       updated <- foreach::foreach(
-        i = 1:nrow(all_timeseries),
+        i = seq_len(nrow(all_timeseries)),
         .packages = c(
           "DBI",
           "jsonlite",
@@ -773,6 +909,7 @@ synchronize_continuous <- function(
         .errorhandling = "pass"
       ) %dopar%
         {
+          parcon <- NULL
           tryCatch(
             {
               parcon <- AquaCache::AquaConnect(
@@ -783,46 +920,17 @@ synchronize_continuous <- function(
                 password = dbPass,
                 silent = TRUE
               )
-              worker(
-                i,
-                all_timeseries,
-                approval_unknown,
-                grade_unknown,
-                qualifier_unknown,
-                start_datetime,
-                parallel = TRUE,
-                con = parcon
-              )
-              return("Success")
-            },
-            warning = function(w) {
-              msg <- paste0("Warning: ", conditionMessage(w))
-              return(msg)
-            },
-            error = function(e) {
-              msg <- paste0("Error: ", conditionMessage(e))
-              return(msg)
+              run_worker_iteration(i, con = parcon, parallel = TRUE)
             },
             finally = {
               # Close the connection if it was opened in this iteration
-              if (exists("parcon")) {
+              if (!is.null(parcon)) {
                 DBI::dbDisconnect(parcon)
               }
             }
           )
         }
     }
-
-    # Pull apart the 'Success', 'Error', and 'Warning' messages from updated, which is a matrix of 1 column
-    updated <- as.character(updated[, 1])
-    parts <- strsplit(updated, ": ", fixed = TRUE)
-    status <- vapply(parts, `[[`, character(1), 1)
-
-    updated <- data.frame(
-      timeseries_id = all_timeseries$timeseries_id,
-      success = status == "Success",
-      message = ifelse(status == "Success", NA, updated)
-    )
   } else {
     # Not parallel
     message(
@@ -830,40 +938,16 @@ synchronize_continuous <- function(
       nrow(all_timeseries),
       " timeseries in sequence. This may take a while, please be patient."
     )
-    updated <- data.frame(
-      timeseries_id = all_timeseries$timeseries_id,
-      success = NA,
-      message = NA
-    ) # Counter for number of updated timeseries
+    updated <- vector("list", nrow(all_timeseries))
 
-    for (j in 1:nrow(all_timeseries)) {
-      tryCatch(
-        {
-          worker(
-            j,
-            all_timeseries,
-            approval_unknown,
-            grade_unknown,
-            qualifier_unknown,
-            start_datetime,
-            parallel = FALSE,
-            con = con
-          )
-          updated[j, "success"] <- TRUE
-        },
-        error = function(e) {
-          updated[j, "success"] <- FALSE
-          updated[j, "message"] <- paste0("Error: ", conditionMessage(e))
-        },
-        warning = function(w) {
-          updated[j, "success"] <- FALSE
-          updated[j, "message"] <- paste0("Warning: ", conditionMessage(w))
-        }
-      )
+    for (j in seq_len(nrow(all_timeseries))) {
+      updated[[j]] <- run_worker_iteration(j, con = con, parallel = FALSE)
       if (interactive()) {
         utils::setTxtProgressBar(pb, j)
       }
     } # End of for loop
+
+    updated <- do.call(rbind, updated)
   } # End of not parallel block
 
   if (interactive()) {
@@ -880,11 +964,11 @@ synchronize_continuous <- function(
   )
   message(
     "Successfully checked ",
-    sum(updated$success),
-    " timeseries out ",
+    sum(updated$success, na.rm = TRUE),
+    " timeseries out of ",
     nrow(all_timeseries),
     " timeseries; failed on ",
-    sum(!updated$success),
+    sum(!updated$success, na.rm = TRUE),
     " timeseries. See the returned data.frame for more information."
   )
   diff <- Sys.time() - start

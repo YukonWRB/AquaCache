@@ -130,10 +130,16 @@ test_that("adjust_contributor accepts date column and delete removes later segme
     )
   )
 
-  expect_equal(nrow(contributors_out), 1)
-  expect_equal(contributors_out$organization_id, org_a$id)
-  expect_equal(contributors_out$start_dt, "2099-02-01 00:00:00+00")
-  expect_equal(contributors_out$end_dt, "2099-02-04 00:00:00+00")
+  expect_equal(nrow(contributors_out), 2)
+  expect_equal(contributors_out$organization_id, c(org_a$id, org_b$id))
+  expect_equal(
+    contributors_out$start_dt,
+    c("2099-02-01 00:00:00+00", "2099-02-04 00:00:00+00")
+  )
+  expect_equal(
+    contributors_out$end_dt,
+    c("2099-02-04 00:00:00+00", "2099-02-10 00:00:00+00")
+  )
 })
 
 test_that("adjust_grade splits an existing contiguous period when inserting a mid-period grade", {

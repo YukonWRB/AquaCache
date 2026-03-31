@@ -4,7 +4,7 @@
 #'
 #' Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings defined in an import key .csv file, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
 #'
-#' Note that ECCC's results are converted to the AquaCache database parameters and units using the provided key file. Users should ensure that the key file contains accurate mappings for the parameters of interest. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
+#' Note that ECCC's results are converted to the AquaCache database parameters and units using the provided key file. Users should ensure that the key file contains accurate mappings for the parameters of interest, including an explicit `matrix_state` or `matrix_state_id` column for patch-39-era databases. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
 #'
 #' @param location The location code associated with the ECCC monitoring site. Must be a valid location code in the `SITE_NO` field of the ECCC water quality .csv files.
 #' @param file Path (URL) to the ECCC water quality .csv file containing the data to be imported for the specified location.
@@ -71,6 +71,27 @@ downloadECCCwq <- function(
         paste(missing_columns_key, collapse = ", ")
       )
     )
+  }
+
+  if (!("matrix_state" %in% names(key))) {
+    key$matrix_state <- NA_character_
+  }
+  if (!("matrix_state_id" %in% names(key))) {
+    key$matrix_state_id <- NA_integer_
+  }
+
+  key$matrix_state <- trimws(as.character(key$matrix_state))
+  key$matrix_state[!nzchar(key$matrix_state) | key$matrix_state == "NA"] <- NA
+  key$matrix_state_id <- suppressWarnings(as.integer(key$matrix_state_id))
+
+  missing_matrix_state <- is.na(key$matrix_state) & is.na(key$matrix_state_id)
+  if (any(missing_matrix_state)) {
+    warning(
+      "The ECCC key file is missing 'matrix_state' or 'matrix_state_id' for one or more rows. ",
+      "Assuming 'liquid' for those mappings. Update the key file to make matrix state explicit.",
+      call. = FALSE
+    )
+    key$matrix_state[missing_matrix_state] <- "liquid"
   }
 
   # ---- Cached download for `file` (URL or local path) ----
@@ -364,6 +385,9 @@ downloadECCCwq <- function(
         next
       }
 
+      matrix_state_id <- param_row$matrix_state_id[1]
+      matrix_state <- param_row$matrix_state[1]
+
       # Build the result row
       result <- data.frame(
         result_type = param_row$result_type[1],
@@ -374,7 +398,10 @@ downloadECCCwq <- function(
         result_condition_value = result_condition_value,
         result_value_type = param_row$result_value_type[1],
         result_speciation_id = param_row$result_speciation_id[1],
-        laboratory = eccc_lab
+        laboratory = eccc_lab,
+        matrix_state_id = matrix_state_id,
+        matrix_state = matrix_state,
+        stringsAsFactors = FALSE
       )
       results <- rbind(results, result)
     }

@@ -1,11 +1,27 @@
 # Functions to adjust the grade, qualifier, approval, owner, and contributor, and data sharing agreement of continuous-type data as it's appended to the database.
 
+# Helper functions; not exported
+
+#' @title Collapse segments with split
+#' @description
+#'  Collapse existing segments with new segments, splitting at boundaries and optionally bridging the latest existing segment to the next new segment if they have the same value.
+#' @param exist A data.frame of existing segments with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param new_segments A data.frame of new segments with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param value_col The name of the column containing the value to compare for collapsing.
+#' @param id_col The name of the column containing the unique identifier for segments.
+#' @param timeseries_id The timeseries_id to assign to the final segments.
+#' @param bridge_latest_extension Logical. If TRUE, if the latest existing segment ends before the earliest new segment starts and they have the same value, treat the existing segment as continuing through the start of the new segment instead of creating a brand-new trailing segment.
+#' @return A data.frame of segments with columns for id, timeseries_id, value, start_dt, and end_dt, where consecutive segments with the same value have been collapsed and the new segments have been integrated with the existing segments.
+#' @noRd
+#' @keywords internal
+
 collapse_segments_with_split <- function(
   exist,
   new_segments,
   value_col,
   id_col,
-  timeseries_id
+  timeseries_id,
+  bridge_latest_extension = FALSE
 ) {
   if (nrow(new_segments) == 0) {
     return(exist)
@@ -17,6 +33,27 @@ collapse_segments_with_split <- function(
     ,
     drop = FALSE
   ]
+
+  if (bridge_latest_extension && nrow(exist) > 0) {
+    latest_existing_idx <- which.max(exist$end_dt)
+    first_new_idx <- which.min(new_segments$start_dt)
+
+    if (
+      length(latest_existing_idx) == 1 &&
+        length(first_new_idx) == 1 &&
+        exist$end_dt[latest_existing_idx] <
+          new_segments$start_dt[first_new_idx] &&
+        identical(
+          exist[[value_col]][latest_existing_idx],
+          new_segments[[value_col]][first_new_idx]
+        )
+    ) {
+      # When appending new data with the same qualifying value, treat the
+      # latest existing segment as continuing through the next imported block
+      # instead of creating a brand-new trailing row.
+      exist$end_dt[latest_existing_idx] <- new_segments$start_dt[first_new_idx]
+    }
+  }
 
   boundaries <- sort(unique(c(
     as.POSIXct(exist$start_dt, tz = "UTC"),
@@ -111,6 +148,215 @@ collapse_segments_with_split <- function(
   final
 }
 
+#' @title Segment state key
+#' @description Create a unique key for a set of segments based on the id, timeseries_id, value, start_dt, and end_dt columns, to facilitate comparison of segment states.
+#' @param data A data.frame of segments with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param id_col The name of the column containing the unique identifier for segments.
+#' @param value_col The name of the column containing the value to compare for segment state.
+#' @return A character vector where each element is a unique key representing the state of the segments in the input data.frame, constructed by concatenating the id, timeseries_id, value, start_dt, and end_dt for each segment.
+#' @noRd
+#' @keywords internal
+segment_state_key <- function(data, id_col, value_col) {
+  if (nrow(data) == 0) {
+    return(character())
+  }
+
+  data <- data[
+    order(data$start_dt, data$end_dt),
+    c(id_col, "timeseries_id", value_col, "start_dt", "end_dt"),
+    drop = FALSE
+  ]
+
+  paste(
+    ifelse(is.na(data[[id_col]]), "NA", as.character(data[[id_col]])),
+    ifelse(
+      is.na(data$timeseries_id),
+      "NA",
+      as.character(data$timeseries_id)
+    ),
+    ifelse(
+      is.na(data[[value_col]]),
+      "NA",
+      as.character(data[[value_col]])
+    ),
+    fmt(data$start_dt),
+    fmt(data$end_dt),
+    sep = "|"
+  )
+}
+
+#' @title Segment state identical
+#' @description Check if the state of two sets of segments is identical.
+#' @param current A data.frame of the current segment state.
+#' @param proposed A data.frame of the proposed segment state.
+#' @param id_col The name of the column containing the unique identifier for segments.
+#' @param value_col The name of the column containing the value to compare for segment state.
+#' @return TRUE if the segment states are identical, FALSE otherwise.
+#' @noRd
+#' @keywords internal
+segments_identical <- function(current, proposed, id_col, value_col) {
+  identical(
+    segment_state_key(current, id_col, value_col),
+    segment_state_key(proposed, id_col, value_col)
+  )
+}
+
+#' @title Get IDs for synchronization deletion
+#' @description Retrieve the IDs of segments that should be deleted to synchronize with a remote data store, based on the timeseries_id and a minimum datetime threshold.
+#' @param con A connection to the database.
+#' @param table_name The name of the table to query for segments (e.g., "grades", "qualifiers", "approvals").
+#' @param id_col The name of the column containing the unique identifier for segments in the specified table.
+#' @param timeseries_id The timeseries_id for which to retrieve segment IDs.
+#' @param min_datetime The minimum datetime threshold; segments with a start_dt greater than or equal to this value will be considered for deletion.
+#' @return An integer vector of segment IDs that should be deleted to synchronize with the remote data store. If no segments meet the criteria, an empty integer vector is returned.
+#' @noRd
+#' @keywords internal
+get_sync_delete_ids <- function(
+  con,
+  table_name,
+  id_col,
+  timeseries_id,
+  min_datetime
+) {
+  ids <- DBI::dbGetQuery(
+    con,
+    sprintf(
+      "SELECT %s FROM %s WHERE timeseries_id = $1 AND start_dt >= $2;",
+      id_col,
+      table_name
+    ),
+    params = list(timeseries_id, min_datetime)
+  )
+
+  if (nrow(ids) == 0) {
+    return(integer())
+  }
+
+  ids[[1]]
+}
+
+#' @title Reconcile segment changes
+#' @description Reconcile the changes between the existing state and proposed state of segments by performing the necessary deletions, updates, and insertions in the database to align with the proposed state.
+#' @param con A connection to the database.
+#' @param table_name The name of the table to update segments in (e.g., "grades", "qualifiers", "approvals").
+#' @param id_col The name of the column containing the unique identifier for segments in the specified table.
+#' @param value_col The name of the column containing the value to compare for segment state in the input data.frames.
+#' @param db_value_col The name of the column containing the value to update in the database table.
+#' @param existing_state A data.frame representing the existing state of segments, with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param proposed_state A data.frame representing the proposed state of segments, with columns for id, timeseries_id, value, start_dt, and end_dt.
+#' @param delete_ids An integer vector of segment IDs that should be deleted as part of the reconciliation process, in addition to any deletions determined by comparing the existing and proposed states.
+#' @return TRUE if any changes were made to the database, FALSE if the existing state and proposed state are identical and no changes were necessary. The function performs the necessary deletions, updates, and insertions in the database to align with the proposed state.
+#' @noRd
+#' @keywords internal
+reconcile_segment_changes <- function(
+  con,
+  table_name,
+  id_col,
+  value_col,
+  db_value_col,
+  existing_state,
+  proposed_state,
+  delete_ids = integer()
+) {
+  proposed_delete_ids <- proposed_state[
+    proposed_state$timeseries_id == -1,
+    id_col
+  ]
+  proposed_state <- proposed_state[
+    proposed_state$timeseries_id != -1,
+    ,
+    drop = FALSE
+  ]
+
+  delete_ids <- unique(c(delete_ids, proposed_delete_ids))
+  delete_ids <- delete_ids[!is.na(delete_ids)]
+
+  kept_ids <- proposed_state[[id_col]]
+  kept_ids <- unique(kept_ids[!is.na(kept_ids)])
+  delete_ids <- setdiff(delete_ids, kept_ids)
+
+  existing_remaining <- existing_state
+  if (length(delete_ids) > 0) {
+    existing_remaining <- existing_remaining[
+      !(existing_remaining[[id_col]] %in% delete_ids),
+      ,
+      drop = FALSE
+    ]
+  }
+
+  if (
+    length(delete_ids) == 0 &&
+      segments_identical(existing_remaining, proposed_state, id_col, value_col)
+  ) {
+    return(invisible(FALSE))
+  }
+
+  if (length(delete_ids) > 0) {
+    DBI::dbExecute(
+      con,
+      paste0(
+        "DELETE FROM ",
+        table_name,
+        " WHERE ",
+        id_col,
+        " IN (",
+        paste(delete_ids, collapse = ", "),
+        ");"
+      )
+    )
+  }
+
+  for (i in seq_len(nrow(proposed_state))) {
+    proposed_row <- proposed_state[i, , drop = FALSE]
+    if (!is.na(proposed_row[[id_col]])) {
+      current_row <- existing_state[
+        existing_state[[id_col]] == proposed_row[[id_col]],
+        ,
+        drop = FALSE
+      ]
+      if (
+        nrow(current_row) == 1 &&
+          segments_identical(current_row, proposed_row, id_col, value_col)
+      ) {
+        next
+      }
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "UPDATE %s SET %s = $1, start_dt = $2, end_dt = $3 WHERE %s = $4;",
+          table_name,
+          db_value_col,
+          id_col
+        ),
+        params = list(
+          proposed_row[[value_col]][1],
+          proposed_row$start_dt[1],
+          proposed_row$end_dt[1],
+          proposed_row[[id_col]][1]
+        )
+      )
+    } else {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "INSERT INTO %s (timeseries_id, %s, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+          table_name,
+          db_value_col
+        ),
+        params = list(
+          proposed_row$timeseries_id[1],
+          proposed_row[[value_col]][1],
+          proposed_row$start_dt[1],
+          proposed_row$end_dt[1]
+        )
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
 #' Adjust the grade of a timeseries in the database
 #'
 #' @param con A connection to the database with write privileges to the 'grades' and 'measurements_continuous' tables.
@@ -159,17 +405,15 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
       # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
       min_datetime <- fmt(min(data$datetime))
       max_datetime <- fmt(max(data$datetime))
+      sync_delete_ids <- integer()
 
       if (delete) {
-        DBI::dbExecute(
+        sync_delete_ids <- get_sync_delete_ids(
           con,
-          paste0(
-            "DELETE FROM grades WHERE timeseries_id = ",
-            timeseries_id,
-            " AND start_dt >= '",
-            min_datetime,
-            "';"
-          )
+          "grades",
+          "grade_id",
+          timeseries_id,
+          min(data$datetime)
         )
       }
 
@@ -212,6 +456,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
           timeseries_id
         )
       )
+      existing_state <- exist
 
       if (nrow(exist) == 0) {
         exist <- data.frame(
@@ -241,57 +486,25 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "grade_type_id",
         id_col = "grade_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database
-      commit_fx <- function(con, exist) {
-        remove <- exist[exist$timeseries_id == -1, "grade_id"]
-        exist <- exist[exist$timeseries_id != -1, ]
-        if (length(remove) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM grades WHERE grade_id IN (",
-              paste(remove, collapse = ", "),
-              ");"
-            )
-          )
-        }
-        for (i in 1:nrow(exist)) {
-          if (!is.na(exist$grade_id[i])) {
-            # Means that we need to update rows
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE grades SET grade_type_id = ",
-                exist$grade_type_id[i],
-                ", start_dt = '",
-                exist$start_dt[i],
-                "', end_dt = '",
-                exist$end_dt[i],
-                "' WHERE grade_id = ",
-                exist$grade_id[i],
-                ";"
-              )
-            )
-          } else {
-            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
-            DBI::dbExecute(
-              con,
-              "INSERT INTO grades (timeseries_id, grade_type_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
-              params = list(
-                exist$timeseries_id[i],
-                exist$grade_type_id[i],
-                exist$start_dt[i],
-                exist$end_dt[i]
-              )
-            )
-          }
-        }
+      commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
+        reconcile_segment_changes(
+          con = con,
+          table_name = "grades",
+          id_col = "grade_id",
+          value_col = "grade_type_id",
+          db_value_col = "grade_type_id",
+          existing_state = existing_state,
+          proposed_state = exist,
+          delete_ids = sync_delete_ids
+        )
       }
 
-      commit_fx(con, exist)
+      commit_fx(con, exist, existing_state, sync_delete_ids)
 
       if (active) {
         DBI::dbExecute(con, "COMMIT;")
@@ -375,19 +588,26 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
 
       # Break 'data' into a data.frame for each unique 'rank'
       datalist <- split(data, data$rank)
+      sync_delete_ids <- integer()
 
       if (delete) {
-        DBI::dbExecute(
+        sync_delete_ids <- get_sync_delete_ids(
           con,
-          paste0(
-            "DELETE FROM qualifiers WHERE timeseries_id = ",
-            timeseries_id,
-            " AND start_dt >= '",
-            fmt(min(data$datetime)),
-            "';"
-          )
+          "qualifiers",
+          "qualifier_id",
+          timeseries_id,
+          min(data$datetime)
         )
       }
+
+      existing_state_all <- data.frame(
+        qualifier_id = integer(),
+        timeseries_id = integer(),
+        qualifier_type_id = integer(),
+        start_dt = as.POSIXct(character(), tz = "UTC"),
+        end_dt = as.POSIXct(character(), tz = "UTC")
+      )
+      proposed_state_all <- existing_state_all
 
       # Work on each table in the list
       for (tbl in names(datalist)) {
@@ -440,6 +660,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
             data$qualifier[1]
           )
         )
+        existing_state_all <- rbind(existing_state_all, exist)
 
         if (nrow(exist) == 0) {
           exist <- data.frame(
@@ -469,58 +690,52 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           new_segments = new_segments,
           value_col = "qualifier_type_id",
           id_col = "qualifier_id",
-          timeseries_id = timeseries_id
+          timeseries_id = timeseries_id,
+          bridge_latest_extension = TRUE
         )
 
-        # Now commit the changes to the database
-        commit_fx <- function(con, exist) {
-          remove <- exist[exist$timeseries_id == -1, "qualifier_id"]
-          exist <- exist[exist$timeseries_id != -1, ]
-          if (length(remove) > 0) {
-            DBI::dbExecute(
-              con,
-              paste0(
-                "DELETE FROM qualifiers WHERE qualifier_id IN (",
-                paste(remove, collapse = ", "),
-                ");"
-              )
-            )
-          }
-          for (i in 1:nrow(exist)) {
-            if (!is.na(exist$qualifier_id[i])) {
-              # Means that we need to update rows
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE qualifiers SET qualifier_type_id = ",
-                  exist$qualifier_type_id[i],
-                  ", start_dt = '",
-                  exist$start_dt[i],
-                  "', end_dt = '",
-                  exist$end_dt[i],
-                  "' WHERE qualifier_id = ",
-                  exist$qualifier_id[i],
-                  ";"
-                )
-              )
-            } else {
-              # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
-              DBI::dbExecute(
-                con,
-                "INSERT INTO qualifiers (timeseries_id, qualifier_type_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
-                params = list(
-                  exist$timeseries_id[i],
-                  exist$qualifier_type_id[i],
-                  exist$start_dt[i],
-                  exist$end_dt[i]
-                )
-              )
-            }
-          }
-        }
-
-        commit_fx(con, exist)
+        proposed_state_all <- rbind(proposed_state_all, exist)
       } # End of for loop iterating on tables
+
+      if (nrow(existing_state_all) > 0) {
+        existing_state_all <- existing_state_all[
+          !duplicated(existing_state_all$qualifier_id),
+          ,
+          drop = FALSE
+        ]
+      }
+
+      if (nrow(proposed_state_all) > 0) {
+        proposed_existing_ids <- proposed_state_all[
+          !is.na(proposed_state_all$qualifier_id),
+          ,
+          drop = FALSE
+        ]
+        proposed_new_ids <- proposed_state_all[
+          is.na(proposed_state_all$qualifier_id),
+          ,
+          drop = FALSE
+        ]
+        if (nrow(proposed_existing_ids) > 0) {
+          proposed_existing_ids <- proposed_existing_ids[
+            !duplicated(proposed_existing_ids$qualifier_id),
+            ,
+            drop = FALSE
+          ]
+        }
+        proposed_state_all <- rbind(proposed_existing_ids, proposed_new_ids)
+      }
+
+      reconcile_segment_changes(
+        con = con,
+        table_name = "qualifiers",
+        id_col = "qualifier_id",
+        value_col = "qualifier_type_id",
+        db_value_col = "qualifier_type_id",
+        existing_state = existing_state_all,
+        proposed_state = proposed_state_all,
+        delete_ids = sync_delete_ids
+      )
 
       if (active) {
         DBI::dbExecute(con, "COMMIT;")
@@ -586,17 +801,15 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
       # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
       min_datetime <- fmt(min(data$datetime))
       max_datetime <- fmt(max(data$datetime))
+      sync_delete_ids <- integer()
 
       if (delete) {
-        DBI::dbExecute(
+        sync_delete_ids <- get_sync_delete_ids(
           con,
-          paste0(
-            "DELETE FROM approvals WHERE timeseries_id = ",
-            timeseries_id,
-            " AND start_dt >= '",
-            min_datetime,
-            "';"
-          )
+          "approvals",
+          "approval_id",
+          timeseries_id,
+          min(data$datetime)
         )
       }
 
@@ -639,6 +852,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
           timeseries_id
         )
       )
+      existing_state <- exist
 
       if (nrow(exist) == 0) {
         exist <- data.frame(
@@ -669,57 +883,25 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "approval_type_id",
         id_col = "approval_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database
-      commit_fx <- function(con, exist) {
-        remove <- exist[exist$timeseries_id == -1, "approval_id"]
-        exist <- exist[exist$timeseries_id != -1, ]
-        if (length(remove) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM approvals WHERE approval_id IN (",
-              paste(remove, collapse = ", "),
-              ");"
-            )
-          )
-        }
-        for (i in 1:nrow(exist)) {
-          if (!is.na(exist$approval_id[i])) {
-            # Means that we need to update rows
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE approvals SET approval_type_id = ",
-                exist$approval_type_id[i],
-                ", start_dt = '",
-                exist$start_dt[i],
-                "', end_dt = '",
-                exist$end_dt[i],
-                "' WHERE approval_id = ",
-                exist$approval_id[i],
-                ";"
-              )
-            )
-          } else {
-            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
-            DBI::dbExecute(
-              con,
-              "INSERT INTO approvals (timeseries_id, approval_type_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
-              params = list(
-                exist$timeseries_id[i],
-                exist$approval_type_id[i],
-                exist$start_dt[i],
-                exist$end_dt[i]
-              )
-            )
-          }
-        }
+      commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
+        reconcile_segment_changes(
+          con = con,
+          table_name = "approvals",
+          id_col = "approval_id",
+          value_col = "approval_type_id",
+          db_value_col = "approval_type_id",
+          existing_state = existing_state,
+          proposed_state = exist,
+          delete_ids = sync_delete_ids
+        )
       }
 
-      commit_fx(con, exist)
+      commit_fx(con, exist, existing_state, sync_delete_ids)
 
       if (active) {
         DBI::dbExecute(con, "COMMIT;")
@@ -787,17 +969,15 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
       min_datetime <- fmt(min(data$datetime))
       max_datetime <- fmt(max(data$datetime))
+      sync_delete_ids <- integer()
 
       if (delete) {
-        DBI::dbExecute(
+        sync_delete_ids <- get_sync_delete_ids(
           con,
-          paste0(
-            "DELETE FROM owners WHERE timeseries_id = ",
-            timeseries_id,
-            " AND start_dt >= '",
-            min_datetime,
-            "';"
-          )
+          "owners",
+          "owner_id",
+          timeseries_id,
+          min(data$datetime)
         )
       }
 
@@ -840,6 +1020,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
           timeseries_id
         )
       )
+      existing_state <- exist
 
       if (nrow(exist) == 0) {
         exist <- data.frame(
@@ -869,57 +1050,25 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "organization_id",
         id_col = "owner_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database
-      commit_fx <- function(con, exist) {
-        remove <- exist[exist$timeseries_id == -1, "owner_id"]
-        exist <- exist[exist$timeseries_id != -1, ]
-        if (length(remove) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM owners WHERE owner_id IN (",
-              paste(remove, collapse = ", "),
-              ");"
-            )
-          )
-        }
-        for (i in 1:nrow(exist)) {
-          if (!is.na(exist$owner_id[i])) {
-            # Means that we need to update rows
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE owners SET organization_id = ",
-                exist$organization_id[i],
-                ", start_dt = '",
-                exist$start_dt[i],
-                "', end_dt = '",
-                exist$end_dt[i],
-                "' WHERE owner_id = ",
-                exist$owner_id[i],
-                ";"
-              )
-            )
-          } else {
-            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
-            DBI::dbExecute(
-              con,
-              "INSERT INTO owners (timeseries_id, organization_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
-              params = list(
-                exist$timeseries_id[i],
-                exist$organization_id[i],
-                exist$start_dt[i],
-                exist$end_dt[i]
-              )
-            )
-          }
-        }
+      commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
+        reconcile_segment_changes(
+          con = con,
+          table_name = "owners",
+          id_col = "owner_id",
+          value_col = "organization_id",
+          db_value_col = "organization_id",
+          existing_state = existing_state,
+          proposed_state = exist,
+          delete_ids = sync_delete_ids
+        )
       }
 
-      commit_fx(con, exist)
+      commit_fx(con, exist, existing_state, sync_delete_ids)
 
       if (active) {
         DBI::dbExecute(con, "COMMIT;")
@@ -987,17 +1136,15 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
       # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
       min_datetime <- fmt(min(data$datetime))
       max_datetime <- fmt(max(data$datetime))
+      sync_delete_ids <- integer()
 
       if (delete) {
-        DBI::dbExecute(
+        sync_delete_ids <- get_sync_delete_ids(
           con,
-          paste0(
-            "DELETE FROM contributors WHERE timeseries_id = ",
-            timeseries_id,
-            " AND start_dt >= '",
-            min_datetime,
-            "';"
-          )
+          "contributors",
+          "contributor_id",
+          timeseries_id,
+          min(data$datetime)
         )
       }
 
@@ -1040,6 +1187,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
           timeseries_id
         )
       )
+      existing_state <- exist
 
       if (nrow(exist) == 0) {
         exist <- data.frame(
@@ -1069,57 +1217,25 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
         new_segments = new_segments,
         value_col = "organization_id",
         id_col = "contributor_id",
-        timeseries_id = timeseries_id
+        timeseries_id = timeseries_id,
+        bridge_latest_extension = TRUE
       )
 
       # Now commit the changes to the database
-      commit_fx <- function(con, exist) {
-        remove <- exist[exist$timeseries_id == -1, "contributor_id"]
-        exist <- exist[exist$timeseries_id != -1, ]
-        if (length(remove) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM contributors WHERE contributor_id IN (",
-              paste(remove, collapse = ", "),
-              ");"
-            )
-          )
-        }
-        for (i in 1:nrow(exist)) {
-          if (!is.na(exist$contributor_id[i])) {
-            # Means that we need to update rows
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE contributors SET organization_id = ",
-                exist$organization_id[i],
-                ", start_dt = '",
-                exist$start_dt[i],
-                "', end_dt = '",
-                exist$end_dt[i],
-                "' WHERE contributor_id = ",
-                exist$contributor_id[i],
-                ";"
-              )
-            )
-          } else {
-            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
-            DBI::dbExecute(
-              con,
-              "INSERT INTO contributors (timeseries_id, organization_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
-              params = list(
-                exist$timeseries_id[i],
-                exist$organization_id[i],
-                exist$start_dt[i],
-                exist$end_dt[i]
-              )
-            )
-          }
-        }
+      commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
+        reconcile_segment_changes(
+          con = con,
+          table_name = "contributors",
+          id_col = "contributor_id",
+          value_col = "organization_id",
+          db_value_col = "organization_id",
+          existing_state = existing_state,
+          proposed_state = exist,
+          delete_ids = sync_delete_ids
+        )
       }
 
-      commit_fx(con, exist)
+      commit_fx(con, exist, existing_state, sync_delete_ids)
 
       if (active) {
         DBI::dbExecute(con, "COMMIT;")
@@ -1195,17 +1311,15 @@ adjust_data_sharing_agreement <- function(
       # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
       min_datetime <- fmt(min(data$datetime))
       max_datetime <- fmt(max(data$datetime))
+      sync_delete_ids <- integer()
 
       if (delete) {
-        DBI::dbExecute(
+        sync_delete_ids <- get_sync_delete_ids(
           con,
-          paste0(
-            "DELETE FROM timeseries_data_sharing_agreements WHERE timeseries_id = ",
-            timeseries_id,
-            " AND start_dt >= '",
-            min_datetime,
-            "';"
-          )
+          "timeseries_data_sharing_agreements",
+          "timeseries_data_sharing_agreement_id",
+          timeseries_id,
+          min(data$datetime)
         )
       }
 
@@ -1256,6 +1370,7 @@ adjust_data_sharing_agreement <- function(
           timeseries_id
         )
       )
+      existing_state <- exist
 
       if (nrow(exist) == 0) {
         exist <- data.frame(
@@ -1289,56 +1404,20 @@ adjust_data_sharing_agreement <- function(
       )
 
       # Now commit the changes to the database
-      commit_fx <- function(con, exist) {
-        remove <- exist[
-          exist$timeseries_id == -1,
-          "timeseries_data_sharing_agreement_id"
-        ]
-        exist <- exist[exist$timeseries_id != -1, ]
-        if (length(remove) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM timeseries_data_sharing_agreements WHERE timeseries_data_sharing_agreement_id IN (",
-              paste(remove, collapse = ", "),
-              ");"
-            )
-          )
-        }
-        for (i in 1:nrow(exist)) {
-          if (!is.na(exist$timeseries_data_sharing_agreement_id[i])) {
-            # Means that we need to update rows
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE timeseries_data_sharing_agreements SET data_sharing_agreement_id = ",
-                exist$data_sharing_agreement_id[i],
-                ", start_dt = '",
-                exist$start_dt[i],
-                "', end_dt = '",
-                exist$end_dt[i],
-                "' WHERE timeseries_data_sharing_agreement_id = ",
-                exist$timeseries_data_sharing_agreement_id[i],
-                ";"
-              )
-            )
-          } else {
-            # Means that we need to insert new rows (usually a single row, no need to concatenate values into a single query)
-            DBI::dbExecute(
-              con,
-              "INSERT INTO timeseries_data_sharing_agreements (timeseries_id, data_sharing_agreement_id, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
-              params = list(
-                exist$timeseries_id[i],
-                exist$data_sharing_agreement_id[i],
-                exist$start_dt[i],
-                exist$end_dt[i]
-              )
-            )
-          }
-        }
+      commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
+        reconcile_segment_changes(
+          con = con,
+          table_name = "timeseries_data_sharing_agreements",
+          id_col = "timeseries_data_sharing_agreement_id",
+          value_col = "data_sharing_agreement_id",
+          db_value_col = "data_sharing_agreement_id",
+          existing_state = existing_state,
+          proposed_state = exist,
+          delete_ids = sync_delete_ids
+        )
       }
 
-      commit_fx(con, exist)
+      commit_fx(con, exist, existing_state, sync_delete_ids)
 
       if (active) {
         DBI::dbExecute(con, "COMMIT;")

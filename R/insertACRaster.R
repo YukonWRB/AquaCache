@@ -40,64 +40,9 @@ insertACRaster <- function(
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
   if (!("rasters_reference" %in% DBI::dbListTables(con))) {
-    message("rasters_reference does not already exist. Creating it.")
-    version <- DBI::dbGetQuery(con, "SELECT version()")
-    if (grepl("PostgreSQL", version$version)) {
-      DBI::dbExecute(
-        con,
-        "CREATE TABLE rasters_reference (
-                   reference_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-                   raster_series_id INTEGER,
-                   type TEXT CHECK(type IN ('model', 'other')),
-                   model TEXT,
-                   description TEXT,
-                   flag TEXT,
-                   band_names TEXT NOT NULL,
-                   units TEXT,
-                   valid_from TIMESTAMP WITH TIME ZONE,
-                   valid_to TIMESTAMP WITH TIME ZONE,
-                   issued TIMESTAMP WITH TIME ZONE,
-                   source TEXT,
-                   UNIQUE NULLS NOT DISTINCT (raster_series_id, flag, valid_from, valid_to, issued),
-                   CONSTRAINT check_model_constraints
-                     CHECK (
-                     (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
-                     (type = 'other' AND description IS NOT NULL)
-                     )
-                     );"
-      )
-    } else if (grepl("Microsoft", version$version)) {
-      DBI::dbExecute(
-        con,
-        "CREATE TABLE rasters_reference (
-                   reference_id INT IDENTITY(1,1) PRIMARY KEY,
-                   raster_series_id INTEGER,
-                   type VARCHAR(MAX) CHECK(type IN ('model', 'other')),
-                   model VARCHAR(MAX),
-                   description VARCHAR(MAX),
-                   flag VARCHAR(MAX),
-                   band_names VARCHAR(MAX) NOT NULL,
-                   units VARCHAR(MAX),
-                   valid_from TIMESTAMP WITH TIME ZONE,
-                   valid_to TIMESTAMP WITH TIME ZONE,
-                   issued TIMESTAMP WITH TIME ZONE,
-                   source VARCHAR(MAX),
-                   UNIQUE NULLS NOT DISTINCT (raster_series_id, flag, valid_from, valid_to, issued),
-                   CONSTRAINT check_model_constraints
-                     CHECK (
-                     (type = 'model' AND valid_from IS NOT NULL AND valid_to IS NOT NULL) OR
-                     (type = 'other' AND description IS NOT NULL)
-                     )
-                     );"
-      )
-    } else {
-      stop(
-        "This script is designed to work with either postgreSQL or SQL server databases."
-      )
-    }
-    add_constraints <- TRUE
-  } else {
-    add_constraints <- FALSE
+    stop(
+      "spatial.rasters_reference does not exist in this database. Apply the AquaCache schema before calling insertACRaster()."
+    )
   }
 
   if (inherits(raster, "character")) {
@@ -132,6 +77,16 @@ insertACRaster <- function(
   )
 
   if (res$status) {
+    other_type_id <- DBI::dbGetQuery(
+      con,
+      "SELECT raster_type_id
+       FROM spatial.raster_types
+       WHERE raster_type_name = 'other';"
+    )[1, 1]
+    if (is.na(other_type_id)) {
+      stop("Could not resolve raster_type_id for raster type 'other'.")
+    }
+
     # band names
     bnds <- DBI::dbQuoteString(
       con,
@@ -139,9 +94,9 @@ insertACRaster <- function(
     )
     new_id <- DBI::dbGetQuery(
       con,
-      "INSERT INTO spatial.rasters_reference (type, band_names, units, description, source) VALUES ($1, $2, $3, $4, $5) RETURNING reference_id;",
+      "INSERT INTO spatial.rasters_reference (raster_type_id, band_names, units, description, source) VALUES ($1, $2, $3, $4, $5) RETURNING reference_id;",
       params = list(
-        "other",
+        other_type_id,
         bnds,
         units,
         description,
@@ -158,33 +113,6 @@ insertACRaster <- function(
         ");"
       )
     )
-
-    if (add_constraints) {
-      DBI::dbExecute(
-        con,
-        "ALTER TABLE rasters ADD CONSTRAINT fk_reference_id FOREIGN KEY (reference_id) REFERENCES rasters_reference(reference_id) ON DELETE CASCADE ON UPDATE CASCADE"
-      )
-      DBI::dbExecute(
-        con,
-        "COMMENT ON TABLE public.rasters_reference IS 'References rasters in the rasters table, since the later might have rasters broken up in multiple tiles. This table has one reference_id per raster, which may be linked to multiple entries in table rasters.'"
-      )
-      DBI::dbExecute(
-        con,
-        "COMMENT ON COLUMN public.rasters_reference.flag IS 'Used to flag rasters that require further review or that need to be deleted after a certain period. Reanalysis products in particular can have preliminary issues, in which case PRELIMINARY would be entered here.'"
-      )
-      DBI::dbExecute(
-        con,
-        "COMMENT ON COLUMN public.rasters_reference.reference_id IS 'Used to identify one or more raster tiles (large rasters may be broken up in tiles for performance) in the table rasters.'"
-      )
-      DBI::dbExecute(
-        con,
-        "COMMENT ON COLUMN public.rasters_reference.raster_series_id IS 'Identifies a time-series of rasters, the details of which are stored in table raster_series_index.'"
-      )
-      DBI::dbExecute(
-        con,
-        "COMMENT ON COLUMN public.rasters_reference.model IS 'If the raster is generated from a model such as a climate model enter the name here. This is more useful for one-off rasters, as model timeseries will also list the model in table raster_series_index.'"
-      )
-    }
 
     return(new_id)
   } else {

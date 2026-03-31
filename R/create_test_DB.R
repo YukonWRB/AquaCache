@@ -251,13 +251,21 @@ create_test_db <- function(
     "files.document_types",
     "information.internal_status",
     "information.version_info",
+    "instruments.communication_protocol_families",
+    "instruments.communication_protocols",
+    "instruments.transmission_component_roles",
+    "instruments.transmission_method_families",
+    "instruments.transmission_methods",
     "public.approval_types",
     "continuous.correction_types",
     "public.datum_list",
     "public.grade_types",
     "public.location_types",
+    "public.matrix_states",
     "public.media_types",
     "public.network_project_types",
+    "public.units",
+    "public.unit_conversions",
     "public.parameters",
     "public.parameter_groups",
     "public.parameter_sub_groups",
@@ -322,6 +330,30 @@ create_test_db <- function(
   DBI::dbAppendTable(test_con, DBI::SQL("spatial.vectors"), vect)
   message("Loading table public.locations into the test database...")
   DBI::dbAppendTable(test_con, "locations", locs)
+
+  sub_locations <- DBI::dbGetQuery(
+    con,
+    sprintf(
+      "SELECT * FROM sub_locations WHERE location_id IN (%s)",
+      paste(locations, collapse = ", ")
+    )
+  )
+  if (nrow(sub_locations) > 0) {
+    message("Loading table public.sub_locations into the test database...")
+    DBI::dbAppendTable(test_con, DBI::SQL("public.sub_locations"), sub_locations)
+  }
+
+  loc_z <- DBI::dbGetQuery(
+    con,
+    sprintf(
+      "SELECT * FROM locations_z WHERE location_id IN (%s)",
+      paste(locations, collapse = ", ")
+    )
+  )
+  if (nrow(loc_z) > 0) {
+    message("Loading table public.locations_z into the test database...")
+    DBI::dbAppendTable(test_con, DBI::SQL("public.locations_z"), loc_z)
+  }
 
   # Select entries in locations_networks and locations_projects that match the selected locations
   loc_networks <- DBI::dbGetQuery(
@@ -480,6 +512,219 @@ create_test_db <- function(
         )
       )
       DBI::dbAppendTable(test_con, "location_names", location_names)
+
+      if (
+        DBI::dbExistsTable(
+          con,
+          DBI::Id(schema = "public", table = "locations_metadata_instruments")
+        )
+      ) {
+        lmi <- DBI::dbGetQuery(
+          con,
+          sprintf(
+            "SELECT * FROM public.locations_metadata_instruments WHERE location_id IN (%s)",
+            paste(locations, collapse = ",")
+          )
+        )
+        if (nrow(lmi) > 0) {
+          metadata_ids <- paste(lmi$metadata_id, collapse = ",")
+
+          message(
+            "Loading table public.locations_metadata_instruments into the test database"
+          )
+          DBI::dbAppendTable(
+            test_con,
+            DBI::SQL("public.locations_metadata_instruments"),
+            lmi
+          )
+
+          if (
+            DBI::dbExistsTable(
+              con,
+              DBI::Id(
+                schema = "public",
+                table = "locations_metadata_instrument_connections"
+              )
+            )
+          ) {
+            connections <- DBI::dbGetQuery(
+              con,
+              sprintf(
+                paste(
+                  "SELECT *",
+                  "FROM public.locations_metadata_instrument_connections",
+                  "WHERE instrument_metadata_id IN (%s)",
+                  "   OR logger_metadata_id IN (%s)"
+                ),
+                metadata_ids,
+                metadata_ids
+              )
+            )
+            if (nrow(connections) > 0) {
+              message(
+                paste(
+                  "Loading table public.locations_metadata_instrument_connections",
+                  "into the test database"
+                )
+              )
+              DBI::dbAppendTable(
+                test_con,
+                DBI::SQL("public.locations_metadata_instrument_connections"),
+                connections
+              )
+
+              connection_ids <- paste(connections$connection_id, collapse = ",")
+              if (
+                DBI::dbExistsTable(
+                  con,
+                  DBI::Id(
+                    schema = "public",
+                    table = "locations_metadata_instrument_connection_signals"
+                  )
+                )
+              ) {
+                connection_signals <- DBI::dbGetQuery(
+                  con,
+                  sprintf(
+                    paste(
+                      "SELECT *",
+                      "FROM public.locations_metadata_instrument_connection_signals",
+                      "WHERE connection_id IN (%s)"
+                    ),
+                    connection_ids
+                  )
+                )
+                if (nrow(connection_signals) > 0) {
+                  message(
+                    paste(
+                      "Loading table",
+                      "public.locations_metadata_instrument_connection_signals",
+                      "into the test database"
+                    )
+                  )
+                  DBI::dbAppendTable(
+                    test_con,
+                    DBI::SQL(
+                      "public.locations_metadata_instrument_connection_signals"
+                    ),
+                    connection_signals
+                  )
+                }
+              }
+            }
+          }
+
+          if (
+            DBI::dbExistsTable(
+              con,
+              DBI::Id(
+                schema = "public",
+                table = "locations_metadata_transmission_setups"
+              )
+            )
+          ) {
+            transmission_setups <- DBI::dbGetQuery(
+              con,
+              sprintf(
+                paste(
+                  "SELECT *",
+                  "FROM public.locations_metadata_transmission_setups",
+                  "WHERE logger_metadata_id IN (%s)"
+                ),
+                metadata_ids
+              )
+            )
+            if (nrow(transmission_setups) > 0) {
+              message(
+                paste(
+                  "Loading table public.locations_metadata_transmission_setups",
+                  "into the test database"
+                )
+              )
+              DBI::dbAppendTable(
+                test_con,
+                DBI::SQL("public.locations_metadata_transmission_setups"),
+                transmission_setups
+              )
+
+              setup_ids <- paste(
+                transmission_setups$transmission_setup_id,
+                collapse = ","
+              )
+              if (
+                DBI::dbExistsTable(
+                  con,
+                  DBI::Id(
+                    schema = "public",
+                    table = "locations_metadata_transmission_routes"
+                  )
+                )
+              ) {
+                transmission_routes <- DBI::dbGetQuery(
+                  con,
+                  sprintf(
+                    paste(
+                      "SELECT *",
+                      "FROM public.locations_metadata_transmission_routes",
+                      "WHERE transmission_setup_id IN (%s)"
+                    ),
+                    setup_ids
+                  )
+                )
+                if (nrow(transmission_routes) > 0) {
+                  message(
+                    paste(
+                      "Loading table public.locations_metadata_transmission_routes",
+                      "into the test database"
+                    )
+                  )
+                  DBI::dbAppendTable(
+                    test_con,
+                    DBI::SQL("public.locations_metadata_transmission_routes"),
+                    transmission_routes
+                  )
+                }
+              }
+
+              if (
+                DBI::dbExistsTable(
+                  con,
+                  DBI::Id(
+                    schema = "public",
+                    table = "locations_metadata_transmission_components"
+                  )
+                )
+              ) {
+                transmission_components <- DBI::dbGetQuery(
+                  con,
+                  sprintf(
+                    paste(
+                      "SELECT *",
+                      "FROM public.locations_metadata_transmission_components",
+                      "WHERE transmission_setup_id IN (%s)"
+                    ),
+                    setup_ids
+                  )
+                )
+                if (nrow(transmission_components) > 0) {
+                  message(
+                    paste(
+                      "Loading table",
+                      "public.locations_metadata_transmission_components",
+                      "into the test database"
+                    )
+                  )
+                  DBI::dbAppendTable(
+                    test_con,
+                    DBI::SQL("public.locations_metadata_transmission_components"),
+                    transmission_components
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
     } else {
       warning("No continuous timeseries found for the specified locations.")
     }

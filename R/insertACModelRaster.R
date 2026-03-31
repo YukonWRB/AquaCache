@@ -162,19 +162,47 @@ insertACModelRaster <- function(
   )
 
   if (res$status) {
+    series_meta <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         raster_type_id,
+         parameter_id,
+         aggregation_type_id,
+         media_id,
+         matrix_state_id,
+         z_value,
+         z_units,
+         model
+       FROM spatial.raster_series_index
+       WHERE raster_series_id = $1;",
+      params = list(raster_series_id)
+    )
+    if (nrow(series_meta) != 1) {
+      stop("Could not find a unique raster_series_index row for the supplied raster_series_id.")
+    }
+
     # band names
     bnds <- DBI::dbQuoteString(
       con,
       paste0("{{", paste(names(raster), collapse = "},{"), "}}")
     )
-    type_id <- DBI::dbGetQuery(con, paste0("SELECT raster_type_id FROM raster_series_index WHERE raster_series_id = ", raster_series_id))
     new_id <- DBI::dbGetQuery(
       con,
-      "INSERT INTO spatial.rasters_reference (raster_series_id, raster_type_id, model, band_names, units, valid_from, valid_to, issued, source, description, flag) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING reference_id;",
+      paste(
+        "INSERT INTO spatial.rasters_reference (",
+        "raster_series_id, raster_type_id, model, band_names, units,",
+        "valid_from, valid_to, issued, source, description, flag,",
+        "parameter_id, aggregation_type_id, media_id, matrix_state_id,",
+        "z_value, z_units",
+        ") VALUES (",
+        "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,",
+        "$12, $13, $14, $15, $16, $17",
+        ") RETURNING reference_id;"
+      ),
       params = list(
         raster_series_id,
-        type_id,
-        model,
+        series_meta$raster_type_id[1],
+        if (is.na(model)) series_meta$model[1] else model,
         bnds,
         units,
         valid_from,
@@ -182,7 +210,13 @@ insertACModelRaster <- function(
         issued,
         source,
         description,
-        flag
+        flag,
+        series_meta$parameter_id[1],
+        series_meta$aggregation_type_id[1],
+        series_meta$media_id[1],
+        series_meta$matrix_state_id[1],
+        series_meta$z_value[1],
+        series_meta$z_units[1]
       )
     )[1, 1]
 

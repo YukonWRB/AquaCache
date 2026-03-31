@@ -13,6 +13,7 @@ addACTimeseries(
   z = NA,
   parameter = NA,
   media = NA,
+  matrix_state_id = NA,
   sensor_priority = 1,
   aggregation_type = "instantaneous",
   record_rate = NA,
@@ -40,6 +41,8 @@ addACTimeseries(
 \item{parameter}{A numeric vector corresponding to column 'parameter_id' of table 'parameters'.}
 
 \item{media}{A numeric vector corresponding to column 'media_id' of table 'media_types'.}
+
+\item{matrix_state_id}{An optional numeric vector corresponding to column 'matrix_state_id' of table 'matrix_states'. Leave as NA to let the database resolve the matrix state from the media and parameter defaults.}
 
 \item{sensor_priority}{A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.}
 
