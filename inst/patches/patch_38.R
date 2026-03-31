@@ -176,22 +176,22 @@ tryCatch(
     DBI::dbExecute(
       con,
       "COMMENT ON COLUMN continuous.measurements_continuous.measurement_row_id IS
-       'Stable internal row identifier used to reconstruct measurement history when the natural key changes over time.';"
+       'Stable internal row identifier assigned once and used to reconstruct measurement history when the natural key changes over time.';"
     )
     DBI::dbExecute(
       con,
       "COMMENT ON COLUMN continuous.measurements_calculated_daily.measurement_row_id IS
-       'Stable internal row identifier used to reconstruct stored daily history when the natural key changes over time.';"
+       'Stable internal row identifier assigned once and used to reconstruct stored daily history when the natural key changes over time.';"
     )
     DBI::dbExecute(
       con,
       "COMMENT ON COLUMN audit.measurements_continuous_log.measurement_row_id IS
-       'Stable measurement row identifier copied from continuous.measurements_continuous to support point-in-time reconstruction across key changes.';"
+       'Stable immutable measurement row identifier copied from continuous.measurements_continuous to support point-in-time reconstruction across key changes.';"
     )
     DBI::dbExecute(
       con,
       "COMMENT ON COLUMN audit.measurements_calculated_daily_log.measurement_row_id IS
-       'Stable measurement row identifier copied from continuous.measurements_calculated_daily to support point-in-time reconstruction across key changes.';"
+       'Stable immutable measurement row identifier copied from continuous.measurements_calculated_daily to support point-in-time reconstruction across key changes.';"
     )
 
     message(
@@ -236,6 +236,60 @@ tryCatch(
          log_id
        )
        WHERE measurement_row_id IS NOT NULL;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.prevent_measurement_row_id_change()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $function$
+       BEGIN
+         IF OLD.measurement_row_id IS DISTINCT FROM NEW.measurement_row_id THEN
+           RAISE EXCEPTION
+             'measurement_row_id is immutable on %.%. Attempted to change % to %.',
+             TG_TABLE_SCHEMA,
+             TG_TABLE_NAME,
+             OLD.measurement_row_id,
+             NEW.measurement_row_id;
+         END IF;
+
+         RETURN NEW;
+       END;
+       $function$;"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER FUNCTION public.prevent_measurement_row_id_change()
+       OWNER TO admin;"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON FUNCTION public.prevent_measurement_row_id_change() IS
+       'Prevents updates to measurement_row_id so audit history remains keyed to one stable row identifier per measurement row.';"
+    )
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS prevent_measurements_continuous_row_id_change
+       ON continuous.measurements_continuous;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER prevent_measurements_continuous_row_id_change
+       BEFORE UPDATE OF measurement_row_id ON continuous.measurements_continuous
+       FOR EACH ROW
+       EXECUTE FUNCTION public.prevent_measurement_row_id_change();"
+    )
+    DBI::dbExecute(
+      con,
+      "DROP TRIGGER IF EXISTS prevent_measurements_calculated_daily_row_id_change
+       ON continuous.measurements_calculated_daily;"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER prevent_measurements_calculated_daily_row_id_change
+       BEFORE UPDATE OF measurement_row_id ON continuous.measurements_calculated_daily
+       FOR EACH ROW
+       EXECUTE FUNCTION public.prevent_measurement_row_id_change();"
     )
 
     DBI::dbExecute(

@@ -11,13 +11,18 @@ addACRasterSeries(
   source_fx,
   type,
   source_fx_args = NA,
-  con = NULL
+  con = NULL,
+  media_id = NA,
+  matrix_state_id = NA,
+  aggregation_type = NA,
+  z_value = NA,
+  z_units = NA
 )
 }
 \arguments{
 \item{model}{The model producing the raster, as a character string}
 
-\item{parameter}{The parameter to import, as a string.}
+\item{parameter}{The parameter to import, as a parameter name or \code{parameter_id}.}
 
 \item{start_datetime}{The datetime (as POSIXct) from which to look for rasters}
 
@@ -28,6 +33,16 @@ addACRasterSeries(
 \item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}}. Leave NULL if you want to use the package default connection settings and have the connection automatically closed afterwards.}
+
+\item{media_id}{Optional \code{media_id} for the raster series. Required when the parameter can exist in multiple matrix states unless \code{matrix_state_id} is supplied explicitly.}
+
+\item{matrix_state_id}{Optional \code{matrix_state_id} for the raster series. Leave as \code{NA} to let the database resolve it from \code{media_id} and the parameter defaults.}
+
+\item{aggregation_type}{Optional aggregation type name or \code{aggregation_type_id} for the raster series metadata.}
+
+\item{z_value}{Optional z value (elevation, depth, pressure level, etc.) associated with the raster series.}
+
+\item{z_units}{Optional units for \code{z_value}.}
 }
 \value{
 TRUE if successful, and a new entry in the database with images fetched.

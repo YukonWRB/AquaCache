@@ -64,10 +64,11 @@ getNewRasters <- function(
         rt.raster_type_name AS type, 
         rs.source_fx, 
         rs.source_fx_args, 
-        rs.parameter, 
+        COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name, 
         rs.active 
-      FROM raster_series_index rs
+      FROM spatial.raster_series_index rs
       JOIN raster_types rt ON rt.raster_type_id = rs.raster_type_id
+      LEFT JOIN public.parameters p ON p.parameter_id = rs.parameter_id
       WHERE rs.source_fx IS NOT NULL;"
     )
   } else {
@@ -81,10 +82,11 @@ getNewRasters <- function(
           rt.raster_type_name AS type, 
           rs.source_fx, 
           rs.source_fx_args, 
-          rs.parameter, 
+          COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name, 
           rs.active 
-        FROM raster_series_index rs
+        FROM spatial.raster_series_index rs
         JOIN raster_types rt ON rt.raster_type_id = rs.raster_type_id
+        LEFT JOIN public.parameters p ON p.parameter_id = rs.parameter_id
         WHERE rs.raster_series_id IN ('",
         paste(raster_series_ids, collapse = "', '"),
         "') AND rs.source_fx IS NOT NULL;"
@@ -120,7 +122,7 @@ getNewRasters <- function(
       "Working on raster_series_id ",
       id,
       " for parameter '",
-      meta_ids[i, "parameter"],
+      meta_ids[i, "parameter_name"],
       "' and source function '",
       meta_ids[i, "source_fx"],
       "'"

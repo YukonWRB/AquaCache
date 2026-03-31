@@ -25,6 +25,7 @@
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
 #' @param parameter A numeric vector corresponding to column 'parameter_id' of table 'parameters'.
 #' @param media A numeric vector corresponding to column 'media_id' of table 'media_types'.
+#' @param matrix_state_id An optional numeric vector corresponding to column 'matrix_state_id' of table 'matrix_states'. Leave as NA to let the database resolve the matrix state from the media and parameter defaults.
 #' @param sensor_priority A numeric vector assigning priority order to assign to this timeseries, default 1. This can allow for storage of multiple identical timeseries taken by different sensors for redundancy.
 #' @param aggregation_type A character vector describing the measurement type; one of 'instantaneous' (immediate sensor value), 'sum', 'mean', 'median', 'min', 'max', '(min+max)/2'.
 #' @param record_rate A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'.
@@ -69,6 +70,7 @@ addACTimeseries <- function(
   z = NA,
   parameter = NA,
   media = NA,
+  matrix_state_id = NA,
   sensor_priority = 1,
   aggregation_type = 'instantaneous',
   record_rate = NA,
@@ -98,9 +100,11 @@ addACTimeseries <- function(
       !all(is.na(c(
         location,
         start_datetime,
+        sub_location,
         z,
         parameter,
         media,
+        matrix_state_id,
         record_rate,
         owner,
         source_fx,
@@ -146,10 +150,19 @@ addACTimeseries <- function(
     # Assign each column of the data.frame to the corresponding function parameter
     start_datetime <- df$start_datetime
     location <- df$location
-    sub_location <- df$sub_location
+    sub_location <- if ("sub_location" %in% colnames(df)) {
+      df$sub_location
+    } else {
+      rep(NA_integer_, nrow(df))
+    }
     z <- df$z
     parameter <- df$parameter
     media <- df$media
+    matrix_state_id <- if ("matrix_state_id" %in% colnames(df)) {
+      df$matrix_state_id
+    } else {
+      rep(NA_integer_, nrow(df))
+    }
     sensor_priority <- df$sensor_priority
     aggregation_type <- df$aggregation_type
     record_rate <- df$record_rate
@@ -166,9 +179,11 @@ addACTimeseries <- function(
   maxlength <- max(
     length(start_datetime),
     length(location),
+    length(sub_location),
     length(z),
     length(parameter),
     length(media),
+    length(matrix_state_id),
     length(sensor_priority),
     length(aggregation_type),
     length(record_rate),
@@ -237,7 +252,13 @@ addACTimeseries <- function(
   }
 
   # Check that every sub_location in 'sub_location' already exists, if specified
-  if (!is.na(sub_location)) {
+  if (length(sub_location) == 1 && maxlength > 1) {
+    sub_location <- rep(sub_location, maxlength)
+  }
+  if (any(!is.na(sub_location))) {
+    if (!inherits(sub_location, "numeric") && !inherits(sub_location, "integer")) {
+      stop("sub_location must be a numeric or integer vector or left as NA.")
+    }
     db_sub_loc <- DBI::dbGetQuery(
       con,
       "SELECT sub_location_id FROM sub_locations;"
@@ -305,6 +326,18 @@ addACTimeseries <- function(
         "At least one of the media_ids you specified does not exist in the database."
       )
     }
+  }
+
+  if (any(!is.na(matrix_state_id))) {
+    if (
+      !inherits(matrix_state_id, "numeric") &&
+        !inherits(matrix_state_id, "integer")
+    ) {
+      stop("matrix_state_id must be a numeric or integer vector or left as NA.")
+    }
+  }
+  if (length(matrix_state_id) == 1 && maxlength > 1) {
+    matrix_state_id <- rep(matrix_state_id, maxlength)
   }
 
   if (any(is.na(sensor_priority))) {
@@ -499,14 +532,27 @@ addACTimeseries <- function(
           )
         )[1, 1]
 
+        resolved_matrix_state_id <- resolve_parameter_matrix_state(
+          con = con,
+          media_id = media[i],
+          parameter_id = parameter[i],
+          matrix_state_id = matrix_state_id[i]
+        )
+        if (is.na(resolved_matrix_state_id)) {
+          stop(
+            "Could not resolve matrix_state_id for location ",
+            loc_label,
+            ", parameter ",
+            parameter[i],
+            ", and media ",
+            media[i],
+            "."
+          )
+        }
+
         zi <- z[i]
         # If not NA, create a new entry in public.locations_z
         if (!is.na(zi)) {
-          z_df <- data.frame(
-            location_id = loc_id,
-            z_meters = zi,
-            sub_location_id = sub_location[i]
-          )
           try({
             # This may fail if the z value already exists for this location/sub_location combo
             DBI::dbExecute(
@@ -518,7 +564,7 @@ addACTimeseries <- function(
           zi <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT location_z_id FROM locations_z WHERE location_id = ",
+              "SELECT z_id FROM locations_z WHERE location_id = ",
               loc_id,
               " AND z_meters = ",
               zi,
@@ -539,6 +585,7 @@ addACTimeseries <- function(
           z_id = zi,
           parameter_id = parameter[i],
           media_id = media[i],
+          matrix_state_id = resolved_matrix_state_id,
           sensor_priority = sensor_priority[i],
           aggregation_type_id = aggregation_type_id,
           record_rate = record_rate[i],
@@ -554,13 +601,14 @@ addACTimeseries <- function(
           {
             new_tsid <- DBI::dbGetQuery(
               con,
-              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note, end_datetime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10, $11, $12::jsonb, $13, $14) RETURNING timeseries_id;",
+              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note, end_datetime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14, $15) RETURNING timeseries_id;",
               params = list(
                 add$location_id,
                 add$sub_location_id,
                 add$z_id,
                 add$parameter_id,
                 add$media_id,
+                add$matrix_state_id,
                 add$sensor_priority,
                 add$aggregation_type_id,
                 add$record_rate,
@@ -599,28 +647,39 @@ addACTimeseries <- function(
             )
             new_tsid <<- DBI::dbGetQuery(
               con,
-              paste0(
-                "SELECT timeseries_id FROM timeseries WHERE location_id = '",
+              paste(
+                "SELECT timeseries_id",
+                "FROM timeseries",
+                "WHERE location_id = $1",
+                "  AND parameter_id = $2",
+                "  AND aggregation_type_id = $3",
+                "  AND media_id = $4",
+                "  AND matrix_state_id IS NOT DISTINCT FROM $5",
+                "  AND record_rate = $6",
+                "  AND z_id IS NOT DISTINCT FROM $7",
+                "  AND sensor_priority = $8",
+                "  AND sub_location_id IS NOT DISTINCT FROM $9;"
+              ),
+              params = list(
                 add$location_id,
-                "' AND parameter_id = ",
                 add$parameter_id,
-                " AND aggregation_type_id = '",
                 add$aggregation_type_id,
-                "' AND record_rate = '",
+                add$media_id,
+                add$matrix_state_id,
                 add$record_rate,
-                "';"
+                add$z_id,
+                add$sensor_priority,
+                add$sub_location_id
               )
             )[1, 1]
+            if (is.na(new_tsid)) {
+              stop(conditionMessage(e))
+            }
             # Modify the end_datetime in the DB to be one second before the start_datetime
             DBI::dbExecute(
               con,
-              paste0(
-                "UPDATE timeseries SET end_datetime = '",
-                add$end_datetime,
-                "' WHERE timeseries_id = ",
-                new_tsid,
-                ";"
-              )
+              "UPDATE timeseries SET end_datetime = $1 WHERE timeseries_id = $2;",
+              params = list(add$end_datetime, new_tsid)
             )
           }
         )

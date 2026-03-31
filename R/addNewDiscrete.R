@@ -28,7 +28,7 @@
 #' Additionally, the following columns may need to be included:
 #' - 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
 #' - 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
-#' - 'matrix_state_id': an optional numeric specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
+#' - 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 #'
@@ -54,71 +54,14 @@ addNewDiscrete <- function(con, sample, results) {
     # Insert the sample data
     dbAppendTableRLS(con, "samples", sample)
 
-    # Get the sample_id using all fields that define a unique sample
-    sample_id <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT sample_id FROM samples WHERE location_id = ",
-        sample$location_id,
-        " AND datetime = '",
-        sample$datetime,
-        " UTC'",
-        " AND media_id = ",
-        sample$media_id,
-        " AND sample_type = ",
-        sample$sample_type,
-        " AND collection_method = ",
-        sample$collection_method,
-        ifelse(
-          is.null(sample$sub_location_id) || is.na(sample$sub_location_id),
-          " AND sub_location_id IS NULL",
-          paste0(" AND sub_location_id = ", sample$sub_location_id)
-        ),
-        ifelse(
-          is.null(sample$z) || is.na(sample$z),
-          " AND z IS NULL",
-          paste0(" AND z = ", sample$z)
-        ),
-        ifelse(
-          is.null(sample$target_datetime) || is.na(sample$target_datetime),
-          " AND target_datetime IS NULL",
-          paste0(" AND target_datetime = '", sample$target_datetime, " UTC'")
-        ),
-        ifelse(
-          is.null(sample[["import_source"]]) ||
-            is.na(sample[["import_source"]]),
-          " AND import_source IS NULL",
-          paste0(" AND import_source = '", sample[["import_source"]], "'")
-        ),
-        ifelse(
-          is.null(sample[["import_source_id"]]) ||
-            is.na(sample[["import_source_id"]]),
-          " AND import_source_id IS NULL",
-          paste0(
-            " AND import_source_id = '",
-            sample[["import_source_id"]],
-            "';"
-          )
-        )
-      )
-    )[1, 1]
+    sample_id <- find_discrete_sample_id(con, sample)
 
     # Insert the results data
     results$sample_id <- sample_id
-    if (!("matrix_state_id" %in% names(results))) {
-      results$matrix_state_id <- NA_integer_
-    }
-    results$matrix_state_id <- vapply(
-      seq_len(nrow(results)),
-      function(i) {
-        resolve_discrete_result_matrix_state(
-          con = con,
-          sample_media_id = sample$media_id[[1]],
-          parameter_id = results$parameter_id[[i]],
-          matrix_state_id = results$matrix_state_id[[i]]
-        )
-      },
-      integer(1)
+    results <- normalize_discrete_result_matrix_states(
+      con = con,
+      sample_media_id = sample$media_id[1],
+      results = results
     )
     dbAppendTableRLS(con, "results", results)
 

@@ -273,7 +273,6 @@ synchronize_discrete <- function(
             inRemote_sample <- inRemote[[j]][["sample"]]
             inRemote_results <- inRemote[[j]][["results"]]
             names_inRemote_samp <- names(inRemote_sample)
-            names_inRemote_res <- names(inRemote_results)
 
             if (delete) {
               delete_has_prev <- j > 1 && !is.na(inRemote_datetimes[j - 1])
@@ -387,6 +386,34 @@ synchronize_discrete <- function(
               next
             }
 
+            inRemote_results <- tryCatch(
+              {
+                normalize_discrete_result_matrix_states(
+                  con = con,
+                  sample_media_id = inRemote_sample$media_id[1],
+                  results = inRemote_results
+                )
+              },
+              error = function(e) {
+                warning(
+                  "For sample_series_id ",
+                  sid,
+                  ", returned sample ",
+                  j,
+                  " (sample_datetime ",
+                  inRemote_sample$datetime,
+                  ") the source function returned an invalid matrix_state value: ",
+                  e$message,
+                  " Skipping to next sample."
+                )
+                NULL
+              }
+            )
+            if (is.null(inRemote_results)) {
+              next
+            }
+            names_inRemote_res <- names(inRemote_results)
+
             inDB_sample <- DBI::dbGetQuery(
               con,
               paste0(
@@ -489,19 +516,7 @@ synchronize_discrete <- function(
               for (k in 1:nrow(inRemote_results)) {
                 sub <- inRemote_results[k, ]
                 names_inRemote_sub <- names(sub)
-                resolved_sub_matrix_state_id <-
-                  resolve_discrete_result_matrix_state(
-                    con = con,
-                    sample_media_id = inDB_sample$media_id,
-                    parameter_id = sub$parameter_id,
-                    matrix_state_id = if (
-                      "matrix_state_id" %in% names_inRemote_sub
-                    ) {
-                      sub$matrix_state_id
-                    } else {
-                      NA_integer_
-                    }
-                  )
+                resolved_sub_matrix_state_id <- sub$matrix_state_id
                 # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, matrix_state_id, sample_fraction_id, result_value_type, result_speciation_id, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
 
                 idx <- inDB_results$result_type == sub$result_type &

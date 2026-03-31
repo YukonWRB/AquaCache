@@ -424,7 +424,7 @@ select_changed_daily_stats <- function(con, timeseries_id, rows) {
   )
   existing <- normalize_daily_stats(existing, timeseries_id)
 
-  existing_keys <- setNames(
+  existing_keys <- stats::setNames(
     daily_stats_row_key(existing),
     as.character(existing$date)
   )
@@ -447,26 +447,267 @@ select_changed_daily_stats <- function(con, timeseries_id, rows) {
   rows[changed, , drop = FALSE]
 }
 
+#' @title Resolve a matrix state identifier
+#' @description
+#' Accepts a matrix state identifier as an integer id, numeric string, or a
+#' matrix state code/name and returns the corresponding matrix_state_id.
+#' @param con A database connection object.
+#' @param matrix_state A single matrix state identifier or label.
+#' @return An integer matrix_state_id, or `NA_integer_` if no value was
+#' supplied.
+#' @noRd
+#' @keywords internal
+resolve_matrix_state_identifier <- function(con, matrix_state = NA) {
+  if (is.null(matrix_state) || length(matrix_state) == 0) {
+    return(NA_integer_)
+  }
+
+  matrix_state <- matrix_state[1]
+
+  if (is.na(matrix_state)) {
+    return(NA_integer_)
+  }
+
+  if (is.factor(matrix_state)) {
+    matrix_state <- as.character(matrix_state)
+  }
+
+  if (inherits(matrix_state, "integer")) {
+    return(as.integer(matrix_state))
+  }
+
+  if (is.numeric(matrix_state)) {
+    return(as.integer(matrix_state))
+  }
+
+  matrix_state <- trimws(as.character(matrix_state))
+  if (!nzchar(matrix_state) || toupper(matrix_state) %in% c("NA", "NULL")) {
+    return(NA_integer_)
+  }
+
+  if (grepl("^[+-]?[0-9]+$", matrix_state)) {
+    return(as.integer(matrix_state))
+  }
+
+  hits <- DBI::dbGetQuery(
+    con,
+    paste(
+      "SELECT matrix_state_id",
+      "FROM public.matrix_states",
+      "WHERE LOWER(matrix_state_code) = LOWER($1)",
+      "   OR LOWER(matrix_state_name) = LOWER($1)",
+      "   OR LOWER(matrix_state_name_fr) = LOWER($1)",
+      "ORDER BY matrix_state_id;"
+    ),
+    params = list(matrix_state)
+  )
+
+  if (nrow(hits) == 0) {
+    stop(
+      "Unknown matrix_state value '",
+      matrix_state,
+      "'. Supply a valid matrix_state_id or a value from public.matrix_states."
+    )
+  }
+
+  if (nrow(hits) > 1) {
+    stop(
+      "Matrix state value '",
+      matrix_state,
+      "' matched multiple rows in public.matrix_states."
+    )
+  }
+
+  as.integer(hits$matrix_state_id[[1]])
+}
+
+#' @title Normalize matrix state columns on discrete result rows
+#' @description
+#' Resolves `matrix_state` text labels or `matrix_state_id` values on a results
+#' data.frame and returns rows ready for insert into `discrete.results`.
+#' @param con A database connection object.
+#' @param sample_media_id The parent sample media_id for the results.
+#' @param results A discrete results data.frame.
+#' @return The input `results` with a resolved `matrix_state_id` column and any
+#' `matrix_state` helper column removed.
+#' @noRd
+#' @keywords internal
+normalize_discrete_result_matrix_states <- function(
+  con,
+  sample_media_id,
+  results
+) {
+  if (nrow(results) == 0) {
+    return(results)
+  }
+
+  matrix_state_input <- if ("matrix_state" %in% names(results)) {
+    results$matrix_state
+  } else if ("matrix_state_id" %in% names(results)) {
+    results$matrix_state_id
+  } else {
+    rep(NA_integer_, nrow(results))
+  }
+
+  if (!("matrix_state_id" %in% names(results))) {
+    results$matrix_state_id <- NA_integer_
+  }
+
+  results$matrix_state_id <- vapply(
+    seq_len(nrow(results)),
+    function(i) {
+      resolve_discrete_result_matrix_state(
+        con = con,
+        sample_media_id = sample_media_id,
+        parameter_id = results$parameter_id[[i]],
+        matrix_state_id = results$matrix_state_id[[i]],
+        matrix_state = matrix_state_input[[i]]
+      )
+    },
+    integer(1)
+  )
+
+  if ("matrix_state" %in% names(results)) {
+    results$matrix_state <- NULL
+  }
+
+  results
+}
+
+#' @title Find a discrete sample id from its unique key
+#' @description
+#' Looks up a discrete sample using the actual uniqueness constraint on
+#' `discrete.samples`.
+#' @param con A database connection object.
+#' @param sample A one-row sample data.frame.
+#' @return The matching sample_id as an integer.
+#' @noRd
+#' @keywords internal
+find_discrete_sample_id <- function(con, sample) {
+  sample_id <- DBI::dbGetQuery(
+    con,
+    paste(
+      "SELECT sample_id",
+      "FROM samples",
+      "WHERE location_id = $1",
+      "  AND sub_location_id IS NOT DISTINCT FROM $2",
+      "  AND media_id = $3",
+      "  AND z IS NOT DISTINCT FROM $4",
+      "  AND datetime = $5",
+      "  AND sample_type = $6",
+      "  AND collection_method = $7",
+      "LIMIT 1;"
+    ),
+    params = list(
+      suppressWarnings(as.integer(sample$location_id[1])),
+      if ("sub_location_id" %in% names(sample)) {
+        suppressWarnings(as.integer(sample$sub_location_id[1]))
+      } else {
+        NA_integer_
+      },
+      suppressWarnings(as.integer(sample$media_id[1])),
+      if ("z" %in% names(sample)) {
+        suppressWarnings(as.numeric(sample$z[1]))
+      } else {
+        NA_real_
+      },
+      as.POSIXct(sample$datetime[1], tz = "UTC"),
+      suppressWarnings(as.integer(sample$sample_type[1])),
+      suppressWarnings(as.integer(sample$collection_method[1]))
+    )
+  )[1, 1]
+
+  if (is.na(sample_id)) {
+    stop(
+      "Could not determine sample_id for the inserted discrete sample. ",
+      "The sample insert may have failed or the sample uniqueness key may be inconsistent."
+    )
+  }
+
+  as.integer(sample_id)
+}
+
+#' @title Resolve matrix state ID for parameter/media combinations
+#' @description
+#' Utility function to resolve the matrix state ID for a parameter/media
+#' combination using the database function `public.resolve_matrix_state_id()`.
+#' If `matrix_state_id` or `matrix_state` is already supplied, that value is
+#' resolved and returned unchanged.
+#' @param con A database connection object.
+#' @param media_id The media_id used to infer a default matrix state when one is not supplied explicitly.
+#' @param parameter_id The parameter_id for the discrete result.
+#' @param matrix_state_id An optional existing matrix_state_id for the discrete
+#' result. If provided and not NA, this value will be returned as is.
+#' @param matrix_state An optional matrix state code or label to resolve when
+#' `matrix_state_id` is not provided.
+#' @return An integer matrix_state_id for the parameter/media combination.
+#' @noRd
+#' @keywords internal
+resolve_parameter_matrix_state <- function(
+  con,
+  media_id,
+  parameter_id,
+  matrix_state_id = NA_integer_,
+  matrix_state = matrix_state_id
+) {
+  media_id <- suppressWarnings(as.integer(media_id))
+  parameter_id <- suppressWarnings(as.integer(parameter_id))
+  matrix_state_id <- resolve_matrix_state_identifier(con, matrix_state_id)
+
+  if (!is.na(matrix_state_id)) {
+    return(matrix_state_id)
+  }
+
+  matrix_state_id <- resolve_matrix_state_identifier(con, matrix_state)
+  if (!is.na(matrix_state_id)) {
+    return(matrix_state_id)
+  }
+
+  DBI::dbGetQuery(
+    con,
+    "SELECT public.resolve_matrix_state_id($1, $2, $3) AS matrix_state_id;",
+    params = list(media_id, parameter_id, matrix_state_id)
+  )[1, 1]
+}
+
 #' @title Resolve matrix state ID for discrete results
 #' @description
-#' Utility function to resolve the matrix state ID for discrete results based on the sample_media_id, parameter_id, and optionally an existing matrix_state_id. If the matrix_state_id is provided and not NA, it is returned as is. If the matrix_state_id is NA, the function calls a database function `public.resolve_matrix_state_id` to determine the appropriate matrix_state_id based on the sample_media_id and parameter_id. This is used to ensure that discrete results have the correct matrix state ID assigned, which may be necessary for certain calculations or analyses.
+#' Utility function to resolve the matrix state ID for discrete results based on
+#' the sample_media_id, parameter_id, and optionally an existing
+#' matrix_state_id. If the matrix_state_id is provided and not NA, it is
+#' returned as is. If the matrix_state_id is NA, the function calls a database
+#' function `public.resolve_matrix_state_id` to determine the appropriate
+#' matrix_state_id based on the sample_media_id and parameter_id. This is used
+#' to ensure that discrete results have the correct matrix state ID assigned,
+#' which may be necessary for certain calculations or analyses.
 #' @param con A database connection object.
 #' @param sample_media_id The sample_media_id for the discrete result.
 #' @param parameter_id The parameter_id for the discrete result.
-#' @param matrix_state_id An optional existing matrix_state_id for the discrete result. If provided and not NA, this value will be returned as is. If NA, the function will attempt to resolve the matrix_state_id using the database function.
-#' @return An integer matrix_state_id for the discrete result, either the provided matrix_state_id if it was not NA, or the resolved matrix_state_id from the database function if the provided matrix_state_id was NA.
+#' @param matrix_state_id An optional existing matrix_state_id for the discrete
+#' result. If provided and not NA, this value will be returned as is.
+#' @param matrix_state An optional matrix state code or label to resolve when
+#' `matrix_state_id` is not provided.
+#' @return An integer matrix_state_id for the discrete result, either the
+#' provided matrix_state_id if it was not NA, or the resolved matrix_state_id
+#' from the database function if the provided matrix_state_id was NA.
 #' @noRd
 #' @keywords internal
 resolve_discrete_result_matrix_state <- function(
   con,
   sample_media_id,
   parameter_id,
-  matrix_state_id = NA_integer_
+  matrix_state_id = NA_integer_,
+  matrix_state = matrix_state_id
 ) {
   sample_media_id <- suppressWarnings(as.integer(sample_media_id))
   parameter_id <- suppressWarnings(as.integer(parameter_id))
-  matrix_state_id <- suppressWarnings(as.integer(matrix_state_id))
+  matrix_state_id <- resolve_matrix_state_identifier(con, matrix_state_id)
 
+  if (!is.na(matrix_state_id)) {
+    return(matrix_state_id)
+  }
+
+  matrix_state_id <- resolve_matrix_state_identifier(con, matrix_state)
   if (!is.na(matrix_state_id)) {
     return(matrix_state_id)
   }

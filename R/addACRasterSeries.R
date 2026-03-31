@@ -6,12 +6,17 @@
 #' Additional arguments to pass to the function specified in source_fx go in argument 'source_fx_args' (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
 #'
 #' @param model The model producing the raster, as a character string
-#' @param parameter The parameter to import, as a string.
+#' @param parameter The parameter to import, as a parameter name or `parameter_id`.
 #' @param start_datetime The datetime (as POSIXct) from which to look for rasters
 #' @param source_fx The function to use for fetching new rasters. Must be an existing function in this package.
 #' @param type The type of raster, 'forecast' or 'reanalysis'. Reanalysis rasters are kept forever, forecasts are replaced when a new one is issued.
 #' @param source_fx_args Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.
 #' @param con A connection to the database, created with [DBI::dbConnect()]. Leave NULL if you want to use the package default connection settings and have the connection automatically closed afterwards.
+#' @param media_id Optional `media_id` for the raster series. Required when the parameter can exist in multiple matrix states unless `matrix_state_id` is supplied explicitly.
+#' @param matrix_state_id Optional `matrix_state_id` for the raster series. Leave as `NA` to let the database resolve it from `media_id` and the parameter defaults.
+#' @param aggregation_type Optional aggregation type name or `aggregation_type_id` for the raster series metadata.
+#' @param z_value Optional z value (elevation, depth, pressure level, etc.) associated with the raster series.
+#' @param z_units Optional units for `z_value`.
 #'
 #' @return TRUE if successful, and a new entry in the database with images fetched.
 #' @export
@@ -24,7 +29,12 @@ addACRasterSeries <- function(
   source_fx,
   type,
   source_fx_args = NA,
-  con = NULL
+  con = NULL,
+  media_id = NA,
+  matrix_state_id = NA,
+  aggregation_type = NA,
+  z_value = NA,
+  z_units = NA
 ) {
   # function will add entry to raster_series_index, then trigger getNewRasters from the user-specified start_datetime
 
@@ -44,48 +54,193 @@ addACRasterSeries <- function(
     on.exit(DBI::dbDisconnect(con))
   }
 
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+
+  if (!inherits(model, "character") || length(model) != 1 || is.na(model)) {
+    stop("Parameter 'model' must be a single non-NA character string.")
+  }
+
+  if (!inherits(source_fx, "character") || length(source_fx) != 1 || is.na(source_fx)) {
+    stop("Parameter 'source_fx' must be a single non-NA character string.")
+  }
+  if (!source_fx %in% ls(getNamespace("AquaCache"))) {
+    stop("The function specified in 'source_fx' does not exist in the AquaCache package.")
+  }
+
+  if (!inherits(start_datetime, "POSIXct")) {
+    start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
+  } else {
+    attr(start_datetime, "tzone") <- "UTC"
+  }
+  if (length(start_datetime) != 1 || is.na(start_datetime)) {
+    stop("Parameter 'start_datetime' must resolve to one non-NA POSIXct value.")
+  }
+
+  raster_type_id <- DBI::dbGetQuery(
+    con,
+    "SELECT raster_type_id
+     FROM spatial.raster_types
+     WHERE raster_type_name = $1;",
+    params = list(type)
+  )[1, 1]
+  if (is.na(raster_type_id)) {
+    stop("The raster type you specified could not be found in spatial.raster_types.")
+  }
+
+  parameter_lookup <- if (inherits(parameter, "numeric") || inherits(parameter, "integer")) {
+    DBI::dbGetQuery(
+      con,
+      "SELECT parameter_id, param_name
+       FROM public.parameters
+       WHERE parameter_id = $1;",
+      params = list(as.integer(parameter))
+    )
+  } else {
+    DBI::dbGetQuery(
+      con,
+      "SELECT parameter_id, param_name
+       FROM public.parameters
+       WHERE LOWER(param_name) = LOWER($1);",
+      params = list(as.character(parameter))
+    )
+  }
+  if (nrow(parameter_lookup) != 1) {
+    stop("The parameter you specified could not be resolved to exactly one row in public.parameters.")
+  }
+  parameter_id <- parameter_lookup$parameter_id[1]
+  parameter_label <- parameter_lookup$param_name[1]
+
+  media_id <- suppressWarnings(as.integer(media_id))
+  if (!is.na(media_id)) {
+    media_exists <- DBI::dbGetQuery(
+      con,
+      "SELECT media_id
+       FROM public.media_types
+       WHERE media_id = $1;",
+      params = list(media_id)
+    )[1, 1]
+    if (is.na(media_exists)) {
+      stop("The media_id you specified could not be found in public.media_types.")
+    }
+  }
+
+  if (is.na(media_id) && is.na(matrix_state_id)) {
+    stop(
+      "Specify either 'media_id' or 'matrix_state_id' so the raster series can satisfy the matrix-state-aware parameter unit checks."
+    )
+  }
+  resolved_matrix_state_id <- resolve_parameter_matrix_state(
+    con = con,
+    media_id = media_id,
+    parameter_id = parameter_id,
+    matrix_state_id = matrix_state_id
+  )
+  if (is.na(resolved_matrix_state_id)) {
+    stop(
+      "Could not resolve matrix_state_id for parameter '",
+      parameter_label,
+      "'."
+    )
+  }
+
+  aggregation_type_id <- NA_integer_
+  if (!is.na(aggregation_type)) {
+    aggregation_lookup <- if (
+      inherits(aggregation_type, "numeric") ||
+        inherits(aggregation_type, "integer")
+    ) {
+      DBI::dbGetQuery(
+        con,
+        "SELECT aggregation_type_id
+         FROM continuous.aggregation_types
+         WHERE aggregation_type_id = $1;",
+        params = list(as.integer(aggregation_type))
+      )
+    } else {
+      DBI::dbGetQuery(
+        con,
+        "SELECT aggregation_type_id
+         FROM continuous.aggregation_types
+         WHERE aggregation_type = $1;",
+        params = list(as.character(aggregation_type))
+      )
+    }
+    if (nrow(aggregation_lookup) != 1) {
+      stop("The aggregation_type you specified could not be resolved in continuous.aggregation_types.")
+    }
+    aggregation_type_id <- aggregation_lookup$aggregation_type_id[1]
+  }
+
+  if (!is.na(z_units) && (!inherits(z_units, "character") || length(z_units) != 1)) {
+    stop("Parameter 'z_units' must be a single character value or left as NA.")
+  }
+
   exists <- DBI::dbGetQuery(
     con,
-    paste0(
-      "SELECT raster_series_id FROM raster_series_index WHERE model = '",
+    paste(
+      "SELECT raster_series_id",
+      "FROM spatial.raster_series_index",
+      "WHERE model = $1",
+      "  AND parameter_id = $2",
+      "  AND raster_type_id = $3",
+      "  AND media_id IS NOT DISTINCT FROM $4",
+      "  AND matrix_state_id IS NOT DISTINCT FROM $5",
+      "  AND aggregation_type_id IS NOT DISTINCT FROM $6",
+      "  AND z_value IS NOT DISTINCT FROM $7",
+      "  AND z_units IS NOT DISTINCT FROM $8;"
+    ),
+    params = list(
       model,
-      "' AND parameter = '",
-      parameter,
-      "';"
+      parameter_id,
+      raster_type_id,
+      media_id,
+      resolved_matrix_state_id,
+      aggregation_type_id,
+      z_value,
+      z_units
     )
   )[1, 1]
   if (!is.na(exists)) {
     stop(
-      "There is already an entry for that model and parameter in the raster_series_index table."
+      "There is already an entry for that model, parameter, raster type, and matrix-state combination in the raster_series_index table."
     )
   }
 
-  args <- source_fx_args
-  # split into "argument1: value1" etc.
-  args <- strsplit(args, ",\\s*")[[1]]
-
-  # split only on first colon
-  keys <- sub(":.*", "", args)
-  vals <- sub("^[^:]+:\\s*", "", args)
-
-  # build named list
-  args <- stats::setNames(as.list(vals), keys)
-
-  # convert to JSON
-  args <- jsonlite::toJSON(args, auto_unbox = TRUE)
+  if (is.na(source_fx_args) || identical(trimws(source_fx_args), "")) {
+    args <- NA_character_
+  } else {
+    args <- strsplit(source_fx_args, ",\\s*")[[1]]
+    keys <- sub(":.*", "", args)
+    vals <- sub("^[^:]+:\\s*", "", args)
+    args <- stats::setNames(as.list(vals), keys)
+    args <- jsonlite::toJSON(args, auto_unbox = TRUE)
+  }
 
   # Insert new entry into raster_series_index and get the new raster_series_id
   res <- DBI::dbGetQuery(
     con,
-    "INSERT INTO raster_series_index (model, parameter, start_datetime, last_new_raster, end_datetime, source_fx, type, source_fx_args, active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING raster_series_id;",
+    paste(
+      "INSERT INTO spatial.raster_series_index (",
+      "model, parameter_id, media_id, matrix_state_id, aggregation_type_id,",
+      "z_value, z_units, start_datetime, last_new_raster, end_datetime,",
+      "source_fx, raster_type_id, source_fx_args, active",
+      ") VALUES (",
+      "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14",
+      ") RETURNING raster_series_id;"
+    ),
     params = list(
       model,
-      parameter,
+      parameter_id,
+      media_id,
+      resolved_matrix_state_id,
+      aggregation_type_id,
+      z_value,
+      z_units,
       start_datetime,
       start_datetime,
       start_datetime,
       source_fx,
-      type,
+      raster_type_id,
       args,
       TRUE
     )
@@ -95,39 +250,32 @@ addACRasterSeries <- function(
   if (length(added) == 0) {
     DBI::dbExecute(
       con,
-      paste0(
-        "DELETE FROM raster_series_index WHERE raster_series_id = ",
-        res,
-        ";"
-      )
+      "DELETE FROM spatial.raster_series_index WHERE raster_series_id = $1;",
+      params = list(res)
     )
     warning(
-      "Failed to find or add new images. The new entry to table raster_series_index has been deleted."
+      "Failed to find or add new rasters. The new entry to table raster_series_index has been deleted."
     )
   } else {
     first_new <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT MIN(valid_from) FROM rasters_reference WHERE raster_series_id = ",
-        res,
-        ";"
-      )
+      "SELECT MIN(valid_from)
+       FROM spatial.rasters_reference
+       WHERE raster_series_id = $1;",
+      params = list(res)
     )[1, 1]
     DBI::dbExecute(
       con,
-      paste0(
-        "UPDATE raster_series_index SET start_datetime = '",
-        first_new,
-        "' WHERE raster_series_id = ",
-        res,
-        ";"
-      )
+      "UPDATE spatial.raster_series_index
+       SET start_datetime = $1
+       WHERE raster_series_id = $2;",
+      params = list(first_new, res)
     )
     message(
       "Added new raster series for model ",
       model,
       " and parameter ",
-      parameter,
+      parameter_label,
       ". The new raster_series_id is ",
       res,
       "."

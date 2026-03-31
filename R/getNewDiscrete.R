@@ -29,7 +29,7 @@
 #' Additionally, the following columns may need to be included:
 #' - 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
 #' - 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
-#' - 'matrix_state_id': an optional numeric specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
+#' - 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 #'
@@ -406,6 +406,34 @@ getNewDiscrete <- function(
             )
             next
           }
+
+          results <- tryCatch(
+            {
+              normalize_discrete_result_matrix_states(
+                con = con,
+                sample_media_id = sample$media_id[1],
+                results = results
+              )
+            },
+            error = function(e) {
+              warning(
+                "For sample_series_id ",
+                sid,
+                " element ",
+                j,
+                " (sample_datetime ",
+                sample$datetime,
+                ") the source function returned an invalid matrix_state value: ",
+                e$message,
+                " Skipping to next sample."
+              )
+              NULL
+            }
+          )
+          if (is.null(results)) {
+            next
+          }
+          names_res <- names(results)
 
           # More complex checks if 'result' is NA
           # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
