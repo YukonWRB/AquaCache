@@ -728,88 +728,94 @@ tryCatch(
          created TIMESTAMPTZ,
          modified TIMESTAMPTZ
        )
-       LANGUAGE sql
+       LANGUAGE plpgsql
        STABLE
        SET search_path = pg_catalog, public, continuous, audit
        AS $function$
-         WITH candidate_row_ids AS (
-           SELECT mc.measurement_row_id
-           FROM continuous.measurements_continuous mc
-           WHERE (p_timeseries_ids IS NULL OR mc.timeseries_id = ANY(p_timeseries_ids))
-             AND (p_start_datetime IS NULL OR mc.datetime >= p_start_datetime)
-             AND (p_end_datetime IS NULL OR mc.datetime <= p_end_datetime)
-           UNION
-           SELECT log.measurement_row_id
-           FROM audit.measurements_continuous_log log
-           WHERE log.measurement_row_id IS NOT NULL
-             AND log.action_timestamp > p_as_of
-             AND (
-               p_timeseries_ids IS NULL OR
-                 (log.original_data ->> 'timeseries_id')::integer = ANY(p_timeseries_ids)
-             )
-             AND (
-               p_start_datetime IS NULL OR
-                 (log.original_data ->> 'datetime')::timestamptz >= p_start_datetime
-             )
-             AND (
-               p_end_datetime IS NULL OR
-                 (log.original_data ->> 'datetime')::timestamptz <= p_end_datetime
-             )
-         ),
-         current_rows AS (
+       BEGIN
+         RETURN QUERY EXECUTE
+         $sql$
+           WITH candidate_row_ids AS (
+             SELECT mc.measurement_row_id
+             FROM continuous.measurements_continuous mc
+             WHERE ($1 IS NULL OR mc.timeseries_id = ANY($1))
+               AND ($2 IS NULL OR mc.datetime >= $2)
+               AND ($3 IS NULL OR mc.datetime <= $3)
+             UNION
+             SELECT log.measurement_row_id
+             FROM audit.measurements_continuous_log log
+             WHERE log.measurement_row_id IS NOT NULL
+               AND log.action_timestamp > $4
+               AND (
+                 $1 IS NULL OR
+                   (log.original_data ->> 'timeseries_id')::integer = ANY($1)
+               )
+               AND (
+                 $2 IS NULL OR
+                   (log.original_data ->> 'datetime')::timestamptz >= $2
+               )
+               AND (
+                 $3 IS NULL OR
+                   (log.original_data ->> 'datetime')::timestamptz <= $3
+               )
+           ),
+           current_rows AS (
+             SELECT
+               mc.measurement_row_id,
+               to_jsonb(mc) AS row_json,
+               mc.created AS row_created
+             FROM continuous.measurements_continuous mc
+             JOIN candidate_row_ids ids
+               ON ids.measurement_row_id = mc.measurement_row_id
+           ),
+           future_changes AS (
+             SELECT DISTINCT ON (log.measurement_row_id)
+               log.measurement_row_id,
+               log.original_data AS row_json,
+               NULLIF(log.original_data ->> 'created', '')::timestamptz AS row_created
+             FROM audit.measurements_continuous_log log
+             JOIN candidate_row_ids ids
+               ON ids.measurement_row_id = log.measurement_row_id
+             WHERE log.measurement_row_id IS NOT NULL
+               AND log.action_timestamp > $4
+             ORDER BY
+               log.measurement_row_id,
+               log.action_timestamp ASC,
+               log.log_id ASC
+           ),
+           snapshot_json AS (
+             SELECT
+               COALESCE(f.measurement_row_id, c.measurement_row_id) AS measurement_row_id,
+               COALESCE(f.row_json, c.row_json) AS row_json,
+               COALESCE(f.row_created, c.row_created) AS row_created
+             FROM current_rows c
+             FULL OUTER JOIN future_changes f
+               ON c.measurement_row_id = f.measurement_row_id
+           )
            SELECT
-             mc.measurement_row_id,
-             to_jsonb(mc) AS row_json,
-             mc.created AS row_created
-           FROM continuous.measurements_continuous mc
-           JOIN candidate_row_ids ids
-             ON ids.measurement_row_id = mc.measurement_row_id
-         ),
-         future_changes AS (
-           SELECT DISTINCT ON (log.measurement_row_id)
-             log.measurement_row_id,
-             log.original_data AS row_json,
-             NULLIF(log.original_data ->> 'created', '')::timestamptz AS row_created
-           FROM audit.measurements_continuous_log log
-           JOIN candidate_row_ids ids
-             ON ids.measurement_row_id = log.measurement_row_id
-           WHERE log.measurement_row_id IS NOT NULL
-             AND log.action_timestamp > p_as_of
-           ORDER BY
-             log.measurement_row_id,
-             log.action_timestamp ASC,
-             log.log_id ASC
-         ),
-         snapshot_json AS (
-           SELECT
-             COALESCE(f.measurement_row_id, c.measurement_row_id) AS measurement_row_id,
-             COALESCE(f.row_json, c.row_json) AS row_json,
-             COALESCE(f.row_created, c.row_created) AS row_created
-           FROM current_rows c
-           FULL OUTER JOIN future_changes f
-             ON c.measurement_row_id = f.measurement_row_id
-         )
-         SELECT
-           r.timeseries_id,
-           r.datetime,
-           r.value,
-           r.period,
-           r.imputed,
-           r.no_update,
-           r.created_by,
-           r.modified_by,
-           r.created,
-           r.modified
-         FROM snapshot_json s
-         CROSS JOIN LATERAL jsonb_populate_record(
-           NULL::continuous.measurements_continuous,
-           s.row_json
-         ) AS r
-         WHERE COALESCE(r.created, s.row_created) <= p_as_of
-           AND (p_timeseries_ids IS NULL OR r.timeseries_id = ANY(p_timeseries_ids))
-           AND (p_start_datetime IS NULL OR r.datetime >= p_start_datetime)
-           AND (p_end_datetime IS NULL OR r.datetime <= p_end_datetime)
-         ORDER BY r.timeseries_id, r.datetime;
+             r.timeseries_id,
+             r.datetime,
+             r.value,
+             r.period,
+             r.imputed,
+             r.no_update,
+             r.created_by,
+             r.modified_by,
+             r.created,
+             r.modified
+           FROM snapshot_json s
+           CROSS JOIN LATERAL jsonb_populate_record(
+             NULL::continuous.measurements_continuous,
+             s.row_json
+           ) AS r
+           WHERE COALESCE(r.created, s.row_created) <= $4
+             AND ($1 IS NULL OR r.timeseries_id = ANY($1))
+             AND ($2 IS NULL OR r.datetime >= $2)
+             AND ($3 IS NULL OR r.datetime <= $3)
+           ORDER BY r.timeseries_id, r.datetime
+         $sql$
+         USING p_timeseries_ids, p_start_datetime, p_end_datetime, p_as_of;
+       END;
        $function$;"
     )
     DBI::dbExecute(
@@ -829,7 +835,7 @@ tryCatch(
          TIMESTAMPTZ,
          TIMESTAMPTZ
        ) IS
-       'Reconstructs raw continuous measurement rows as they existed at a requested timestamp using the current table plus audit.measurements_continuous_log.';"
+       'Reconstructs raw continuous measurement rows as they existed at a requested timestamp using the current table plus audit.measurements_continuous_log. Implemented with dynamic execution so filtered calls use a custom plan.';"
     )
 
     DBI::dbExecute(
@@ -861,97 +867,103 @@ tryCatch(
          created TIMESTAMPTZ,
          modified TIMESTAMPTZ
        )
-       LANGUAGE sql
+       LANGUAGE plpgsql
        STABLE
        SET search_path = pg_catalog, public, continuous, audit
        AS $function$
-         WITH candidate_row_ids AS (
-           SELECT mcd.measurement_row_id
-           FROM continuous.measurements_calculated_daily mcd
-           WHERE (p_timeseries_ids IS NULL OR mcd.timeseries_id = ANY(p_timeseries_ids))
-             AND (p_start_date IS NULL OR mcd.date >= p_start_date)
-             AND (p_end_date IS NULL OR mcd.date <= p_end_date)
-           UNION
-           SELECT log.measurement_row_id
-           FROM audit.measurements_calculated_daily_log log
-           WHERE log.measurement_row_id IS NOT NULL
-             AND log.action_timestamp > p_as_of
-             AND (
-               p_timeseries_ids IS NULL OR
-                 (log.original_data ->> 'timeseries_id')::integer = ANY(p_timeseries_ids)
-             )
-             AND (
-               p_start_date IS NULL OR
-                 (log.original_data ->> 'date')::date >= p_start_date
-             )
-             AND (
-               p_end_date IS NULL OR
-                 (log.original_data ->> 'date')::date <= p_end_date
-             )
-         ),
-         current_rows AS (
+       BEGIN
+         RETURN QUERY EXECUTE
+         $sql$
+           WITH candidate_row_ids AS (
+             SELECT mcd.measurement_row_id
+             FROM continuous.measurements_calculated_daily mcd
+             WHERE ($1 IS NULL OR mcd.timeseries_id = ANY($1))
+               AND ($2 IS NULL OR mcd.date >= $2)
+               AND ($3 IS NULL OR mcd.date <= $3)
+             UNION
+             SELECT log.measurement_row_id
+             FROM audit.measurements_calculated_daily_log log
+             WHERE log.measurement_row_id IS NOT NULL
+               AND log.action_timestamp > $4
+               AND (
+                 $1 IS NULL OR
+                   (log.original_data ->> 'timeseries_id')::integer = ANY($1)
+               )
+               AND (
+                 $2 IS NULL OR
+                   (log.original_data ->> 'date')::date >= $2
+               )
+               AND (
+                 $3 IS NULL OR
+                   (log.original_data ->> 'date')::date <= $3
+               )
+           ),
+           current_rows AS (
+             SELECT
+               mcd.measurement_row_id,
+               to_jsonb(mcd) AS row_json,
+               mcd.created AS row_created
+             FROM continuous.measurements_calculated_daily mcd
+             JOIN candidate_row_ids ids
+               ON ids.measurement_row_id = mcd.measurement_row_id
+           ),
+           future_changes AS (
+             SELECT DISTINCT ON (log.measurement_row_id)
+               log.measurement_row_id,
+               log.original_data AS row_json,
+               NULLIF(log.original_data ->> 'created', '')::timestamptz AS row_created
+             FROM audit.measurements_calculated_daily_log log
+             JOIN candidate_row_ids ids
+               ON ids.measurement_row_id = log.measurement_row_id
+             WHERE log.measurement_row_id IS NOT NULL
+               AND log.action_timestamp > $4
+             ORDER BY
+               log.measurement_row_id,
+               log.action_timestamp ASC,
+               log.log_id ASC
+           ),
+           snapshot_json AS (
+             SELECT
+               COALESCE(f.measurement_row_id, c.measurement_row_id) AS measurement_row_id,
+               COALESCE(f.row_json, c.row_json) AS row_json,
+               COALESCE(f.row_created, c.row_created) AS row_created
+             FROM current_rows c
+             FULL OUTER JOIN future_changes f
+               ON c.measurement_row_id = f.measurement_row_id
+           )
            SELECT
-             mcd.measurement_row_id,
-             to_jsonb(mcd) AS row_json,
-             mcd.created AS row_created
-           FROM continuous.measurements_calculated_daily mcd
-           JOIN candidate_row_ids ids
-             ON ids.measurement_row_id = mcd.measurement_row_id
-         ),
-         future_changes AS (
-           SELECT DISTINCT ON (log.measurement_row_id)
-             log.measurement_row_id,
-             log.original_data AS row_json,
-             NULLIF(log.original_data ->> 'created', '')::timestamptz AS row_created
-           FROM audit.measurements_calculated_daily_log log
-           JOIN candidate_row_ids ids
-             ON ids.measurement_row_id = log.measurement_row_id
-           WHERE log.measurement_row_id IS NOT NULL
-             AND log.action_timestamp > p_as_of
-           ORDER BY
-             log.measurement_row_id,
-             log.action_timestamp ASC,
-             log.log_id ASC
-         ),
-         snapshot_json AS (
-           SELECT
-             COALESCE(f.measurement_row_id, c.measurement_row_id) AS measurement_row_id,
-             COALESCE(f.row_json, c.row_json) AS row_json,
-             COALESCE(f.row_created, c.row_created) AS row_created
-           FROM current_rows c
-           FULL OUTER JOIN future_changes f
-             ON c.measurement_row_id = f.measurement_row_id
-         )
-         SELECT
-           r.timeseries_id,
-           r.date,
-           r.value,
-           r.imputed,
-           r.percent_historic_range,
-           r.max,
-           r.min,
-           r.q90,
-           r.q75,
-           r.q50,
-           r.q25,
-           r.q10,
-           r.mean,
-           r.doy_count,
-           r.no_update,
-           r.created_by,
-           r.modified_by,
-           r.created,
-           r.modified
-         FROM snapshot_json s
-         CROSS JOIN LATERAL jsonb_populate_record(
-           NULL::continuous.measurements_calculated_daily,
-           s.row_json
-         ) AS r
-         WHERE COALESCE(r.created, s.row_created) <= p_as_of
-           AND (p_timeseries_ids IS NULL OR r.timeseries_id = ANY(p_timeseries_ids))
-           AND (p_start_date IS NULL OR r.date >= p_start_date)
-           AND (p_end_date IS NULL OR r.date <= p_end_date)
-         ORDER BY r.timeseries_id, r.date;
+             r.timeseries_id,
+             r.date,
+             r.value,
+             r.imputed,
+             r.percent_historic_range,
+             r.max,
+             r.min,
+             r.q90,
+             r.q75,
+             r.q50,
+             r.q25,
+             r.q10,
+             r.mean,
+             r.doy_count,
+             r.no_update,
+             r.created_by,
+             r.modified_by,
+             r.created,
+             r.modified
+           FROM snapshot_json s
+           CROSS JOIN LATERAL jsonb_populate_record(
+             NULL::continuous.measurements_calculated_daily,
+             s.row_json
+           ) AS r
+           WHERE COALESCE(r.created, s.row_created) <= $4
+             AND ($1 IS NULL OR r.timeseries_id = ANY($1))
+             AND ($2 IS NULL OR r.date >= $2)
+             AND ($3 IS NULL OR r.date <= $3)
+           ORDER BY r.timeseries_id, r.date
+         $sql$
+         USING p_timeseries_ids, p_start_date, p_end_date, p_as_of;
+       END;
        $function$;"
     )
     DBI::dbExecute(
@@ -971,7 +983,7 @@ tryCatch(
          DATE,
          DATE
        ) IS
-       'Reconstructs stored calculated daily rows as they existed at a requested timestamp using the current table plus audit.measurements_calculated_daily_log. It does not recompute daily values.';"
+       'Reconstructs stored calculated daily rows as they existed at a requested timestamp using the current table plus audit.measurements_calculated_daily_log. It does not recompute daily values and uses dynamic execution so filtered calls use a custom plan.';"
     )
 
     DBI::dbExecute(
