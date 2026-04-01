@@ -394,10 +394,10 @@ tryCatch(
                'qualifiers',
                'owners',
                'contributors'
-             ]) AND
-             jsonb_object_length(v_changed_fields) = 1 AND
-             v_changed_fields ? 'end_dt'
-         THEN
+            ]) AND
+            v_changed_fields ? 'end_dt' AND
+            (v_changed_fields - 'end_dt') = '{}'::jsonb
+        THEN
            v_old_end_dt := (to_jsonb(OLD) ->> 'end_dt')::timestamptz;
            v_new_end_dt := (to_jsonb(NEW) ->> 'end_dt')::timestamptz;
            v_segment_start_dt := (to_jsonb(NEW) ->> 'start_dt')::timestamptz;
