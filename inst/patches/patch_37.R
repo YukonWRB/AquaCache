@@ -3132,7 +3132,6 @@ tryCatch(
       "samples",
       "results",
       "guidelines",
-      "sample_series",
       "field_visit_images",
       "field_visit_instruments",
       "field_visits",
