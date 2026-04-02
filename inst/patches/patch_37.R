@@ -3165,7 +3165,7 @@ tryCatch(
     general_audit_table_schemas <- c(
       rep("boreholes", 7),
       rep("continuous", 7),
-      rep("discrete", 4),
+      rep("discrete", 3),
       rep("field", 3),
       rep("instruments", 15),
       rep("public", 11)
