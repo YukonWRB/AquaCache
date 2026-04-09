@@ -19,6 +19,11 @@ getNewRasters <- function(
     start_datetime = NULL,
     end_datetime = NULL
 ) {
+  restore_spatial_env <- unset_postgres_spatial_env()
+  if (is.function(restore_spatial_env)) {
+    on.exit(restore_spatial_env(), add = TRUE)
+  }
+
   if (!keep_forecasts %in% c('selective', 'all', 'none')) {
     stop(
       "The 'keep_forecasts' parameter must be either 'selective', 'all', or 'none'."
@@ -198,7 +203,8 @@ getNewRasters <- function(
     }
     
     tryCatch(
-      {
+      withCallingHandlers(
+        {
         args_list <- list(start_datetime = next_instant)
         if (!is.null(end_datetime_i)) {
           args_list$end_datetime <- end_datetime_i # If end_datetime_i is specified, add it to the args_list
@@ -238,6 +244,7 @@ getNewRasters <- function(
         rasters[["issued"]] <- NULL
         
         if (!is.null(rasters)) {
+          series_raster_count <- 0L
           for (j in 1:length(rasters)) {
             rast <- rasters[[j]]
             if (is.null(rast)) {
@@ -330,16 +337,23 @@ getNewRasters <- function(
                 params = list(valid_to, id)
               )
               raster_count <- raster_count + 1
+              series_raster_count <- series_raster_count + 1L
               
               # On success, commit the transaction
               DBI::dbExecute(con, "COMMIT")
             }, error = function(e) {
+              message(
+                "getNewRasters: Failed to append a raster for raster_series_id ",
+                id,
+                " with error message: ",
+                conditionMessage(e)
+              )
               # On error, rollback the transaction
               DBI::dbExecute(con, "ROLLBACK")
             })
           }
           
-          if (forecast) {
+          if (forecast && series_raster_count > 0) {
             # Delete the old forecast rasters as per input parameters, adjust raster_series_index.last_issue
             valid_from <- as.POSIXct(
               sapply(rasters, function(x) {
@@ -403,8 +417,16 @@ getNewRasters <- function(
             )
           }
           
-          count <- count + 1
-          success <- c(success, id)
+          if (series_raster_count > 0) {
+            count <- count + 1
+            success <- c(success, id)
+          } else {
+            message(
+              "getNewRasters: No rasters were appended for raster_series_id ",
+              id,
+              "."
+            )
+          }
         } else {
           message(
             "getNewRasters: No new rasters found for raster_series_id ",
@@ -413,20 +435,22 @@ getNewRasters <- function(
           )
         }
       },
+      warning = function(w) {
+        message(
+          "getNewRasters: Warning while processing raster_series_id ",
+          id,
+          ": ",
+          conditionMessage(w)
+        )
+        invokeRestart("muffleWarning")
+      }
+      ),
       error = function(e) {
         warning(
           "getNewRasters: Failed to get new rasters or to append new rasters for raster_series_id ",
           id,
           " with error message: ",
           e$message
-        )
-      },
-      warning = function(w) {
-        warning(
-          "getNewRasters: Warning while processing raster_series_id ",
-          id,
-          ": ",
-          w$message
         )
       }
     )

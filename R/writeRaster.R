@@ -51,6 +51,11 @@ writeRaster <- function(
   blocks = NULL,
   constraints = FALSE
 ) {
+  restore_spatial_env <- unset_postgres_spatial_env()
+  if (is.function(restore_spatial_env)) {
+    on.exit(restore_spatial_env(), add = TRUE)
+  }
+
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {
     stop("PostGIS is not enabled on this database.")
   }
@@ -59,10 +64,10 @@ writeRaster <- function(
     stop("Raster must be a terra SpatRaster object.")
   }
 
-  raster2pgsql_path <- Sys.which("raster2pgsql")
-  psql_path <- Sys.which("psql")
+  raster2pgsql_path <- find_postgres_utility("raster2pgsql")
+  psql_path <- find_postgres_utility("psql")
   if (!nzchar(raster2pgsql_path) || !nzchar(psql_path)) {
-    warning(
+    message(
       "Either raster2pgsql or psql utilities were not found on the system PATH. Defaulting to the (slow) R only method."
     )
     res <- writeRaster_old(
@@ -349,36 +354,66 @@ writeRaster <- function(
     }
   )
 
+  current_db_user <- tryCatch(
+    DBI::dbGetQuery(con, "SELECT current_user AS current_user;")$current_user[1],
+    error = function(e) NA_character_
+  )
+  table_owner <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      "SELECT tableowner
+       FROM pg_tables
+       WHERE schemaname = $1
+         AND tablename = $2;",
+      params = list(schema_for_constraints, table_plain)
+    )$tableowner[1],
+    error = function(e) NA_character_
+  )
+
   identity_reset_ok <- FALSE
   if (isTRUE(is_identity)) {
-    restart_with <- if (max_before <= 0) 1L else max_before + 1L
-    identity_reset_ok <- tryCatch(
-      {
-        DBI::dbExecute(
-          con,
-          paste0(
-            "ALTER TABLE ",
-            rast_table_sql,
-            " ALTER COLUMN rid RESTART WITH ",
-            restart_with,
-            ";"
+    if (
+      !is.na(current_db_user) &&
+        !is.na(table_owner) &&
+        identical(current_db_user, table_owner)
+    ) {
+      restart_with <- if (max_before <= 0) 1L else max_before + 1L
+      identity_reset_ok <- tryCatch(
+        {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "ALTER TABLE ",
+              rast_table_sql,
+              " ALTER COLUMN rid RESTART WITH ",
+              restart_with,
+              ";"
+            )
           )
-        )
-        TRUE
-      },
-      error = function(e) {
-        warning(
-          paste0(
-            "Failed to realign identity for raster table '",
-            qualified_table,
-            "': ",
-            conditionMessage(e),
-            ". Falling back to sequence realignment."
+          TRUE
+        },
+        error = function(e) {
+          warning(
+            paste0(
+              "Failed to realign identity for raster table '",
+              qualified_table,
+              "': ",
+              conditionMessage(e),
+              ". Falling back to sequence realignment."
+            )
           )
-        )
-        FALSE
-      }
-    )
+          FALSE
+        }
+      )
+    } else {
+      message(
+        "Skipping identity realignment for raster table '",
+        qualified_table,
+        "' because current user '",
+        current_db_user,
+        "' does not own the table."
+      )
+    }
   }
 
   if (!isTRUE(identity_reset_ok)) {
@@ -391,23 +426,43 @@ writeRaster <- function(
       error = function(e) NA_character_
     )
     if (!is.na(seq_name) && nzchar(seq_name)) {
-      tryCatch(
-        DBI::dbExecute(
+      seq_can_update <- tryCatch(
+        DBI::dbGetQuery(
           con,
-          "SELECT setval($1::regclass, $2, $3);",
-          params = list(seq_name, max_before, max_before > 0)
-        ),
-        error = function(e) {
-          warning(
-            paste0(
-              "Failed to synchronise sequence for raster table '",
-              qualified_table,
-              "': ",
-              conditionMessage(e)
-            )
-          )
-        }
+          "SELECT has_sequence_privilege($1, 'UPDATE') AS can_update;",
+          params = list(seq_name)
+        )$can_update[1],
+        error = function(e) NA
       )
+      if (isTRUE(seq_can_update)) {
+        tryCatch(
+          DBI::dbExecute(
+            con,
+            "SELECT setval($1::regclass, $2, $3);",
+            params = list(seq_name, max_before, max_before > 0)
+          ),
+          error = function(e) {
+            warning(
+              paste0(
+                "Failed to synchronise sequence for raster table '",
+                qualified_table,
+                "': ",
+                conditionMessage(e)
+              )
+            )
+          }
+        )
+      } else {
+        message(
+          "Skipping sequence synchronisation for raster table '",
+          qualified_table,
+          "' because current user '",
+          current_db_user,
+          "' lacks UPDATE privilege on sequence '",
+          seq_name,
+          "'."
+        )
+      }
     }
   }
 
@@ -602,11 +657,6 @@ writeRaster <- function(
   if (!isTRUE(index_exists)) {
     index_sql <- paste0(
       "CREATE INDEX ",
-      if (!is.null(schema_name)) {
-        paste0(DBI::dbQuoteIdentifier(con, schema_name), ".")
-      } else {
-        ""
-      },
       DBI::dbQuoteIdentifier(con, index_name),
       " ON ",
       rast_table_sql,
