@@ -132,6 +132,22 @@ getNewRasters <- function(
       meta_ids[i, "source_fx"],
       "'"
     )
+    lock_namespace <- "aquacache_raster_series"
+    lock_acquired <- advisory_lock_acquire(
+      con = con,
+      namespace = lock_namespace,
+      key = id,
+      wait = FALSE
+    )
+    if (!isTRUE(lock_acquired)) {
+      warning(
+        "getNewRasters: Skipping raster_series_id ",
+        id,
+        " because it is locked by another process."
+      )
+      next
+    }
+
     source_fx <- meta_ids[i, "source_fx"]
     source_fx_args <- meta_ids[i, "source_fx_args"]
     type <- meta_ids[i, "type"]
@@ -270,6 +286,7 @@ getNewRasters <- function(
               tryCatch(
                 {
                   activeTrans <- dbTransBegin(con)
+                  DBI::dbExecute(con, "SET LOCAL lock_timeout = '30s';")
 
                   valid_from <- rast[["valid_from"]]
                   valid_to <- rast[["valid_to"]]
@@ -487,6 +504,9 @@ getNewRasters <- function(
           " with error message: ",
           e$message
         )
+      },
+      finally = {
+        advisory_lock_release(con, lock_namespace, id)
       }
     )
 

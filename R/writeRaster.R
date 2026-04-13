@@ -327,142 +327,58 @@ writeRaster <- function(
     max_before <- 0L
   }
 
-  # Synchronise sequence before appending new rasters ------------------------
-  is_identity <- tryCatch(
-    {
-      info <- DBI::dbGetQuery(
-        con,
-        "SELECT is_identity = 'YES' AS is_identity FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = 'rid';",
-        params = list(schema_for_constraints, table_plain)
-      )
-      if (nrow(info) == 0) {
-        FALSE
-      } else {
-        isTRUE(info$is_identity[1])
-      }
-    },
-    error = function(e) {
-      warning(
-        paste0(
-          "Unable to determine identity status for raster table '",
-          qualified_table,
-          "': ",
-          conditionMessage(e)
-        )
-      )
-      NA
-    }
-  )
-
+  # Synchronise the backing sequence before appending new rasters. Using
+  # setval() avoids the stronger table lock required by ALTER TABLE ...
+  # RESTART WITH, which can otherwise block indefinitely behind readers.
   current_db_user <- tryCatch(
     DBI::dbGetQuery(con, "SELECT current_user AS current_user;")$current_user[1],
     error = function(e) NA_character_
   )
-  table_owner <- tryCatch(
+  seq_name <- tryCatch(
     DBI::dbGetQuery(
       con,
-      "SELECT tableowner
-       FROM pg_tables
-       WHERE schemaname = $1
-         AND tablename = $2;",
-      params = list(schema_for_constraints, table_plain)
-    )$tableowner[1],
+      "SELECT pg_get_serial_sequence($1, 'rid') AS seqname;",
+      params = list(qualified_table)
+    )$seqname,
     error = function(e) NA_character_
   )
-
-  identity_reset_ok <- FALSE
-  if (isTRUE(is_identity)) {
-    if (
-      !is.na(current_db_user) &&
-        !is.na(table_owner) &&
-        identical(current_db_user, table_owner)
-    ) {
-      restart_with <- if (max_before <= 0) 1L else max_before + 1L
-      identity_reset_ok <- tryCatch(
-        {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "ALTER TABLE ",
-              rast_table_sql,
-              " ALTER COLUMN rid RESTART WITH ",
-              restart_with,
-              ";"
-            )
-          )
-          TRUE
-        },
+  if (!is.na(seq_name) && nzchar(seq_name)) {
+    seq_can_update <- tryCatch(
+      DBI::dbGetQuery(
+        con,
+        "SELECT has_sequence_privilege($1, 'UPDATE') AS can_update;",
+        params = list(seq_name)
+      )$can_update[1],
+      error = function(e) NA
+    )
+    if (isTRUE(seq_can_update)) {
+      tryCatch(
+        DBI::dbExecute(
+          con,
+          "SELECT setval($1::regclass, $2, $3);",
+          params = list(seq_name, max_before, max_before > 0)
+        ),
         error = function(e) {
           warning(
             paste0(
-              "Failed to realign identity for raster table '",
+              "Failed to synchronise sequence for raster table '",
               qualified_table,
               "': ",
-              conditionMessage(e),
-              ". Falling back to sequence realignment."
+              conditionMessage(e)
             )
           )
-          FALSE
         }
       )
     } else {
       message(
-        "Skipping identity realignment for raster table '",
+        "Skipping sequence synchronisation for raster table '",
         qualified_table,
         "' because current user '",
         current_db_user,
-        "' does not own the table."
+        "' lacks UPDATE privilege on sequence '",
+        seq_name,
+        "'."
       )
-    }
-  }
-
-  if (!isTRUE(identity_reset_ok)) {
-    seq_name <- tryCatch(
-      DBI::dbGetQuery(
-        con,
-        "SELECT pg_get_serial_sequence($1, 'rid') AS seqname;",
-        params = list(qualified_table)
-      )$seqname,
-      error = function(e) NA_character_
-    )
-    if (!is.na(seq_name) && nzchar(seq_name)) {
-      seq_can_update <- tryCatch(
-        DBI::dbGetQuery(
-          con,
-          "SELECT has_sequence_privilege($1, 'UPDATE') AS can_update;",
-          params = list(seq_name)
-        )$can_update[1],
-        error = function(e) NA
-      )
-      if (isTRUE(seq_can_update)) {
-        tryCatch(
-          DBI::dbExecute(
-            con,
-            "SELECT setval($1::regclass, $2, $3);",
-            params = list(seq_name, max_before, max_before > 0)
-          ),
-          error = function(e) {
-            warning(
-              paste0(
-                "Failed to synchronise sequence for raster table '",
-                qualified_table,
-                "': ",
-                conditionMessage(e)
-              )
-            )
-          }
-        )
-      } else {
-        message(
-          "Skipping sequence synchronisation for raster table '",
-          qualified_table,
-          "' because current user '",
-          current_db_user,
-          "' lacks UPDATE privilege on sequence '",
-          seq_name,
-          "'."
-        )
-      }
     }
   }
 
@@ -538,7 +454,8 @@ writeRaster <- function(
       "PGUSER",
       "PGPASSWORD",
       "PGCONNECT_TIMEOUT",
-      "PSQLRC"
+      "PSQLRC",
+      "PGOPTIONS"
     ),
     unset = NA
   )
@@ -581,6 +498,11 @@ writeRaster <- function(
   Sys.setenv(
     PSQLRC = if (.Platform$OS.type == "windows") "NUL" else "/dev/null"
   )
+  pg_options <- "-c lock_timeout=30s -c statement_timeout=0"
+  if (!is.na(old_env[["PGOPTIONS"]]) && nzchar(old_env[["PGOPTIONS"]])) {
+    pg_options <- paste(old_env[["PGOPTIONS"]], pg_options)
+  }
+  Sys.setenv(PGOPTIONS = pg_options)
 
   tmp_psql_err <- tempfile(fileext = ".log")
   tmp_psql_out <- tempfile(fileext = ".log")
