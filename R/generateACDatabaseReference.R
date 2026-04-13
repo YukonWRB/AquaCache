@@ -15,8 +15,12 @@
 #'   function attempts to create a temporary connection from environment
 #'   variables.
 #' @param output_file File path for the generated HTML document.
+#' @param standalone Logical. If `TRUE`, write a complete standalone HTML
+#'   document. If `FALSE`, write an embeddable HTML fragment suitable for
+#'   inclusion inside an existing HTML page such as a package vignette.
 #' @param schemas Optional character vector of schema names to document. The
-#'   default `NULL` documents the standard AquaCache schemas.
+#'   default `NULL` discovers visible non-system AquaCache schemas from the
+#'   live database catalog.
 #' @param check_visibility Logical. If `TRUE`, compare the visible object counts
 #'   of the supplied connection against an admin session when possible and warn
 #'   if the connection appears to be missing documented objects.
@@ -28,38 +32,11 @@
 generateACDatabaseReference <- function(
   con = NULL,
   output_file = "aquacache_database_reference.html",
+  standalone = TRUE,
   schemas = NULL,
   check_visibility = TRUE,
   open = interactive()
 ) {
-  target_schemas <- c(
-    "application",
-    "audit",
-    "boreholes",
-    "continuous",
-    "discrete",
-    "field",
-    "files",
-    "information",
-    "instruments",
-    "public",
-    "spatial"
-  )
-
-  schema_descriptions <- c(
-    application = "Application-managed content, notifications, and usage telemetry for client applications such as YGwater.",
-    audit = "Audit logging and point-in-time reconstruction helpers for tracking metadata and measurement edits.",
-    boreholes = "Groundwater and borehole inventory tables, including borehole construction, geology, permafrost, and linked documents.",
-    continuous = "Automated time-series definitions, observations, corrections, quality flags, forecasts, and other continuous-data business rules.",
-    discrete = "Manual and laboratory sample workflows, analytical results, guideline lookups, and sampling metadata.",
-    field = "Field visit records and the assets or instruments associated with a visit.",
-    files = "Documents, images, image-series metadata, and related file-classification tables.",
-    information = "Internal database status and version-tracking tables used by AquaCache itself.",
-    instruments = "Instrument inventory, maintenance, calibration, communications, and deployment-related reference data.",
-    public = "Shared core reference tables such as locations, organizations, parameters, units, permissions, and normalized location metadata.",
-    spatial = "Raster and vector storage plus indexing tables for spatial series and derived spatial metadata."
-  )
-
   schema_palette <- list(
     application = c(accent = "#0b7285", tint = "#e6f7fa"),
     audit = c(accent = "#8b3d66", tint = "#f8e8f0"),
@@ -129,6 +106,65 @@ generateACDatabaseReference <- function(
     )
   }
 
+  discover_documented_schemas <- function(con) {
+    DBI::dbGetQuery(
+      con,
+      "
+      WITH relation_schemas AS (
+        SELECT DISTINCT n.nspname AS schema_name
+        FROM pg_class c
+        JOIN pg_namespace n
+          ON n.oid = c.relnamespace
+        WHERE c.relkind IN ('r', 'p', 'v', 'm')
+          AND n.nspname !~ '^pg_'
+          AND n.nspname <> 'information_schema'
+          AND c.relname !~ '^pg_'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pg_depend dep
+            JOIN pg_extension ext
+              ON ext.oid = dep.refobjid
+            WHERE dep.classid = 'pg_class'::regclass
+              AND dep.objid = c.oid
+              AND dep.refclassid = 'pg_extension'::regclass
+              AND dep.deptype = 'e'
+          )
+      ),
+      routine_schemas AS (
+        SELECT DISTINCT n.nspname AS schema_name
+        FROM pg_proc p
+        JOIN pg_namespace n
+          ON n.oid = p.pronamespace
+        WHERE p.prokind IN ('f', 'p')
+          AND n.nspname !~ '^pg_'
+          AND n.nspname <> 'information_schema'
+          AND p.proname !~ '^pg_'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pg_depend dep
+            JOIN pg_extension ext
+              ON ext.oid = dep.refobjid
+            WHERE dep.classid = 'pg_proc'::regclass
+              AND dep.objid = p.oid
+              AND dep.refclassid = 'pg_extension'::regclass
+              AND dep.deptype = 'e'
+          )
+      )
+      SELECT
+        n.oid AS schema_oid,
+        n.nspname AS schema_name,
+        obj_description(n.oid, 'pg_namespace') AS comment
+      FROM pg_namespace n
+      WHERE n.nspname IN (
+        SELECT schema_name FROM relation_schemas
+        UNION
+        SELECT schema_name FROM routine_schemas
+      )
+      ORDER BY n.nspname;
+      "
+    )
+  }
+
   connect_catalog <- function() {
     con <- AquaConnect(silent = TRUE)
     suppressWarnings(
@@ -143,8 +179,25 @@ generateACDatabaseReference <- function(
     con
   }
 
-  fetch_catalog <- function(con, target_schemas = target_schemas) {
+  fetch_catalog <- function(con, target_schemas) {
     schema_sql <- schema_list_sql(target_schemas)
+    schemas <- DBI::dbGetQuery(
+      con,
+      sprintf(
+        "
+        WITH target_schemas AS (%s)
+        SELECT
+          n.oid AS schema_oid,
+          n.nspname AS schema_name,
+          obj_description(n.oid, 'pg_namespace') AS comment
+        FROM pg_namespace n
+        JOIN target_schemas ts
+          ON ts.schema_name = n.nspname
+        ORDER BY n.nspname;
+        ",
+        schema_sql
+      )
+    )
     tables <- DBI::dbGetQuery(
       con,
       sprintf(
@@ -174,7 +227,7 @@ generateACDatabaseReference <- function(
         )
       ORDER BY n.nspname, c.relname;
       ",
-      schema_sql
+        schema_sql
       )
     )
     tables$key <- relation_key(tables$schema_name, tables$object_name)
@@ -210,7 +263,7 @@ generateACDatabaseReference <- function(
         )
       ORDER BY n.nspname, c.relname;
       ",
-      schema_sql
+        schema_sql
       )
     )
     views$key <- relation_key(views$schema_name, views$object_name)
@@ -229,7 +282,6 @@ generateACDatabaseReference <- function(
           a.attname AS column_name,
           format_type(a.atttypid, a.atttypmod) AS data_type,
           NOT a.attnotnull AS nullable,
-          pg_get_expr(ad.adbin, ad.adrelid) AS column_default,
           col_description(c.oid, a.attnum) AS comment
         FROM pg_class c
         JOIN pg_namespace n
@@ -240,9 +292,6 @@ generateACDatabaseReference <- function(
         ON a.attrelid = c.oid
          AND a.attnum > 0
          AND NOT a.attisdropped
-        LEFT JOIN pg_attrdef ad
-          ON ad.adrelid = c.oid
-         AND ad.adnum = a.attnum
       WHERE c.relkind IN ('r', 'p', 'v', 'm')
         AND c.relname !~ '^pg_'
         AND NOT EXISTS (
@@ -257,9 +306,55 @@ generateACDatabaseReference <- function(
         )
       ORDER BY n.nspname, c.relname, a.attnum;
       ",
-      schema_sql
+        schema_sql
       )
     )
+    columns$column_default <- NA_character_
+
+    column_defaults <- DBI::dbGetQuery(
+      con,
+      sprintf(
+        "
+        WITH target_schemas AS (%s)
+        SELECT
+          c.oid AS object_oid,
+          a.attnum AS ordinal_position,
+          pg_get_expr(ad.adbin, ad.adrelid) AS column_default
+        FROM pg_class c
+        JOIN pg_namespace n
+          ON n.oid = c.relnamespace
+        JOIN target_schemas ts
+          ON ts.schema_name = n.nspname
+        JOIN pg_attribute a
+          ON a.attrelid = c.oid
+         AND a.attnum > 0
+         AND NOT a.attisdropped
+        JOIN pg_attrdef ad
+          ON ad.adrelid = c.oid
+         AND ad.adnum = a.attnum
+        WHERE c.relkind IN ('r', 'p')
+          AND c.relname !~ '^pg_'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pg_depend dep
+            JOIN pg_extension ext
+              ON ext.oid = dep.refobjid
+            WHERE dep.classid = 'pg_class'::regclass
+              AND dep.objid = c.oid
+              AND dep.refclassid = 'pg_extension'::regclass
+              AND dep.deptype = 'e'
+          );
+        ",
+        schema_sql
+      )
+    )
+    if (nrow(column_defaults) > 0) {
+      default_idx <- match(
+        paste(columns$object_oid, columns$ordinal_position),
+        paste(column_defaults$object_oid, column_defaults$ordinal_position)
+      )
+      columns$column_default <- column_defaults$column_default[default_idx]
+    }
     columns$key <- relation_key(columns$schema_name, columns$object_name)
 
     constraints <- DBI::dbGetQuery(
@@ -495,6 +590,7 @@ generateACDatabaseReference <- function(
 
     list(
       target_schemas = target_schemas,
+      schemas = schemas,
       tables = tables,
       views = views,
       columns = columns,
@@ -517,90 +613,6 @@ generateACDatabaseReference <- function(
   ) {
     if (!is_blank(comment)) {
       return(list(text = trim_or_na(comment)[1], source = "Database comment"))
-    }
-
-    full_name <- relation_key(schema_name, table_name)
-    manual <- switch(
-      full_name,
-      "application.api_requests" = "Captures application or API request history, likely for monitoring, diagnostics, throttling, or troubleshooting.",
-      "application.feedback" = "Stores end-user feedback submitted through an application interface, usually as a lightweight content or support workflow table.",
-      "application.images" = "Stores application-managed image assets that can be placed into CMS-style content blocks such as pages or announcements.",
-      "application.shiny_app_usage" = "Stores one record per Shiny application session or usage episode so higher-volume event rows can roll up to a parent usage record.",
-      "boreholes.borehole_well_purposes" = "Lookup table of valid purpose categories for wells associated with boreholes.",
-      "boreholes.boreholes" = "Primary borehole inventory for boreholes that have accepted coordinates and can be mapped directly.",
-      "boreholes.boreholes_documents" = "Associative table that links mapped boreholes to file records, so reports or logs can be attached to a borehole.",
-      "boreholes.boreholes_no_coords" = "Secondary borehole inventory for boreholes that are known but do not yet have usable coordinates.",
-      "boreholes.boreholes_no_coords_documents" = "Associative table linking non-spatial borehole records to supporting documents.",
-      "boreholes.casing_materials" = "Reference table of valid casing materials used when describing well or borehole construction.",
-      "boreholes.drillers" = "Reference table of drillers or drilling companies associated with borehole construction records.",
-      "boreholes.geology" = "Stores geology or lithology intervals observed within a borehole, usually by depth range.",
-      "boreholes.permafrost" = "Stores permafrost intervals or classifications recorded for a borehole, typically by depth range.",
-      "boreholes.wells" = "Stores well-specific metadata connected to a borehole, such as construction, use, or operational attributes.",
-      "continuous.aggregation_types" = "Reference table defining how a time-series value represents time, such as instantaneous, mean, sum, minimum, or maximum.",
-      "continuous.approvals" = "Time-bounded approval history for a time series, letting the approved status change over date ranges.",
-      "continuous.contributors" = "Time-bounded record of contributing organizations or parties for each time series.",
-      "continuous.grades" = "Time-bounded grade history for each time series so quality grades can change over time.",
-      "continuous.owners" = "Time-bounded ownership history for each time series.",
-      "continuous.qualifiers" = "Time-bounded qualifier history for each time series, such as conditions or context flags.",
-      "continuous.rating_curves" = "Stores rating-curve headers or versions used to convert one measurement domain into another, typically stage to discharge.",
-      "continuous.rating_curve_shifts" = "Stores temporal shifts or offsets that modify a rating curve for a given period.",
-      "continuous.rating_curve_points" = "Stores the individual points that make up a rating curve or a rating-curve segment.",
-      "discrete.collection_methods" = "Reference table of field collection methods used when taking discrete samples.",
-      "discrete.guideline_publishers" = "Reference table of organizations that publish water-quality or sample-result guidelines.",
-      "discrete.guideline_series" = "Reference table grouping guidelines into a named publication series or edition.",
-      "discrete.guidelines" = "Stores published guideline thresholds used to interpret discrete analytical results.",
-      "discrete.laboratories" = "Reference table of laboratories that analyze discrete samples.",
-      "discrete.protocols_methods" = "Reference table of protocols or analytical methods used in discrete sampling and laboratory work.",
-      "discrete.result_conditions" = "Reference table of result-condition qualifiers such as below detection, estimated, or otherwise condition-coded values.",
-      "discrete.result_speciations" = "Reference table for chemical or analytical speciation categories used on results.",
-      "discrete.result_types" = "Reference table classifying what a result value represents, such as observed, duplicate, blank, or derived values.",
-      "discrete.result_value_types" = "Reference table defining the form of the stored result value, such as numeric, textual, or categorical.",
-      "discrete.results" = "Stores one analytical result per sample, parameter, and related analytical qualifiers.",
-      "discrete.sample_fractions" = "Reference table of sample fractions such as dissolved, total, filtered, or unfiltered.",
-      "discrete.sample_types" = "Reference table of sample types or sampling programs.",
-      "discrete.samples" = "Stores the sampled event itself: where, when, how, and under what media a discrete sample was collected.",
-      "files.document_types" = "Reference table defining the types of documents that can be attached to AquaCache records.",
-      "files.documents_spatial" = "Associative table linking documents to spatial features or spatial records.",
-      "files.image_types" = "Reference table defining the types of images stored in the files schema.",
-      "information.version_info" = "Stores internal database version and patch-tracking values used by AquaCache maintenance routines.",
-      "instruments.calibrations" = "Stores one parent calibration event per instrument or sensor calibration activity.",
-      "instruments.instrument_maintenance" = "Stores maintenance events performed on an instrument or instrument assembly.",
-      "instruments.instrument_make" = "Reference table of instrument manufacturers or makes.",
-      "instruments.instrument_model" = "Reference table of instrument models, usually linked to a make and type.",
-      "instruments.instrument_type" = "Reference table of high-level instrument categories such as logger, sensor, modem, or controller.",
-      "instruments.instruments" = "Master inventory of physical instruments deployed, maintained, or tracked by AquaCache.",
-      "instruments.observers" = "Reference table of people who perform field observations, calibrations, or maintenance tasks.",
-      "instruments.sensor_types" = "Reference table of sensor categories used to classify sensors.",
-      "instruments.sensors" = "Inventory of sensors, often linked to a parent instrument, model, or deployment metadata.",
-      "instruments.suppliers" = "Reference table of suppliers or vendors for instruments and parts.",
-      "public.ac_append_rls" = "Internal helper table supporting row-level-security-aware append operations from application code or helper functions.",
-      "public.approval_types" = "Reference table of approval categories used by continuous and related quality workflows.",
-      "public.grade_types" = "Reference table of grade categories used to classify data quality or record status.",
-      "public.location_types" = "Reference table defining the types of locations stored in AquaCache, such as station, site, or feature categories.",
-      "public.locations" = "Master location table for physical monitoring sites, stations, or other spatially meaningful assets.",
-      "public.locations_metadata_instruments" = "Stores time-bounded instrument deployment metadata for a location.",
-      "public.locations_metadata_maintenance" = "Stores maintenance history or maintenance metadata linked to a location and its instrumentation.",
-      "public.locations_networks" = "Associative table connecting locations to monitoring networks.",
-      "public.locations_projects" = "Associative table connecting locations to projects or initiatives.",
-      "public.media_types" = "Reference table defining media such as water, air, snow, or soil and their default matrix-state behavior.",
-      "public.network_project_types" = "Reference table classifying how a network or project relationship should be interpreted.",
-      "public.networks" = "Reference table of monitoring networks, programs, or organizational groupings of locations.",
-      "public.organization_data_sharing_agreements" = "Associative table linking organizations to data-sharing agreement documents.",
-      "public.organizations" = "Reference table of organizations that own, contribute to, operate, or otherwise relate to AquaCache assets.",
-      "public.parameter_groups" = "Reference table for high-level parameter groupings.",
-      "public.parameter_relationships" = "Stores explicit relationships between parameters, such as derived or paired parameter mappings.",
-      "public.parameter_sub_groups" = "Reference table for more specific parameter subgroupings beneath a broader parameter group.",
-      "public.projects" = "Reference table of projects, initiatives, or work programs linked to locations or networks.",
-      "public.qualifier_types" = "Reference table of qualifier categories used in time-series workflows.",
-      "public.sub_locations" = "Child location dimension used to distinguish sub-sites or measurement points beneath a main location.",
-      "public.units" = "Reference table of measurement units used across parameters and results.",
-      "spatial.raster_types" = "Reference table classifying raster products, such as observed, forecast, or derived raster families.",
-      "spatial.spatial_ref_sys" = "Reference table of spatial reference systems. This is typically PostGIS-managed rather than AquaCache-specific business data.",
-      NULL
-    )
-
-    if (!is.null(manual)) {
-      return(list(text = manual, source = "Inferred from object name"))
     }
 
     if (schema_name == "instruments" && startsWith(table_name, "calibrate_")) {
@@ -719,22 +731,6 @@ generateACDatabaseReference <- function(
       return(list(text = trim_or_na(comment)[1], source = "Database comment"))
     }
 
-    full_name <- relation_key(schema_name, view_name)
-    manual <- switch(
-      full_name,
-      "continuous.measurements_calculated_daily_corrected" = "Convenience view that exposes stored daily values after applying currently effective corrections and security filtering.",
-      "continuous.measurements_continuous_corrected" = "Convenience view that exposes raw continuous measurements alongside correction-adjusted values visible to the current caller.",
-      "continuous.timeseries_metadata_en" = "English-language view that flattens key time-series metadata into a reader-friendly dataset for applications and exports.",
-      "continuous.timeseries_metadata_fr" = "French-language view that flattens key time-series metadata into a reader-friendly dataset for applications and exports.",
-      "public.location_metadata_en" = "English-language flattened location metadata view assembled from the normalized location tables.",
-      "public.location_metadata_fr" = "French-language flattened location metadata view assembled from the normalized location tables.",
-      NULL
-    )
-
-    if (!is.null(manual)) {
-      return(list(text = manual, source = "Inferred from object name"))
-    }
-
     dep_count <- nrow(dependencies)
     list(
       text = sprintf(
@@ -755,34 +751,6 @@ generateACDatabaseReference <- function(
   ) {
     if (!is_blank(comment)) {
       return(list(text = trim_or_na(comment)[1], source = "Database comment"))
-    }
-
-    full_name <- relation_key(schema_name, function_name)
-    manual <- switch(
-      full_name,
-      "audit.jsonb_changed_fields" = "Compares two JSONB row snapshots and returns only the fields whose values changed.",
-      "audit.log_measurements_calculated_daily_change" = "Trigger function that writes daily measurement changes into the dedicated audit log table.",
-      "audit.log_measurements_continuous_change" = "Trigger function that writes continuous measurement changes into the dedicated audit log table.",
-      "continuous.delete_old_forecasts" = "Maintenance routine that removes forecast rows that are no longer meant to remain in the database.",
-      "continuous.trunc_hour_utc" = "Helper function that truncates a timestamp to the start of its UTC hour, mainly to support indexing and grouping.",
-      "public.default_matrix_state_id_from_media" = "Helper that returns the default matrix-state identifier associated with a given media type.",
-      "public.drop_role_if_unused" = "Administrative helper that drops a database role only if it no longer has references in share-with style columns.",
-      "public.get_parameter_unit_id" = "Returns the unit identifier that should be used for a parameter under a given matrix state.",
-      "public.get_parameter_unit_name" = "Returns the display name of the unit resolved for a parameter under a given matrix state.",
-      "public.get_shareable_principals_for" = "Lists roles that are eligible to receive shared access for a relation and privilege set.",
-      "public.get_unique_parameter_matrix_state_id" = "Returns the unique matrix-state identifier for a parameter when exactly one valid mapping exists.",
-      "public.parameter_has_unit_for_matrix_state" = "Checks whether a parameter has a valid unit mapping for a given matrix state.",
-      "public.resolve_matrix_state_id" = "Resolves the correct matrix-state identifier from media, parameter, and optionally an explicit matrix-state value.",
-      "public.update_modified" = "Trigger helper that stamps the modified timestamp when a row is updated.",
-      "public.user_modified" = "Trigger helper that records which database role last modified the row.",
-      "public.validate_documents_array" = "Validates the structure or contents of a document-id array before the row is written.",
-      "public.validate_share_with" = "Validates share-with role arrays so row-level sharing only references acceptable roles.",
-      "spatial.update_geom_type" = "Trigger helper that derives or refreshes the stored geometry-type label when a vector geometry changes.",
-      NULL
-    )
-
-    if (!is.null(manual)) {
-      return(list(text = manual, source = "Inferred from object name"))
     }
 
     if (identical(trimws(tolower(returns)), "trigger")) {
@@ -927,6 +895,55 @@ generateACDatabaseReference <- function(
     list(text = NA_character_, source = NA_character_)
   }
 
+  infer_schema_description <- function(
+    schema_name,
+    comment,
+    table_count,
+    view_count,
+    function_count
+  ) {
+    if (!is_blank(comment)) {
+      return(trim_or_na(comment)[1])
+    }
+
+    parts <- c()
+    if (table_count > 0) {
+      parts <- c(
+        parts,
+        sprintf("%d table%s", table_count, if (table_count == 1) "" else "s")
+      )
+    }
+    if (view_count > 0) {
+      parts <- c(
+        parts,
+        sprintf("%d view%s", view_count, if (view_count == 1) "" else "s")
+      )
+    }
+    if (function_count > 0) {
+      parts <- c(
+        parts,
+        sprintf(
+          "%d function%s",
+          function_count,
+          if (function_count == 1) "" else "s"
+        )
+      )
+    }
+
+    if (length(parts) == 0) {
+      return(
+        sprintf(
+          "User-defined schema discovered from the live catalog. Add a COMMENT ON SCHEMA statement to document its purpose."
+        )
+      )
+    }
+
+    sprintf(
+      "User-defined schema discovered from the live catalog, currently containing %s. Add a COMMENT ON SCHEMA statement to document its purpose more precisely.",
+      paste(parts, collapse = ", ")
+    )
+  }
+
   make_relation_regex <- function(schema_name, object_name) {
     schema_name <- gsub("([.|()\\^{}+$*?\\[\\]\\\\])", "\\\\\\1", schema_name)
     object_name <- gsub("([.|()\\^{}+$*?\\[\\]\\\\])", "\\\\\\1", object_name)
@@ -1062,7 +1079,7 @@ generateACDatabaseReference <- function(
     )
   }
 
-  catalog_visibility_summary <- function(con, target_schemas = target_schemas) {
+  catalog_visibility_summary <- function(con, target_schemas) {
     schema_sql <- schema_list_sql(target_schemas)
 
     DBI::dbGetQuery(
@@ -1134,29 +1151,36 @@ generateACDatabaseReference <- function(
     )
   }
 
-  check_catalog_visibility <- function(con, target_schemas = target_schemas) {
-    current_summary <- catalog_visibility_summary(
-      con,
-      target_schemas = target_schemas
-    )
+  check_catalog_visibility <- function(
+    con,
+    target_schemas,
+    include_admin_discovered_schemas = FALSE
+  ) {
+    warn_missing_schemas <- function(current_summary) {
+      missing_schemas <- current_summary$schema_name[
+        current_summary$tables == 0 &
+          current_summary$views == 0 &
+          current_summary$routines == 0
+      ]
+      if (length(missing_schemas) > 0) {
+        warning(
+          "The supplied connection cannot see any documented objects in the following schema(s): ",
+          paste(missing_schemas, collapse = ", "),
+          ". The generated reference may be incomplete.",
+          call. = FALSE
+        )
+      }
+    }
+
     current_user <- DBI::dbGetQuery(
       con,
       "SELECT current_user AS current_user;"
     )[1, 1]
-
-    missing_schemas <- current_summary$schema_name[
-      current_summary$tables == 0 &
-        current_summary$views == 0 &
-        current_summary$routines == 0
-    ]
-    if (length(missing_schemas) > 0) {
-      warning(
-        "The supplied connection cannot see any documented objects in the following schema(s): ",
-        paste(missing_schemas, collapse = ", "),
-        ". The generated reference may be incomplete.",
-        call. = FALSE
-      )
-    }
+    comparison_schemas <- unique(target_schemas)
+    current_summary <- catalog_visibility_summary(
+      con,
+      target_schemas = comparison_schemas
+    )
 
     admin_user <- Sys.getenv("aquacacheAdminUser")
     admin_pass <- Sys.getenv("aquacacheAdminPass")
@@ -1165,6 +1189,7 @@ generateACDatabaseReference <- function(
         !nzchar(admin_pass) ||
         identical(current_user, admin_user)
     ) {
+      warn_missing_schemas(current_summary)
       return(invisible(current_summary))
     }
 
@@ -1181,6 +1206,7 @@ generateACDatabaseReference <- function(
     )
 
     if (is.null(admin_con)) {
+      warn_missing_schemas(current_summary)
       warning(
         "Could not compare the supplied connection against an admin session, so completeness could not be fully verified.",
         call. = FALSE
@@ -1189,9 +1215,20 @@ generateACDatabaseReference <- function(
     }
 
     on.exit(DBI::dbDisconnect(admin_con), add = TRUE)
+    if (isTRUE(include_admin_discovered_schemas)) {
+      admin_schemas <- discover_documented_schemas(admin_con)$schema_name
+      comparison_schemas <- unique(c(comparison_schemas, admin_schemas))
+      current_summary <- catalog_visibility_summary(
+        con,
+        target_schemas = comparison_schemas
+      )
+    }
+
+    warn_missing_schemas(current_summary)
+
     admin_summary <- catalog_visibility_summary(
       admin_con,
-      target_schemas = target_schemas
+      target_schemas = comparison_schemas
     )
     comparison <- merge(
       admin_summary,
@@ -1235,7 +1272,8 @@ generateACDatabaseReference <- function(
   build_html <- function(
     catalog,
     output_path,
-    selected_schemas = catalog$target_schemas %||% target_schemas
+    selected_schemas = catalog$target_schemas,
+    standalone = TRUE
   ) {
     tables <- catalog$tables
     views <- catalog$views
@@ -1245,6 +1283,7 @@ generateACDatabaseReference <- function(
     triggers <- catalog$triggers
     view_dependencies <- catalog$view_dependencies
     functions <- catalog$functions
+    schema_info <- catalog$schemas
 
     relation_catalog <- rbind(
       data.frame(
@@ -1289,9 +1328,13 @@ generateACDatabaseReference <- function(
       character(1)
     )
 
+    schema_comments <- schema_info$comment[
+      match(selected_schemas, schema_info$schema_name)
+    ]
+
     schema_counts <- data.frame(
       schema_name = selected_schemas,
-      schema_description = unname(schema_descriptions[selected_schemas]),
+      schema_comment = schema_comments,
       table_count = vapply(
         selected_schemas,
         function(s) sum(tables$schema_name == s),
@@ -1308,6 +1351,15 @@ generateACDatabaseReference <- function(
         integer(1)
       ),
       stringsAsFactors = FALSE
+    )
+    schema_counts$schema_description <- mapply(
+      infer_schema_description,
+      schema_counts$schema_name,
+      schema_counts$schema_comment,
+      schema_counts$table_count,
+      schema_counts$view_count,
+      schema_counts$function_count,
+      USE.NAMES = FALSE
     )
 
     object_totals <- list(
@@ -2062,14 +2114,14 @@ generateACDatabaseReference <- function(
           table_cards,
           "schema-group-tables",
           length(table_cards),
-          open = TRUE
+          open = FALSE
         ),
         make_group(
           "Views",
           view_cards,
           "schema-group-views",
           length(view_cards),
-          open = TRUE
+          open = FALSE
         ),
         make_group(
           "Functions",
@@ -2080,6 +2132,11 @@ generateACDatabaseReference <- function(
         ),
         collapse = ""
       )
+
+      schema_description <- schema_counts$schema_description[
+        schema_counts$schema_name == schema_name
+      ][1] %||%
+        ""
 
       cards_html <- c(
         cards_html,
@@ -2130,7 +2187,7 @@ generateACDatabaseReference <- function(
             ),
             "default"
           ),
-          escape_html(schema_descriptions[[schema_name]] %||% ""),
+          escape_html(schema_description),
           schema_body
         )
       )
@@ -2204,7 +2261,7 @@ generateACDatabaseReference <- function(
           colors <- schema_palette[[schema_name]] %||%
             c(accent = "#007c91", tint = "#e3f7fb")
           sprintf(
-            ".%s{--schema-accent:%s;--schema-tint:%s}.schema-chip.%s{background:%s;border-color:%s;color:%s}",
+            ".acdb-reference .%s{--schema-accent:%s;--schema-tint:%s}.acdb-reference .schema-chip.%s{background:%s;border-color:%s;color:%s}",
             schema_class_name(schema_name),
             colors[["accent"]],
             colors[["tint"]],
@@ -2219,124 +2276,135 @@ generateACDatabaseReference <- function(
       collapse = "\n"
     )
 
+    common_css <- paste(
+      c(
+        ".acdb-reference{--bg:#f4fbfd;--panel:#ffffff;--panel-alt:#eef7f9;--ink:#13232d;--muted:#5b7380;--line:#d7e5ea;--accent:#007c91;--accent-deep:#0d5561;--warm:#d27a00;--good:#1b7f5a;--shadow:0 12px 32px rgba(10,52,63,0.08);font-family:\"Segoe UI\",\"Helvetica Neue\",Arial,sans-serif;color:var(--ink);line-height:1.55}",
+        ".acdb-reference *{box-sizing:border-box}",
+        ".acdb-reference a{color:var(--accent-deep)}",
+        ".acdb-reference code,.acdb-reference pre{font-family:Consolas,\"Courier New\",monospace}",
+        ".acdb-reference .page{width:min(1600px,calc(100% - 48px));margin:0 auto;padding:32px 0 72px}",
+        ".acdb-reference .hero{background:linear-gradient(135deg,rgba(0,124,145,0.95),rgba(13,85,97,0.95));color:#fff;border-radius:28px;padding:36px 36px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}",
+        ".acdb-reference .hero::after{content:\"\";position:absolute;inset:auto -8% -25% auto;width:320px;height:320px;background:radial-gradient(circle,rgba(255,255,255,0.24),rgba(255,255,255,0) 70%);pointer-events:none}",
+        ".acdb-reference .eyebrow{margin:0 0 10px;letter-spacing:0.14em;text-transform:uppercase;font-size:0.76rem;font-weight:700;color:rgba(255,255,255,0.72)}",
+        ".acdb-reference .hero h1{margin:0;font-size:clamp(2.2rem,5vw,4rem);line-height:1}",
+        ".acdb-reference .hero p{max-width:920px;font-size:1.05rem;margin:16px 0 0;color:rgba(255,255,255,0.9)}",
+        ".acdb-reference .hero ul{margin:18px 0 0;padding-left:20px;color:rgba(255,255,255,0.9)}",
+        ".acdb-reference .top-controls{margin:24px 0;display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start}",
+        ".acdb-reference .panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:var(--shadow)}",
+        ".acdb-reference .panel h2,.acdb-reference .schema-block h2,.acdb-reference .object-card h3,.acdb-reference .object-card h4{margin-top:0}",
+        ".acdb-reference .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:18px}",
+        ".acdb-reference .summary-card{background:linear-gradient(180deg,#ffffff,#f5fbfc);border:1px solid var(--line);border-radius:18px;padding:16px}",
+        ".acdb-reference .summary-card strong{display:block;font-size:1.85rem;margin-top:6px}",
+        ".acdb-reference .summary-label{display:block;color:var(--muted);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.08em}",
+        ".acdb-reference .search-box{width:100%;padding:14px 16px;border-radius:14px;border:1px solid var(--line);font-size:1rem}",
+        ".acdb-reference .search-meta{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-top:12px;flex-wrap:wrap}",
+        ".acdb-reference .button-row{display:flex;gap:10px;flex-wrap:wrap}",
+        ".acdb-reference .ghost-button{background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:600;color:var(--accent-deep);cursor:pointer}",
+        ".acdb-reference .schema-chip-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}",
+        ".acdb-reference .schema-chip{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:var(--panel-alt);text-decoration:none;border:1px solid var(--line);color:var(--accent-deep);font-weight:600}",
+        ".acdb-reference .content-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:24px;align-items:start;margin-top:24px}",
+        ".acdb-reference .toc-panel{position:sticky;top:16px;padding:0;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);overflow:hidden;max-height:calc(100vh - 32px)}",
+        ".acdb-reference .toc-panel-summary{list-style:none;cursor:pointer;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-weight:700;background:rgba(255,255,255,0.96)}",
+        ".acdb-reference .toc-panel-summary::-webkit-details-marker{display:none}",
+        ".acdb-reference .toc-panel-summary::after{content:\"Hide\";font-size:0.85rem;color:var(--muted);font-weight:600}",
+        ".acdb-reference .toc-panel:not([open]) .toc-panel-summary::after{content:\"Show\"}",
+        ".acdb-reference .toc-panel-body{padding:0 22px 22px;border-top:1px solid var(--line);overflow:auto;max-height:calc(100vh - 110px);scrollbar-gutter:stable}",
+        ".acdb-reference .toc-panel:not([open]) .toc-panel-body{display:none}",
+        ".acdb-reference .toc-panel h2{margin:0}",
+        ".acdb-reference .toc-list{list-style:none;padding:0 4px 4px 0;margin:16px 0 0}",
+        ".acdb-reference .toc-list li+li{margin-top:10px}",
+        ".acdb-reference .toc-list a{display:block;padding:12px 14px;border-radius:16px;background:#f7fbfc;border:1px solid var(--line);text-decoration:none}",
+        ".acdb-reference .toc-list strong{display:block;color:var(--ink)}",
+        ".acdb-reference .toc-list span{display:block;color:var(--muted);font-size:0.9rem;margin-top:2px}",
+        ".acdb-reference .main-content{min-width:0}",
+        ".acdb-reference .schema-block{margin:0 0 24px;border-radius:26px;background:linear-gradient(180deg,var(--schema-tint),rgba(255,255,255,0.98) 180px);border:1px solid var(--schema-accent);box-shadow:var(--shadow);overflow:hidden}",
+        ".acdb-reference .schema-summary{list-style:none;cursor:pointer;padding:18px 22px;background:linear-gradient(180deg,var(--schema-tint),rgba(255,255,255,0.92));position:sticky;top:0;z-index:4;border-bottom:1px solid rgba(0,0,0,0.04)}",
+        ".acdb-reference .schema-summary::-webkit-details-marker,.acdb-reference .schema-group-summary::-webkit-details-marker{display:none}",
+        ".acdb-reference .schema-body{padding:0 22px 22px}",
+        ".acdb-reference .schema-header,.acdb-reference .object-header{display:flex;justify-content:space-between;gap:16px;align-items:start}",
+        ".acdb-reference .schema-description{color:var(--muted);max-width:980px;margin:12px 0 0}",
+        ".acdb-reference .schema-group{margin-top:18px;background:rgba(255,255,255,0.78);border:1px solid rgba(19,35,45,0.08);border-radius:20px;overflow:hidden}",
+        ".acdb-reference .schema-group-summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.78);font-weight:700}",
+        ".acdb-reference .schema-group-body{padding:0 18px 18px}",
+        ".acdb-reference .object-card{border:1px solid rgba(19,35,45,0.08);border-radius:22px;padding:22px;margin-top:18px;background:linear-gradient(180deg,#ffffff,#fbfeff)}",
+        ".acdb-reference .object-card h3{margin-bottom:8px;word-break:break-word}",
+        ".acdb-reference .object-card h4{margin-bottom:8px;font-size:1rem}",
+        ".acdb-reference .object-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:18px}",
+        ".acdb-reference .span-2{grid-column:span 2}",
+        ".acdb-reference .object-badges{display:flex;flex-wrap:wrap;gap:8px;justify-content:end}",
+        ".acdb-reference .badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:0.8rem;font-weight:700;letter-spacing:0.02em;border:1px solid transparent;white-space:nowrap}",
+        ".acdb-reference .badge-default{background:#edf6f8;color:var(--accent-deep);border-color:#cfe4ea}",
+        ".acdb-reference .badge-good{background:#e7f6ee;color:var(--good);border-color:#cfe9dc}",
+        ".acdb-reference .badge-warn{background:#fff4e5;color:#8f5600;border-color:#f1d2a3}",
+        ".acdb-reference .purpose-block{margin-top:10px;padding:14px 16px;background:var(--panel-alt);border-radius:16px;border:1px solid var(--line)}",
+        ".acdb-reference .purpose-block p{margin:10px 0 0}",
+        ".acdb-reference .data-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:0.94rem}",
+        ".acdb-reference .data-table th,.acdb-reference .data-table td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}",
+        ".acdb-reference .data-table thead th{background:#f4fafc;position:sticky;top:0;z-index:1}",
+        ".acdb-reference .muted{color:var(--muted)}",
+        ".acdb-reference .kv-list{display:grid;grid-template-columns:220px 1fr;gap:10px 16px;margin:18px 0}",
+        ".acdb-reference .kv-list dt{font-weight:700;color:var(--muted)}",
+        ".acdb-reference .kv-list dd{margin:0}",
+        ".acdb-reference .object-card details{margin-top:14px;background:#f8fcfd;border-radius:16px;border:1px solid var(--line);padding:12px 14px}",
+        ".acdb-reference summary{cursor:pointer;font-weight:700}",
+        ".acdb-reference pre{margin:14px 0 0;padding:16px;border-radius:14px;background:#13232d;color:#ecf7fb;overflow:auto}",
+        ".acdb-reference footer{margin-top:32px;color:var(--muted);text-align:center}",
+        "@media (max-width:1180px){.acdb-reference .top-controls,.acdb-reference .content-layout{grid-template-columns:1fr}.acdb-reference .toc-panel{position:static;max-height:none}.acdb-reference .toc-panel-body{max-height:none}}",
+        "@media (max-width:860px){.acdb-reference .page{width:min(100% - 28px,1600px)}.acdb-reference .schema-header,.acdb-reference .object-header,.acdb-reference .object-badges,.acdb-reference .search-meta{display:block}.acdb-reference .object-grid{grid-template-columns:1fr}.acdb-reference .span-2{grid-column:auto}.acdb-reference .kv-list{grid-template-columns:1fr}}",
+        schema_theme_css
+      ),
+      collapse = "\n"
+    )
+
     page_css <- paste(
       c(
-        ":root{--bg:#f4fbfd;--panel:#ffffff;--panel-alt:#eef7f9;--ink:#13232d;--muted:#5b7380;--line:#d7e5ea;--accent:#007c91;--accent-deep:#0d5561;--warm:#d27a00;--good:#1b7f5a;--shadow:0 12px 32px rgba(10,52,63,0.08)}",
-        "*{box-sizing:border-box}",
-        "html{scroll-behavior:smooth}",
-        "body{margin:0;font-family:\"Segoe UI\",\"Helvetica Neue\",Arial,sans-serif;color:var(--ink);background:radial-gradient(circle at top left, rgba(0,124,145,0.18), transparent 28%),radial-gradient(circle at top right, rgba(210,122,0,0.12), transparent 24%),linear-gradient(180deg,#fbfeff 0%,var(--bg) 100%);line-height:1.55}",
-        "a{color:var(--accent-deep)}",
-        "code,pre{font-family:Consolas,\"Courier New\",monospace}",
-        ".page{width:min(1600px,calc(100% - 48px));margin:0 auto;padding:32px 0 72px}",
-        ".hero{background:linear-gradient(135deg,rgba(0,124,145,0.95),rgba(13,85,97,0.95));color:#fff;border-radius:28px;padding:36px 36px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}",
-        ".hero::after{content:\"\";position:absolute;inset:auto -8% -25% auto;width:320px;height:320px;background:radial-gradient(circle,rgba(255,255,255,0.24),rgba(255,255,255,0) 70%);pointer-events:none}",
-        ".eyebrow{margin:0 0 10px;letter-spacing:0.14em;text-transform:uppercase;font-size:0.76rem;font-weight:700;color:rgba(255,255,255,0.72)}",
-        ".hero h1{margin:0;font-size:clamp(2.2rem,5vw,4rem);line-height:1}",
-        ".hero p{max-width:920px;font-size:1.05rem;margin:16px 0 0;color:rgba(255,255,255,0.9)}",
-        ".hero ul{margin:18px 0 0;padding-left:20px;color:rgba(255,255,255,0.9)}",
-        ".top-controls{margin:24px 0;display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start}",
-        ".panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:var(--shadow)}",
-        ".panel h2,.schema-block h2,.object-card h3,.object-card h4{margin-top:0}",
-        ".summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:18px}",
-        ".summary-card{background:linear-gradient(180deg,#ffffff,#f5fbfc);border:1px solid var(--line);border-radius:18px;padding:16px}",
-        ".summary-card strong{display:block;font-size:1.85rem;margin-top:6px}",
-        ".summary-label{display:block;color:var(--muted);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.08em}",
-        ".search-box{width:100%;padding:14px 16px;border-radius:14px;border:1px solid var(--line);font-size:1rem}",
-        ".search-meta{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-top:12px;flex-wrap:wrap}",
-        ".button-row{display:flex;gap:10px;flex-wrap:wrap}",
-        ".ghost-button{background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:600;color:var(--accent-deep);cursor:pointer}",
-        ".schema-chip-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}",
-        ".schema-chip{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:var(--panel-alt);text-decoration:none;border:1px solid var(--line);color:var(--accent-deep);font-weight:600}",
-        ".content-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:24px;align-items:start;margin-top:24px}",
-        ".toc-panel{position:sticky;top:16px;padding:0;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);overflow:hidden;max-height:calc(100vh - 32px)}",
-        ".toc-panel-summary{list-style:none;cursor:pointer;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-weight:700;background:rgba(255,255,255,0.96)}",
-        ".toc-panel-summary::-webkit-details-marker{display:none}",
-        ".toc-panel-summary::after{content:\"Hide\";font-size:0.85rem;color:var(--muted);font-weight:600}",
-        ".toc-panel:not([open]) .toc-panel-summary::after{content:\"Show\"}",
-        ".toc-panel-body{padding:0 22px 22px;border-top:1px solid var(--line);overflow:auto;max-height:calc(100vh - 110px);scrollbar-gutter:stable}",
-        ".toc-panel:not([open]) .toc-panel-body{display:none}",
-        ".toc-panel h2{margin:0}",
-        ".toc-list{list-style:none;padding:0 4px 4px 0;margin:16px 0 0}",
-        ".toc-list li+li{margin-top:10px}",
-        ".toc-list a{display:block;padding:12px 14px;border-radius:16px;background:#f7fbfc;border:1px solid var(--line);text-decoration:none}",
-        ".toc-list strong{display:block;color:var(--ink)}",
-        ".toc-list span{display:block;color:var(--muted);font-size:0.9rem;margin-top:2px}",
-        ".main-content{min-width:0}",
-        ".schema-block{margin:0 0 24px;border-radius:26px;background:linear-gradient(180deg,var(--schema-tint),rgba(255,255,255,0.98) 180px);border:1px solid var(--schema-accent);box-shadow:var(--shadow);overflow:hidden}",
-        ".schema-summary{list-style:none;cursor:pointer;padding:18px 22px;background:linear-gradient(180deg,var(--schema-tint),rgba(255,255,255,0.92));position:sticky;top:0;z-index:4;border-bottom:1px solid rgba(0,0,0,0.04)}",
-        ".schema-summary::-webkit-details-marker,.schema-group-summary::-webkit-details-marker{display:none}",
-        ".schema-body{padding:0 22px 22px}",
-        ".schema-header,.object-header{display:flex;justify-content:space-between;gap:16px;align-items:start}",
-        ".schema-description{color:var(--muted);max-width:980px;margin:12px 0 0}",
-        ".schema-group{margin-top:18px;background:rgba(255,255,255,0.78);border:1px solid rgba(19,35,45,0.08);border-radius:20px;overflow:hidden}",
-        ".schema-group-summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.78);font-weight:700}",
-        ".schema-group-body{padding:0 18px 18px}",
-        ".object-card{border:1px solid rgba(19,35,45,0.08);border-radius:22px;padding:22px;margin-top:18px;background:linear-gradient(180deg,#ffffff,#fbfeff)}",
-        ".object-card h3{margin-bottom:8px;word-break:break-word}",
-        ".object-card h4{margin-bottom:8px;font-size:1rem}",
-        ".object-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:18px}",
-        ".span-2{grid-column:span 2}",
-        ".object-badges{display:flex;flex-wrap:wrap;gap:8px;justify-content:end}",
-        ".badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:0.8rem;font-weight:700;letter-spacing:0.02em;border:1px solid transparent;white-space:nowrap}",
-        ".badge-default{background:#edf6f8;color:var(--accent-deep);border-color:#cfe4ea}",
-        ".badge-good{background:#e7f6ee;color:var(--good);border-color:#cfe9dc}",
-        ".badge-warn{background:#fff4e5;color:#8f5600;border-color:#f1d2a3}",
-        ".purpose-block{margin-top:10px;padding:14px 16px;background:var(--panel-alt);border-radius:16px;border:1px solid var(--line)}",
-        ".purpose-block p{margin:10px 0 0}",
-        ".data-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:0.94rem}",
-        ".data-table th,.data-table td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}",
-        ".data-table thead th{background:#f4fafc;position:sticky;top:0;z-index:1}",
-        ".muted{color:var(--muted)}",
-        ".kv-list{display:grid;grid-template-columns:220px 1fr;gap:10px 16px;margin:18px 0}",
-        ".kv-list dt{font-weight:700;color:var(--muted)}",
-        ".kv-list dd{margin:0}",
-        ".object-card details{margin-top:14px;background:#f8fcfd;border-radius:16px;border:1px solid var(--line);padding:12px 14px}",
-        "summary{cursor:pointer;font-weight:700}",
-        "pre{margin:14px 0 0;padding:16px;border-radius:14px;background:#13232d;color:#ecf7fb;overflow:auto}",
-        "footer{margin-top:32px;color:var(--muted);text-align:center}",
-        "@media (max-width:1180px){.top-controls,.content-layout{grid-template-columns:1fr}.toc-panel{position:static;max-height:none}.toc-panel-body{max-height:none}}",
-        "@media (max-width:860px){.page{width:min(100% - 28px,1600px)}.schema-header,.object-header,.object-badges,.search-meta{display:block}.object-grid{grid-template-columns:1fr}.span-2{grid-column:auto}.kv-list{grid-template-columns:1fr}}",
-        schema_theme_css
+        if (isTRUE(standalone)) {
+          c(
+            "html{scroll-behavior:smooth}",
+            "body{margin:0;background:radial-gradient(circle at top left, rgba(0,124,145,0.18), transparent 28%),radial-gradient(circle at top right, rgba(210,122,0,0.12), transparent 24%),linear-gradient(180deg,#fbfeff 0%,#f4fbfd 100%)}"
+          )
+        } else {
+          c(
+            ".acdb-reference{margin:0;background:radial-gradient(circle at top left, rgba(0,124,145,0.18), transparent 28%),radial-gradient(circle at top right, rgba(210,122,0,0.12), transparent 24%),linear-gradient(180deg,#fbfeff 0%,#f4fbfd 100%);border-radius:28px}",
+            ".acdb-reference-embedded{width:100vw;max-width:none;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw)}"
+          )
+        },
+        common_css
       ),
       collapse = "\n"
     )
 
     page_js <- paste(
       c(
-        "const searchBox=document.getElementById('doc-search');",
-        "const statusEl=document.getElementById('search-status');",
-        "const objectCards=Array.from(document.querySelectorAll('.object-card'));",
-        "const groupBlocks=Array.from(document.querySelectorAll('.schema-group'));",
-        "const schemaBlocks=Array.from(document.querySelectorAll('.schema-block'));",
-        "const expandAll=document.getElementById('expand-all');",
-        "const collapseAll=document.getElementById('collapse-all');",
+        "(function(){",
+        "const root=document.getElementById('acdb-reference-root');",
+        "if(!root){return;}",
+        "const searchBox=root.querySelector('#doc-search');",
+        "const statusEl=root.querySelector('#search-status');",
+        "const objectCards=Array.from(root.querySelectorAll('.object-card'));",
+        "const groupBlocks=Array.from(root.querySelectorAll('.schema-group'));",
+        "const schemaBlocks=Array.from(root.querySelectorAll('.schema-block'));",
+        "const expandAll=root.querySelector('#expand-all');",
+        "const collapseAll=root.querySelector('#collapse-all');",
         "function updateSearch(){",
-        "const query=searchBox.value.trim().toLowerCase();",
+        "const query=searchBox?searchBox.value.trim().toLowerCase():'';",
         "let visibleCount=0;",
         "objectCards.forEach(card=>{const haystack=((card.dataset.search||'')+' '+card.textContent).toLowerCase();const show=!query||haystack.includes(query);card.style.display=show?'':'none';if(show){visibleCount+=1;}});",
         "groupBlocks.forEach(group=>{const visible=Array.from(group.querySelectorAll('.object-card')).some(card=>card.style.display!=='none');group.style.display=visible?'':'none';if(query&&visible){group.open=true;}});",
         "schemaBlocks.forEach(block=>{const visible=Array.from(block.querySelectorAll('.object-card')).some(card=>card.style.display!=='none');block.style.display=visible?'':'none';if(query&&visible){block.open=true;}});",
-        "statusEl.textContent=query?`Showing ${visibleCount} matching objects below.`:`Showing all ${objectCards.length} documented objects below.`;",
+        "if(statusEl){statusEl.textContent=query?`Showing ${visibleCount} matching objects below.`:`Showing all ${objectCards.length} documented objects below.`;}",
         "}",
-        "searchBox.addEventListener('input',updateSearch);",
-        "expandAll.addEventListener('click',()=>{document.querySelectorAll('.schema-block,.schema-group').forEach(el=>{el.open=true;});});",
-        "collapseAll.addEventListener('click',()=>{document.querySelectorAll('.schema-group,.schema-block').forEach(el=>{el.open=false;});});",
-        "updateSearch();"
+        "if(searchBox){searchBox.addEventListener('input',updateSearch);}",
+        "if(expandAll){expandAll.addEventListener('click',()=>{root.querySelectorAll('.schema-block,.schema-group').forEach(el=>{el.open=true;});});}",
+        "if(collapseAll){collapseAll.addEventListener('click',()=>{root.querySelectorAll('.schema-group,.schema-block').forEach(el=>{el.open=false;});});}",
+        "updateSearch();",
+        "})();"
       ),
       collapse = ""
     )
 
-    html <- sprintf(
-      "<!DOCTYPE html>
-  <html lang=\"en\">
-  <head>
-    <meta charset=\"utf-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-    <title>AquaCache Database Reference</title>
-    <style>%s</style>
-  </head>
-  <body>
-    <div class=\"page\">
+    page_markup <- sprintf(
+      "<div class=\"page\">
       <section class=\"hero\">
         <p class=\"eyebrow\">AquaCache Schema Reference</p>
         <h1>Human-Readable Database Documentation</h1>
@@ -2391,31 +2459,49 @@ generateACDatabaseReference <- function(
           %s
         </main>
       </div>
-      <footer>
-        <p>Output file: %s</p>
-      </footer>
-    </div>
-    <script>%s</script>
-  </body>
-  </html>",
-      page_css,
+    </div>",
       escape_html(generation_stamp),
       summary_cards,
       version_summary,
       schema_nav,
       toc_items,
       format_simple_table(schema_overview_df),
-      paste(cards_html, collapse = ""),
-      escape_html(normalizePath(output_path, winslash = "/", mustWork = FALSE)),
-      page_js
+      paste(cards_html, collapse = "")
     )
 
-    html
-  }
+    html <- if (isTRUE(standalone)) {
+      sprintf(
+        "<!DOCTYPE html>
+  <html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+    <title>AquaCache Database Reference</title>
+    <style>%s</style>
+  </head>
+  <body>
+    <div id=\"acdb-reference-root\" class=\"acdb-reference\">%s</div>
+    <script>%s</script>
+  </body>
+  </html>",
+        page_css,
+        page_markup,
+        page_js
+      )
+    } else {
+      sprintf(
+        "<div id=\"acdb-reference-root\" class=\"acdb-reference acdb-reference-embedded\">
+  <style>%s</style>
+  %s
+  <script>%s</script>
+</div>",
+        page_css,
+        page_markup,
+        page_js
+      )
+    }
 
-  selected_schemas <- unique(as.character(schemas %||% target_schemas))
-  if (length(selected_schemas) == 0 || any(trimws(selected_schemas) == "")) {
-    stop("`schemas` must contain at least one non-empty schema name.")
+    html
   }
 
   if (is.null(con)) {
@@ -2427,15 +2513,40 @@ generateACDatabaseReference <- function(
     stop("`con` must be a valid DBI connection.")
   }
 
+  visible_schemas <- discover_documented_schemas(con)$schema_name
+  selected_schemas <- if (is.null(schemas)) {
+    visible_schemas
+  } else {
+    unique(as.character(schemas))
+  }
+  if (length(selected_schemas) == 0 || any(trimws(selected_schemas) == "")) {
+    stop("`schemas` must contain at least one non-empty schema name.")
+  }
+
+  invisible_requested_schemas <- setdiff(selected_schemas, visible_schemas)
+  if (length(invisible_requested_schemas) > 0) {
+    warning(
+      "The supplied connection cannot currently see the following requested schema(s): ",
+      paste(invisible_requested_schemas, collapse = ", "),
+      ". The generated reference may be incomplete.",
+      call. = FALSE
+    )
+  }
+
   if (isTRUE(check_visibility)) {
-    check_catalog_visibility(con, target_schemas = selected_schemas)
+    check_catalog_visibility(
+      con,
+      target_schemas = selected_schemas,
+      include_admin_discovered_schemas = is.null(schemas)
+    )
   }
 
   catalog <- fetch_catalog(con, target_schemas = selected_schemas)
   html <- build_html(
     catalog,
     output_path = output_file,
-    selected_schemas = selected_schemas
+    selected_schemas = selected_schemas,
+    standalone = standalone
   )
 
   dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)

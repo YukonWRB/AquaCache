@@ -7,6 +7,7 @@
 generateACDatabaseReference(
   con = NULL,
   output_file = "aquacache_database_reference.html",
+  standalone = TRUE,
   schemas = NULL,
   check_visibility = TRUE,
   open = interactive()
@@ -19,8 +20,13 @@ variables.}
 
 \item{output_file}{File path for the generated HTML document.}
 
+\item{standalone}{Logical. If \code{TRUE}, write a complete standalone HTML
+document. If \code{FALSE}, write an embeddable HTML fragment suitable for
+inclusion inside an existing HTML page such as a package vignette.}
+
 \item{schemas}{Optional character vector of schema names to document. The
-default \code{NULL} documents the standard AquaCache schemas.}
+default \code{NULL} discovers visible non-system AquaCache schemas from the
+live database catalog.}
 
 \item{check_visibility}{Logical. If \code{TRUE}, compare the visible object counts
 of the supplied connection against an admin session when possible and warn
