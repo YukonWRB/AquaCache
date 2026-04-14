@@ -63,9 +63,9 @@ downloadECCCwxMinute <- function(
     stop("downloadECCCwxMinute: 'station_type' cannot be an empty string.")
   }
 
-  parameter_swob <- downloadECCCwxMinute_resolve_parameter(parameter_requested)
+  parameter_swob <- dlECCCwxMinute_resolve_parameter(parameter_requested)
 
-  bounds <- downloadECCCwxMinute_normalize_datetimes(
+  bounds <- dlECCCwxMinute_normalize_datetimes(
     start_datetime = start_datetime,
     end_datetime = end_datetime
   )
@@ -78,12 +78,12 @@ downloadECCCwxMinute <- function(
     )
   }
 
-  requested_minutes <- downloadECCCwxMinute_requested_minutes(
+  requested_minutes <- dlECCCwxMinute_requested_minutes(
     start_datetime = start_datetime,
     end_datetime = end_datetime
   )
   if (length(requested_minutes) == 0) {
-    return(downloadECCCwxMinute_empty_result())
+    return(dlECCCwxMinute_empty_result())
   }
 
   requested_days <- split(
@@ -94,7 +94,7 @@ downloadECCCwxMinute <- function(
   bundles <- lapply(
     names(requested_days),
     function(day_chr) {
-      downloadECCCwxMinute_get_day_bundle(
+      dlECCCwxMinute_get_day_bundle(
         location = location,
         station_type = station_type,
         day = as.Date(day_chr),
@@ -109,7 +109,7 @@ downloadECCCwxMinute <- function(
     fill = TRUE
   )
   if (nrow(all_rows) == 0) {
-    return(downloadECCCwxMinute_empty_result())
+    return(dlECCCwxMinute_empty_result())
   }
 
   units <- unlist(lapply(bundles, `[[`, "units"), use.names = TRUE)
@@ -135,13 +135,13 @@ downloadECCCwxMinute <- function(
       !is.na(value)
   ]
   if (nrow(data) == 0) {
-    return(downloadECCCwxMinute_empty_result())
+    return(dlECCCwxMinute_empty_result())
   }
 
-  data$value <- downloadECCCwxMinute_convert_values(
+  data$value <- dlECCCwxMinute_convert_values(
     values = data$value,
     parameter = parameter_swob,
-    unit = downloadECCCwxMinute_unit_lookup(
+    unit = dlECCCwxMinute_unit_lookup(
       units = units,
       parameter = parameter_swob
     )
@@ -152,7 +152,7 @@ downloadECCCwxMinute <- function(
     on.exit(DBI::dbDisconnect(con), add = TRUE)
   }
 
-  defaults <- downloadECCCwxMinute_db_defaults(con = con)
+  defaults <- dlECCCwxMinute_db_defaults(con = con)
   data$grade <- defaults$grade
   data$approval <- defaults$approval
   data$qualifier <- defaults$qualifier
@@ -166,16 +166,16 @@ downloadECCCwxMinute <- function(
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_normalize_datetimes <- function(
+dlECCCwxMinute_normalize_datetimes <- function(
   start_datetime,
   end_datetime
 ) {
   list(
-    start_datetime = downloadECCCwxMinute_as_utc_datetime(
+    start_datetime = dlECCCwxMinute_as_utc_datetime(
       x = start_datetime,
       is_end = FALSE
     ),
-    end_datetime = downloadECCCwxMinute_as_utc_datetime(
+    end_datetime = dlECCCwxMinute_as_utc_datetime(
       x = end_datetime,
       is_end = TRUE
     )
@@ -185,7 +185,7 @@ downloadECCCwxMinute_normalize_datetimes <- function(
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_as_utc_datetime <- function(x, is_end = FALSE) {
+dlECCCwxMinute_as_utc_datetime <- function(x, is_end = FALSE) {
   tryCatch(
     {
       if (inherits(x, "character") && nchar(x) > 10) {
@@ -215,7 +215,7 @@ downloadECCCwxMinute_as_utc_datetime <- function(x, is_end = FALSE) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_requested_minutes <- function(
+dlECCCwxMinute_requested_minutes <- function(
   start_datetime,
   end_datetime
 ) {
@@ -242,7 +242,7 @@ downloadECCCwxMinute_requested_minutes <- function(
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_empty_result <- function() {
+dlECCCwxMinute_empty_result <- function() {
   data.table::data.table(
     datetime = as.POSIXct(character(), tz = "UTC"),
     value = numeric(),
@@ -257,7 +257,7 @@ downloadECCCwxMinute_empty_result <- function() {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_empty_bundle <- function() {
+dlECCCwxMinute_empty_bundle <- function() {
   list(
     data = data.table::data.table(
       datetime = as.POSIXct(character(), tz = "UTC")
@@ -269,16 +269,16 @@ downloadECCCwxMinute_empty_bundle <- function() {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_cache_dir <- function() {
+dlECCCwxMinute_cache_dir <- function() {
   file.path(tempdir(), "downloadECCCwxMinute")
 }
 
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_cache_file <- function(location, station_type, day) {
+dlECCCwxMinute_cache_file <- function(location, station_type, day) {
   file.path(
-    downloadECCCwxMinute_cache_dir(),
+    dlECCCwxMinute_cache_dir(),
     paste0(location, "_", station_type, "_", format(day, "%Y-%m-%d"), ".rds")
   )
 }
@@ -286,14 +286,14 @@ downloadECCCwxMinute_cache_file <- function(location, station_type, day) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_read_cache <- function(location, station_type, day) {
-  cache_file <- downloadECCCwxMinute_cache_file(
+dlECCCwxMinute_read_cache <- function(location, station_type, day) {
+  cache_file <- dlECCCwxMinute_cache_file(
     location = location,
     station_type = station_type,
     day = day
   )
   if (!file.exists(cache_file)) {
-    return(downloadECCCwxMinute_empty_bundle())
+    return(dlECCCwxMinute_empty_bundle())
   }
 
   cache <- readRDS(cache_file)
@@ -315,20 +315,20 @@ downloadECCCwxMinute_read_cache <- function(location, station_type, day) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_write_cache <- function(
+dlECCCwxMinute_write_cache <- function(
   location,
   station_type,
   day,
   cache
 ) {
   dir.create(
-    downloadECCCwxMinute_cache_dir(),
+    dlECCCwxMinute_cache_dir(),
     recursive = TRUE,
     showWarnings = FALSE
   )
   saveRDS(
     cache,
-    downloadECCCwxMinute_cache_file(
+    dlECCCwxMinute_cache_file(
       location = location,
       station_type = station_type,
       day = day
@@ -339,13 +339,13 @@ downloadECCCwxMinute_write_cache <- function(
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_get_day_bundle <- function(
+dlECCCwxMinute_get_day_bundle <- function(
   location,
   station_type,
   day,
   requested_minutes
 ) {
-  cache <- downloadECCCwxMinute_read_cache(
+  cache <- dlECCCwxMinute_read_cache(
     location = location,
     station_type = station_type,
     day = day
@@ -365,7 +365,7 @@ downloadECCCwxMinute_get_day_bundle <- function(
   }
 
   if (length(missing_minutes) > 0) {
-    available_files <- downloadECCCwxMinute_list_day_files(
+    available_files <- dlECCCwxMinute_list_day_files(
       location = location,
       station_type = station_type,
       day = day
@@ -376,8 +376,8 @@ downloadECCCwxMinute_get_day_bundle <- function(
       fetched <- lapply(
         to_fetch$filename,
         function(filename) {
-          xml_txt <- downloadECCCwxMinute_fetch_xml(
-            downloadECCCwxMinute_file_url(
+          xml_txt <- dlECCCwxMinute_fetch_xml(
+            dlECCCwxMinute_file_url(
               location = location,
               day = day,
               filename = filename
@@ -387,7 +387,7 @@ downloadECCCwxMinute_get_day_bundle <- function(
             return(NULL)
           }
 
-          downloadECCCwxMinute_parse_xml(xml_txt)
+          dlECCCwxMinute_parse_xml(xml_txt)
         }
       )
       fetched <- Filter(Negate(is.null), fetched)
@@ -412,7 +412,7 @@ downloadECCCwxMinute_get_day_bundle <- function(
           ]
         }
 
-        downloadECCCwxMinute_write_cache(
+        dlECCCwxMinute_write_cache(
           location = location,
           station_type = station_type,
           day = day,
@@ -431,7 +431,7 @@ downloadECCCwxMinute_get_day_bundle <- function(
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_day_url <- function(location, day) {
+dlECCCwxMinute_day_url <- function(location, day) {
   day_path <- format(day, "%Y%m%d")
   paste0(
     "https://dd.weather.gc.ca/",
@@ -447,14 +447,14 @@ downloadECCCwxMinute_day_url <- function(location, day) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_file_url <- function(location, day, filename) {
-  paste0(downloadECCCwxMinute_day_url(location = location, day = day), filename)
+dlECCCwxMinute_file_url <- function(location, day, filename) {
+  paste0(dlECCCwxMinute_day_url(location = location, day = day), filename)
 }
 
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_filename_datetime <- function(filename) {
+dlECCCwxMinute_filename_datetime <- function(filename) {
   as.POSIXct(
     strptime(substr(filename, 1, 16), format = "%Y-%m-%d-%H%M", tz = "UTC")
   )
@@ -463,8 +463,8 @@ downloadECCCwxMinute_filename_datetime <- function(filename) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_list_day_files <- function(location, station_type, day) {
-  response <- httr::GET(downloadECCCwxMinute_day_url(
+dlECCCwxMinute_list_day_files <- function(location, station_type, day) {
+  response <- httr::GET(dlECCCwxMinute_day_url(
     location = location,
     day = day
   ))
@@ -506,7 +506,7 @@ downloadECCCwxMinute_list_day_files <- function(location, station_type, day) {
   data.table::data.table(
     filename = hrefs,
     datetime = as.POSIXct(
-      unlist(lapply(hrefs, downloadECCCwxMinute_filename_datetime)),
+      unlist(lapply(hrefs, dlECCCwxMinute_filename_datetime)),
       origin = "1970-01-01",
       tz = "UTC"
     )
@@ -516,7 +516,7 @@ downloadECCCwxMinute_list_day_files <- function(location, station_type, day) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_fetch_xml <- function(url) {
+dlECCCwxMinute_fetch_xml <- function(url) {
   response <- httr::GET(url)
   status <- httr::status_code(response)
   if (status == 404) {
@@ -530,7 +530,7 @@ downloadECCCwxMinute_fetch_xml <- function(url) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_parse_xml <- function(xml_txt) {
+dlECCCwxMinute_parse_xml <- function(xml_txt) {
   doc <- xml2::read_xml(xml_txt)
   datetime_node <- xml2::xml_find_first(
     doc,
@@ -595,7 +595,7 @@ downloadECCCwxMinute_parse_xml <- function(xml_txt) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_parameter_aliases <- function() {
+dlECCCwxMinute_parameter_aliases <- function() {
   c(
     temp = "air_temp",
     wind_spd = "avg_wnd_spd_10m_pst1mt",
@@ -609,9 +609,9 @@ downloadECCCwxMinute_parameter_aliases <- function() {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_resolve_parameter <- function(parameter) {
+dlECCCwxMinute_resolve_parameter <- function(parameter) {
   parameter <- tolower(parameter)
-  aliases <- downloadECCCwxMinute_parameter_aliases()
+  aliases <- dlECCCwxMinute_parameter_aliases()
   if (parameter %in% names(aliases)) {
     return(unname(aliases[[parameter]]))
   }
@@ -622,7 +622,7 @@ downloadECCCwxMinute_resolve_parameter <- function(parameter) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_convert_values <- function(values, parameter, unit) {
+dlECCCwxMinute_convert_values <- function(values, parameter, unit) {
   if (
     !is.null(unit) &&
       identical(unit, "km/h") &&
@@ -637,7 +637,7 @@ downloadECCCwxMinute_convert_values <- function(values, parameter, unit) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_unit_lookup <- function(units, parameter) {
+dlECCCwxMinute_unit_lookup <- function(units, parameter) {
   unit <- units[parameter]
   if (length(unit) == 0 || is.na(unit)) {
     return(NULL)
@@ -649,7 +649,7 @@ downloadECCCwxMinute_unit_lookup <- function(units, parameter) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-downloadECCCwxMinute_db_defaults <- function(con) {
+dlECCCwxMinute_db_defaults <- function(con) {
   organization_id <- DBI::dbGetQuery(
     con,
     "SELECT organization_id FROM organizations WHERE name = 'Environment and Climate Change Canada'"
