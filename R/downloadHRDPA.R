@@ -148,9 +148,9 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
     for (i in 1:nrow(available)) {
       file <- list()
       if (interactive()) {
-        utils::setTxtProgressBar(pb, ii)
+        utils::setTxtProgressBar(pb, i)
       }
-      
+
       download_url <- available$path[i]
       rast <- terra::rast(download_url)[[1]]
       file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
