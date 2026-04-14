@@ -163,6 +163,9 @@ downloadECCCwxMinute <- function(
   data[]
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_normalize_datetimes <- function(
   start_datetime,
   end_datetime
@@ -179,6 +182,9 @@ downloadECCCwxMinute_normalize_datetimes <- function(
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_as_utc_datetime <- function(x, is_end = FALSE) {
   tryCatch(
     {
@@ -206,6 +212,9 @@ downloadECCCwxMinute_as_utc_datetime <- function(x, is_end = FALSE) {
   x
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_requested_minutes <- function(
   start_datetime,
   end_datetime
@@ -230,6 +239,9 @@ downloadECCCwxMinute_requested_minutes <- function(
   seq(start_minute, end_minute, by = "1 min")
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_empty_result <- function() {
   data.table::data.table(
     datetime = as.POSIXct(character(), tz = "UTC"),
@@ -242,6 +254,9 @@ downloadECCCwxMinute_empty_result <- function() {
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_empty_bundle <- function() {
   list(
     data = data.table::data.table(
@@ -251,10 +266,16 @@ downloadECCCwxMinute_empty_bundle <- function() {
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_cache_dir <- function() {
   file.path(tempdir(), "downloadECCCwxMinute")
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_cache_file <- function(location, station_type, day) {
   file.path(
     downloadECCCwxMinute_cache_dir(),
@@ -262,6 +283,9 @@ downloadECCCwxMinute_cache_file <- function(location, station_type, day) {
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_read_cache <- function(location, station_type, day) {
   cache_file <- downloadECCCwxMinute_cache_file(
     location = location,
@@ -288,6 +312,9 @@ downloadECCCwxMinute_read_cache <- function(location, station_type, day) {
   cache
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_write_cache <- function(
   location,
   station_type,
@@ -309,6 +336,9 @@ downloadECCCwxMinute_write_cache <- function(
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_get_day_bundle <- function(
   location,
   station_type,
@@ -398,6 +428,9 @@ downloadECCCwxMinute_get_day_bundle <- function(
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_day_url <- function(location, day) {
   day_path <- format(day, "%Y%m%d")
   paste0(
@@ -411,16 +444,25 @@ downloadECCCwxMinute_day_url <- function(location, day) {
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_file_url <- function(location, day, filename) {
   paste0(downloadECCCwxMinute_day_url(location = location, day = day), filename)
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_filename_datetime <- function(filename) {
   as.POSIXct(
     strptime(substr(filename, 1, 16), format = "%Y-%m-%d-%H%M", tz = "UTC")
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_list_day_files <- function(location, station_type, day) {
   response <- httr::GET(downloadECCCwxMinute_day_url(
     location = location,
@@ -471,6 +513,9 @@ downloadECCCwxMinute_list_day_files <- function(location, station_type, day) {
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_fetch_xml <- function(url) {
   response <- httr::GET(url)
   status <- httr::status_code(response)
@@ -482,6 +527,9 @@ downloadECCCwxMinute_fetch_xml <- function(url) {
   httr::content(response, as = "text", encoding = "UTF-8")
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_parse_xml <- function(xml_txt) {
   doc <- xml2::read_xml(xml_txt)
   datetime_node <- xml2::xml_find_first(
@@ -544,6 +592,9 @@ downloadECCCwxMinute_parse_xml <- function(xml_txt) {
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_parameter_aliases <- function() {
   c(
     temp = "air_temp",
@@ -555,6 +606,9 @@ downloadECCCwxMinute_parameter_aliases <- function() {
   )
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_resolve_parameter <- function(parameter) {
   parameter <- tolower(parameter)
   aliases <- downloadECCCwxMinute_parameter_aliases()
@@ -565,6 +619,9 @@ downloadECCCwxMinute_resolve_parameter <- function(parameter) {
   parameter
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_convert_values <- function(values, parameter, unit) {
   if (
     !is.null(unit) &&
@@ -577,6 +634,9 @@ downloadECCCwxMinute_convert_values <- function(values, parameter, unit) {
   values
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_unit_lookup <- function(units, parameter) {
   unit <- units[parameter]
   if (length(unit) == 0 || is.na(unit)) {
@@ -586,6 +646,9 @@ downloadECCCwxMinute_unit_lookup <- function(units, parameter) {
   unname(unit[[1]])
 }
 
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 downloadECCCwxMinute_db_defaults <- function(con) {
   organization_id <- DBI::dbGetQuery(
     con,
