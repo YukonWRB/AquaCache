@@ -319,69 +319,6 @@ writeRaster <- function(
     stop("Failed to serialise raster to temporary GeoTIFF for upload.")
   }
 
-  max_before <- DBI::dbGetQuery(
-    con,
-    paste0("SELECT COALESCE(max(rid), 0) AS max_rid FROM ", rast_table_sql, ";")
-  )$max_rid
-  if (length(max_before) != 1 || is.na(max_before)) {
-    max_before <- 0L
-  }
-
-  # Synchronise the backing sequence before appending new rasters. Using
-  # setval() avoids the stronger table lock required by ALTER TABLE ...
-  # RESTART WITH, which can otherwise block indefinitely behind readers.
-  current_db_user <- tryCatch(
-    DBI::dbGetQuery(con, "SELECT current_user AS current_user;")$current_user[1],
-    error = function(e) NA_character_
-  )
-  seq_name <- tryCatch(
-    DBI::dbGetQuery(
-      con,
-      "SELECT pg_get_serial_sequence($1, 'rid') AS seqname;",
-      params = list(qualified_table)
-    )$seqname,
-    error = function(e) NA_character_
-  )
-  if (!is.na(seq_name) && nzchar(seq_name)) {
-    seq_can_update <- tryCatch(
-      DBI::dbGetQuery(
-        con,
-        "SELECT has_sequence_privilege($1, 'UPDATE') AS can_update;",
-        params = list(seq_name)
-      )$can_update[1],
-      error = function(e) NA
-    )
-    if (isTRUE(seq_can_update)) {
-      tryCatch(
-        DBI::dbExecute(
-          con,
-          "SELECT setval($1::regclass, $2, $3);",
-          params = list(seq_name, max_before, max_before > 0)
-        ),
-        error = function(e) {
-          warning(
-            paste0(
-              "Failed to synchronise sequence for raster table '",
-              qualified_table,
-              "': ",
-              conditionMessage(e)
-            )
-          )
-        }
-      )
-    } else {
-      message(
-        "Skipping sequence synchronisation for raster table '",
-        qualified_table,
-        "' because current user '",
-        current_db_user,
-        "' lacks UPDATE privilege on sequence '",
-        seq_name,
-        "'."
-      )
-    }
-  }
-
   tmp_sql <- tempfile(fileext = ".sql")
   tmp_r2p_err <- tempfile(fileext = ".log")
   on.exit(unlink(tmp_sql), add = TRUE)
@@ -509,19 +446,130 @@ writeRaster <- function(
   on.exit(unlink(tmp_psql_err), add = TRUE)
   on.exit(unlink(tmp_psql_out), add = TRUE)
 
-  psql_status <- system2(
-    command = psql_path,
-    args = psql_args,
-    stdout = tmp_psql_out,
-    stderr = tmp_psql_err
-  )
+  repair_raster_sequence <- function() {
+    current_db_user <- tryCatch(
+      DBI::dbGetQuery(con, "SELECT current_user AS current_user;")$current_user[1],
+      error = function(e) NA_character_
+    )
+    seq_name <- tryCatch(
+      DBI::dbGetQuery(
+        con,
+        "SELECT pg_get_serial_sequence($1, 'rid') AS seqname;",
+        params = list(qualified_table)
+      )$seqname,
+      error = function(e) NA_character_
+    )
+    if (is.na(seq_name) || !nzchar(seq_name)) {
+      return(FALSE)
+    }
 
-  out <- readLines(tmp_psql_out, warn = FALSE)
+    seq_can_update <- tryCatch(
+      DBI::dbGetQuery(
+        con,
+        "SELECT has_sequence_privilege($1, 'UPDATE') AS can_update;",
+        params = list(seq_name)
+      )$can_update[1],
+      error = function(e) NA
+    )
+    if (!isTRUE(seq_can_update)) {
+      message(
+        "Skipping sequence synchronisation for raster table '",
+        qualified_table,
+        "' because current user '",
+        current_db_user,
+        "' lacks UPDATE privilege on sequence '",
+        seq_name,
+        "'."
+      )
+      return(FALSE)
+    }
+
+    max_rid <- tryCatch(
+      DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT rid FROM ",
+          rast_table_sql,
+          " ORDER BY rid DESC LIMIT 1;"
+        )
+      )$rid[1],
+      error = function(e) NA_integer_
+    )
+    if (length(max_rid) != 1 || is.na(max_rid)) {
+      max_rid <- 0L
+    }
+
+    tryCatch(
+      {
+        DBI::dbExecute(
+          con,
+          "SELECT setval($1::regclass, $2, $3);",
+          params = list(seq_name, max_rid, max_rid > 0)
+        )
+        TRUE
+      },
+      error = function(e) {
+        warning(
+          paste0(
+            "Failed to synchronise sequence for raster table '",
+            qualified_table,
+            "': ",
+            conditionMessage(e)
+          )
+        )
+        FALSE
+      }
+    )
+  }
+
+  run_psql_load <- function() {
+    unlink(c(tmp_psql_out, tmp_psql_err), force = TRUE)
+    status <- system2(
+      command = psql_path,
+      args = psql_args,
+      stdout = tmp_psql_out,
+      stderr = tmp_psql_err
+    )
+    list(
+      status = status,
+      out = if (file.exists(tmp_psql_out)) {
+        readLines(tmp_psql_out, warn = FALSE)
+      } else {
+        character(0)
+      },
+      err = if (file.exists(tmp_psql_err)) {
+        readLines(tmp_psql_err, warn = FALSE)
+      } else {
+        character(0)
+      }
+    )
+  }
+
+  psql_result <- run_psql_load()
+  err_text <- paste(psql_result$err, collapse = "\n")
+  if (
+    !identical(psql_result$status, 0L) &&
+      grepl(
+        "duplicate key value violates unique constraint",
+        err_text,
+        ignore.case = TRUE
+      ) &&
+      grepl("Key \\(rid\\)=", err_text, perl = TRUE)
+  ) {
+    if (isTRUE(repair_raster_sequence())) {
+      message(
+        "writeRaster: Retrying raster load after synchronising the raster rid sequence."
+      )
+      psql_result <- run_psql_load()
+    }
+  }
+
+  out <- psql_result$out
   new_rids <- suppressWarnings(as.integer(out[grepl("^[0-9]+$", out)]))
   new_rids <- new_rids[!is.na(new_rids)]
 
-  if (!identical(psql_status, 0L)) {
-    err_msg <- readLines(tmp_psql_err, warn = FALSE)
+  if (!identical(psql_result$status, 0L)) {
+    err_msg <- psql_result$err
     if (length(err_msg) == 0) {
       err_msg <- "psql exited with a non-zero status but produced no error output."
     }

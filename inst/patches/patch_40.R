@@ -1602,6 +1602,98 @@ tryCatch(
        )"
     )
 
+    # Fix for stalling raster writes caused by immediate FK locking on spatial.rasters_reference.
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION spatial.sync_rr_cell_size_deg_apply(ref_ids integer[])
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF COALESCE(array_length(ref_ids, 1), 0) = 0 THEN
+    RETURN;
+  END IF;
+
+  UPDATE spatial.rasters_reference rr
+  SET cell_size_x_deg = s.cell_size_x_deg,
+      cell_size_y_deg = s.cell_size_y_deg
+  FROM (
+    SELECT
+      r.reference_id,
+      MIN(ABS(ST_ScaleX(r.rast))) AS cell_size_x_deg,
+      MIN(ABS(ST_ScaleY(r.rast))) AS cell_size_y_deg
+    FROM spatial.rasters r
+    WHERE r.reference_id = ANY(ref_ids)
+    GROUP BY r.reference_id
+  ) s
+  WHERE rr.reference_id = s.reference_id;
+END;
+$$;
+"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION spatial.sync_rr_cell_size_deg_ins()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  ref_ids integer[];
+BEGIN
+  SELECT array_agg(DISTINCT nr.reference_id)
+  INTO ref_ids
+  FROM new_rows nr
+  WHERE nr.reference_id IS NOT NULL;
+
+  IF COALESCE(array_length(ref_ids, 1), 0) = 0 THEN
+    RETURN NULL;
+  END IF;
+
+  PERFORM spatial.sync_rr_cell_size_deg_apply(ref_ids);
+  RETURN NULL;
+END;
+$$;
+"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION spatial.sync_rr_cell_size_deg_upd()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  ref_ids integer[];
+BEGIN
+  SELECT array_agg(DISTINCT x.reference_id)
+  INTO ref_ids
+  FROM (
+    SELECT nr.reference_id AS reference_id FROM new_rows nr
+    UNION
+    SELECT orr.reference_id AS reference_id FROM old_rows orr
+  ) x
+  WHERE x.reference_id IS NOT NULL;
+
+  IF COALESCE(array_length(ref_ids, 1), 0) = 0 THEN
+    RETURN NULL;
+  END IF;
+
+  PERFORM spatial.sync_rr_cell_size_deg_apply(ref_ids);
+  RETURN NULL;
+END;
+$$;
+"
+    )
+
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.rasters
+  ALTER CONSTRAINT fk_reference_id DEFERRABLE INITIALLY DEFERRED;"
+    )
+
+    # Wrap things up and commit
     DBI::dbExecute(
       con,
       "UPDATE information.version_info SET version = '40'

@@ -35,7 +35,7 @@ unset_postgres_spatial_env <- function() {
       if (is.na(old_vals[[nm]])) {
         Sys.unsetenv(nm)
       } else {
-        do.call(Sys.setenv, setNames(list(old_vals[[nm]]), nm))
+        do.call(Sys.setenv, stats::setNames(list(old_vals[[nm]]), nm))
       }
     }
   }

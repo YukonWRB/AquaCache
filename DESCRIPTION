@@ -1,6 +1,6 @@
 Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
-Version: 2.7.0
+Version: 2.7.1
 Authors@R: c(
     person("Ghislain", "de Laplante", , email = "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -51,11 +51,12 @@ Imports:
     tidyhydat,
     tools,
     weathercan,
+    xml2,
     zoo
 Suggests:
-    YGwater,
     doSNOW,
     foreach,
+    htmltools,
     knitr,
     openxlsx,
     plotly,
@@ -64,7 +65,8 @@ Suggests:
     R.utils,
     sf,
     testthat (>= 3.0.0),
-    usethis
+    usethis,
+    YGwater,
 Remotes:
     github::ropensci/weathercan,
     github::stenevang/sftp,
