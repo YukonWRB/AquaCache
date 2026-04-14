@@ -116,3 +116,88 @@ test_that("getNewContinuous does not delete history when period calculation need
   expect_equal(inserted_count, nrow(new_rows))
   expect_true(tsid %in% result$timeseries_id)
 })
+
+test_that("getNewContinuous passes source_fx_args to downloadECCCwxMinute", {
+  con <- connect_test()
+  on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
+
+  candidate <- DBI::dbGetQuery(
+    con,
+    "SELECT t.timeseries_id, MAX(mc.datetime) AS last_datetime
+     FROM timeseries t
+     JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id
+     JOIN measurements_continuous mc ON mc.timeseries_id = t.timeseries_id
+     WHERE at.aggregation_type = 'instantaneous'
+     GROUP BY t.timeseries_id
+     ORDER BY MAX(mc.datetime) DESC
+     LIMIT 1"
+  )
+  if (nrow(candidate) == 0) {
+    testthat::skip("No instantaneous timeseries with history found.")
+  }
+
+  tsid <- candidate$timeseries_id[[1]]
+  last_datetime <- candidate$last_datetime[[1]]
+  new_rows <- data.frame(
+    datetime = last_datetime + c(60, 120),
+    value = c(1.1, 1.2)
+  )
+  captured <- new.env(parent = emptyenv())
+
+  AquaCache:::dbTransBegin(con)
+  on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
+
+  DBI::dbExecute(
+    con,
+    "UPDATE timeseries
+     SET source_fx = $1,
+         source_fx_args = $2
+     WHERE timeseries_id = $3",
+    params = list(
+      "downloadECCCwxMinute",
+      '{"location":"CVXY","parameter":"temp","station_type":"AUTO"}',
+      tsid
+    )
+  )
+
+  testthat::local_mocked_bindings(
+    downloadECCCwxMinute = function(
+      start_datetime,
+      con,
+      location,
+      parameter,
+      station_type = "AUTO",
+      ...
+    ) {
+      captured$start_datetime <- start_datetime
+      captured$location <- location
+      captured$parameter <- parameter
+      captured$station_type <- station_type
+      new_rows
+    },
+    .package = "AquaCache"
+  )
+
+  result <- AquaCache::getNewContinuous(
+    con = con,
+    timeseries_id = tsid,
+    active = "all"
+  )
+
+  inserted_count <- DBI::dbGetQuery(
+    con,
+    "SELECT COUNT(*)
+     FROM measurements_continuous
+     WHERE timeseries_id = $1
+       AND datetime >= $2",
+    params = list(tsid, min(new_rows$datetime))
+  )[[1]]
+
+  expect_true(inherits(captured$start_datetime, "POSIXct"))
+  expect_equal(captured$start_datetime, last_datetime + 1)
+  expect_equal(captured$location, "CVXY")
+  expect_equal(captured$parameter, "temp")
+  expect_equal(captured$station_type, "AUTO")
+  expect_equal(inserted_count, nrow(new_rows))
+  expect_true(tsid %in% result$timeseries_id)
+})
