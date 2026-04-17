@@ -66,9 +66,24 @@ writeRaster <- function(
 
   raster2pgsql_path <- find_postgres_utility("raster2pgsql")
   psql_path <- find_postgres_utility("psql")
-  if (!nzchar(raster2pgsql_path) || !nzchar(psql_path)) {
+
+  # Password from .Renviron (correct key)
+  pg_pass <- Sys.getenv("aquacacheAdminPass", unset = NA_character_)
+  pass_present <- FALSE
+  # Only set password if found
+  if (!is.na(pg_pass) && nzchar(pg_pass)) {
+    Sys.setenv(PGPASSWORD = pg_pass)
+    on.exit(Sys.unsetenv("PGPASSWORD"), add = TRUE)
+    pass_present <- TRUE
+  } else {
+    warning(
+      "No password found in .Renviron under 'aquacacheAdminPass'. Can't add a raster using the psql utility (fast method) without this variable. Falling back to the slower R-only method."
+    )
+  }
+
+  if (!nzchar(raster2pgsql_path) || !nzchar(psql_path) || !pass_present) {
     message(
-      "Either raster2pgsql or psql utilities were not found on the system PATH. Defaulting to the (slow) R only method."
+      "Either raster2pgsql or psql utilities were not found on the system PATH, or the password is not set. Defaulting to the (slow) R only method."
     )
     res <- writeRaster_old(
       con = con,
@@ -448,7 +463,9 @@ writeRaster <- function(
 
   repair_raster_sequence <- function() {
     current_db_user <- tryCatch(
-      DBI::dbGetQuery(con, "SELECT current_user AS current_user;")$current_user[1],
+      DBI::dbGetQuery(con, "SELECT current_user AS current_user;")$current_user[
+        1
+      ],
       error = function(e) NA_character_
     )
     seq_name <- tryCatch(

@@ -1,18 +1,22 @@
-#' Get minute-resolution weather observations from the ECCC SWOB archive
+#' Get minute-resolution weather observations from the ECCC SWOB realtime API
 #'
 #' @description
-#' Fetches minute-resolution SWOB XML observations from the ECCC data
-#' distribution archive. Because each XML file contains all parameters for one
-#' minute, parsed observations are cached by station and day in the session
-#' temporary directory. Subsequent calls for other parameters at the same
-#' station/day can therefore reuse the same cached data instead of downloading
-#' the same XML files again.
+#' Fetches minute-resolution SWOB observations from the filtered realtime API at
+#' https://api.weather.gc.ca/. The query is restricted to one station, one
+#' parameter, and the requested datetime interval, then returned as CSV for fast
+#' parsing into AquaCache's standard one-timeseries-at-a-time workflow.
 #'
 #' @details
-#' Data is fetched from the ECCC API at https://api.weather.gc.ca/. To see a list of stations, use this url: https://api.weather.gc.ca/collections/swob-realtime/items?limit=2000&offset=0. Once you find your station, click on one of the .xml links to see an example URL and parse out the desired location and parameter codes, such as https://dd.weather.gc.ca//20260316/WXO-DD/observations/swob-ml/20260316/CVXY/2026-03-16-0742-CVXY-AUTO-minute-swob.xml. In this example (Whitehorse Auto), the `location` is `CVXY`, the `station_type` is `AUTO`. Available parameters are extensive and listed in the right-side table below the obs_date_tm and processed_date_tm fields, beginning with `data_avail_pst1mt`.
+#' Raw parameter names are available from the SWOB queryables page at
+#' https://api.weather.gc.ca/collections/swob-realtime/queryables?f=html. The
+#' function also accepts familiar aliases such as `"temp"`, `"wind_spd"`,
+#' `"wind_dir"`, `"wind_gust"`, `"stn_press"`, and `"dew_point"`. The
+#' `station_type` argument is retained for backward compatibility in
+#' `source_fx_args`, but the filtered realtime API endpoint does not require it
+#' and it is currently ignored.
 #'
-#' @param location A four-letter station code used in the SWOB archive, such as
-#'   `"CVXY"`. See details.
+#' @param location A four-letter station code used by the SWOB realtime API,
+#'   such as `"CVXY"`. See details.
 #' @param parameter The SWOB element name to extract, or a supported alias from
 #'   [downloadECCCwx()] such as `"temp"`, `"wind_spd"`, `"wind_dir"`,
 #'   `"wind_gust"`, `"stn_press"`, or `"dew_point"`. See details.
@@ -24,8 +28,9 @@
 #'   which can be interpreted as POSIXct. If character, UTC offset of 0 will be
 #'   assigned, otherwise conversion to UTC 0 will be performed on POSIXct class
 #'   input. If Date, time will default to 23:59:59 to capture whole day.
-#' @param station_type File suffix used in the SWOB archive. Defaults to
-#'   `"AUTO"`.
+#' @param station_type Retained for backward compatibility with existing
+#'   `source_fx_args`. The filtered realtime API endpoint does not currently use
+#'   this argument.
 #' @param con A connection to the aquacache database, necessary to allow for the
 #'   mapping of approvals, grades, qualifiers, and owners to the database. If
 #'   left NULL connection will be made and closed automatically.
@@ -72,39 +77,37 @@ downloadECCCwxMinute <- function(
   start_datetime <- bounds$start_datetime
   end_datetime <- bounds$end_datetime
 
+  # IF start_datetime if > 1 month ago, trim
+  if (start_datetime < (Sys.time() - 7 * 24 * 3600)) {
+    start_datetime <- Sys.time() - 7 * 24 * 3600
+  }
+
   if (start_datetime > end_datetime) {
     stop(
       "downloadECCCwxMinute: 'start_datetime' must be earlier than 'end_datetime'."
     )
   }
 
-  requested_minutes <- dlECCCwxMinute_requested_minutes(
+  windows <- dlECCCwxMinute_day_windows(
     start_datetime = start_datetime,
     end_datetime = end_datetime
   )
-  if (length(requested_minutes) == 0) {
+  if (length(windows) == 0) {
     return(dlECCCwxMinute_empty_result())
   }
 
-  requested_days <- split(
-    requested_minutes,
-    format(requested_minutes, "%Y-%m-%d", tz = "UTC")
-  )
-
-  bundles <- lapply(
-    names(requested_days),
-    function(day_chr) {
-      dlECCCwxMinute_get_day_bundle(
-        location = location,
-        station_type = station_type,
-        day = as.Date(day_chr),
-        requested_minutes = requested_days[[day_chr]]
-      )
-    }
-  )
-
   all_rows <- data.table::rbindlist(
-    lapply(bundles, `[[`, "data"),
+    lapply(
+      windows,
+      function(window) {
+        dlECCCwxMinute_fetch_window(
+          location = location,
+          parameter = parameter_swob,
+          start_datetime = window$start_datetime,
+          end_datetime = window$end_datetime
+        )
+      }
+    ),
     use.names = TRUE,
     fill = TRUE
   )
@@ -112,11 +115,11 @@ downloadECCCwxMinute <- function(
     return(dlECCCwxMinute_empty_result())
   }
 
-  units <- unlist(lapply(bundles, `[[`, "units"), use.names = TRUE)
-  if (length(units) > 0) {
-    units <- units[!duplicated(names(units), fromLast = TRUE)]
+  if (!("date_tm-value" %in% names(all_rows))) {
+    stop(
+      "downloadECCCwxMinute: The API response did not contain 'date_tm-value'."
+    )
   }
-
   if (!(parameter_swob %in% names(all_rows))) {
     stop(
       "downloadECCCwxMinute: The parameter '",
@@ -126,11 +129,12 @@ downloadECCCwxMinute <- function(
   }
 
   data <- data.table::data.table(
-    datetime = all_rows$datetime,
+    datetime = dlECCCwxMinute_parse_api_datetime(all_rows[["date_tm-value"]]),
     value = suppressWarnings(as.numeric(all_rows[[parameter_swob]]))
   )
   data <- data[
-    datetime >= start_datetime &
+    !is.na(datetime) &
+      datetime >= start_datetime &
       datetime <= end_datetime &
       !is.na(value)
   ]
@@ -138,13 +142,24 @@ downloadECCCwxMinute <- function(
     return(dlECCCwxMinute_empty_result())
   }
 
+  data.table::setorderv(data, "datetime")
+  data <- data[!duplicated(datetime, fromLast = TRUE)]
+
+  unit_column <- dlECCCwxMinute_unit_column(parameter_swob)
+  unit_value <- NULL
+  if (unit_column %in% names(all_rows)) {
+    unit_values <- as.character(all_rows[[unit_column]])
+    unit_values <- trimws(unit_values[!is.na(all_rows[[unit_column]])])
+    unit_values <- unique(unit_values[nzchar(unit_values)])
+    if (length(unit_values) > 0) {
+      unit_value <- unit_values[[1]]
+    }
+  }
+
   data$value <- dlECCCwxMinute_convert_values(
     values = data$value,
     parameter = parameter_swob,
-    unit = dlECCCwxMinute_unit_lookup(
-      units = units,
-      parameter = parameter_swob
-    )
+    unit = unit_value
   )
 
   if (is.null(con)) {
@@ -158,7 +173,6 @@ downloadECCCwxMinute <- function(
   data$qualifier <- defaults$qualifier
   data$owner <- defaults$organization
   data$contributor <- defaults$organization
-  data <- data[order(datetime)]
 
   data[]
 }
@@ -215,33 +229,6 @@ dlECCCwxMinute_as_utc_datetime <- function(x, is_end = FALSE) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-dlECCCwxMinute_requested_minutes <- function(
-  start_datetime,
-  end_datetime
-) {
-  start_minute <- as.POSIXct(
-    strftime(start_datetime, "%Y-%m-%d %H:%M:00", tz = "UTC"),
-    tz = "UTC"
-  )
-  if (start_datetime > start_minute) {
-    start_minute <- start_minute + 60
-  }
-
-  end_minute <- as.POSIXct(
-    strftime(end_datetime, "%Y-%m-%d %H:%M:00", tz = "UTC"),
-    tz = "UTC"
-  )
-
-  if (start_minute > end_minute) {
-    return(as.POSIXct(character(), tz = "UTC"))
-  }
-
-  seq(start_minute, end_minute, by = "1 min")
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
 dlECCCwxMinute_empty_result <- function() {
   data.table::data.table(
     datetime = as.POSIXct(character(), tz = "UTC"),
@@ -257,339 +244,170 @@ dlECCCwxMinute_empty_result <- function() {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-dlECCCwxMinute_empty_bundle <- function() {
-  list(
-    data = data.table::data.table(
-      datetime = as.POSIXct(character(), tz = "UTC")
-    ),
-    units = structure(character(), names = character())
-  )
-}
+dlECCCwxMinute_day_windows <- function(start_datetime, end_datetime) {
+  windows <- list()
+  window_start <- start_datetime
 
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_cache_dir <- function() {
-  file.path(tempdir(), "downloadECCCwxMinute")
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_cache_file <- function(location, station_type, day) {
-  file.path(
-    dlECCCwxMinute_cache_dir(),
-    paste0(location, "_", station_type, "_", format(day, "%Y-%m-%d"), ".rds")
-  )
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_read_cache <- function(location, station_type, day) {
-  cache_file <- dlECCCwxMinute_cache_file(
-    location = location,
-    station_type = station_type,
-    day = day
-  )
-  if (!file.exists(cache_file)) {
-    return(dlECCCwxMinute_empty_bundle())
-  }
-
-  cache <- readRDS(cache_file)
-  if (data.table::is.data.table(cache) || inherits(cache, "data.frame")) {
-    cache <- list(data = data.table::as.data.table(cache), units = character())
-  }
-  if (!is.list(cache) || !("data" %in% names(cache))) {
-    stop("downloadECCCwxMinute: Cached minute data has an unexpected format.")
-  }
-
-  cache$data <- data.table::as.data.table(cache$data)
-  if (is.null(cache$units)) {
-    cache$units <- character()
-  }
-
-  cache
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_write_cache <- function(
-  location,
-  station_type,
-  day,
-  cache
-) {
-  dir.create(
-    dlECCCwxMinute_cache_dir(),
-    recursive = TRUE,
-    showWarnings = FALSE
-  )
-  saveRDS(
-    cache,
-    dlECCCwxMinute_cache_file(
-      location = location,
-      station_type = station_type,
-      day = day
-    )
-  )
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_get_day_bundle <- function(
-  location,
-  station_type,
-  day,
-  requested_minutes
-) {
-  cache <- dlECCCwxMinute_read_cache(
-    location = location,
-    station_type = station_type,
-    day = day
-  )
-
-  requested_minutes <- as.POSIXct(
-    requested_minutes,
-    tz = "UTC",
-    origin = "1970-01-01"
-  )
-  if (nrow(cache$data) > 0) {
-    missing_minutes <- requested_minutes[
-      !(requested_minutes %in% cache$data$datetime)
-    ]
-  } else {
-    missing_minutes <- requested_minutes
-  }
-
-  if (length(missing_minutes) > 0) {
-    available_files <- dlECCCwxMinute_list_day_files(
-      location = location,
-      station_type = station_type,
-      day = day
-    )
-
-    to_fetch <- available_files[datetime %in% missing_minutes]
-    if (nrow(to_fetch) > 0) {
-      fetched <- lapply(
-        to_fetch$filename,
-        function(filename) {
-          xml_txt <- dlECCCwxMinute_fetch_xml(
-            dlECCCwxMinute_file_url(
-              location = location,
-              day = day,
-              filename = filename
-            )
-          )
-          if (is.null(xml_txt)) {
-            return(NULL)
-          }
-
-          dlECCCwxMinute_parse_xml(xml_txt)
-        }
-      )
-      fetched <- Filter(Negate(is.null), fetched)
-
-      if (length(fetched) > 0) {
-        cache$data <- data.table::rbindlist(
-          c(list(cache$data), lapply(fetched, `[[`, "data")),
-          use.names = TRUE,
-          fill = TRUE
-        )
-        data.table::setorderv(cache$data, "datetime")
-        cache$data <- cache$data[!duplicated(datetime, fromLast = TRUE)]
-
-        fetched_units <- unlist(
-          lapply(fetched, `[[`, "units"),
-          use.names = TRUE
-        )
-        if (length(fetched_units) > 0) {
-          cache$units <- c(cache$units, fetched_units)
-          cache$units <- cache$units[
-            !duplicated(names(cache$units), fromLast = TRUE)
-          ]
-        }
-
-        dlECCCwxMinute_write_cache(
-          location = location,
-          station_type = station_type,
-          day = day,
-          cache = cache
-        )
-      }
-    }
-  }
-
-  list(
-    data = cache$data[datetime %in% requested_minutes],
-    units = cache$units
-  )
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_day_url <- function(location, day) {
-  day_path <- format(day, "%Y%m%d")
-  paste0(
-    "https://dd.weather.gc.ca/",
-    day_path,
-    "/WXO-DD/observations/swob-ml/",
-    day_path,
-    "/",
-    location,
-    "/"
-  )
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_file_url <- function(location, day, filename) {
-  paste0(dlECCCwxMinute_day_url(location = location, day = day), filename)
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_filename_datetime <- function(filename) {
-  as.POSIXct(
-    strptime(substr(filename, 1, 16), format = "%Y-%m-%d-%H%M", tz = "UTC")
-  )
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_list_day_files <- function(location, station_type, day) {
-  response <- httr::GET(dlECCCwxMinute_day_url(
-    location = location,
-    day = day
-  ))
-  status <- httr::status_code(response)
-  if (status == 404) {
-    return(data.table::data.table(
-      filename = character(),
-      datetime = as.POSIXct(character(), tz = "UTC")
-    ))
-  }
-
-  httr::stop_for_status(response)
-  listing <- httr::content(response, as = "text", encoding = "UTF-8")
-  listing <- xml2::read_html(listing)
-
-  hrefs <- xml2::xml_attr(
-    xml2::xml_find_all(
-      listing,
-      ".//a[contains(@href, '-minute-swob.xml')]"
-    ),
-    "href"
-  )
-  pattern <- paste0(
-    "^\\d{4}-\\d{2}-\\d{2}-\\d{4}-",
-    location,
-    "-",
-    station_type,
-    "-minute-swob\\.xml$"
-  )
-  hrefs <- unique(hrefs[grepl(pattern, hrefs)])
-
-  if (length(hrefs) == 0) {
-    return(data.table::data.table(
-      filename = character(),
-      datetime = as.POSIXct(character(), tz = "UTC")
-    ))
-  }
-
-  data.table::data.table(
-    filename = hrefs,
-    datetime = as.POSIXct(
-      unlist(lapply(hrefs, dlECCCwxMinute_filename_datetime)),
-      origin = "1970-01-01",
+  repeat {
+    next_day <- as.POSIXct(
+      paste0(as.Date(window_start, tz = "UTC") + 1, " 00:00:00"),
       tz = "UTC"
     )
-  )
+    window_end <- min(end_datetime, next_day - 1)
+    windows[[length(windows) + 1L]] <- list(
+      start_datetime = window_start,
+      end_datetime = window_end
+    )
+
+    if (window_end >= end_datetime) {
+      break
+    }
+
+    window_start <- window_end + 1
+  }
+
+  windows
 }
 
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-dlECCCwxMinute_fetch_xml <- function(url) {
+dlECCCwxMinute_fetch_window <- function(
+  location,
+  parameter,
+  start_datetime,
+  end_datetime
+) {
+  page <- dlECCCwxMinute_fetch_csv(dlECCCwxMinute_api_url(
+    location = location,
+    parameter = parameter,
+    start_datetime = start_datetime,
+    end_datetime = end_datetime
+  ))
+  if (!data.table::is.data.table(page)) {
+    page <- data.table::as.data.table(page)
+  }
+
+  page
+}
+
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
+dlECCCwxMinute_fetch_csv <- function(url) {
   response <- httr::GET(url)
   status <- httr::status_code(response)
   if (status == 404) {
-    return(NULL)
+    return(data.table::data.table())
   }
 
   httr::stop_for_status(response)
-  httr::content(response, as = "text", encoding = "UTF-8")
+  csv_txt <- httr::content(response, as = "text", encoding = "UTF-8")
+  if (!nzchar(trimws(csv_txt))) {
+    return(data.table::data.table())
+  }
+
+  data.table::fread(
+    text = csv_txt,
+    na.strings = c("", "MSNG", "MISSING", "NULL", "NA"),
+    check.names = FALSE,
+    showProgress = FALSE
+  )
 }
 
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
-dlECCCwxMinute_parse_xml <- function(xml_txt) {
-  doc <- xml2::read_xml(xml_txt)
-  datetime_node <- xml2::xml_find_first(
-    doc,
-    ".//*[local-name()='samplingTime']//*[local-name()='timePosition']"
-  )
-  if (inherits(datetime_node, "xml_missing")) {
-    stop(
-      "downloadECCCwxMinute: Could not find a sampling time in the SWOB XML."
+dlECCCwxMinute_api_url <- function(
+  location,
+  parameter,
+  start_datetime,
+  end_datetime,
+  limit = 2000L
+) {
+  properties <- unique(c(
+    "date_tm-value",
+    parameter,
+    dlECCCwxMinute_unit_column(parameter)
+  ))
+  query <- c(
+    lang = "en",
+    offset = "0",
+    limit = as.character(as.integer(limit)),
+    sortby = "-date_tm-value",
+    url = location,
+    properties = paste(properties, collapse = ","),
+    f = "csv",
+    datetime = paste0(
+      dlECCCwxMinute_format_interval_datetime(start_datetime),
+      "/",
+      dlECCCwxMinute_format_interval_datetime(end_datetime)
     )
-  }
+  )
 
-  datetime <- as.POSIXct(
-    xml2::xml_text(datetime_node),
-    format = "%Y-%m-%dT%H:%M:%OSZ",
+  paste0(
+    "https://api.weather.gc.ca/collections/swob-realtime/items?",
+    paste(
+      paste0(
+        names(query),
+        "=",
+        vapply(query, utils::URLencode, character(1), reserved = TRUE)
+      ),
+      collapse = "&"
+    )
+  )
+}
+
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
+dlECCCwxMinute_format_interval_datetime <- function(x) {
+  format(x, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+}
+
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
+dlECCCwxMinute_parse_api_datetime <- function(x) {
+  values <- as.character(x)
+  trimmed_values <- trimws(values)
+  out <- as.POSIXct(
+    rep(NA_real_, length(values)),
+    origin = "1970-01-01",
     tz = "UTC"
   )
+  is_missing <- is.na(x) | trimmed_values == ""
+  if (all(is_missing)) {
+    return(out)
+  }
 
-  element_nodes <- xml2::xml_find_all(
-    doc,
-    ".//*[local-name()='result']//*[local-name()='element']"
-  )
-  if (length(element_nodes) == 0) {
-    return(list(
-      data = data.table::data.table(datetime = datetime),
-      units = structure(character(), names = character())
+  with_offset <- !is_missing &
+    grepl("([+-]\\d{2}:?\\d{2})$", trimmed_values, perl = TRUE)
+  if (any(with_offset)) {
+    offset_values <- sub(
+      "([+-]\\d{2}):(\\d{2})$",
+      "\\1\\2",
+      trimmed_values[with_offset],
+      perl = TRUE
+    )
+    out[with_offset] <- as.POSIXct(strptime(
+      offset_values,
+      format = "%Y-%m-%dT%H:%M:%OS%z",
+      tz = "UTC"
     ))
   }
 
-  parsed <- data.table::data.table(
-    name = xml2::xml_attr(element_nodes, "name"),
-    unit = xml2::xml_attr(element_nodes, "uom"),
-    value = xml2::xml_attr(element_nodes, "value")
-  )
-  parsed <- parsed[!is.na(name) & name != ""]
-  if (nrow(parsed) == 0) {
-    return(list(
-      data = data.table::data.table(datetime = datetime),
-      units = structure(character(), names = character())
+  without_offset <- !is_missing & !with_offset
+  if (any(without_offset)) {
+    plain_values <- sub("Z$", "", trimmed_values[without_offset])
+    out[without_offset] <- as.POSIXct(strptime(
+      plain_values,
+      format = "%Y-%m-%dT%H:%M:%OS",
+      tz = "UTC"
     ))
   }
 
-  parsed$value[
-    parsed$value %in% c("", "MSNG", "MISSING", "NULL", "NA")
-  ] <- NA_character_
-  parsed <- parsed[!duplicated(name, fromLast = TRUE)]
-
-  data <- data.table::as.data.table(
-    as.list(stats::setNames(
-      suppressWarnings(as.numeric(parsed$value)),
-      parsed$name
-    ))
-  )
-  data[, datetime := datetime]
-  data.table::setcolorder(data, "datetime")
-
-  list(
-    data = data,
-    units = stats::setNames(parsed$unit, parsed$name)
-  )
+  out
 }
 
 #' downloadECCCwxMinute helper
@@ -622,6 +440,13 @@ dlECCCwxMinute_resolve_parameter <- function(parameter) {
 #' downloadECCCwxMinute helper
 #' @keywords internal
 #' @noRd
+dlECCCwxMinute_unit_column <- function(parameter) {
+  paste0(parameter, "-uom")
+}
+
+#' downloadECCCwxMinute helper
+#' @keywords internal
+#' @noRd
 dlECCCwxMinute_convert_values <- function(values, parameter, unit) {
   if (
     !is.null(unit) &&
@@ -632,18 +457,6 @@ dlECCCwxMinute_convert_values <- function(values, parameter, unit) {
   }
 
   values
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_unit_lookup <- function(units, parameter) {
-  unit <- units[parameter]
-  if (length(unit) == 0 || is.na(unit)) {
-    return(NULL)
-  }
-
-  unname(unit[[1]])
 }
 
 #' downloadECCCwxMinute helper

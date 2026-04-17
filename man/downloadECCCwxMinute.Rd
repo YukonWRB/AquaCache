@@ -2,7 +2,7 @@
 % Please edit documentation in R/downloadECCCwxMinute.R
 \name{downloadECCCwxMinute}
 \alias{downloadECCCwxMinute}
-\title{Get minute-resolution weather observations from the ECCC SWOB archive}
+\title{Get minute-resolution weather observations from the ECCC SWOB realtime API}
 \usage{
 downloadECCCwxMinute(
   location,
@@ -14,8 +14,8 @@ downloadECCCwxMinute(
 )
 }
 \arguments{
-\item{location}{A four-letter station code used in the SWOB archive, such as
-\code{"CVXY"}. See details.}
+\item{location}{A four-letter station code used by the SWOB realtime API,
+such as \code{"CVXY"}. See details.}
 
 \item{parameter}{The SWOB element name to extract, or a supported alias from
 \code{\link[=downloadECCCwx]{downloadECCCwx()}} such as \code{"temp"}, \code{"wind_spd"}, \code{"wind_dir"},
@@ -31,8 +31,9 @@ which can be interpreted as POSIXct. If character, UTC offset of 0 will be
 assigned, otherwise conversion to UTC 0 will be performed on POSIXct class
 input. If Date, time will default to 23:59:59 to capture whole day.}
 
-\item{station_type}{File suffix used in the SWOB archive. Defaults to
-\code{"AUTO"}.}
+\item{station_type}{Retained for backward compatibility with existing
+\code{source_fx_args}. The filtered realtime API endpoint does not currently use
+this argument.}
 
 \item{con}{A connection to the aquacache database, necessary to allow for the
 mapping of approvals, grades, qualifiers, and owners to the database. If
@@ -42,13 +43,17 @@ left NULL connection will be made and closed automatically.}
 A data.table object of weather observations, with datetimes in UTC-0.
 }
 \description{
-Fetches minute-resolution SWOB XML observations from the ECCC data
-distribution archive. Because each XML file contains all parameters for one
-minute, parsed observations are cached by station and day in the session
-temporary directory. Subsequent calls for other parameters at the same
-station/day can therefore reuse the same cached data instead of downloading
-the same XML files again.
+Fetches minute-resolution SWOB observations from the filtered realtime API at
+https://api.weather.gc.ca/. The query is restricted to one station, one
+parameter, and the requested datetime interval, then returned as CSV for fast
+parsing into AquaCache's standard one-timeseries-at-a-time workflow.
 }
 \details{
-Data is fetched from the ECCC API at https://api.weather.gc.ca/. To see a list of stations, use this url: https://api.weather.gc.ca/collections/swob-realtime/items?limit=2000&offset=0. Once you find your station, click on one of the .xml links to see an example URL and parse out the desired location and parameter codes, such as https://dd.weather.gc.ca//20260316/WXO-DD/observations/swob-ml/20260316/CVXY/2026-03-16-0742-CVXY-AUTO-minute-swob.xml. In this example (Whitehorse Auto), the \code{location} is \code{CVXY}, the \code{station_type} is \code{AUTO}. Available parameters are extensive and listed in the right-side table below the obs_date_tm and processed_date_tm fields, beginning with \code{data_avail_pst1mt}.
+Raw parameter names are available from the SWOB queryables page at
+https://api.weather.gc.ca/collections/swob-realtime/queryables?f=html. The
+function also accepts familiar aliases such as \code{"temp"}, \code{"wind_spd"},
+\code{"wind_dir"}, \code{"wind_gust"}, \code{"stn_press"}, and \code{"dew_point"}. The
+\code{station_type} argument is retained for backward compatibility in
+\code{source_fx_args}, but the filtered realtime API endpoint does not require it
+and it is currently ignored.
 }

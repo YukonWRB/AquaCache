@@ -8,15 +8,30 @@ getNewContinuous(
   con = NULL,
   timeseries_id = "all",
   active = "default",
+  dbName = NULL,
+  dbHost = NULL,
+  dbPort = NULL,
+  dbUser = NULL,
+  dbPass = NULL,
   verbose = FALSE
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. If you wish to run this function in parallel you MUST leave this argument NULL. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.}
 
 \item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
+
+\item{dbName}{The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbHost}{The host address of the database. If left NULL, the function will use the default host address from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbPort}{The port of the database. If left NULL, the function will use the default port from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbUser}{The username for the database. If left NULL, the function will use the default username from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{verbose}{If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.}
 }

@@ -8,31 +8,19 @@
 
 # What's the AquaCache package about?
 
-The AquaCache R package is a collection of functions that facilitate the creation of a postgres database (the aquacache), loads data to this database, retrieves it, and performs checks on the data.
-It integrates the Water Survey of Canada's realtime (5 minute) hydrometric data with published historical daily means, and facilitates the automated import of data from a variety of sources.
-
-In addition, the package provides functions for the creation and administration of a snow survey database as well as a database intended for instrument maintenance/calibration records.
-The later works with the Shiny application packaged with the WRBcalibrates package, created by the Yukon Department of Environment Water Science and Stewardship Branch.
+The AquaCache R package is a collection of functions that facilitate the maintenance of the AquaCache PostgreSQL database, loads data to this database, retrieves it, and performs checks on the data.
+It integrates a variety of continuous data sources, including the Water Survey of Canada's realtime (5 minute) hydrometric data with published historical daily means, USGS hydrometric data, and facilitates the automated import of data from a variety of other sources such as SFTP servers, APIs, and local files.
 
 # Installation
 
 The AquaCache package is not available on CRAN and likely never will be, but you can install it from GitHub with: `devtools::install_github("YukonWRB/AquaCache")`
 
-Once the package is installed you attempt to initialize the aquacache database on a running postgres server using the AquaCacheInit function, which creates tables, relationships, functions, triggers, and pre-populates some tables with standard information.
-Note that we state "attempt to initialize" here: it's been a long while since anyone's created the database from scratch, so there's a really good chance that this function will not run cleanly because of some SQL syntax errors.
-
-An alternative to initializing the database is to restore a backup of the aquacache database.
-This is the preferred method, as it will ensure that the database is in a known state.
-The backup file is available by contacting the Water Science and Stewardship Branch data scientist, Ghislain de Laplante, who can also help you out with the installation process in general.
+Once the package is installed you can set up the AquaCache database into a PostgreSQL instance of your choice (minimum version 17, recommended 18 or latest). A template database instance is available in the tests/thatthat/fixtures folder, though you may want to contact the Yukon Environment Water Science and Stewardship Branch data scientist, Ghislain de Laplante, at <ghislain.delaplante@yukon.ca> who can help you out with the installation process and ensure that you are working with the most complete and recent version of the database.
 
 # Collaboration and contributions
 
-Are you part of an organization that needs to store and manage water or climate related data, documents, images, and instrument metadata in one location?
-If so, you may find the AquaCache package useful and the alternatives lacking.
-We designed this R package and associated database to meet the needs of the Yukon Department of Environment Water Science and Stewardship Branch, but we believe that it could be useful to other organizations as well.
-
-We welcome contributions to the package, and encourage you to contact the project creator and coordinator, Ghislain de Laplante if you wish to collaborate on the development of the package.
-We are particularly interested in collaborating with organizations that have a need for a database like aquacache, and that are willing to contribute to the development of the package.
+Are you part of an organization that needs to store and manage water or climate related data, documents, images, spatial data, and instrument metadata in one location? If so, you may find the AquaCache package useful and the alternatives lacking or very expensive.
+We designed this R package and associated database to meet the needs of the Yukon Department of Environment Water Science and Stewardship Branch, but we believe that it could be useful to other organizations as well. We welcome contributions to this software as well as to the database schema, and encourage you to contact the project team (see DESCRIPTION file) if you wish to collaborate on any developments.
 
 ## Contribution guidelines
 
@@ -43,15 +31,14 @@ Contributions to this package should be done via GitHub pull requests, and shoul
 -   Avoid adding new dependencies to the package, unless absolutely necessary.
     If a new dependency is required, it should be discussed with the project coordinator before being added.
 
--   Package functions that are meant to be called repeatedly (getting data, comparing to remote stores, etc) should have a heavy emphasis on speed and efficiency.
-    We've used the data.table package to great effect in this regard, for example.
+-   Package functions that are meant to be called repeatedly (getting data, comparing to remote stores, etc) should have a heavy emphasis on speed and efficiency. We've used the data.table package to great effect in this regard, for example.
 
 -   Avoid using hard-coded values in the code, and instead use variables or functions to store and retrieve values.
     Credentials should be stored in a .Renviron file, while values such as parameter codes, source functions, etc. should be fetched from the database itself.
 
--   All functions should be documented in the usual R package manner and should include examples of how to use the function if possible (so far we're not doing so well on this one).
+-   All functions should be documented in the usual R package manner and should include examples of how to use the function if possible (so far we're not doing so well on this).
 
--   Any contributions should pass devtools::check() without any errors, warnings, and if possible notes.
+-   Any contributions must pass devtools::check() without any errors, warnings, and if possible notes before integration.
 
 -   ANY changes to the database schema should be accompanied by the necessary SQL code to create or modify the database.
     This is to ensure that the package and database remain in sync; see below for more information.
@@ -82,7 +69,7 @@ In general we ask that contributors follow this process:
 
 6.  Write down what you did in the NEWS.md file.
 
-7.  If you want to enforce a review of the code you worked or function you added before future changes take place, add relevant entries to the .github/CODEOWNERS file (see GitHub help pages for how to do this).
+7.  If you want to enforce a review of the code you worked on or function you added before future changes take place, add relevant entries to the .github/CODEOWNERS file (see GitHub help pages for how to do this).
 
 8.  Make a pull request.
 
