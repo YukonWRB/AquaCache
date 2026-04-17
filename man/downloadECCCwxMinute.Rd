@@ -9,7 +9,6 @@ downloadECCCwxMinute(
   parameter,
   start_datetime,
   end_datetime = Sys.time(),
-  station_type = "AUTO",
   con = NULL
 )
 }
@@ -31,10 +30,6 @@ which can be interpreted as POSIXct. If character, UTC offset of 0 will be
 assigned, otherwise conversion to UTC 0 will be performed on POSIXct class
 input. If Date, time will default to 23:59:59 to capture whole day.}
 
-\item{station_type}{Retained for backward compatibility with existing
-\code{source_fx_args}. The filtered realtime API endpoint does not currently use
-this argument.}
-
 \item{con}{A connection to the aquacache database, necessary to allow for the
 mapping of approvals, grades, qualifiers, and owners to the database. If
 left NULL connection will be made and closed automatically.}
@@ -52,8 +47,6 @@ parsing into AquaCache's standard one-timeseries-at-a-time workflow.
 Raw parameter names are available from the SWOB queryables page at
 https://api.weather.gc.ca/collections/swob-realtime/queryables?f=html. The
 function also accepts familiar aliases such as \code{"temp"}, \code{"wind_spd"},
-\code{"wind_dir"}, \code{"wind_gust"}, \code{"stn_press"}, and \code{"dew_point"}. The
-\code{station_type} argument is retained for backward compatibility in
-\code{source_fx_args}, but the filtered realtime API endpoint does not require it
-and it is currently ignored.
+\code{"wind_dir"}, \code{"wind_gust"}, \code{"stn_press"}, and \code{"dew_point"}, though you are
+recommended to use exact SWOB parameter names when possible.
 }

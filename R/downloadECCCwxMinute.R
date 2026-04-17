@@ -10,10 +10,8 @@
 #' Raw parameter names are available from the SWOB queryables page at
 #' https://api.weather.gc.ca/collections/swob-realtime/queryables?f=html. The
 #' function also accepts familiar aliases such as `"temp"`, `"wind_spd"`,
-#' `"wind_dir"`, `"wind_gust"`, `"stn_press"`, and `"dew_point"`. The
-#' `station_type` argument is retained for backward compatibility in
-#' `source_fx_args`, but the filtered realtime API endpoint does not require it
-#' and it is currently ignored.
+#' `"wind_dir"`, `"wind_gust"`, `"stn_press"`, and `"dew_point"`, though you are
+#' recommended to use exact SWOB parameter names when possible.
 #'
 #' @param location A four-letter station code used by the SWOB realtime API,
 #'   such as `"CVXY"`. See details.
@@ -28,9 +26,6 @@
 #'   which can be interpreted as POSIXct. If character, UTC offset of 0 will be
 #'   assigned, otherwise conversion to UTC 0 will be performed on POSIXct class
 #'   input. If Date, time will default to 23:59:59 to capture whole day.
-#' @param station_type Retained for backward compatibility with existing
-#'   `source_fx_args`. The filtered realtime API endpoint does not currently use
-#'   this argument.
 #' @param con A connection to the aquacache database, necessary to allow for the
 #'   mapping of approvals, grades, qualifiers, and owners to the database. If
 #'   left NULL connection will be made and closed automatically.
@@ -42,7 +37,6 @@ downloadECCCwxMinute <- function(
   parameter,
   start_datetime,
   end_datetime = Sys.time(),
-  station_type = "AUTO",
   con = NULL
 ) {
   if (length(location) != 1 || is.na(location)) {
@@ -51,21 +45,14 @@ downloadECCCwxMinute <- function(
   if (length(parameter) != 1 || is.na(parameter)) {
     stop("downloadECCCwxMinute: 'parameter' must be a single non-NA value.")
   }
-  if (length(station_type) != 1 || is.na(station_type)) {
-    stop("downloadECCCwxMinute: 'station_type' must be a single non-NA value.")
-  }
 
   location <- toupper(trimws(as.character(location)))
-  station_type <- toupper(trimws(as.character(station_type)))
   parameter_requested <- trimws(as.character(parameter))
   if (!nzchar(location)) {
     stop("downloadECCCwxMinute: 'location' cannot be an empty string.")
   }
   if (!nzchar(parameter_requested)) {
     stop("downloadECCCwxMinute: 'parameter' cannot be an empty string.")
-  }
-  if (!nzchar(station_type)) {
-    stop("downloadECCCwxMinute: 'station_type' cannot be an empty string.")
   }
 
   parameter_swob <- dlECCCwxMinute_resolve_parameter(parameter_requested)
@@ -77,9 +64,9 @@ downloadECCCwxMinute <- function(
   start_datetime <- bounds$start_datetime
   end_datetime <- bounds$end_datetime
 
-  # IF start_datetime if > 1 month ago, trim
-  if (start_datetime < (Sys.time() - 7 * 24 * 3600)) {
-    start_datetime <- Sys.time() - 7 * 24 * 3600
+  # IF start_datetime if > 1 month ago, trim (otherwise it takes too long)
+  if (start_datetime < (Sys.time() - 30 * 24 * 3600)) {
+    start_datetime <- Sys.time() - 30 * 24 * 3600
   }
 
   if (start_datetime > end_datetime) {
@@ -129,7 +116,7 @@ downloadECCCwxMinute <- function(
   }
 
   data <- data.table::data.table(
-    datetime = dlECCCwxMinute_parse_api_datetime(all_rows[["date_tm-value"]]),
+    datetime = all_rows[["date_tm-value"]],
     value = suppressWarnings(as.numeric(all_rows[[parameter_swob]]))
   )
   data <- data[
@@ -174,7 +161,7 @@ downloadECCCwxMinute <- function(
   data$owner <- defaults$organization
   data$contributor <- defaults$organization
 
-  data[]
+  return(data)
 }
 
 #' downloadECCCwxMinute helper
@@ -363,51 +350,6 @@ dlECCCwxMinute_api_url <- function(
 #' @noRd
 dlECCCwxMinute_format_interval_datetime <- function(x) {
   format(x, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_parse_api_datetime <- function(x) {
-  values <- as.character(x)
-  trimmed_values <- trimws(values)
-  out <- as.POSIXct(
-    rep(NA_real_, length(values)),
-    origin = "1970-01-01",
-    tz = "UTC"
-  )
-  is_missing <- is.na(x) | trimmed_values == ""
-  if (all(is_missing)) {
-    return(out)
-  }
-
-  with_offset <- !is_missing &
-    grepl("([+-]\\d{2}:?\\d{2})$", trimmed_values, perl = TRUE)
-  if (any(with_offset)) {
-    offset_values <- sub(
-      "([+-]\\d{2}):(\\d{2})$",
-      "\\1\\2",
-      trimmed_values[with_offset],
-      perl = TRUE
-    )
-    out[with_offset] <- as.POSIXct(strptime(
-      offset_values,
-      format = "%Y-%m-%dT%H:%M:%OS%z",
-      tz = "UTC"
-    ))
-  }
-
-  without_offset <- !is_missing & !with_offset
-  if (any(without_offset)) {
-    plain_values <- sub("Z$", "", trimmed_values[without_offset])
-    out[without_offset] <- as.POSIXct(strptime(
-      plain_values,
-      format = "%Y-%m-%dT%H:%M:%OS",
-      tz = "UTC"
-    ))
-  }
-
-  out
 }
 
 #' downloadECCCwxMinute helper
