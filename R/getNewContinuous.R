@@ -249,14 +249,6 @@ getNewContinuous <- function(
       }
     }
 
-    if (identical(source_fx, "downloadECCCwxMinute")) {
-      location <- get_source_fx_arg(args, "location")
-      station_type <- get_source_fx_arg(args, "station_type", default = "AUTO")
-      if (!is.null(location) && !is.null(station_type)) {
-        return(paste(source_fx, location, station_type, sep = "|"))
-      }
-    }
-
     paste0("timeseries|", all_timeseries$timeseries_id[[i]])
   }
 

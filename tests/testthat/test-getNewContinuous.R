@@ -202,7 +202,7 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   )))
 })
 
-test_that("getNewContinuous groups cache-sharing ECCC minute tasks in parallel", {
+test_that("getNewContinuous does not group ECCC minute tasks", {
   skip_if_not_installed("foreach")
   skip_if_not_installed("doSNOW")
 
@@ -217,9 +217,9 @@ test_that("getNewContinuous groups cache-sharing ECCC minute tasks in parallel",
     tz = "UTC"
   )
   source_fx_args <- c(
-    '{"location":"CVXY","parameter":"temp","station_type":"AUTO"}',
-    '{"location":"CVXY","parameter":"wind_spd","station_type":"AUTO"}',
-    '{"location":"CYXY","parameter":"temp","station_type":"AUTO"}'
+    '{"location":"CVXY","parameter":"temp"}',
+    '{"location":"CVXY","parameter":"wind_spd"}',
+    '{"location":"CYXY","parameter":"temp"}'
   )
 
   mock_dopar <- function(obj, expr) {
@@ -269,9 +269,7 @@ test_that("getNewContinuous groups cache-sharing ECCC minute tasks in parallel",
       start_datetime,
       con,
       location,
-      parameter,
-      station_type = "AUTO",
-      ...
+      parameter
     ) {
       captured$parameters <- c(captured$parameters, parameter)
       data.frame(
@@ -322,13 +320,13 @@ test_that("getNewContinuous groups cache-sharing ECCC minute tasks in parallel",
       dbUser = "mock_user",
       dbPass = "mock_pass"
     ),
-    regexp = "Cache-sharing groups cover 3 timeseries across 2 groups; largest group size = 2\\."
+    regexp = "Parallel plan: 3 timeseries across 3 task groups"
   )
 
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
-  expect_equal(connect_calls, 3L)
-  expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
+  expect_equal(connect_calls, 4L)
+  expect_equal(captured$parameters, c("temp", "wind_spd", "temp"))
   expect_true(all(vapply(
     captured$connect_args,
     function(args) identical(args, list(
@@ -462,7 +460,7 @@ test_that("getNewContinuous does not delete history when period calculation need
   expect_true(tsid %in% result$timeseries_id)
 })
 
-test_that("getNewContinuous passes source_fx_args to downloadECCCwxMinute", {
+test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinute", {
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
 
@@ -500,7 +498,7 @@ test_that("getNewContinuous passes source_fx_args to downloadECCCwxMinute", {
      WHERE timeseries_id = $3",
     params = list(
       "downloadECCCwxMinute",
-      '{"location":"CVXY","parameter":"temp","station_type":"AUTO"}',
+      '{"location":"CVXY","parameter":"temp"}',
       tsid
     )
   )
@@ -510,14 +508,11 @@ test_that("getNewContinuous passes source_fx_args to downloadECCCwxMinute", {
       start_datetime,
       con,
       location,
-      parameter,
-      station_type = "AUTO",
-      ...
+      parameter
     ) {
       captured$start_datetime <- start_datetime
       captured$location <- location
       captured$parameter <- parameter
-      captured$station_type <- station_type
       new_rows
     },
     .package = "AquaCache"
@@ -542,7 +537,6 @@ test_that("getNewContinuous passes source_fx_args to downloadECCCwxMinute", {
   expect_equal(captured$start_datetime, last_datetime + 1)
   expect_equal(captured$location, "CVXY")
   expect_equal(captured$parameter, "temp")
-  expect_equal(captured$station_type, "AUTO")
   expect_equal(inserted_count, nrow(new_rows))
   expect_true(tsid %in% result$timeseries_id)
 })
