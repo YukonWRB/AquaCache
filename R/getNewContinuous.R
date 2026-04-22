@@ -452,12 +452,18 @@ getNewContinuous <- function(
       !inherits(ts, "data.frame") &&
         !data.table::is.data.table(ts)
     ) {
-      stop("getNewContinuous: The data returned by source_fx is not tabular.")
+      stop(
+        "getNewContinuous: The data returned by source_fx ",
+        source_fx,
+        " is not tabular."
+      )
     }
     # Make sure we have the required columns
     if (!all(c("value", "datetime") %in% names(ts))) {
       stop(
-        "getNewContinuous: The data returned by source_fx does not have columns named 'value' and 'datetime'."
+        "getNewContinuous: The data returned by source_fx ",
+        source_fx,
+        " does not have columns named 'value' and 'datetime'."
       )
     }
 
@@ -606,7 +612,6 @@ getNewContinuous <- function(
         "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
         params = list(max(ts$datetime), tsid)
       )
-
     }
 
     rows_added <- nrow(ts)
