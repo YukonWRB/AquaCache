@@ -7,6 +7,76 @@
 #' @export
 fmt <- function(x) format(x, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
 
+#' @title Temporarily clear PostgreSQL spatial environment variables
+#' @description
+#' Internal helper used around raster workflows to avoid `terra` picking up
+#' PostgreSQL-installed `PROJ_LIB` or `GDAL_DATA` paths that can break raster
+#' reads and writes. Returns a restore function when any variables are unset.
+#' @return Either `NULL` when no PostgreSQL spatial environment variables were
+#' detected, or a function that restores the original values.
+#' @noRd
+#' @keywords internal
+unset_postgres_spatial_env <- function() {
+  env_vars <- c("PROJ_LIB", "GDAL_DATA")
+  old_env <- Sys.getenv(env_vars, unset = NA_character_)
+  postgres_vars <- !is.na(old_env) &
+    grepl("PostgreSQL", old_env, ignore.case = TRUE)
+
+  if (!any(postgres_vars)) {
+    return(NULL)
+  }
+
+  vars_to_unset <- env_vars[postgres_vars]
+  old_vals <- old_env[postgres_vars]
+  Sys.unsetenv(vars_to_unset)
+
+  function() {
+    for (nm in names(old_vals)) {
+      if (is.na(old_vals[[nm]])) {
+        Sys.unsetenv(nm)
+      } else {
+        do.call(Sys.setenv, stats::setNames(list(old_vals[[nm]]), nm))
+      }
+    }
+  }
+}
+
+#' @title Find a PostgreSQL command line utility
+#' @description
+#' Internal helper that first checks `Sys.which()` and, on Windows, falls back
+#' to common PostgreSQL installation directories under Program Files.
+#' @param name The base utility name, such as `"psql"` or `"raster2pgsql"`.
+#' @return A single path to the requested utility, or `""` if it could not be
+#' found.
+#' @noRd
+#' @keywords internal
+find_postgres_utility <- function(name) {
+  utility_path <- Sys.which(name)
+  if (nzchar(utility_path) || .Platform$OS.type != "windows") {
+    return(utility_path)
+  }
+
+  patterns <- c(
+    file.path("C:/Program Files/PostgreSQL", "*", "bin", paste0(name, ".exe")),
+    file.path(
+      "C:/Program Files (x86)/PostgreSQL",
+      "*",
+      "bin",
+      paste0(name, ".exe")
+    )
+  )
+  candidates <- unique(unlist(lapply(patterns, Sys.glob), use.names = FALSE))
+  if (!length(candidates)) {
+    return("")
+  }
+
+  normalizePath(
+    sort(candidates, decreasing = TRUE)[1],
+    winslash = "\\",
+    mustWork = FALSE
+  )
+}
+
 
 #' @title Begin a transaction
 #' @description

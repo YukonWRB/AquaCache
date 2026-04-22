@@ -23,7 +23,7 @@ Water Survey of Canada daily means are dealt with differently than other timeser
 
 Some continuous measurement data may have a period of greater than 1 day. In these cases it would be impossible to calculate daily statistics, so this function explicitly excludes data points with a period greater than P1D.
 
-This function is meant to be called from within \code{\link[=dailyUpdate]{dailyUpdate()}}, but is exported in case a need arises to calculate daily means and statistics in isolation or in another function. It \emph{must} be used with a database created by this package, or one with identical tables.
+This function is meant to be called from maintenance workflows such as \code{\link[=getNewContinuous]{getNewContinuous()}}, \code{\link[=update_hydat]{update_hydat()}}, and \code{\link[=synchronize_continuous]{synchronize_continuous()}}, but is exported in case a need arises to calculate daily means and statistics in isolation or in another function. It \emph{must} be used with a database created by this package, or one with identical tables.
 }
 \details{
 Calculating daily statistics for February 29 is complicated: due to a paucity of data, this day's statistics are liable to be very mismatched from those of the preceding and succeeding days if calculated based only on Feb 29 data. Consequently, statistics for these days are computed by averaging those of Feb 28 and March 1, ensuring a smooth line when graphing mean/min/max/quantile parameters. This necessitates waiting for complete March 1st data, so Feb 29 means and stats will be delayed until March 2nd.

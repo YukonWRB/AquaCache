@@ -127,13 +127,6 @@ insertACModelRaster <- function(
     )
   }
 
-  if (is.null(con)) {
-    con <- AquaConnect(silent = TRUE)
-    on.exit(DBI::dbDisconnect(con))
-  }
-
-  DBI::dbExecute(con, "SET timezone = 'UTC'")
-
   # Make sure that if units are provided that there's either one total or 1 per band
   if (!is.null(units)) {
     if (!inherits(units, "character")) {
@@ -149,6 +142,12 @@ insertACModelRaster <- function(
     }
   } else {
     units <- paste(terra::units(raster), collapse = ", ")
+  }
+
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    DBI::dbExecute(con, "SET timezone = 'UTC'")
+    on.exit(DBI::dbDisconnect(con))
   }
 
   # Attempt to write the raster to the database
@@ -178,7 +177,9 @@ insertACModelRaster <- function(
       params = list(raster_series_id)
     )
     if (nrow(series_meta) != 1) {
-      stop("Could not find a unique raster_series_index row for the supplied raster_series_id.")
+      stop(
+        "Could not find a unique raster_series_index row for the supplied raster_series_id."
+      )
     }
 
     # band names

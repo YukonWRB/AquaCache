@@ -5,7 +5,7 @@
 #' A fast, pared down method of fetching WSC realtime data (at least compared to tidyhydat). Dispenses with extra columns that those packages include and uses data.table::fread to speed up parsing.
 #'
 #' @param location A WSC station number.
-#' @param parameter A WSC parameter code. 47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46 for level, 5 for water temperature, 4 for air temperature. See the full list using [tidyhydat::param_id].
+#' @param parameter A WSC parameter code. 47 for discharge primary (sensor derived), 8 for discharge (sensor measured), 46 for level, 5 for water temperature, 4 for equipment temperature, 1 for air temperature. See the full list using [tidyhydat::param_id].
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param con A connection to the aquacache database, necessary to allow for the mapping of Aquarius approvals, grades, and qualifiers to the database. If left NULL connection will be made and closed automatically.

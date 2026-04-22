@@ -26,7 +26,7 @@ synchronize_continuous(
 
 \item{active}{Sets behavior for checking timeseries or not. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all timeseries}
 
-\item{sync_remote_false}{Controls whether to synchronize timeseries that have the \code{sync_remote} column set to FALSE in the \code{timeseries} table.}
+\item{sync_remote_false}{Controls whether to synchronize timeseries that have the \code{sync_remote} column set to FALSE in the \code{timeseries} table. Use with extreme caution as setting to TRUE will override the timeseries' intended behavior and overwrite local data with remote data.}
 
 \item{dbName}{The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 
