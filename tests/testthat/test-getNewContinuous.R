@@ -130,6 +130,7 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    calculate_stats = function(...) invisible(TRUE),
     downloadECCCwx = function(start_datetime, con, location, parameter, interval, ...) {
       captured$parameters <- c(captured$parameters, parameter)
       data.frame(
@@ -263,6 +264,7 @@ test_that("getNewContinuous groups cache-sharing ECCC minute tasks in parallel",
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    calculate_stats = function(...) invisible(TRUE),
     downloadECCCwxMinute = function(
       start_datetime,
       con,
@@ -542,5 +544,64 @@ test_that("getNewContinuous passes source_fx_args to downloadECCCwxMinute", {
   expect_equal(captured$parameter, "temp")
   expect_equal(captured$station_type, "AUTO")
   expect_equal(inserted_count, nrow(new_rows))
+  expect_true(tsid %in% result$timeseries_id)
+})
+
+test_that("getNewContinuous recalculates stats from the earliest imported datetime", {
+  captured <- new.env(parent = emptyenv())
+  tsid <- 1323L
+  new_rows <- data.frame(
+    datetime = as.POSIXct(
+      c(
+        "2026-01-03 12:00:00",
+        "2026-01-04 12:00:00",
+        "2026-01-05 12:00:00"
+      ),
+      tz = "UTC"
+    ),
+    value = c(1, 2, 3)
+  )
+
+  local_mocked_bindings(
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(con, silent = TRUE) TRUE,
+    adjust_grade = function(...) invisible(TRUE),
+    adjust_approval = function(...) invisible(TRUE),
+    adjust_qualifier = function(...) invisible(TRUE),
+    adjust_owner = function(...) invisible(TRUE),
+    adjust_contributor = function(...) invisible(TRUE),
+    adjust_data_sharing_agreement = function(...) invisible(TRUE),
+    dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    calculate_stats = function(con, timeseries_id, start_recalc = NULL) {
+      captured$timeseries_id <- timeseries_id
+      captured$start_recalc <- start_recalc
+      invisible(TRUE)
+    },
+    downloadRWIS = function(start_datetime, con, ...) {
+      new_rows
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = mock_getnew_db_get_query(
+      timeseries_ids = tsid,
+      source_fx_name = "downloadRWIS",
+      source_fx_args = '{"location":"TEST","parameter":"TEST"}',
+      last_data_point = as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
+    ),
+    dbExecute = function(con, statement, ...) 1L,
+    .package = "DBI"
+  )
+
+  result <- getNewContinuous(
+    con = structure(list(), class = "mock_con"),
+    timeseries_id = tsid,
+    active = "all",
+    stats = TRUE
+  )
+
+  expect_equal(captured$timeseries_id, tsid)
+  expect_equal(captured$start_recalc, min(new_rows$datetime))
   expect_true(tsid %in% result$timeseries_id)
 })

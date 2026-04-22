@@ -23,6 +23,7 @@
 #' @param dbPort The port of the database. If left NULL, the function will use the default port from the .Renviron file as per [AquaConnect()].
 #' @param dbUser The username for the database. If left NULL, the function will use the default username from the .Renviron file as per [AquaConnect()].
 #' @param dbPass The password for the database. If left NULL, the function will use the default password from the .Renviron file as per [AquaConnect()].
+#' @param stats If TRUE, will update statistics in measurements_calculated_daily after importing new data. Default TRUE.
 #' @param verbose If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
@@ -36,6 +37,7 @@ getNewContinuous <- function(
   dbPort = NULL,
   dbUser = NULL,
   dbPass = NULL,
+  stats = TRUE,
   verbose = FALSE
 ) {
   if (!active %in% c('default', 'all')) {
@@ -76,11 +78,13 @@ getNewContinuous <- function(
       }
     }
 
-    if (any(vapply(
-      list(dbName, dbHost, dbPort, dbUser, dbPass),
-      is.null,
-      logical(1)
-    ))) {
+    if (
+      any(vapply(
+        list(dbName, dbHost, dbPort, dbUser, dbPass),
+        is.null,
+        logical(1)
+      ))
+    ) {
       stop(
         "Unable to establish a connection. Please provide a connection, all connection parameters, or set them in the .Renviron file."
       )
@@ -382,7 +386,7 @@ getNewContinuous <- function(
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_timeseries), style = 3)
   }
 
-  worker <- function(i, con, parallel) {
+  worker <- function(i, con, parallel, stats) {
     tsid <- all_timeseries$timeseries_id[i]
     if (verbose && !parallel) {
       message(
@@ -428,7 +432,8 @@ getNewContinuous <- function(
       con,
       "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1",
       params = list(tsid)
-    )[1, 1] + 1
+    )[1, 1] +
+      1
 
     if (is.na(last_data_point)) {
       last_data_point <- origin_datetime
@@ -441,27 +446,33 @@ getNewContinuous <- function(
     }
 
     ts <- do.call(source_fx, args_list)
+
+    # Make sure we've got at a data.frame or data.table
     if (
       !inherits(ts, "data.frame") &&
         !data.table::is.data.table(ts)
     ) {
       stop("getNewContinuous: The data returned by source_fx is not tabular.")
     }
+    # Make sure we have the required columns
     if (!all(c("value", "datetime") %in% names(ts))) {
       stop(
         "getNewContinuous: The data returned by source_fx does not have columns named 'value' and 'datetime'."
       )
     }
 
+    # Remove rows with NA values in the value column, and then filter to only new data points after the last data point in the database
     ts <- ts[!is.na(ts$value), ]
     if (nrow(ts) > 0) {
       ts <- ts[ts$datetime >= last_data_point, ]
     }
 
+    # If there are no new data points, skip to the next timeseries.
     if (nrow(ts) == 0) {
       return(build_status_row(i, tsid, state = "no_new_data"))
     }
 
+    # Add required columns with default values if they don't exist
     ts$timeseries_id <- tsid
     ts$imputed <- FALSE
 
@@ -595,12 +606,21 @@ getNewContinuous <- function(
         "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
         params = list(max(ts$datetime), tsid)
       )
+
     }
 
     rows_added <- nrow(ts)
+    stats_start <- min(ts$datetime)
     run_db_updates(function() {
       commit_fx(con, ts, tsid)
     })
+    if (stats) {
+      calculate_stats(
+        con = con,
+        timeseries_id = tsid,
+        start_recalc = stats_start
+      )
+    }
 
     build_status_row(
       i,
@@ -611,9 +631,9 @@ getNewContinuous <- function(
     )
   }
 
-  run_worker_iteration <- function(i, con, parallel) {
+  run_worker_iteration <- function(i, con, parallel, stats) {
     tryCatch(
-      worker(i, con = con, parallel = parallel),
+      worker(i, con = con, parallel = parallel, stats = stats),
       error = function(e) {
         build_status_row(
           i,
@@ -625,14 +645,15 @@ getNewContinuous <- function(
     )
   }
 
-  run_worker_group <- function(indices, con, parallel) {
+  run_worker_group <- function(indices, con, parallel, stats) {
     status_group <- vector("list", length(indices))
 
     for (j in seq_along(indices)) {
       status_group[[j]] <- run_worker_iteration(
         indices[[j]],
         con = con,
-        parallel = parallel
+        parallel = parallel,
+        stats = stats
       )
     }
 
@@ -734,7 +755,12 @@ getNewContinuous <- function(
                 silent = TRUE
               )
               DBI::dbExecute(parcon, "SET timezone = 'UTC'")
-              run_worker_group(task_groups[[i]], con = parcon, parallel = TRUE)
+              run_worker_group(
+                task_groups[[i]],
+                con = parcon,
+                parallel = TRUE,
+                stats = stats
+              )
             },
             finally = {
               if (!is.null(parcon)) {
@@ -770,7 +796,12 @@ getNewContinuous <- function(
                 silent = TRUE
               )
               DBI::dbExecute(parcon, "SET timezone = 'UTC'")
-              run_worker_group(task_groups[[i]], con = parcon, parallel = TRUE)
+              run_worker_group(
+                task_groups[[i]],
+                con = parcon,
+                parallel = TRUE,
+                stats = stats
+              )
             },
             finally = {
               if (!is.null(parcon)) {
@@ -800,10 +831,20 @@ getNewContinuous <- function(
         " groups; sequential mode can reuse the session cache directly."
       )
     }
+    if (stats) {
+      message(
+        "Statistics will be updated after each timeseries as requested."
+      )
+    }
 
     status_rows <- vector("list", nrow(all_timeseries))
     for (j in seq_len(nrow(all_timeseries))) {
-      status_rows[[j]] <- run_worker_iteration(j, con = con, parallel = FALSE)
+      status_rows[[j]] <- run_worker_iteration(
+        j,
+        con = con,
+        parallel = FALSE,
+        stats = stats
+      )
       if (interactive()) {
         utils::setTxtProgressBar(pb, j)
       }

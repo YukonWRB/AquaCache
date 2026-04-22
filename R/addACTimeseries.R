@@ -763,7 +763,11 @@ addACTimeseries <- function(
                   "';"
                 )
               )
-              getNewContinuous(con = con, timeseries_id = new_tsid)
+              getNewContinuous(
+                con = con,
+                timeseries_id = new_tsid,
+                stats = TRUE
+              )
               new_start <- DBI::dbGetQuery(
                 con,
                 paste0(
@@ -857,54 +861,17 @@ addACTimeseries <- function(
               }
             }
           }
-          tryCatch(
-            {
-              if (
-                lubridate::period(add$record_rate) <= lubridate::period("1 day")
-              ) {
-                calculate_stats(
-                  timeseries_id = new_tsid,
-                  con = con,
-                  start_recalc = NULL
-                )
-                message(
-                  "Success! Calculated daily means and statistics for ",
-                  loc_label,
-                  " and parameter ",
-                  param_name,
-                  "."
-                )
-              } else {
-                message(
-                  "Not calculating daily statistics for ",
-                  loc_label,
-                  " and parameter ",
-                  param_name,
-                  " as recording rate is greater than 1 day."
-                )
-              }
-            },
-            error = function(e) {
-              message(
-                "Unable to calculate daily means and statistics for ",
-                loc_label,
-                " and parameter ",
-                param_name,
-                " with message ",
-                e$message,
-                "."
-              )
-            },
-            warning = function(e) {
-              message(
-                "May have failed to calculate daily means and statistics for ",
-                loc_label,
-                " and parameter ",
-                param_name,
-                "."
-              )
-            }
-          )
+          if (
+            lubridate::period(add$record_rate) > lubridate::period("1 day")
+          ) {
+            message(
+              "Not calculating daily statistics for ",
+              loc_label,
+              " and parameter ",
+              param_name,
+              " as recording rate is greater than 1 day."
+            )
+          }
         } else {
           message(
             "You didn't specify a source_fx. No data was added to the measurements_continuous or measurements_discrete table, so make sure you go and add that data ASAP. If you made a mistake delete the timeseries from the timeseries table and restart. The timeseries ID for this new entry is ",
