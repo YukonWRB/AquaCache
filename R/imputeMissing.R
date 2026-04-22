@@ -1,3 +1,211 @@
+impute_function <- function(
+  df,
+  min_gap,
+  max_gap,
+  method,
+  selected = NULL,
+  list = NULL
+) {
+  #selected and list are only used for the direct interpolation method
+  df$imputed <- FALSE # Initialize the 'imputed' column
+  lengths <- rle(is.na(df$value)) # Run-length encoding to find consecutive NAs
+  positions <- cumsum(lengths$lengths) # Positions of changes
+
+  if (method == "direct") {
+    to_use <- list[[as.character(selected$timeseries_id)]]
+    offset <- selected$avg_offset
+    to_use$value <- to_use$value - offset
+  }
+
+  for (i in seq_along(lengths$lengths)) {
+    if (
+      lengths$values[i] &&
+        lengths$lengths[i] <= max_gap &&
+        lengths$lengths[i] >= min_gap
+    ) {
+      # Check for NA stretch less than max_gap
+      start_pos <- positions[i] - lengths$lengths[i] + 1
+      end_pos <- if (i < length(positions)) {
+        positions[i + 1] - lengths$lengths[i + 1]
+      } else {
+        nrow(df)
+      }
+      if (!is.na(end_pos) && end_pos < nrow(df)) {
+        # Avoid out-of-bounds
+        if (method == "linear") {
+          # Linear interpolation for the stretch of NAs
+          y_values <- stats::approx(
+            x = c(start_pos - 1, end_pos + 1),
+            y = df$value[c(start_pos - 1, end_pos + 1)],
+            xout = seq(start_pos, end_pos),
+            method = "linear"
+          )$y
+        } else if (method == "spline") {
+          if (start_pos - 20 < 1) {
+            start_pos_spline <- 1
+          } else {
+            start_pos_spline <- start_pos - 20
+          }
+          if (end_pos + 20 > nrow(df)) {
+            end_pos_spline <- nrow(df)
+          } else {
+            end_pos_spline <- end_pos + 20
+          }
+          y_values <- stats::spline(
+            x = c(start_pos_spline:end_pos_spline),
+            y = df$value[c(start_pos_spline:end_pos_spline)],
+            xout = seq(start_pos, end_pos)
+          )$y
+        } else if (method == "moving_average") {
+          # Simple moving average interpolation (window size 5)
+          window <- 5
+          y_values <- rep(NA, end_pos - start_pos + 1)
+          for (k in seq_along(y_values)) {
+            idx <- start_pos + k - 1
+            left <- max(1, idx - floor(window / 2))
+            right <- min(nrow(df), idx + floor(window / 2))
+            y_values[k] <- mean(df$value[left:right], na.rm = TRUE)
+          }
+        } else if (method == "direct") {
+          dt_start <- df[start_pos, "datetime"]
+          dt_end <- df[end_pos, "datetime"]
+          y_values <- to_use[
+            to_use$datetime >= dt_start & to_use$datetime <= dt_end,
+            "value"
+          ]
+        }
+      }
+      # After y_values is computed:
+      target_len <- end_pos - start_pos + 1
+      if (length(y_values) != target_len) {
+        if (length(y_values) > target_len) {
+          y_values <- y_values[seq_len(target_len)]
+        } else if (length(y_values) < target_len) {
+          y_values <- c(y_values, rep(NA, target_len - length(y_values)))
+        }
+      }
+      df$value[start_pos:end_pos] <- y_values
+      df$imputed[start_pos:end_pos] <- TRUE
+    }
+  }
+  return(df)
+} # end impute_function
+
+' @title Cross-Validation for Imputation Methods
+#'
+#' @description
+#' Performs cross-validation to evaluate the performance of a specified imputation function on a dataset with missing values. Random gaps are introduced into the data, and the imputation function is applied to estimate the missing values. The accuracy of the imputation is then assessed.
+#'
+#' @param full_dt A data.table or data.frame containing the complete dataset to be used for cross-validation.
+#' @param min_gap Integer. The minimum length of consecutive missing value gaps to introduce during cross-validation.
+#' @param max_gap Integer. The maximum length of consecutive missing value gaps to introduce during cross-validation.
+#' @param impute_function Function. The imputation function to be evaluated. This function should accept a dataset with missing values and return the imputed dataset.
+#' @param ncv Integer. Number of cross-validation iterations to perform. Default is 10.
+#' @param frac Numeric. Fraction of the data to be masked as missing in each cross-validation iteration. Default is 0.02.
+#'
+#' @return A list or data.frame containing cross-validation results, such as error metrics (e.g., RMSE, MAE) for each iteration.
+#'
+#' @details
+#' This function is useful for benchmarking and comparing different imputation methods by simulating missing data scenarios and quantifying the accuracy of the imputed values. The function randomly selects positions in the data to mask as missing, applies the imputation function, and compares the imputed values to the original data.
+#'
+#' @examples
+#' \dontrun{
+#' results <- imputation_cv(
+#'   full_dt = my_data,
+#'   min_gap = 2,
+#'   max_gap = 5,
+#'   impute_function = my_imputer,
+#'   ncv = 10,
+#'   frac = 0.05
+#' )
+#' print(results)
+#' }
+#'
+#' @export
+imputation_cv <- function(
+  full_dt,
+  min_gap,
+  max_gap,
+  ncv = 10,
+  frac = 0.02,
+  consequutive_missing_vals = NULL
+) {
+  methods <- c("linear", "spline", "moving_average")
+  mse_mat <- matrix(NA, nrow = ncv, ncol = length(methods))
+  colnames(mse_mat) <- methods
+
+  if (max_gap == Inf) {
+    max_gap <- as.integer(max_gap)
+  }
+  if (is.null(consequutive_missing_vals)) {
+    consequutive_missing_vals <- seq(min_gap, max_gap)
+  }
+
+  message("imputation_cv: start")
+  for (seed in seq_len(ncv)) {
+    message(sprintf("imputation_cv: seed %d", seed))
+    set.seed(seed)
+    non_na_indices <- which(!is.na(full_dt$value))
+    test_size <- ceiling(frac * length(non_na_indices))
+
+    # Grouped indices: sample starting points, then create runs of 1-6
+    max_starts <- min(ceiling(test_size / 3), length(non_na_indices))
+    group_size <- sample(
+      consequutive_missing_vals,
+      size = max_starts,
+      replace = TRUE
+    )
+    starts <- sample(non_na_indices, length(group_size), replace = FALSE)
+    test_indices <- integer(0)
+    for (i in seq_along(starts)) {
+      idx <- starts[i]
+      run <- idx:(idx + group_size[i] - 1)
+      # Only keep indices that are in non_na_indices and within bounds
+      run <- run[run %in% non_na_indices & run <= max(non_na_indices)]
+      test_indices <- c(test_indices, run)
+      if (length(test_indices) >= test_size) break
+    }
+    test_indices <- unique(test_indices)[1:test_size]
+
+    train_dt <- full_dt
+    train_dt$value[test_indices] <- NA
+
+    actual <- full_dt$value[test_indices]
+
+    for (m in seq_along(methods)) {
+      method <- methods[m]
+      message(sprintf("imputation_cv: running %s imputation", method))
+      imputed <- tryCatch(
+        impute_function(train_dt, min_gap, max_gap, method),
+        error = function(e) {
+          warning(sprintf("%s interpolation failed: %s", method, e$message))
+          train_dt # fallback to NA
+        }
+      )
+      pred <- if (is.data.frame(imputed)) {
+        imputed$value[test_indices]
+      } else {
+        rep(NA, length(test_indices))
+      }
+      mse <- mean((actual - pred)^2, na.rm = TRUE)
+      mse_mat[seed, m] <- mse
+      message(sprintf(
+        "imputation_cv: seed %d, method %s, mse = %f",
+        seed,
+        method,
+        mse
+      ))
+    }
+  }
+  mse_means <- colMeans(mse_mat, na.rm = TRUE)
+  message(sprintf(
+    "imputation_cv: mean MSEs: %s",
+    paste(sprintf("%s = %f", names(mse_means), mse_means), collapse = ", ")
+  ))
+  as.list(mse_means)
+}
+
+
 #' Impute missing values
 #'
 #' @description
@@ -953,18 +1161,21 @@ imputeMissing <- function(
         message("Which other method would you like to try?")
         other_impute <- readline(
           prompt = writeLines(paste(
-            "\n1: Linear inerpolation",
-            "\n2: Cubic spline interpolation",
-            "\n3: Stop! I'd like to exit"
+            "\n1: Analyze all methods (cross-validation)",
+            "\n2: Linear interpolation",
+            "\n3: Cubic spline interpolation",
+            "\n4: Moving average interpolation",
+            "\n5: Stop! I'd like to exit"
           ))
         )
         other_impute <- as.numeric(other_impute)
 
-        if (other_impute == 3) {
+        if (other_impute == 5) {
           return(returns)
         }
-        if (!(other_impute %in% 1:2)) {
-          while (!(other_impute %in% 1:2)) {
+
+        if (!(other_impute %in% 1:5)) {
+          while (!(other_impute %in% 1:5)) {
             other_impute <- readline(
               prompt = writeLines(paste(
                 "\nThat isn't an acceptable number. Try again."
@@ -973,6 +1184,46 @@ imputeMissing <- function(
             other_impute <- as.numeric(other_impute)
           }
         }
+
+        if (other_impute == 1) {
+          # Analyze all methods
+          cv_results <- imputation_cv(
+            full_dt,
+            min_gap,
+            max_gap
+          )
+          method_names <- names(cv_results)
+          mse_scores <- unlist(cv_results)
+          prompt_lines <- c("\nSelect a method to use:")
+          for (i in seq_along(method_names)) {
+            prompt_lines <- c(
+              prompt_lines,
+              sprintf("%d: %s (MSE: %.4f)", i, method_names[i], mse_scores[i])
+            )
+          }
+          prompt_lines <- c(
+            prompt_lines,
+            sprintf("%d: Stop! I'd like to exit", length(method_names) + 1)
+          )
+          method_choice <- readline(prompt = writeLines(prompt_lines))
+          method_choice <- as.numeric(method_choice)
+          if (method_choice == length(method_names) + 1) {
+            return(returns)
+          }
+          while (!(method_choice %in% seq_along(method_names))) {
+            method_choice <- readline(
+              prompt = writeLines(paste(
+                "\nThat isn't an acceptable number. Try again."
+              ))
+            )
+            method_choice <- as.numeric(method_choice)
+            if (method_choice == length(method_names) + 1) {
+              return(returns)
+            }
+          }
+          other_impute <- method_choice + 1 # Offset by 1 because 1 was 'analyze all methods'
+        }
+        # Now, other_impute is 2: linear, 3: spline, 4: moving average
         other_method <- TRUE
       } else {
         missing_for_impute <- function(
@@ -1034,18 +1285,20 @@ imputeMissing <- function(
               message("Which other method would you like to try?")
               other_impute <- readline(
                 prompt = writeLines(paste(
-                  "\n1: Linear inerpolation",
-                  "\n2: Cubic spline interpolation",
-                  "\n3: Stop! I'd like to exit"
+                  "\n1: Analyze all methods (cross-validation)",
+                  "\n2: Linear interpolation",
+                  "\n3: Cubic spline interpolation",
+                  "\n4: Moving average interpolation",
+                  "\n5: Stop! I'd like to exit"
                 ))
               )
               other_impute <- as.numeric(other_impute)
 
-              if (other_impute == 3) {
+              if (other_impute == 5) {
                 return(returns)
               }
-              if (!(other_impute %in% 1:2)) {
-                while (!(other_impute %in% 1:2)) {
+              if (!(other_impute %in% 1:5)) {
+                while (!(other_impute %in% 1:5)) {
                   other_impute <- readline(
                     prompt = writeLines(paste(
                       "\nThat isn't an acceptable number. Try again."
@@ -1053,6 +1306,52 @@ imputeMissing <- function(
                   )
                   other_impute <- as.numeric(other_impute)
                 }
+              }
+              if (other_impute == 1) {
+                # Analyze all methods
+                cv_results <- imputation_cv(
+                  full_dt,
+                  min_gap,
+                  max_gap
+                )
+                method_names <- names(cv_results)
+                mse_scores <- unlist(cv_results)
+                prompt_lines <- c("\nSelect a method to use:")
+                for (i in seq_along(method_names)) {
+                  prompt_lines <- c(
+                    prompt_lines,
+                    sprintf(
+                      "%d: %s (MSE: %.4f)",
+                      i,
+                      method_names[i],
+                      mse_scores[i]
+                    )
+                  )
+                }
+                prompt_lines <- c(
+                  prompt_lines,
+                  sprintf(
+                    "%d: Stop! I'd like to exit",
+                    length(method_names) + 1
+                  )
+                )
+                method_choice <- readline(prompt = writeLines(prompt_lines))
+                method_choice <- as.numeric(method_choice)
+                if (method_choice == length(method_names) + 1) {
+                  return(returns)
+                }
+                while (!(method_choice %in% seq_along(method_names))) {
+                  method_choice <- readline(
+                    prompt = writeLines(paste(
+                      "\nThat isn't an acceptable number. Try again."
+                    ))
+                  )
+                  method_choice <- as.numeric(method_choice)
+                  if (method_choice == length(method_names) + 1) {
+                    return(returns)
+                  }
+                }
+                other_impute <- method_choice + 1 # Offset by 1 because 1 was 'analyze all methods'
               }
               other_method <- TRUE
               break
@@ -1078,25 +1377,27 @@ imputeMissing <- function(
   }
 
   if (no_similar) {
-    # There are no locations within the radius specified! Ask the user if they want linear or cubic.
+    # There are no locations within the radius specified! Ask the user if they want to analyze or use another method.
     message(
       "There were no suitable locations within the radius you specified. Do you want to use another method instead?"
     )
     other_impute <- readline(
       prompt = writeLines(paste(
-        "\n1: Yes, linear inerpolation",
-        "\n2: Yes, cubic spline interpolation",
-        "\n3: No, I'd like to exit"
+        "\n1: Analyze all methods (cross-validation)",
+        "\n2: Linear interpolation",
+        "\n3: Cubic spline interpolation",
+        "\n4: Moving average interpolation",
+        "\n5: No, I'd like to exit"
       ))
     )
     other_impute <- as.numeric(other_impute)
 
-    if (other_impute == 3) {
+    if (other_impute == 5) {
       return(returns)
     }
 
-    if (!(other_impute %in% 1:2)) {
-      while (!(other_impute %in% 1:2)) {
+    if (!(other_impute %in% 1:5)) {
+      while (!(other_impute %in% 1:5)) {
         other_impute <- readline(
           prompt = writeLines(paste(
             "\nThat isn't an acceptable number. Try again."
@@ -1105,88 +1406,61 @@ imputeMissing <- function(
         other_impute <- as.numeric(other_impute)
       }
     }
+
+    if (other_impute == 1) {
+      # Analyze all methods
+      cv_results <- imputation_cv(full_dt, min_gap, max_gap)
+      method_names <- names(cv_results)
+      mse_scores <- unlist(cv_results)
+      prompt_lines <- c("\nSelect a method to use:")
+      for (i in seq_along(method_names)) {
+        prompt_lines <- c(
+          prompt_lines,
+          sprintf("%d: %s (MSE: %.4f)", i, method_names[i], mse_scores[i])
+        )
+      }
+      prompt_lines <- c(
+        prompt_lines,
+        sprintf("%d: Stop! I'd like to exit", length(method_names) + 1)
+      )
+      method_choice <- readline(prompt = writeLines(prompt_lines))
+      method_choice <- as.numeric(method_choice)
+      if (method_choice == length(method_names) + 1) {
+        return(returns)
+      }
+      while (!(method_choice %in% seq_along(method_names))) {
+        method_choice <- readline(
+          prompt = writeLines(paste(
+            "\nThat isn't an acceptable number. Try again."
+          ))
+        )
+        method_choice <- as.numeric(method_choice)
+        if (method_choice == length(method_names) + 1) {
+          return(returns)
+        }
+      }
+      other_impute <- method_choice + 1 # Offset by 1 because 1 was 'analyze all methods'
+    }
+    # Now, other_impute is 2: linear, 3: spline, 4: moving average
     other_method <- TRUE
   }
 
-  impute_function <- function(
-    df,
-    min_gap,
-    max_gap,
-    method,
-    selected = NULL,
-    list = NULL
-  ) {
-    #selected and list are only used for the direct interpolation method
-    df$imputed <- FALSE # Initialize the 'imputed' column
-    lengths <- rle(is.na(df$value)) # Run-length encoding to find consecutive NAs
-    positions <- cumsum(lengths$lengths) # Positions of changes
-
-    if (method == "direct") {
-      to_use <- list[[as.character(selected$timeseries_id)]]
-      offset <- selected$avg_offset
-      to_use$value <- to_use$value - offset
-    }
-
-    for (i in seq_along(lengths$lengths)) {
-      if (
-        lengths$values[i] &&
-          lengths$lengths[i] <= max_gap &&
-          lengths$lengths[i] >= min_gap
-      ) {
-        # Check for NA stretch less than max_gap
-        start_pos <- positions[i] - lengths$lengths[i] + 1
-        end_pos <- positions[i + 1] - lengths$lengths[i + 1]
-        if (end_pos < nrow(df)) {
-          # Avoid out-of-bounds
-          if (method == "linear") {
-            # Linear interpolation for the stretch of NAs
-            y_values <- stats::approx(
-              x = c(start_pos - 1, end_pos + 1),
-              y = df$value[c(start_pos - 1, end_pos + 1)],
-              xout = seq(start_pos, end_pos),
-              method = "linear"
-            )$y
-          } else if (method == "spline") {
-            if (start_pos - 20 < 1) {
-              start_pos_spline <- 1
-            } else {
-              start_pos_spline <- start_pos - 20
-            }
-            if (end_pos + 20 > nrow(df)) {
-              end_pos_spline <- nrow(df)
-            } else {
-              end_pos_spline <- end_pos + 20
-            }
-            y_values <- stats::spline(
-              x = c(start_pos_spline:end_pos_spline),
-              y = df$value[c(start_pos_spline:end_pos_spline)],
-              xout = seq(start_pos, end_pos)
-            )$y
-          } else if (method == "direct") {
-            dt_start <- df[start_pos, "datetime"]
-            dt_end <- df[end_pos, "datetime"]
-            y_values <- to_use[
-              to_use$datetime >= dt_start & to_use$datetime <= dt_end,
-              "value"
-            ]
-          }
-        }
-        df$value[start_pos:end_pos] <- y_values
-        df$imputed[start_pos:end_pos] <- TRUE
-      }
-    }
-    return(df)
-  }
+  # cv_results <- imputation_cv(full_dt, min_gap, max_gap, impute_function)
+  # returns[["mse_linear"]] <- cv_results$mse_linear
+  # returns[["mse_spline"]] <- cv_results$mse_spline
 
   if (other_method) {
-    #Now make the interpolation according to add_impute. This is only using the target tsid!
-    if (other_impute == 1) {
+    # Now make the interpolation according to add_impute. This is only using the target tsid!
+    # other_impute: 2 = linear, 3 = spline, 4 = moving average
+    if (other_impute == 2) {
       # Linear interpolation
       imputed <- impute_function(full_dt, min_gap, max_gap, "linear")
-      returns[["imputed_data"]] <- imputed
-    } else if (other_impute == 2) {
-      # spline interpolation
+    } else if (other_impute == 3) {
+      # Spline interpolation
       imputed <- impute_function(full_dt, min_gap, max_gap, "spline")
+    } else if (other_impute == 4) {
+      # Moving average interpolation
+      imputed <- impute_function(full_dt, min_gap, max_gap, "moving_average")
     }
     returns[["imputed_data"]] <- imputed
   } else {

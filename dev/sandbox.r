@@ -1,4 +1,5 @@
-library(AquaCache)
+load_all()
+
 
 config <- list(
     dbName = "aquacache",
@@ -16,11 +17,12 @@ con <- AquaConnect(
     pass = config$dbPass
 )
 
-
 imputeMissing(
     tsid = 513,
     radius = 10,
-    start = as.Date("2015-01-01"),
+    start = as.Date("2010-01-01"),
     end = as.Date("2017-01-01"),
-    con = con
+    con = con,
+    max_gap = 100,
+    min_gap = 1
 )
