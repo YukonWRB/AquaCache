@@ -766,68 +766,11 @@ synchronize_continuous <- function(
             start_recalc = min(affected_dates)
           )
         }
-        # adjust entries in table 'timeseries' to reflect the new data
-        end <- max(
-          DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-              tsid,
-              ";"
-            )
-          )[[1]],
-          as.POSIXct(
-            DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
-            )[[1]],
-            tz = "UTC"
-          )
-        )
         DBI::dbExecute(
           con,
           paste0(
-            "UPDATE timeseries SET end_datetime = '",
-            end,
-            "', last_new_data = '",
+            "UPDATE timeseries SET last_synchronize = '",
             .POSIXct(Sys.time(), "UTC"),
-            "', last_synchronize = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
-        )
-        earliest <- min(
-          DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-              tsid,
-              ";"
-            )
-          )[[1]],
-          as.POSIXct(
-            DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
-            )[[1]],
-            tz = "UTC"
-          )
-        )
-        DBI::dbExecute(
-          con,
-          paste0(
-            "UPDATE timeseries SET start_datetime = '",
-            earliest,
             "' WHERE timeseries_id = ",
             tsid,
             ";"
@@ -887,42 +830,7 @@ synchronize_continuous <- function(
           )
         )
 
-        # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
-
-        # double check the earliest time in DB in case there's an error in the timeseries table
-        earliest <- min(
-          min(write_remote$datetime),
-          DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-              tsid,
-              ";"
-            )
-          )[[1]],
-          as.POSIXct(
-            DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
-            )[[1]],
-            tz = "UTC"
-          )
-        )
-
-        DBI::dbExecute(
-          con,
-          paste0(
-            "UPDATE timeseries SET start_datetime = '",
-            fmt(earliest),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
-        )
+        # Bounds are maintained by database triggers.
       })
     }
   } # End of worker function

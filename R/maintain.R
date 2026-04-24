@@ -49,92 +49,46 @@ maintain <- function(
   }
 
   if (timeseries_check) {
-    ts_tbl <- DBI::dbGetQuery(con, "SELECT * FROM timeseries;")
-    for (i in 1:nrow(ts_tbl)) {
-      # Confirm start/end datetimes are correct
-      tsid <- ts_tbl$timeseries_id[i]
-      start_rt <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
-      )[1, 1]
-      start_dly <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
-      )[1, 1]
-      if (is.na(start_rt) && is.na(start_dly)) {
-        message(
-          "No data found associated with timeseries_id ",
-          tsid,
-          ". You should consider deleting this timeseries."
-        )
-        next
-      }
-      start <- if (!is.na(start_rt) & !is.na(start_dly)) {
-        min(start_rt, as.POSIXct(start_dly, tz = "UTC"))
-      } else if (is.na(start_rt)) {
-        start_dly
-      } else {
-        start_rt
-      }
+    metadata_refresh <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         to_regprocedure(
+           'continuous.refresh_basic_timeseries_datetime_bounds(integer[])'
+         ) IS NOT NULL AS has_basic_refresh,
+         to_regprocedure(
+           'continuous.refresh_direct_compound_timeseries_datetime_bounds(integer[])'
+         ) IS NOT NULL AS has_compound_refresh"
+    )
 
-      end_rt <- DBI::dbGetQuery(
+    if (
+      !isTRUE(metadata_refresh$has_basic_refresh[[1]]) ||
+        !isTRUE(metadata_refresh$has_compound_refresh[[1]])
+    ) {
+      warning(
+        "Timeseries metadata refresh functions are not installed in the database; start_datetime/end_datetime checks were skipped."
+      )
+    } else {
+      DBI::dbExecute(
         con,
-        paste0(
-          "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
-      )[1, 1]
-      end_dly <- DBI::dbGetQuery(
+        "SELECT continuous.refresh_basic_timeseries_datetime_bounds(
+           ARRAY(
+             SELECT timeseries_id
+             FROM continuous.timeseries
+             WHERE timeseries_type = 'basic'
+           )
+         );"
+      )
+      DBI::dbExecute(
         con,
-        paste0(
-          "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-          tsid,
-          ";"
-        )
-      )[1, 1]
-      end <- if (!is.na(end_rt) & !is.na(end_dly)) {
-        max(end_rt, as.POSIXct(end_dly, tz = "UTC"))
-      } else if (is.na(end_rt)) {
-        end_dly
-      } else {
-        end_rt
-      }
-
-      if (start != ts_tbl$start_datetime[i]) {
-        DBI::dbExecute(
-          con,
-          paste0(
-            "UPDATE timeseries SET start_datetime = '",
-            start,
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
-        )
-      }
-      if (end != ts_tbl$end_datetime[i]) {
-        DBI::dbExecute(
-          con,
-          paste0(
-            "UPDATE timeseries SET end_datetime = '",
-            end,
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
-        )
-      }
+        "SELECT continuous.refresh_direct_compound_timeseries_datetime_bounds(
+           ARRAY(
+             SELECT timeseries_id
+             FROM continuous.timeseries
+           )
+         );"
+      )
+      message("Timeseries datetime metadata refresh completed")
     }
-    message("Timeseries checks completed")
   }
 
   if (locations_check) {

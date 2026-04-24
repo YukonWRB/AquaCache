@@ -369,23 +369,8 @@ addNewContinuous <- function(
         )
       }
 
-      # make the new entry into table timeseries
-      exist_times <- DBI::dbGetQuery(
-        con,
-        "SELECT start_datetime, end_datetime FROM timeseries WHERE timeseries_id =  $1;",
-        params = list(tsid)
-      )
-      new_start <- min(c(exist_times$start_datetime, df$datetime), na.rm = TRUE)
-      new_end <- max(c(exist_times$end_datetime, df$datetime), na.rm = TRUE)
-      DBI::dbExecute(
-        con,
-        "UPDATE timeseries SET end_datetime = $1, start_datetime = $2, last_new_data = NOW() WHERE timeseries_id = $3",
-        params = list(
-          new_end,
-          new_start,
-          tsid
-        )
-      )
+      # continuous.timeseries metadata is maintained by database triggers on
+      # measurements_continuous.
     } # end commit_fx
 
     activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
@@ -471,20 +456,13 @@ addNewContinuous <- function(
         # If overwrite is "no", we do not delete any existing data, so we just append
       }
       dbAppendTableRLS(con, "measurements_calculated_daily", df)
-      #make the new entry into table timeseries
-      if (max(df$date) > last_data_point) {
-        DBI::dbExecute(
-          con,
-          "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
-          params = list(max(df$date), tsid)
-        )
-      } else {
-        DBI::dbExecute(
-          con,
-          "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
-          params = list(tsid)
-        )
-      }
+      # Daily-only imports do not touch measurements_continuous, so keep the
+      # existing import timestamp here. Date bounds are maintained by triggers.
+      DBI::dbExecute(
+        con,
+        "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
+        params = list(tsid)
+      )
     }
 
     activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.

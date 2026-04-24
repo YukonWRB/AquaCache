@@ -242,8 +242,6 @@ update_hydat <- function(
                 "aggregation_type" = "instantaneous",
                 "record_rate" = "5 minutes", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
                 "media_id" = media_id,
-                "start_datetime" = min(new_flow$date),
-                "end_datetime" = max(new_flow$date),
                 "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
                 "share_with" = "{pulic_reader}",
                 "owner" = 1,
@@ -455,16 +453,6 @@ update_hydat <- function(
                       )
                     }
 
-                    DBI::dbExecute(
-                      con,
-                      paste0(
-                        "UPDATE timeseries SET start_datetime = '",
-                        start,
-                        "'WHERE timeseries_id = ",
-                        tsid_flow,
-                        ";"
-                      )
-                    )
                   }
 
                   activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
@@ -507,17 +495,7 @@ update_hydat <- function(
                     start_recalc = start
                   )
                 } else {
-                  # Check that start_datetime is correct in timeseries table
-                  DBI::dbExecute(
-                    con,
-                    paste0(
-                      "UPDATE timeseries SET start_datetime = '",
-                      start,
-                      "'WHERE timeseries_id = ",
-                      tsid_flow,
-                      ";"
-                    )
-                  )
+                  # Datetime bounds are maintained by database triggers.
                 }
               } else {
                 #There is an entry in timeseries table, but no daily data
@@ -528,16 +506,6 @@ update_hydat <- function(
                     con,
                     "measurements_calculated_daily",
                     new_flow[, c("date", "value", "timeseries_id", "imputed")]
-                  )
-                  DBI::dbExecute(
-                    con,
-                    paste0(
-                      "UPDATE timeseries SET start_datetime = '",
-                      min(new_flow$date),
-                      "'WHERE timeseries_id = ",
-                      tsid_flow,
-                      ";"
-                    )
                   )
                 }
 
@@ -602,59 +570,6 @@ update_hydat <- function(
                 )
               }
             }
-            # Now find the earliest/last datetime between measurements_calculated_daily and measurements_realtime and update start_datetime in timeseries table if needed
-            cd <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MIN(date) AS start_datetime, MAX(date) AS end_datetime FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid_flow
-              )
-            )
-            rt <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MIN(datetime) AS start_datetime, MAX(datetime) AS end_datetime FROM measurements_continuous WHERE timeseries_id = ",
-                tsid_flow
-              )
-            )
-            if (is.na(cd$start_datetime) && !is.na(rt$start_datetime)) {
-              sdt <- rt$start_datetime
-            }
-            if (!is.na(cd$start_datetime) && is.na(rt$start_datetime)) {
-              sdt <- cd$start_datetime
-            }
-            if (!is.na(cd$start_datetime) && !is.na(rt$start_datetime)) {
-              sdt <- min(cd$start_datetime, rt$start_datetime)
-            }
-
-            if (is.na(cd$end_datetime) && !is.na(rt$end_datetime)) {
-              edt <- rt$end_datetime
-            }
-            if (!is.na(cd$end_datetime) && is.na(rt$end_datetime)) {
-              edt <- cd$end_datetime
-            }
-            if (!is.na(cd$end_datetime) && !is.na(rt$end_datetime)) {
-              edt <- min(cd$end_datetime, rt$end_datetime)
-            }
-
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE timeseries SET start_datetime = '",
-                sdt,
-                "' WHERE timeseries_id = ",
-                tsid_flow
-              )
-            )
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE timeseries SET end_datetime = '",
-                edt,
-                "' WHERE timeseries_id = ",
-                tsid_flow
-              )
-            )
             DBI::dbExecute(
               con,
               paste0(
@@ -701,8 +616,6 @@ update_hydat <- function(
                 "aggregation_type" = "instantaneous",
                 "record_rate" = "5 minutes", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
                 "media_id" = media_id,
-                "start_datetime" = min(new_level$date),
-                "end_datetime" = max(new_level$date),
                 "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
                 "share_with" = "{public_reader}",
                 "owner" = 1,
@@ -914,11 +827,6 @@ update_hydat <- function(
                       )
                     }
 
-                    DBI::dbExecute(
-                      con,
-                      "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
-                      params = list(start, tsid_level)
-                    )
                   }
 
                   activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
@@ -961,12 +869,7 @@ update_hydat <- function(
                     start_recalc = start
                   )
                 } else {
-                  # Check that star_datetime is correct in timeseries table
-                  DBI::dbExecute(
-                    con,
-                    "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
-                    params = list(start, tsid_level)
-                  )
+                  # Datetime bounds are maintained by database triggers.
                 }
               } else {
                 #There is an entry in timeseries table, but no daily data
@@ -977,11 +880,6 @@ update_hydat <- function(
                     con,
                     "measurements_calculated_daily",
                     new_level[, c("date", "value", "timeseries_id", "imputed")]
-                  )
-                  DBI::dbExecute(
-                    con,
-                    "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
-                    params = list(min(new_level$date), tsid_level)
                   )
                 }
 
@@ -1050,47 +948,6 @@ update_hydat <- function(
               }
             }
 
-            # Now find the earliest/last datetime between measurements_calculated_daily and measurements_realtime and update start_datetime in timeseries table if needed
-            cd <- DBI::dbGetQuery(
-              con,
-              "SELECT MIN(date) AS start_datetime, MAX(date) AS end_datetime FROM measurements_calculated_daily WHERE timeseries_id = $1",
-              params = list(tsid_level)
-            )
-            rt <- DBI::dbGetQuery(
-              con,
-              "SELECT MIN(datetime) AS start_datetime, MAX(datetime) AS end_datetime FROM measurements_continuous WHERE timeseries_id = $1",
-              params = list(tsid_level)
-            )
-            if (is.na(cd$start_datetime) && !is.na(rt$start_datetime)) {
-              sdt <- rt$start_datetime
-            }
-            if (!is.na(cd$start_datetime) && is.na(rt$start_datetime)) {
-              sdt <- cd$start_datetime
-            }
-            if (!is.na(cd$start_datetime) && !is.na(rt$start_datetime)) {
-              sdt <- min(cd$start_datetime, rt$start_datetime)
-            }
-
-            if (is.na(cd$end_datetime) && !is.na(rt$end_datetime)) {
-              edt <- rt$end_datetime
-            }
-            if (!is.na(cd$end_datetime) && is.na(rt$end_datetime)) {
-              edt <- cd$end_datetime
-            }
-            if (!is.na(cd$end_datetime) && !is.na(rt$end_datetime)) {
-              edt <- min(cd$end_datetime, rt$end_datetime)
-            }
-
-            DBI::dbExecute(
-              con,
-              "UPDATE timeseries SET start_datetime = $1 WHERE timeseries_id = $2",
-              params = list(sdt, tsid_level)
-            )
-            DBI::dbExecute(
-              con,
-              "UPDATE timeseries SET end_datetime = $1 WHERE timeseries_id = $2",
-              params = list(edt, tsid_level)
-            )
             DBI::dbExecute(
               con,
               "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",

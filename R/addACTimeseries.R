@@ -601,7 +601,7 @@ addACTimeseries <- function(
           {
             new_tsid <- DBI::dbGetQuery(
               con,
-              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note, end_datetime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14, $15) RETURNING timeseries_id;",
+              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14) RETURNING timeseries_id;",
               params = list(
                 add$location_id,
                 add$sub_location_id,
@@ -616,8 +616,7 @@ addACTimeseries <- function(
                 add$default_owner,
                 add$source_fx,
                 add$source_fx_args,
-                add$note,
-                add$end_datetime
+                add$note
               )
             )[1, 1]
 
@@ -675,12 +674,6 @@ addACTimeseries <- function(
             if (is.na(new_tsid)) {
               stop(conditionMessage(e))
             }
-            # Modify the end_datetime in the DB to be one second before the start_datetime
-            DBI::dbExecute(
-              con,
-              "UPDATE timeseries SET end_datetime = $1 WHERE timeseries_id = $2;",
-              params = list(add$end_datetime, new_tsid)
-            )
           }
         )
 
@@ -714,27 +707,6 @@ addACTimeseries <- function(
               target = 'realtime',
               con = con
             ) # Calculates stats within the function
-
-            add$end_datetime <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-                new_tsid,
-                ";"
-              )
-            )[1, 1] +
-              1
-
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE timeseries SET start_datetime = (SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-                new_tsid,
-                ") WHERE timeseries_id = ",
-                new_tsid,
-                ";"
-              )
-            )
           }
         }
 
@@ -767,24 +739,6 @@ addACTimeseries <- function(
                 con = con,
                 timeseries_id = new_tsid,
                 stats = TRUE
-              )
-              new_start <- DBI::dbGetQuery(
-                con,
-                paste0(
-                  "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-                  new_tsid,
-                  ";"
-                )
-              )
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE timeseries SET start_datetime = '",
-                  new_start$min,
-                  "' WHERE timeseries_id = ",
-                  new_tsid,
-                  ";"
-                )
               )
             },
             error = function(e) {

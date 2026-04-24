@@ -599,11 +599,6 @@ getNewContinuous <- function(
       }
 
       dbAppendTableRLS(con, "measurements_continuous", ts)
-      DBI::dbExecute(
-        con,
-        "UPDATE timeseries SET end_datetime = $1, last_new_data = NOW() WHERE timeseries_id = $2",
-        params = list(max(ts$datetime), tsid)
-      )
     }
 
     rows_added <- nrow(ts)
