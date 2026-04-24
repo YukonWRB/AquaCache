@@ -1633,7 +1633,28 @@ tryCatch(
     )
 
     message(
-      "Leaving continuous.measurements_continuous_corrected unchanged for basic series..."
+      "Leaving view continuous.measurements_continuous_corrected unchanged for basic series for backward compatibility."
+    )
+
+    # Remove the 'locations' table link to the 'vectors' table.
+    geoms <- DBI::dbGetQuery(
+      con,
+      "SELECT geom_id FROM public.locations WHERE geom_id IS NOT NULL"
+    )$geom_id
+    if (length(geoms) > 0) {
+      DBI::dbExecute(
+        con,
+        paste0(
+          "DELETE FROM spatial.vectors WHERE geom_id IN (",
+          paste(geoms, collapse = ","),
+          ")"
+        )
+      )
+    }
+
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations DROP COLUMN geom_id CASCADE;"
     )
 
     # Wrap things up and commit
