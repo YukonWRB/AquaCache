@@ -364,63 +364,12 @@ addACLocation <- function(
   for (i in 1:length(location_code)) {
     tryCatch(
       {
-        # A transaction is NOT started here because insertACVector calls rpostgis which starts and ends its own transaction. Transaction is started after that if the vector insert was successful.
-
-        active <- FALSE # Gets set to TRUE once a transaction is started in this function; set to FALSE now to avoid trying to rollback a non-existent transaction in case of error before that point
-
-        # Add the location to the 'vectors' table ############################
-        # Check if there's already a point with the exact same name
-        exists <- DBI::dbGetQuery(
-          con,
-          "SELECT geom_id, ST_Y(geom) AS latitude, ST_X(geom) AS longitude FROM spatial.vectors WHERE layer_name = 'Locations' AND LOWER(feature_name) = $1;",
-          params = list(tolower(location_code[i]))
-        )
-
-        if (nrow(exists) == 0) {
-          # Add the point to the table
-          point <- data.frame(
-            "feature_name" = location_code[i],
-            "description" = name[i],
-            "latitude" = latitude[i],
-            "longitude" = longitude[i]
-          )
-          point <- terra::vect(
-            point,
-            geom = c("longitude", "latitude"),
-            crs = "epsg:4269"
-          )
-
-          insertACVector(
-            geom = point,
-            layer_name = "Locations",
-            feature_name_col = "feature_name",
-            description_col = "description",
-            con = con
-          )
-          geom_id <- DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT geom_id FROM spatial.vectors WHERE layer_name = 'Locations' AND feature_name = '",
-              location_code[i],
-              "';"
-            )
-          )[1, 1]
-        } else {
-          geom_id <- exists$geom_id
-          message(
-            "Location code",
-            location_code[i],
-            " already exists in the 'vectors' table."
-          )
-        }
-
-        # rpostgis called from insertACVector has closed the transaction, let's start one for the rest of the operations
         active <- dbTransBegin(con)
 
         # Add the location to the 'locations' table ############################
         location_id <- DBI::dbGetQuery(
           con,
-          "INSERT INTO locations (location_code, name, name_fr, alias, latitude, longitude, share_with, location_type, note, contact, geom_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING location_id;",
+          "INSERT INTO locations (location_code, name, name_fr, alias, latitude, longitude, share_with, location_type, note, contact) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING location_id;",
           params = list(
             location_code[i],
             name[i],
@@ -431,8 +380,7 @@ addACLocation <- function(
             paste0("{", paste(share_with, collapse = ", "), "}"),
             location_type[i],
             note[i],
-            contact[i],
-            geom_id
+            contact[i]
           )
         )[1, 1]
 
