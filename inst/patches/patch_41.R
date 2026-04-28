@@ -3999,11 +3999,21 @@ EXECUTE FUNCTION continuous.refresh_calculated_daily_compound_definition_trg();"
       )
       DBI::dbExecute(con, "SET LOCAL continuous.skip_daily_refresh = 'on'")
 
+      # show progress
+      pb <- utils::txtProgressBar(
+        min = 0,
+        max = length(hydat_backfill_ids),
+        style = 3
+      )
+      on.exit(close(pb), add = TRUE)
       hydat_backfill_rows <- 0L
       for (tsid in hydat_backfill_ids) {
-        hydat_backfill_rows <- hydat_backfill_rows + DBI::dbExecute(
-          con,
-          "WITH daily AS MATERIALIZED (
+        # update PB
+        utils::setTxtProgressBar(pb, which(hydat_backfill_ids == tsid))
+        hydat_backfill_rows <- hydat_backfill_rows +
+          DBI::dbExecute(
+            con,
+            "WITH daily AS MATERIALIZED (
              SELECT
                mcd.timeseries_id,
                mcd.date,
@@ -4076,8 +4086,8 @@ EXECUTE FUNCTION continuous.refresh_calculated_daily_compound_definition_trg();"
                OR continuous.measurements_continuous.period IS DISTINCT FROM EXCLUDED.period
                OR continuous.measurements_continuous.imputed IS DISTINCT FROM EXCLUDED.imputed
              )",
-          params = list(tsid)
-        )
+            params = list(tsid)
+          )
       }
       message(
         "Backfilled or updated ",
