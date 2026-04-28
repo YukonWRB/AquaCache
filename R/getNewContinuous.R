@@ -912,7 +912,7 @@ getNewContinuous <- function(
     " failed."
   )
   if (failed_count > 0) {
-    failed_status <- head(
+    failed_status <- utils::head(
       status_rows[status_rows$state == "error", , drop = FALSE],
       5
     )
@@ -932,7 +932,7 @@ getNewContinuous <- function(
     )
   }
   if (locked_count > 0) {
-    locked_ids <- head(
+    locked_ids <- utils::head(
       status_rows$timeseries_id[status_rows$state == "locked"],
       5
     )
