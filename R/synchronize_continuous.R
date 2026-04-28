@@ -712,11 +712,6 @@ synchronize_continuous <- function(
           c("datetime", "value", "period", "imputed"),
           drop = FALSE
         ]
-        affected_dates <- sort(unique(as.Date(c(
-          delete_datetimes,
-          append_rows$datetime
-        ))))
-
         if (length(delete_datetimes) > 0) {
           DBI::dbExecute(
             con,
@@ -725,19 +720,6 @@ synchronize_continuous <- function(
               tsid,
               " AND datetime IN ('",
               paste(fmt(delete_datetimes), collapse = "', '"),
-              "');"
-            )
-          )
-        }
-
-        if (length(affected_dates) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-              tsid,
-              " AND date IN ('",
-              paste(affected_dates, collapse = "', '"),
               "');"
             )
           )
@@ -755,15 +737,6 @@ synchronize_continuous <- function(
               "timeseries_id",
               "imputed"
             )]
-          )
-        }
-
-        if (length(affected_dates) > 0) {
-          #Recalculate daily means and statistics
-          calculate_stats(
-            timeseries_id = tsid,
-            con = con,
-            start_recalc = min(affected_dates)
           )
         }
         DBI::dbExecute(

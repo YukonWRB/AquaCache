@@ -1,6 +1,5 @@
 test_that("dailyUpdate relies on getNewContinuous for continuous stats updates", {
   captured <- new.env(parent = emptyenv())
-  captured$calculate_stats_called <- FALSE
 
   local_mocked_bindings(
     getNewContinuous = function(con, timeseries_id, stats = FALSE, ...) {
@@ -10,10 +9,6 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
         stats = stats
       )
       data.frame(timeseries_id = timeseries_id)
-    },
-    calculate_stats = function(...) {
-      captured$calculate_stats_called <- TRUE
-      invisible(TRUE)
     },
     .package = "AquaCache"
   )
@@ -55,5 +50,4 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
 
   expect_equal(captured$getnew_args$timeseries_id, c(101L, 202L))
   expect_true(isTRUE(captured$getnew_args$stats))
-  expect_false(captured$calculate_stats_called)
 })

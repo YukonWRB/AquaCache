@@ -2,7 +2,7 @@
 #'
 #' @description
 #'
-#' Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to [addACTimeseries()] for how to add new stations. Does not work on any timeseries of category "discrete": for that, use [getNewDiscrete()]. Timeseries with no specified souce_fx will be ignored.
+#' Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on basic timeseries that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to [addACTimeseries()] for how to add new stations. Does not work on derived/compound timeseries or any timeseries of category "discrete": for that, use [getNewDiscrete()]. Timeseries with no specified source_fx will be ignored.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
 #' This function passes default arguments to the "source_fx" function for start_datetime, defaults to the instant after the last point already existing in the DB. The rest of the fetch parameters are set using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
@@ -23,7 +23,7 @@
 #' @param dbPort The port of the database. If left NULL, the function will use the default port from the .Renviron file as per [AquaConnect()].
 #' @param dbUser The username for the database. If left NULL, the function will use the default username from the .Renviron file as per [AquaConnect()].
 #' @param dbPass The password for the database. If left NULL, the function will use the default password from the .Renviron file as per [AquaConnect()].
-#' @param stats If TRUE, will update statistics in measurements_calculated_daily after importing new data. Default TRUE.
+#' @param stats Deprecated compatibility argument. Daily calculations are maintained by database triggers after measurements are changed.
 #' @param verbose If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
@@ -112,13 +112,14 @@ getNewContinuous <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
-  # Create table of timeseries
+  # Create table of basic timeseries that can fetch material data.
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
       "SELECT
         t.parameter_id,
         t.timeseries_id,
+        t.timeseries_type,
         t.source_fx,
         t.source_fx_args,
         at.aggregation_type,
@@ -133,15 +134,26 @@ getNewContinuous <- function(
         FROM measurements_continuous
         GROUP BY timeseries_id
       ) mc ON mc.timeseries_id = t.timeseries_id
-      WHERE source_fx IS NOT NULL;"
+      WHERE t.timeseries_type = 'basic'
+        AND t.source_fx IS NOT NULL;"
     )
   } else {
-    all_timeseries <- DBI::dbGetQuery(
+    requested_ids <- suppressWarnings(as.integer(timeseries_id))
+    if (any(is.na(requested_ids))) {
+      stop(
+        "getNewContinuous: Parameter 'timeseries_id' must be 'all' or a vector of integer timeseries IDs."
+      )
+    }
+    requested_ids <- unique(requested_ids)
+    requested_sql <- paste(requested_ids, collapse = ", ")
+
+    requested_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
         "SELECT
           t.parameter_id,
           t.timeseries_id,
+          t.timeseries_type,
           t.source_fx,
           t.source_fx_args,
           at.aggregation_type,
@@ -156,12 +168,46 @@ getNewContinuous <- function(
           FROM measurements_continuous
           GROUP BY timeseries_id
         ) mc ON mc.timeseries_id = t.timeseries_id
-        WHERE t.timeseries_id IN ('",
-        paste(timeseries_id, collapse = "', '"),
-        "') AND source_fx IS NOT NULL;"
+        WHERE t.timeseries_id IN (",
+        requested_sql,
+        ");"
       )
     )
-    if (length(timeseries_id) != nrow(all_timeseries)) {
+    if (nrow(requested_timeseries) == 0) {
+      stop("getNewContinuous: None of the requested timeseries IDs were found.")
+    }
+
+    non_basic <- requested_timeseries$timeseries_id[
+      requested_timeseries$timeseries_type != "basic"
+    ]
+    if (length(non_basic) > 0) {
+      non_basic_message <- paste0(
+        "getNewContinuous: New data can only be fetched for basic timeseries. ",
+        "The following timeseries_id values are not basic and will be ignored: ",
+        paste(non_basic, collapse = ", "),
+        "."
+      )
+      if (length(non_basic) == nrow(requested_timeseries)) {
+        stop(non_basic_message)
+      }
+      warning(non_basic_message)
+      requested_timeseries <- requested_timeseries[
+        requested_timeseries$timeseries_type == "basic",
+        ,
+        drop = FALSE
+      ]
+    }
+
+    missing_ids <- setdiff(requested_ids, requested_timeseries$timeseries_id)
+    all_timeseries <- requested_timeseries[
+      !is.na(requested_timeseries$source_fx),
+      ,
+      drop = FALSE
+    ]
+    if (
+      length(missing_ids) > 0 ||
+        nrow(all_timeseries) != nrow(requested_timeseries)
+    ) {
       warning(
         "At least one of the timeseries IDs you called for cannot be found in the database or has no function specified in column source_fx."
       )
@@ -602,17 +648,9 @@ getNewContinuous <- function(
     }
 
     rows_added <- nrow(ts)
-    stats_start <- min(ts$datetime)
     run_db_updates(function() {
       commit_fx(con, ts, tsid)
     })
-    if (stats) {
-      calculate_stats(
-        con = con,
-        timeseries_id = tsid,
-        start_recalc = stats_start
-      )
-    }
 
     build_status_row(
       i,

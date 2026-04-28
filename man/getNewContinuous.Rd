@@ -34,7 +34,7 @@ getNewContinuous(
 
 \item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 
-\item{stats}{If TRUE, will update statistics in measurements_calculated_daily after importing new data. Default TRUE.}
+\item{stats}{Deprecated compatibility argument. Daily calculations are maintained by database triggers after measurements are changed.}
 
 \item{verbose}{If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.}
 }
@@ -42,7 +42,7 @@ getNewContinuous(
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for how to add new stations. Does not work on any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified souce_fx will be ignored.
+Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on basic timeseries that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for how to add new stations. Does not work on derived/compound timeseries or any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified source_fx will be ignored.
 \subsection{Default arguments passed to 'source_fx' functions:}{
 
 This function passes default arguments to the "source_fx" function for start_datetime, defaults to the instant after the last point already existing in the DB. The rest of the fetch parameters are set using the "source_fx_args" column in the "timeseries" table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.

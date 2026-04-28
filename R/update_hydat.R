@@ -2,984 +2,498 @@
 #'
 #' @description
 #'
-#' First checks the local version of HYDAT using function [hydat_check()] and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaces old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in parameter timeseries_id, will also update the internal_status table with the HYDAT version used for the update.
+#' Checks the local version of HYDAT using [hydat_check()] and updates WSC flow
+#' and water-level timeseries when the local HYDAT copy has changed or when
+#' `force_update = TRUE`. HYDAT daily means are stored as one-day-period rows in
+#' `measurements_continuous` on days that do not already have higher-frequency
+#' measurements. Database triggers maintain `measurements_calculated_daily`.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param timeseries_id Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries where the import function is downloadWSC.
-#' @param force_update Set TRUE if you want to force a check of each location against the local copy of HYDAT.
+#' @param force_update Set TRUE to force a check of each location against the local copy of HYDAT.
 #'
-#' @return Updated daily means where HYDAT values were replaced by updated values, and TRUE if a new version of hydat was found.
+#' @return TRUE if a new HYDAT version was found, otherwise FALSE.
 #' @export
-#'
 
 update_hydat <- function(
   con = AquaConnect(silent = TRUE),
   timeseries_id = "all",
   force_update = FALSE
 ) {
-  #Check if the local copy of HYDAT needs an update
   hydat_check(silent = FALSE)
   hydat_path <- tidyhydat::hy_downloaded_db()
 
-  #Check now if the DB should be updated
   local_hydat <- tidyhydat::hy_version(hydat_path)$Date
   DB_hydat <- DBI::dbGetQuery(
     con,
     "SELECT value FROM internal_status WHERE event = 'HYDAT_version'"
   )[1, 1]
-  if (!is.na(DB_hydat)) {
-    if (DB_hydat != local_hydat) {
-      new_hydat <- TRUE
-    } else {
-      new_hydat <- FALSE
-    }
-  } else {
-    new_hydat <- TRUE
+  new_hydat <- is.na(DB_hydat) || !identical(as.character(DB_hydat), as.character(local_hydat))
+
+  if (!new_hydat && !force_update) {
+    message(
+      "No updates were made because the last HYDAT version referenced in the database is the same as the current HYDAT, and you didn't specify force_update = TRUE."
+    )
+    return(new_hydat)
   }
-  if (!new_hydat & force_update) {
+
+  if (!new_hydat && force_update) {
     message(
       "Local version of HYDAT is current, updating related timeseries because force_update is set to TRUE."
     )
   }
 
-  if (new_hydat | force_update) {
-    #Get the required timeseries_ids
-    if (timeseries_id[1] == "all") {
-      all_timeseries <- DBI::dbGetQuery(
-        con,
-        "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type, l.location_id FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id JOIN locations AS l ON t.location_id = l.location_id WHERE source_fx = 'downloadWSC';"
+  if (timeseries_id[1] == "all") {
+    all_timeseries <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         t.parameter_id,
+         t.timeseries_id,
+         t.source_fx_args,
+         l.location_id
+       FROM timeseries t
+       JOIN locations l
+         ON t.location_id = l.location_id
+       WHERE source_fx = 'downloadWSC';"
+    )
+  } else {
+    all_timeseries <- DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT
+           t.parameter_id,
+           t.timeseries_id,
+           t.source_fx_args,
+           l.location_id
+         FROM timeseries t
+         JOIN locations l
+           ON t.location_id = l.location_id
+         WHERE t.timeseries_id IN ('",
+        paste(timeseries_id, collapse = "', '"),
+        "') AND source_fx = 'downloadWSC';"
       )
-    } else {
-      all_timeseries <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT t.parameter_id, t.timeseries_id, at.aggregation_type, l.location_id FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id JOIN locations AS l ON t.location_id = l.location_id WHERE timeseries_id IN ('",
-          paste(timeseries_id, collapse = "', '"),
-          "') AND source_fx = 'downloadWSC';"
+    )
+    if (length(timeseries_id) != nrow(all_timeseries)) {
+      fail <- timeseries_id[!(timeseries_id %in% all_timeseries$timeseries_id)]
+      if (length(fail) == 1) {
+        warning(
+          "update_hydat: Could not find one of the timeseries_ids that you specified: ID ",
+          fail,
+          " is missing from the database."
         )
-      )
-      if (length(timeseries_id) != nrow(all_timeseries)) {
-        fail <- timeseries_id[
-          !(timeseries_id %in% all_timeseries$timeseries_id)
-        ]
-        if ((length(fail) == 1)) {
-          warning(
-            "update_hydat: Could not find one of the timeseries_ids that you specified: ID ",
-            fail,
-            " is missing from the database."
-          )
-        } else {
-          warning(
-            "update_hydat: Could not find some of the timeseries_ids that you specified: IDs ",
-            paste(fail, collapse = ", "),
-            " are missing from the database."
-          )
-        }
+      } else {
+        warning(
+          "update_hydat: Could not find some of the timeseries_ids that you specified: IDs ",
+          paste(fail, collapse = ", "),
+          " are missing from the database."
+        )
       }
     }
+  }
 
-    # Now find the value for 'location' in the JSONB timeseries.source_fx_args column for each timeseries_id
-    locations <- c()
-    for (i in 1:nrow(all_timeseries)) {
-      loc <- DBI::dbGetQuery(
-        con,
-        "SELECT source_fx_args FROM timeseries WHERE timeseries_id = $1;",
-        params = list(all_timeseries$timeseries_id[i])
-      )[1, 1]
-      loc <- jsonlite::fromJSON(loc)$location
-      locations <- c(locations, loc)
-    }
-    all_timeseries$location <- locations
+  if (nrow(all_timeseries) == 0) {
+    message("No WSC timeseries were found to update.")
+    return(new_hydat)
+  }
 
-    # Get organization_id for 'Water Survey of Canada'
+  all_timeseries$location <- vapply(
+    all_timeseries$source_fx_args,
+    function(x) {
+      tryCatch(jsonlite::fromJSON(x)$location, error = function(e) NA_character_)
+    },
+    character(1)
+  )
+  all_timeseries <- all_timeseries[!is.na(all_timeseries$location), , drop = FALSE]
+
+  organization_id <- DBI::dbGetQuery(
+    con,
+    "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'"
+  )[1, 1]
+  if (is.na(organization_id)) {
     organization_id <- DBI::dbGetQuery(
       con,
-      "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'"
+      "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
+      params = list(
+        "Water Survey of Canada",
+        "Releve hydrometrique du Canada"
+      )
     )[1, 1]
-    if (is.na(organization_id)) {
-      organization_id <- DBI::dbGetQuery(
-        con,
-        "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
-        params = list(
-          'Water Survey of Canada',
-          'Relev\u00E9 hydrom\u00E9trique du Canada'
+  }
+
+  grade_unspecified <- DBI::dbGetQuery(
+    con,
+    "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'"
+  )[1, 1]
+  if (is.na(grade_unspecified)) {
+    stop(
+      "Grade type 'Unspecified' (column grade_type_description) not found in the database. Please add it before proceeding."
+    )
+  }
+  approval_approved <- DBI::dbGetQuery(
+    con,
+    "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'A'"
+  )[1, 1]
+  if (is.na(approval_approved)) {
+    stop(
+      "Approval type 'Approved' (column approval_type_description) not found in the database. Please add it before proceeding."
+    )
+  }
+
+  qualifiers <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+  qualifier_mapping <- c(
+    "B" = qualifiers[
+      qualifiers$qualifier_type_code == "ICE",
+      "qualifier_type_id"
+    ],
+    "E" = qualifiers[
+      qualifiers$qualifier_type_code == "EST",
+      "qualifier_type_id"
+    ],
+    "D" = qualifiers[
+      qualifiers$qualifier_type_code == "DRY",
+      "qualifier_type_id"
+    ],
+    "A" = qualifiers[
+      qualifiers$qualifier_type_code == "UNK",
+      "qualifier_type_id"
+    ]
+  )
+  qualifier_unknown <- qualifiers[
+    qualifiers$qualifier_type_code == "UNK",
+    "qualifier_type_id"
+  ]
+
+  format_hydat_daily <- function(raw) {
+    if (nrow(raw) == 0) {
+      return(data.frame())
+    }
+
+    raw <- raw[, c("Date", "Value", "Symbol")]
+    names(raw) <- c("date", "value", "qualifier")
+    raw <- raw[!is.na(raw$value), , drop = FALSE]
+    if (nrow(raw) == 0) {
+      return(raw)
+    }
+
+    raw$qualifier <- ifelse(
+      raw$qualifier %in% names(qualifier_mapping),
+      qualifier_mapping[raw$qualifier],
+      qualifier_unknown
+    )
+    raw$qualifier <- as.integer(raw$qualifier)
+    raw$owner <- organization_id
+    raw$contributor <- organization_id
+    raw$approval <- approval_approved
+    raw$grade <- grade_unspecified
+    raw$imputed <- FALSE
+    raw$date <- as.Date(raw$date)
+    raw
+  }
+
+  fetch_hydat_daily <- function(location, param_name) {
+    tryCatch(
+      {
+        if (param_name == "water flow") {
+          format_hydat_daily(as.data.frame(tidyhydat::hy_daily_flows(location)))
+        } else {
+          format_hydat_daily(as.data.frame(tidyhydat::hy_daily_levels(location)))
+        }
+      },
+      error = function(e) data.frame()
+    )
+  }
+
+  ensure_wsc_timeseries <- function(location, location_id, param_name) {
+    parameter_id <- DBI::dbGetQuery(
+      con,
+      "SELECT parameter_id FROM parameters WHERE param_name = $1",
+      params = list(param_name)
+    )[1, 1]
+    media_id <- DBI::dbGetQuery(
+      con,
+      "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
+    )[1, 1]
+
+    tsid <- DBI::dbGetQuery(
+      con,
+      "SELECT timeseries_id
+       FROM timeseries
+       WHERE parameter_id = $1
+         AND location_id = $2
+         AND source_fx = 'downloadWSC'
+       LIMIT 1;",
+      params = list(parameter_id, location_id)
+    )[1, 1]
+
+    if (length(tsid) == 0 || is.na(tsid)) {
+      new_entry <- data.frame(
+        location_id = location_id,
+        parameter_id = parameter_id,
+        category = "continuous",
+        aggregation_type = "instantaneous",
+        record_rate = "5 minutes",
+        media_id = media_id,
+        last_new_data = .POSIXct(Sys.time(), tz = "UTC"),
+        share_with = "{public_reader}",
+        owner = 1,
+        source_fx = "downloadWSC",
+        source_fx_args = jsonlite::toJSON(
+          list(location = location),
+          auto_unbox = TRUE
         )
+      )
+      dbAppendTableRLS(con, "timeseries", new_entry)
+      tsid <- DBI::dbGetQuery(
+        con,
+        "SELECT timeseries_id
+         FROM timeseries
+         WHERE location_id = $1
+           AND parameter_id = $2
+           AND source_fx = 'downloadWSC'
+         LIMIT 1;",
+        params = list(location_id, parameter_id)
       )[1, 1]
     }
 
-    grade_unspecified <- DBI::dbGetQuery(
-      con,
-      "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'"
-    )[1, 1]
-    if (is.na(grade_unspecified)) {
-      stop(
-        "Grade type 'Unspecified' (column grade_type_description) not found in the database. Please add it before proceeding."
-      )
-    }
-    approval_approved <- DBI::dbGetQuery(
-      con,
-      "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'A'"
-    )[1, 1]
-    if (is.na(approval_approved)) {
-      stop(
-        "Approval type 'Approved' (column approval_type_description) not found in the database. Please add it before proceeding."
-      )
+    tsid
+  }
+
+  write_hydat_continuous <- function(tsid, data) {
+    if (nrow(data) == 0) {
+      return(FALSE)
     }
 
-    qualifiers <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+    offset <- DBI::dbGetQuery(
+      con,
+      "SELECT timezone_daily_calc FROM timeseries WHERE timeseries_id = $1",
+      params = list(tsid)
+    )[1, 1]
+    if (is.na(offset)) {
+      offset <- 0L
+    }
 
-    #Now update historical HYDAT timeseries.
+    data <- data[order(data$date), , drop = FALSE]
+    data$datetime <- daily_datetime_utc(data$date, offset)
+    data$period <- "P1D"
+    data$timeseries_id <- as.integer(tsid)
 
-    qualifier_mapping <- c(
-      "B" = qualifiers[
-        qualifiers$qualifier_type_code == "ICE",
-        "qualifier_type_id"
-      ],
-      "E" = qualifiers[
-        qualifiers$qualifier_type_code == "EST",
-        "qualifier_type_id"
-      ],
-      "D" = qualifiers[
-        qualifiers$qualifier_type_code == "DRY",
-        "qualifier_type_id"
-      ],
-      "A" = qualifiers[
-        qualifiers$qualifier_type_code == "UNK",
-        "qualifier_type_id"
-      ]
+    start_ts <- as.POSIXct(min(data$date), tz = "UTC") -
+      as.integer(offset) * 3600
+    end_ts <- as.POSIXct(max(data$date) + 1, tz = "UTC") -
+      as.integer(offset) * 3600
+
+    high_frequency_dates <- DBI::dbGetQuery(
+      con,
+      "SELECT local_date AS date
+       FROM (
+         SELECT
+           (mc.datetime + make_interval(hours => $2))::date AS local_date,
+           mc.datetime,
+           mc.period
+         FROM measurements_continuous mc
+         WHERE mc.timeseries_id = $1
+           AND mc.datetime >= $3
+           AND mc.datetime < $4
+       ) x
+       GROUP BY local_date
+       HAVING BOOL_OR(
+         x.period IS DISTINCT FROM interval '1 day'
+         OR x.datetime IS DISTINCT FROM continuous.local_noon_to_utc(
+           x.local_date,
+           $2
+         )
+       );",
+      params = list(tsid, as.integer(offset), start_ts, end_ts)
+    )$date
+    high_frequency_dates <- as.Date(high_frequency_dates)
+
+    existing_daily <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         (mc.datetime + make_interval(hours => $2))::date AS date,
+         mc.value
+       FROM measurements_continuous mc
+       WHERE mc.timeseries_id = $1
+         AND mc.datetime >= $3
+         AND mc.datetime < $4
+         AND mc.period = interval '1 day'
+         AND mc.datetime = continuous.local_noon_to_utc(
+           (mc.datetime + make_interval(hours => $2))::date,
+           $2
+         );",
+      params = list(tsid, as.integer(offset), start_ts, end_ts)
     )
+    existing_daily$date <- as.Date(existing_daily$date)
 
-    message(
-      "Updating database with information in HYDAT due to new HYDAT version or request to force update..."
+    compare <- merge(
+      data[, c("date", "value")],
+      existing_daily,
+      by = "date",
+      all.x = TRUE,
+      suffixes = c("_hydat", "_db")
     )
-    for (i in unique(all_timeseries$location)) {
-      tryCatch(
-        {
-          new_flow <- as.data.frame(tidyhydat::hy_daily_flows(i))
-          new_flow <- new_flow[, c("Date", "Value", "Symbol")]
-          names(new_flow) <- c("date", "value", "qualifier")
-          new_flow <- new_flow[!is.na(new_flow$value), ]
+    compare <- compare[
+      !(compare$date %in% high_frequency_dates),
+      ,
+      drop = FALSE
+    ]
+    mismatch <- compare[
+      is.na(compare$value_db) |
+        is.na(compare$value_hydat) != is.na(compare$value_db) |
+        compare$value_hydat != as.numeric(compare$value_db),
+      ,
+      drop = FALSE
+    ]
 
-          new_flow$qualifier <- ifelse(
-            new_flow$qualifier %in% names(qualifier_mapping),
-            qualifier_mapping[new_flow$qualifier],
-            qualifiers[
-              qualifiers$qualifier_type_code == "UNK",
-              "qualifier_type_id"
-            ]
-          )
-          new_flow$qualifier <- as.integer(new_flow$qualifier)
+    if (nrow(mismatch) == 0) {
+      return(FALSE)
+    }
 
-          new_flow$owner <- organization_id
-          new_flow$contributor <- organization_id
-          new_flow$approval <- approval_approved
-          new_flow$grade <- grade_unspecified
-          new_flow$imputed <- FALSE
-        },
-        error = function(e) {
-          new_flow <<- data.frame()
-        }
-      )
-      tryCatch(
-        {
-          new_level <- as.data.frame(tidyhydat::hy_daily_levels(i))
-          new_level <- new_level[, c("Date", "Value", "Symbol")]
-          names(new_level) <- c("date", "value", "qualifier")
-          new_level <- new_level[!is.na(new_level$value), ]
+    start_update <- min(mismatch$date)
+    data <- data[data$date >= start_update, , drop = FALSE]
+    to_write <- data[
+      !(data$date %in% high_frequency_dates),
+      ,
+      drop = FALSE
+    ]
+    delete_start <- as.POSIXct(start_update, tz = "UTC") -
+      as.integer(offset) * 3600
 
-          new_level$qualifier <- ifelse(
-            new_level$qualifier %in% names(qualifier_mapping),
-            qualifier_mapping[new_level$qualifier],
-            qualifiers[
-              qualifiers$qualifier_type_code == "UNK",
-              "qualifier_type_id"
-            ]
-          )
-          new_level$qualifier <- as.integer(new_level$qualifier)
-
-          new_level$owner <- organization_id
-          new_level$contributor <- organization_id
-          new_level$approval <- approval_approved
-          new_level$grade <- grade_unspecified
-          new_level$imputed <- FALSE
-        },
-        error = function(e) {
-          new_level <<- data.frame()
-        }
-      )
-
-      if (nrow(new_flow) > 0) {
-        tryCatch(
-          {
-            parameter_id <- DBI::dbGetQuery(
-              con,
-              "SELECT parameter_id FROM parameters WHERE param_name = 'water flow'"
-            )[1, 1]
-            media_id <- DBI::dbGetQuery(
-              con,
-              "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
-            )[1, 1]
-            location_id <- all_timeseries[
-              all_timeseries$location == i,
-              "location_id"
-            ][1]
-            tsid_flow <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT timeseries_id FROM timeseries WHERE parameter_id = ",
-                parameter_id,
-                " AND location_id = '",
-                location_id,
-                "' AND source_fx = 'downloadWSC'"
-              )
-            )[1, 1]
-            if (length(tsid_flow) == 0 | is.na(tsid_flow)) {
-              #There is no realtime or daily data yet, and no corresponding tsid.
-              new_entry <- data.frame(
-                "location_id" = location_id,
-                "parameter_id" = parameter_id,
-                "category" = "continuous",
-                "aggregation_type" = "instantaneous",
-                "record_rate" = "5 minutes", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
-                "media_id" = media_id,
-                "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                "share_with" = "{pulic_reader}",
-                "owner" = 1,
-                "source_fx" = "downloadWSC"
-              )
-              dbAppendTableRLS(con, "timeseries", new_entry)
-              tsid_flow <- DBI::dbGetQuery(
-                con,
-                paste0(
-                  "SELECT timeseries_id FROM timeseries WHERE location_id = '",
-                  location_id,
-                  "' AND parameter_id = ",
-                  parameter_id,
-                  " AND source_fx = 'downloadWSC';"
-                )
-              )[1, 1]
-              new_flow$timeseries_id <- tsid_flow
-
-              dbAppendTableRLS(
-                con,
-                "measurements_calculated_daily",
-                new_flow[, c("date", "value", "imputed", "timeseries_id")]
-              )
-              calculate_stats(
-                timeseries_id = tsid_flow,
-                con = con,
-                start_recalc = min(new_flow$date)
-              )
-
-              # Now adjust the other tables
-              names(new_flow[names(new_flow) == "date"]) <- "datetime"
-              new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
-
-              adjust_approval(
-                con,
-                tsid_flow,
-                new_flow[!is.na(new_flow$value), c("datetime", "approval")]
-              )
-              adjust_qualifier(
-                con,
-                tsid_flow,
-                new_flow[!is.na(new_flow$value), c("datetime", "qualifier")]
-              )
-              adjust_owner(
-                con,
-                tsid_flow,
-                new_flow[!is.na(new_flow$value), c("datetime", "owner")]
-              )
-              adjust_grade(
-                con,
-                tsid_flow,
-                new_flow[!is.na(new_flow$value), c("datetime", "grade")]
-              )
-              adjust_contributor(
-                con,
-                tsid_flow,
-                new_flow[!is.na(new_flow$value), c("datetime", "contributor")]
-              )
-
-              message(
-                "Found historical flow daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats."
-              )
-            } else {
-              #There is a corresponding tsid in the database
-              existing <- DBI::dbGetQuery(
-                con,
-                paste0(
-                  "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
-                  tsid_flow
-                )
-              )
-              if (nrow(existing) > 0) {
-                #There is an entry in timeseries table AND existing data in measurements_calculated_daily
-                #Find out if any imputed data should be left alone
-                imputed <- existing[existing$imputed, ]
-                imputed.remains <- data.frame()
-                if (nrow(imputed) > 0) {
-                  for (j in 1:nrow(imputed)) {
-                    if (!(imputed[j, "date"] %in% new_flow$date)) {
-                      imputed.remains <- rbind(imputed.remains, imputed[j, ])
-                    }
-                  }
-                }
-
-                # Adjust the ancillary tables
-                adjust_flow <- new_flow
-                names(adjust_flow)[names(adjust_flow) == "date"] <- "datetime"
-                adjust_flow$datetime <- as.POSIXct(
-                  adjust_flow$datetime,
-                  tz = "UTC"
-                )
-
-                adjust_approval(
-                  con,
-                  tsid_flow,
-                  adjust_flow[
-                    !is.na(adjust_flow$value),
-                    c("datetime", "approval")
-                  ]
-                )
-                adjust_qualifier(
-                  con,
-                  tsid_flow,
-                  adjust_flow[
-                    !is.na(adjust_flow$value),
-                    c("datetime", "qualifier")
-                  ]
-                )
-                adjust_owner(
-                  con,
-                  tsid_flow,
-                  adjust_flow[!is.na(adjust_flow$value), c("datetime", "owner")]
-                )
-                adjust_grade(
-                  con,
-                  tsid_flow,
-                  adjust_flow[!is.na(adjust_flow$value), c("datetime", "grade")]
-                )
-                adjust_contributor(
-                  con,
-                  tsid_flow,
-                  adjust_flow[
-                    !is.na(adjust_flow$value),
-                    c("datetime", "contributor")
-                  ]
-                )
-
-                # Create a unique key for both data frames
-                # order both data.frames by date to compare them
-                new_flow <- new_flow[order(new_flow$date), ]
-                existing <- existing[order(existing$date), ]
-                new_flow$key <- paste(new_flow$date, new_flow$value, sep = "|")
-                existing$key <- paste(existing$date, existing$value, sep = "|")
-
-                # Check for mismatches using set operations
-                mismatch_keys <- setdiff(new_flow$key, existing$key)
-
-                # Check if there are any discrepancies
-                if (length(mismatch_keys) > 0) {
-                  mismatch <- TRUE
-                  date <- new_flow[new_flow$key %in% mismatch_keys, "date"]
-                  date <- min(date)
-                } else {
-                  mismatch <- FALSE
-                }
-
-                start <- min(existing$date, new_flow$date)
-
-                if (mismatch) {
-                  new_flow$key <- NULL
-                  new_flow <- new_flow[new_flow$date >= date, ]
-                  new_flow$timeseries_id <- tsid_flow
-
-                  commit_fx1 <- function(
-                    con,
-                    imputed.remains,
-                    tsid_flow,
-                    new_flow,
-                    existing,
-                    start
-                  ) {
-                    if (nrow(imputed.remains) > 0) {
-                      DBI::dbExecute(
-                        con,
-                        paste0(
-                          "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-                          tsid_flow,
-                          " AND date BETWEEN '",
-                          min(new_flow$date),
-                          "' AND '",
-                          max(new_flow$date),
-                          "' AND date NOT IN ('",
-                          paste(imputed.remains$date, collapse = "', '"),
-                          "');"
-                        )
-                      )
-                      dbAppendTableRLS(
-                        con,
-                        "measurements_calculated_daily",
-                        new_flow[, c(
-                          "date",
-                          "value",
-                          "timeseries_id",
-                          "imputed"
-                        )]
-                      )
-                    } else {
-                      DBI::dbExecute(
-                        con,
-                        paste0(
-                          "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-                          tsid_flow,
-                          " AND date BETWEEN '",
-                          min(new_flow$date),
-                          "' AND '",
-                          max(new_flow$date),
-                          "';"
-                        )
-                      )
-                      dbAppendTableRLS(
-                        con,
-                        "measurements_calculated_daily",
-                        new_flow[, c(
-                          "date",
-                          "value",
-                          "timeseries_id",
-                          "imputed"
-                        )]
-                      )
-                    }
-
-                  }
-
-                  activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
-                  if (activeTrans) {
-                    tryCatch(
-                      {
-                        commit_fx1(
-                          con,
-                          imputed.remains,
-                          tsid_flow,
-                          new_flow,
-                          existing,
-                          start
-                        )
-                        DBI::dbExecute(con, "COMMIT;")
-                      },
-                      error = function(e) {
-                        DBI::dbExecute(con, "ROLLBACK;")
-                        warning(
-                          "update_hydat: Failed to add new flow data for location ",
-                          i
-                        )
-                      }
-                    )
-                  } else {
-                    # we're already in a transaction
-                    commit_fx1(
-                      con,
-                      imputed.remains,
-                      tsid_flow,
-                      new_flow,
-                      existing,
-                      start
-                    )
-                  }
-
-                  calculate_stats(
-                    timeseries_id = tsid_flow,
-                    con = con,
-                    start_recalc = start
-                  )
-                } else {
-                  # Datetime bounds are maintained by database triggers.
-                }
-              } else {
-                #There is an entry in timeseries table, but no daily data
-                new_flow$timeseries_id <- tsid_flow
-
-                commit_fx2 <- function(con, tsid_flow, new_flow) {
-                  dbAppendTableRLS(
-                    con,
-                    "measurements_calculated_daily",
-                    new_flow[, c("date", "value", "timeseries_id", "imputed")]
-                  )
-                }
-
-                activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
-                if (activeTrans) {
-                  tryCatch(
-                    {
-                      commit_fx2(con, tsid_flow, new_flow)
-                      DBI::dbExecute(con, "COMMIT;")
-                    },
-                    error = function(e) {
-                      DBI::dbExecute(con, "ROLLBACK;")
-                      warning(
-                        "update_hydat: Failed to add new flow data for location ",
-                        i
-                      )
-                    }
-                  )
-                } else {
-                  # we're already in a transaction
-                  commit_fx2(con, tsid_flow, new_flow)
-                }
-
-                calculate_stats(
-                  timeseries_id = tsid_flow,
-                  con = con,
-                  start_recalc = min(new_flow$date)
-                )
-
-                # Now adjust the other tables
-                names(new_flow)[names(new_flow) == "date"] <- "datetime"
-                new_flow$datetime <- as.POSIXct(new_flow$datetime, tz = "UTC")
-
-                adjust_approval(
-                  con,
-                  tsid_flow,
-                  new_flow[!is.na(new_flow$value), c("datetime", "approval")]
-                )
-                adjust_qualifier(
-                  con,
-                  tsid_flow,
-                  new_flow[!is.na(new_flow$value), c("datetime", "qualifier")]
-                )
-                adjust_owner(
-                  con,
-                  tsid_flow,
-                  new_flow[!is.na(new_flow$value), c("datetime", "owner")]
-                )
-                adjust_grade(
-                  con,
-                  tsid_flow,
-                  new_flow[!is.na(new_flow$value), c("datetime", "grade")]
-                )
-                adjust_contributor(
-                  con,
-                  tsid_flow,
-                  new_flow[!is.na(new_flow$value), c("datetime", "contributor")]
-                )
-
-                message(
-                  "Found historical flow daily means for a location that had no data or only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats."
-                )
-              }
-            }
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = ",
-                tsid_flow
-              )
-            )
-          },
-          error = function(e) {
-            warning(
-              "Something went wrong when trying to add new flow data for location ",
-              i
-            )
-          }
-        )
-      } #End of for flow loop
-
-      if (nrow(new_level) > 0) {
-        tryCatch(
-          {
-            parameter_id <- DBI::dbGetQuery(
-              con,
-              "SELECT parameter_id FROM parameters WHERE param_name = 'water level'"
-            )[1, 1]
-            media_id <- DBI::dbGetQuery(
-              con,
-              "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
-            )[1, 1]
-            location_id <- all_timeseries[
-              all_timeseries$location == i,
-              "location_id"
-            ][1]
-            tsid_level <- DBI::dbGetQuery(
-              con,
-              "SELECT timeseries_id FROM timeseries WHERE parameter_id = $1 AND location_id = $2 AND source_fx = 'downloadWSC'",
-              params = list(parameter_id, location_id)
-            )[1, 1]
-            if (length(tsid_level) == 0 | is.na(tsid_level)) {
-              # There is no realtime or daily data yet, and no corresponding tsid.
-              new_entry <- data.frame(
-                "location_id" = location_id,
-                "parameter_id" = parameter_id,
-                "category" = "continuous",
-                "aggregation_type" = "instantaneous",
-                "record_rate" = "5 minutes", # HYDAT is daily, but it should always correspond with a timeseries that has realtime data even it it's not in the database. This will ensure that the data starts coming in to complement the data being added to the 'measurements_calculated_daily' table here.
-                "media_id" = media_id,
-                "last_new_data" = .POSIXct(Sys.time(), tz = "UTC"),
-                "share_with" = "{public_reader}",
-                "owner" = 1,
-                "source_fx" = "downloadWSC"
-              )
-              dbAppendTableRLS(con, "timeseries", new_entry)
-              tsid_level <- DBI::dbGetQuery(
-                con,
-                "SELECT timeseries_id FROM timeseries WHERE location_id = $1 AND parameter_id = $2 AND source_fx = 'downloadWSC';",
-                params = list(location_id, parameter_id)
-              )[1, 1]
-              new_level$timeseries_id <- tsid_level
-
-              dbAppendTableRLS(
-                con,
-                "measurements_calculated_daily",
-                new_level[, c("date", "value", "imputed", "timeseries_id")]
-              )
-              calculate_stats(
-                timeseries_id = tsid_level,
-                con = con,
-                start_recalc = min(new_level$date)
-              )
-
-              # Now adjust the other tables
-              names(new_level)[names(new_level) == "date"] <- "datetime"
-              new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
-
-              adjust_approval(
-                con,
-                tsid_level,
-                new_level[!is.na(new_level$value), c("datetime", "approval")]
-              )
-              adjust_qualifier(
-                con,
-                tsid_level,
-                new_level[!is.na(new_level$value), c("datetime", "qualifier")]
-              )
-              adjust_owner(
-                con,
-                tsid_level,
-                new_level[!is.na(new_level$value), c("datetime", "owner")]
-              )
-              adjust_grade(
-                con,
-                tsid_level,
-                new_level[!is.na(new_level$value), c("datetime", "grade")]
-              )
-              adjust_contributor(
-                con,
-                tsid_level,
-                new_level[!is.na(new_level$value), c("datetime", "contributor")]
-              )
-
-              message(
-                "Found historical level daily means for a location that didn't yet exist in the local database. Added an entry to table 'timeseries' and calculated new daily stats."
-              )
-            } else {
-              # There is a corresponding tsid in the database
-              existing <- DBI::dbGetQuery(
-                con,
-                "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = $1",
-                params = list(tsid_level)
-              )
-              if (nrow(existing) > 0) {
-                #There is an entry in timeseries table AND existing data
-                #Find out if any imputed data should be left alone
-                imputed <- existing[existing$imputed, ]
-                imputed.remains <- data.frame()
-                if (nrow(imputed) > 0) {
-                  for (j in 1:nrow(imputed)) {
-                    if (!(imputed[j, "date"] %in% new_flow$date)) {
-                      imputed.remains <- rbind(imputed.remains, imputed[j, ])
-                    }
-                  }
-                }
-
-                # Adjust the ancillary tables
-                adjust_level <- new_level
-                names(adjust_level)[names(adjust_level) == "date"] <- "datetime"
-                adjust_level$datetime <- as.POSIXct(
-                  adjust_level$datetime,
-                  tz = "UTC"
-                )
-
-                adjust_approval(
-                  con,
-                  tsid_level,
-                  adjust_level[
-                    !is.na(adjust_level$value),
-                    c("datetime", "approval")
-                  ]
-                )
-                adjust_qualifier(
-                  con,
-                  tsid_level,
-                  adjust_level[
-                    !is.na(adjust_level$value),
-                    c("datetime", "qualifier")
-                  ]
-                )
-                adjust_owner(
-                  con,
-                  tsid_level,
-                  adjust_level[
-                    !is.na(adjust_level$value),
-                    c("datetime", "owner")
-                  ]
-                )
-                adjust_grade(
-                  con,
-                  tsid_level,
-                  adjust_level[
-                    !is.na(adjust_level$value),
-                    c("datetime", "grade")
-                  ]
-                )
-                adjust_contributor(
-                  con,
-                  tsid_level,
-                  adjust_level[
-                    !is.na(adjust_level$value),
-                    c("datetime", "contributor")
-                  ]
-                )
-
-                # Create a unique key for both data frames
-                # Order both data.frames by date to compare them
-                new_level <- new_level[order(new_level$date), ]
-                existing <- existing[order(existing$date), ]
-                new_level$key <- paste(
-                  new_level$date,
-                  new_level$value,
-                  sep = "|"
-                )
-                existing$key <- paste(existing$date, existing$value, sep = "|")
-
-                # Check for mismatches using set operations
-                mismatch_keys <- setdiff(new_level$key, existing$key)
-
-                # Check if there are any discrepancies
-                if (length(mismatch_keys) > 0) {
-                  mismatch <- TRUE
-                  date <- new_level[new_level$key %in% mismatch_keys, "date"]
-                  date <- min(date)
-                } else {
-                  mismatch <- FALSE
-                }
-
-                start <- min(min(existing$date), new_level$date)
-
-                if (mismatch) {
-                  new_level$key <- NULL
-                  new_level <- new_level[new_level$date >= date, ]
-                  new_level$timeseries_id <- tsid_level
-
-                  commit_fx3 <- function(
-                    con,
-                    imputed.remains,
-                    tsid_level,
-                    new_level,
-                    existing,
-                    start
-                  ) {
-                    if (nrow(imputed.remains) > 0) {
-                      DBI::dbExecute(
-                        con,
-                        paste0(
-                          "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-                          tsid_level,
-                          " AND date BETWEEN '",
-                          min(new_level$date),
-                          "' AND '",
-                          max(new_level$date),
-                          "' AND date NOT IN ('",
-                          paste(imputed.remains$date, collapse = "', '"),
-                          "');"
-                        )
-                      )
-                      dbAppendTableRLS(
-                        con,
-                        "measurements_calculated_daily",
-                        new_level[, c(
-                          "date",
-                          "value",
-                          "timeseries_id",
-                          "imputed"
-                        )]
-                      )
-                    } else {
-                      DBI::dbExecute(
-                        con,
-                        "DELETE FROM measurements_calculated_daily WHERE timeseries_id = $1 AND date BETWEEN $2 AND $3;",
-                        params = list(
-                          tsid_level,
-                          min(new_level$date),
-                          max(new_level$date)
-                        )
-                      )
-                      dbAppendTableRLS(
-                        con,
-                        "measurements_calculated_daily",
-                        new_level[, c(
-                          "date",
-                          "value",
-                          "timeseries_id",
-                          "imputed"
-                        )]
-                      )
-                    }
-
-                  }
-
-                  activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
-                  if (activeTrans) {
-                    tryCatch(
-                      {
-                        commit_fx3(
-                          con,
-                          imputed.remains,
-                          tsid_level,
-                          new_level,
-                          existing,
-                          start
-                        )
-                        DBI::dbExecute(con, "COMMIT;")
-                      },
-                      error = function(e) {
-                        DBI::dbExecute(con, "ROLLBACK;")
-                        warning(
-                          "update_hydat: Failed to add new level data for location ",
-                          i
-                        )
-                      }
-                    )
-                  } else {
-                    # we're already in a transaction
-                    commit_fx3(
-                      con,
-                      imputed.remains,
-                      tsid_level,
-                      new_level,
-                      existing,
-                      start
-                    )
-                  }
-
-                  calculate_stats(
-                    timeseries_id = tsid_level,
-                    con = con,
-                    start_recalc = start
-                  )
-                } else {
-                  # Datetime bounds are maintained by database triggers.
-                }
-              } else {
-                #There is an entry in timeseries table, but no daily data
-                new_level$timeseries_id <- tsid_level
-
-                commit_fx4 <- function(con, tsid_level, new_level) {
-                  dbAppendTableRLS(
-                    con,
-                    "measurements_calculated_daily",
-                    new_level[, c("date", "value", "timeseries_id", "imputed")]
-                  )
-                }
-
-                activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
-                if (activeTrans) {
-                  tryCatch(
-                    {
-                      commit_fx4(con, tsid_level, new_level)
-                      DBI::dbExecute(con, "COMMIT;")
-                    },
-                    error = function(e) {
-                      DBI::dbExecute(con, "ROLLBACK;")
-                      warning(
-                        "update_hydat: Failed to add new level data for location ",
-                        i
-                      )
-                    }
-                  )
-                } else {
-                  # we're already in a transaction
-                  commit_fx4(con, tsid_level, new_level)
-                }
-
-                calculate_stats(
-                  timeseries_id = tsid_level,
-                  con = con,
-                  start_recalc = min(new_level$date)
-                )
-
-                # Now adjust the other tables
-                names(new_level)[names(new_level) == "date"] <- "datetime"
-                new_level$datetime <- as.POSIXct(new_level$datetime, tz = "UTC")
-
-                adjust_approval(
-                  con,
-                  tsid_level,
-                  new_level[!is.na(new_level$value), c("datetime", "approval")]
-                )
-                adjust_qualifier(
-                  con,
-                  tsid_level,
-                  new_level[!is.na(new_level$value), c("datetime", "qualifier")]
-                )
-                adjust_owner(
-                  con,
-                  tsid_level,
-                  new_level[!is.na(new_level$value), c("datetime", "owner")]
-                )
-                adjust_grade(
-                  con,
-                  tsid_level,
-                  new_level[!is.na(new_level$value), c("datetime", "grade")]
-                )
-                adjust_contributor(
-                  con,
-                  tsid_level,
-                  new_level[
-                    !is.na(new_level$value),
-                    c("datetime", "contributor")
-                  ]
-                )
-
-                message(
-                  "Found historical level daily means for a location that had no data or only had realtime data. Added new entries to measurements_calculated_daily and calculated daily stats."
-                )
-              }
-            }
-
-            DBI::dbExecute(
-              con,
-              "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
-              params = list(tsid_level)
-            )
-          },
-          error = function(e) {
-            warning(
-              "Something went wrong when trying to add new level data for location ",
-              i
-            )
-          }
-        )
-      } #End of for level loop
-    } #End of for loop iterating over locations
-
-    try(
-      # In a try in case the user doesn't have update permissions on internal_status
+    active <- dbTransBegin(con)
+    ok <- FALSE
+    tryCatch(
       {
+        deleted <- DBI::dbExecute(
+          con,
+          "DELETE FROM measurements_continuous mc
+           WHERE mc.timeseries_id = $1
+             AND mc.datetime >= $2
+             AND mc.datetime < $3
+             AND mc.period = interval '1 day'
+             AND mc.datetime = continuous.local_noon_to_utc(
+               (mc.datetime + make_interval(hours => $4))::date,
+               $4
+             );",
+          params = list(tsid, delete_start, end_ts, as.integer(offset))
+        )
+
+        if (nrow(to_write) > 0) {
+          dbAppendTableRLS(
+            con,
+            "measurements_continuous",
+            to_write[, c(
+              "datetime",
+              "value",
+              "period",
+              "timeseries_id",
+              "imputed"
+            )]
+          )
+
+          adjust_approval(
+            con,
+            tsid,
+            to_write[, c("datetime", "approval")]
+          )
+          adjust_qualifier(
+            con,
+            tsid,
+            to_write[, c("datetime", "qualifier")]
+          )
+          adjust_owner(
+            con,
+            tsid,
+            to_write[, c("datetime", "owner")]
+          )
+          adjust_grade(
+            con,
+            tsid,
+            to_write[, c("datetime", "grade")]
+          )
+          adjust_contributor(
+            con,
+            tsid,
+            to_write[, c("datetime", "contributor")]
+          )
+        }
+
         DBI::dbExecute(
           con,
-          "UPDATE internal_status SET value = NOW() WHERE event = 'HYDAT_version'"
+          "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
+          params = list(tsid)
         )
+        ok <- deleted > 0 || nrow(to_write) > 0
+
+        if (active) {
+          DBI::dbExecute(con, "COMMIT;")
+        }
       },
-      silent = TRUE
+      error = function(e) {
+        if (active) {
+          DBI::dbExecute(con, "ROLLBACK;")
+        }
+        stop(e)
+      }
     )
 
-    message("Completed update of HYDAT related data.")
-  } else {
-    message(
-      "No updates were made because the last HYDAT version referenced in the database is the same as the current HYDAT, and you didn't specify force_update = TRUE."
-    )
-  } #End of function portion that seeks to update HYDAT related data
-  return(new_hydat)
-} #End of function
+    ok
+  }
+
+  message(
+    "Updating database with information in HYDAT due to new HYDAT version or request to force update..."
+  )
+
+  for (location in unique(all_timeseries$location)) {
+    location_id <- all_timeseries[
+      all_timeseries$location == location,
+      "location_id"
+    ][1]
+
+    for (param_name in c("water flow", "water level")) {
+      tryCatch(
+        {
+          hydat_data <- fetch_hydat_daily(location, param_name)
+          if (nrow(hydat_data) == 0) {
+            next
+          }
+
+          tsid <- ensure_wsc_timeseries(location, location_id, param_name)
+          changed <- write_hydat_continuous(tsid, hydat_data)
+          if (changed) {
+            message(
+              "Updated HYDAT ",
+              param_name,
+              " daily means for WSC location ",
+              location,
+              " in measurements_continuous."
+            )
+          }
+        },
+        error = function(e) {
+          warning(
+            "update_hydat: Something went wrong when trying to add ",
+            param_name,
+            " data for location ",
+            location,
+            ". Returned error: ",
+            e$message
+          )
+        }
+      )
+    }
+  }
+
+  try(
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE internal_status SET value = $1 WHERE event = 'HYDAT_version'",
+        params = list(as.character(local_hydat))
+      )
+    },
+    silent = TRUE
+  )
+
+  message("Completed update of HYDAT related data.")
+  new_hydat
+}

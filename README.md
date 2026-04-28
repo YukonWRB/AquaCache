@@ -118,8 +118,8 @@ In contrast however, the insertion of rasters and images to the database is then
 
 There is only one function in this group, dailyUpdate.
 This function first checks if the Water Survey of Canada has published a new version of the HYDAT database and incorporates that if necessary, then calls the 'get' functions with cascading effects.
-For each new continuous-type timeseries, new daily means and statistics are calculated for the table 'measurements_calculated_daily'.
-In the event of new hydat daily means, recalculation takes place from the time of first discrepancy between HYDAT means and existing means in the database.
+For each changed continuous-type timeseries, database triggers maintain daily means and statistics in the table 'measurements_calculated_daily'.
+HYDAT daily means are stored in 'measurements_continuous' as one-day-period rows where higher-frequency data are not already present.
 
 ## 'download' functions
 

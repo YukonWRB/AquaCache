@@ -3,7 +3,8 @@ mock_getnew_timeseries_table <- function(
   source_fx_name,
   source_fx_args = rep(NA_character_, length(timeseries_ids)),
   last_data_point = rep(as.POSIXct(NA, tz = "UTC"), length(timeseries_ids)),
-  aggregation_type = rep("instantaneous", length(timeseries_ids))
+  aggregation_type = rep("instantaneous", length(timeseries_ids)),
+  timeseries_type = rep("basic", length(timeseries_ids))
 ) {
   source_fx <- if (length(source_fx_name) == 1L) {
     rep(source_fx_name, length(timeseries_ids))
@@ -14,6 +15,7 @@ mock_getnew_timeseries_table <- function(
   data.frame(
     parameter_id = rep(1L, length(timeseries_ids)),
     timeseries_id = timeseries_ids,
+    timeseries_type = timeseries_type,
     source_fx = source_fx,
     source_fx_args = source_fx_args,
     aggregation_type = aggregation_type,
@@ -29,7 +31,8 @@ mock_getnew_db_get_query <- function(
   timeseries_ids,
   source_fx_name,
   source_fx_args = rep(NA_character_, length(timeseries_ids)),
-  last_data_point = rep(as.POSIXct(NA, tz = "UTC"), length(timeseries_ids))
+  last_data_point = rep(as.POSIXct(NA, tz = "UTC"), length(timeseries_ids)),
+  timeseries_type = rep("basic", length(timeseries_ids))
 ) {
   function(con, statement, params = NULL, ...) {
     if (grepl("FROM timeseries t", statement, fixed = TRUE)) {
@@ -37,7 +40,8 @@ mock_getnew_db_get_query <- function(
         timeseries_ids = timeseries_ids,
         source_fx_name = source_fx_name,
         source_fx_args = source_fx_args,
-        last_data_point = last_data_point
+        last_data_point = last_data_point,
+        timeseries_type = timeseries_type
       ))
     }
     if (grepl("FROM grade_types", statement, fixed = TRUE)) {
@@ -67,6 +71,27 @@ mock_getnew_db_get_query <- function(
     stop(sprintf("Unexpected dbGetQuery statement in test: %s", statement))
   }
 }
+
+test_that("getNewContinuous rejects compound timeseries", {
+  local_mocked_bindings(
+    dbExecute = function(...) invisible(0L),
+    dbGetQuery = mock_getnew_db_get_query(
+      timeseries_ids = 9001L,
+      source_fx_name = "downloadSomething",
+      timeseries_type = "compound"
+    ),
+    .package = "DBI"
+  )
+
+  expect_error(
+    getNewContinuous(
+      con = structure(list(), class = "mock_con"),
+      timeseries_id = 9001L,
+      active = "all"
+    ),
+    "can only be fetched for basic timeseries"
+  )
+})
 
 test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   skip_if_not_installed("foreach")
@@ -130,7 +155,6 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
-    calculate_stats = function(...) invisible(TRUE),
     downloadECCCwx = function(start_datetime, con, location, parameter, interval, ...) {
       captured$parameters <- c(captured$parameters, parameter)
       data.frame(
@@ -264,7 +288,6 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
-    calculate_stats = function(...) invisible(TRUE),
     downloadECCCwxMinute = function(
       start_datetime,
       con,
@@ -541,7 +564,7 @@ test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinut
   expect_true(tsid %in% result$timeseries_id)
 })
 
-test_that("getNewContinuous recalculates stats from the earliest imported datetime", {
+test_that("getNewContinuous leaves daily refresh to database triggers", {
   captured <- new.env(parent = emptyenv())
   tsid <- 1323L
   new_rows <- data.frame(
@@ -566,10 +589,9 @@ test_that("getNewContinuous recalculates stats from the earliest imported dateti
     adjust_owner = function(...) invisible(TRUE),
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
-    dbAppendTableRLS = function(con, table, value) invisible(TRUE),
-    calculate_stats = function(con, timeseries_id, start_recalc = NULL) {
-      captured$timeseries_id <- timeseries_id
-      captured$start_recalc <- start_recalc
+    dbAppendTableRLS = function(con, table, value) {
+      captured$table <- table
+      captured$value <- value
       invisible(TRUE)
     },
     downloadRWIS = function(start_datetime, con, ...) {
@@ -595,7 +617,7 @@ test_that("getNewContinuous recalculates stats from the earliest imported dateti
     stats = TRUE
   )
 
-  expect_equal(captured$timeseries_id, tsid)
-  expect_equal(captured$start_recalc, min(new_rows$datetime))
+  expect_equal(captured$table, "measurements_continuous")
+  expect_equal(min(captured$value$datetime), min(new_rows$datetime))
   expect_true(tsid %in% result$timeseries_id)
 })

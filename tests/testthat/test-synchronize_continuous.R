@@ -423,30 +423,3 @@ test_that("synchronize_continuous groups cache-sharing ECCC minute tasks in para
   expect_equal(connect_calls, 3L)
   expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
 })
-
-test_that("select_changed_daily_stats treats missing existing rows as changed", {
-  local_mocked_bindings(
-    dbGetQuery = function(con, statement, ...) {
-      empty_daily_stats()
-    },
-    .package = "DBI"
-  )
-
-  rows <- data.frame(
-    date = as.Date("2026-01-02"),
-    value = 1.23,
-    imputed = FALSE
-  )
-
-  res <- select_changed_daily_stats(
-    structure(list(), class = "mock_con"),
-    1323L,
-    rows
-  )
-
-  expect_s3_class(res, "data.frame")
-  expect_equal(nrow(res), 1L)
-  expect_equal(res$date, as.Date("2026-01-02"))
-  expect_equal(res$value, 1.23)
-  expect_false(res$imputed)
-})
