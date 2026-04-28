@@ -3992,10 +3992,16 @@ EXECUTE FUNCTION continuous.refresh_calculated_daily_compound_definition_trg();"
     )$timeseries_id
 
     if (length(hydat_backfill_ids) > 0) {
+      message(
+        "Found ",
+        length(hydat_backfill_ids),
+        " WSC HYDAT timeseries with daily values to backfill."
+      )
       DBI::dbExecute(con, "SET LOCAL continuous.skip_daily_refresh = 'on'")
 
+      hydat_backfill_rows <- 0L
       for (tsid in hydat_backfill_ids) {
-        DBI::dbExecute(
+        hydat_backfill_rows <- hydat_backfill_rows + DBI::dbExecute(
           con,
           "WITH daily AS MATERIALIZED (
              SELECT
@@ -4073,28 +4079,46 @@ EXECUTE FUNCTION continuous.refresh_calculated_daily_compound_definition_trg();"
           params = list(tsid)
         )
       }
+      message(
+        "Backfilled or updated ",
+        hydat_backfill_rows,
+        " WSC HYDAT daily rows in measurements_continuous."
+      )
     }
 
-    # Remove the 'locations' table link to the 'vectors' table.
+    message(
+      "Dropping public.locations.geom_id and removing obsolete location point vectors..."
+    )
+
+    # Remove the 'locations' table link to the 'vectors' table. Drop the
+    # location-side FK before deleting vector rows; otherwise the ON DELETE
+    # CASCADE relationship deletes locations and their dependent records.
     geoms <- DBI::dbGetQuery(
       con,
       "SELECT geom_id FROM public.locations WHERE geom_id IS NOT NULL"
     )$geom_id
-    if (length(geoms) > 0) {
-      DBI::dbExecute(
-        con,
-        paste0(
-          "DELETE FROM spatial.vectors WHERE geom_id IN (",
-          paste(geoms, collapse = ","),
-          ")"
-        )
-      )
-    }
 
     DBI::dbExecute(
       con,
       "ALTER TABLE public.locations DROP COLUMN geom_id CASCADE;"
     )
+
+    if (length(geoms) > 0) {
+      DBI::dbExecute(
+        con,
+        paste0(
+          "DELETE FROM spatial.vectors v
+           WHERE v.geom_id IN (",
+          paste(geoms, collapse = ","),
+          ")
+             AND NOT EXISTS (
+               SELECT 1
+               FROM files.documents_spatial ds
+               WHERE ds.geom_id = v.geom_id
+             )"
+        )
+      )
+    }
 
     # Rename the 'measurements_calculated_daily_corrected_at' function
     DBI::dbExecute(
