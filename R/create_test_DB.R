@@ -11,8 +11,8 @@
 #' @param replace If TRUE and a file of name testdb.sql.gz exists in `outpath` will attempt to replaced the file.
 #' @param pg_dump The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
 #' @param psql The path to the psql utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
-#' @param continuous_locations Character vector of location codes to retain in continuous tables. Defaults to the first location found in the database when `NULL`.
-#' @param discrete_locations Character vector of location codes to retain in discrete tables.  Defaults to `continuous_locations` when `NULL`.
+#' @param continuous_locations Vector of location IDs, location codes, or aliases to retain in continuous tables. Defaults to selected long-lived hydrometric and meteorological locations when `NULL`.
+#' @param discrete_locations Vector of location IDs, location codes, or aliases to retain in discrete tables. Defaults to selected snow-course locations when `NULL`.
 #' @param start_datetime The start datetime for the data to be copied.  If `NULL`, data is copied from the beginning of records to `end_datetime` for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records - this is to enable historic range and return period calculations to be reproduced.
 #' @param end_datetime The end datetime for the data to be copied.  If `NULL`, all data is copied from `start_datetime` to the end of records for the affected locations. This **does** apply to the 'measurements_calculated_daily' table.
 #' @param delete If TRUE, will delete the test_temp database after the function is done. If FALSE, the database will remain for further testing.
@@ -47,8 +47,8 @@ create_test_db <- function(
   # replace <- TRUE
   # password <- Sys.getenv("aquacacheAdminPass")
   # outpath <- testthat::test_path("fixtures")
-  # pg_dump <- "C:/Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe"
-  # psql <- "C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe"
+  # pg_dump <- "C:/Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe"
+  # psql <- "C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe"
   # continuous_locations <- NULL
   # discrete_locations <- NULL
   # start_datetime <- "2020-01-01 00:00"
@@ -158,6 +158,8 @@ create_test_db <- function(
   schema_outfile <- normalizePath(schema_outfile, mustWork = FALSE)
   dump_args <- c(
     "-s", # schema only
+    "--no-owner", # do not include commands to set ownership of objects to the original owner
+    "--no-acl", # do not include commands to set access privileges (grant/revoke) of objects
     "-U",
     username,
     "-h",
@@ -226,16 +228,112 @@ create_test_db <- function(
   # Set the timezone to UTC for test_con (AquaConnect already sets it for the main connection)
   DBI::dbExecute(test_con, "SET timezone = 'UTC'")
 
+  db_search_path <- paste(
+    c(
+      "public",
+      "continuous",
+      "discrete",
+      "spatial",
+      "files",
+      "instruments",
+      "boreholes",
+      "information",
+      "application",
+      "audit",
+      "field"
+    ),
+    collapse = ", "
+  )
+
   # Set the search path (takes effect at next connection)
   DBI::dbExecute(
     test_con,
-    "ALTER DATABASE test_temp SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
+    sprintf("ALTER DATABASE test_temp SET search_path TO %s;", db_search_path)
   )
   # Update the search path for this session
   DBI::dbExecute(
     test_con,
-    "SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;"
+    sprintf("SET search_path TO %s;", db_search_path)
   )
+  DBI::dbExecute(test_con, "SET continuous.skip_daily_refresh = 'on';")
+
+  quote_sql <- function(x) {
+    as.character(DBI::dbQuoteString(con, as.character(x)))
+  }
+
+  id_csv <- function(x) {
+    x <- unique(x[!is.na(x)])
+    if (length(x) == 0) {
+      return(NULL)
+    }
+    paste(as.integer(x), collapse = ",")
+  }
+
+  value_csv <- function(x) {
+    x <- unique(x[!is.na(x)])
+    if (length(x) == 0) {
+      return(NULL)
+    }
+    paste(quote_sql(x), collapse = ",")
+  }
+
+  empty_table <- function(tbl) {
+    DBI::dbGetQuery(con, paste0("SELECT * FROM ", tbl, " WHERE FALSE"))
+  }
+
+  append_if_rows <- function(tbl, data, label = tbl) {
+    if (nrow(data) == 0) {
+      return(invisible(FALSE))
+    }
+    message("Loading table ", label, " into the test database...")
+    DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
+    invisible(TRUE)
+  }
+
+  table_exists <- function(schema, table) {
+    DBI::dbExistsTable(con, DBI::Id(schema = schema, table = table))
+  }
+
+  resolve_location_ids <- function(x) {
+    if (is.null(x) || length(x) == 0) {
+      return(integer())
+    }
+    x <- unique(x[!is.na(x)])
+    numeric_ids <- suppressWarnings(as.integer(x))
+    numeric_ids <- unique(numeric_ids[!is.na(numeric_ids)])
+
+    ids <- integer()
+    if (length(numeric_ids) > 0) {
+      ids <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT location_id
+           FROM public.locations
+           WHERE location_id IN (%s)",
+          id_csv(numeric_ids)
+        )
+      )$location_id
+    }
+
+    text_values <- as.character(x)
+    text_values <- text_values[!text_values %in% as.character(numeric_ids)]
+    if (length(text_values) > 0) {
+      text_ids <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT location_id
+           FROM public.locations
+           WHERE location_code IN (%s)
+              OR alias IN (%s)",
+          value_csv(text_values),
+          value_csv(text_values)
+        )
+      )$location_id
+      ids <- c(ids, text_ids)
+    }
+
+    unique(as.integer(ids))
+  }
 
   message("Loading ancillary tables...")
   full_tbls <- c(
@@ -248,16 +346,24 @@ create_test_db <- function(
     "discrete.result_value_types",
     "discrete.sample_fractions",
     "discrete.sample_types",
+    "discrete.laboratories",
     "files.document_types",
     "information.internal_status",
     "information.version_info",
     "instruments.communication_protocol_families",
     "instruments.communication_protocols",
+    "instruments.instrument_type",
+    "instruments.instrument_make",
+    "instruments.instrument_model",
+    "instruments.observers",
+    "instruments.sensor_types",
+    "instruments.suppliers",
     "instruments.transmission_component_roles",
     "instruments.transmission_method_families",
     "instruments.transmission_methods",
     "public.approval_types",
     "continuous.correction_types",
+    "continuous.timeseries_types",
     "public.datum_list",
     "public.grade_types",
     "public.location_types",
@@ -266,9 +372,10 @@ create_test_db <- function(
     "public.network_project_types",
     "public.units",
     "public.unit_conversions",
-    "public.parameters",
     "public.parameter_groups",
     "public.parameter_sub_groups",
+    "public.parameters",
+    "public.parameter_relationships",
     "public.qualifier_types",
     "public.organizations",
     "public.languages",
@@ -277,28 +384,34 @@ create_test_db <- function(
 
   # Load the ancillary tables into the test database using DBI
   for (tbl in full_tbls) {
-    message("Loading table ", tbl, " into the test database...")
-
     # Read the table from the original database
     data <- DBI::dbGetQuery(con, paste0("SELECT * FROM ", tbl))
 
     # Write the table to the test database
-    DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
+    append_if_rows(tbl, data)
   }
 
   message("\nLoading subsets of data into the test database...")
   if (is.null(continuous_locations)) {
     # Find the locations for the Liard River at upper crossing and Marsh Lake, plus Tagish meteorological
-    continuous_locations <- DBI::dbGetQuery(
+    continuous_location_ids <- DBI::dbGetQuery(
       con,
-      "SELECT DISTINCT(t.location_id) FROM timeseries t JOIN locations l ON t.location_id = l.location_id WHERE l.location_code IN ('09EA004', '09AB004', '09AA-M1', '48168') OR l.alias IN ('09EA004', '09AB004', '09AA-M1', '48168')"
+      "SELECT DISTINCT t.location_id
+       FROM continuous.timeseries t
+       JOIN public.locations l
+         ON t.location_id = l.location_id
+       WHERE l.location_code IN ('09EA004', '09AB004', '09AA-M1', '48168')
+          OR l.alias IN ('09EA004', '09AB004', '09AA-M1', '48168')"
     )$location_id
-  }
-  if (is.null(discrete_locations)) {
-    discrete_locations <- c(46, 44) # Tagish and Log cabin snow courses
+  } else {
+    continuous_location_ids <- resolve_location_ids(continuous_locations)
   }
 
-  locations <- unique(c(continuous_locations, discrete_locations))
+  if (is.null(discrete_locations)) {
+    discrete_location_ids <- c(46L, 44L) # Tagish and Log Cabin snow courses
+  } else {
+    discrete_location_ids <- resolve_location_ids(discrete_locations)
+  }
 
   if (is.null(start_datetime)) {
     start_datetime <- "1800-01-01 00:00"
@@ -308,66 +421,120 @@ create_test_db <- function(
     end_datetime <- Sys.time()
   }
 
+  if (length(continuous_location_ids) > 0) {
+    ts <- DBI::dbGetQuery(
+      con,
+      sprintf(
+        "WITH RECURSIVE deps(timeseries_id) AS (
+           SELECT t.timeseries_id
+           FROM continuous.timeseries t
+           WHERE t.location_id IN (%s)
+
+           UNION
+
+           SELECT m.member_timeseries_id
+           FROM deps d
+           JOIN continuous.timeseries_compound_members m
+             ON m.timeseries_id = d.timeseries_id
+         )
+         SELECT DISTINCT t.*
+         FROM continuous.timeseries t
+         JOIN deps d
+           ON d.timeseries_id = t.timeseries_id
+         ORDER BY t.timeseries_id",
+        id_csv(continuous_location_ids)
+      )
+    )
+  } else {
+    ts <- empty_table("continuous.timeseries")
+  }
+
+  if (length(discrete_location_ids) > 0) {
+    samples <- DBI::dbGetQuery(
+      con,
+      sprintf(
+        "SELECT *
+         FROM discrete.samples
+         WHERE location_id IN (%s)
+           AND datetime >= %s
+           AND datetime <= %s",
+        id_csv(discrete_location_ids),
+        quote_sql(start_datetime),
+        quote_sql(end_datetime)
+      )
+    )
+  } else {
+    samples <- empty_table("discrete.samples")
+  }
+
+  locations <- unique(c(
+    continuous_location_ids,
+    discrete_location_ids,
+    if (nrow(ts) > 0) ts$location_id else integer()
+  ))
+
+  if (length(locations) == 0) {
+    stop("No locations were resolved for the requested test database subset.")
+  }
+
   # locations table
   locs <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT * FROM locations WHERE location_id IN (%s)",
-      paste(locations, collapse = ", ")
+      "SELECT * FROM public.locations WHERE location_id IN (%s)",
+      id_csv(locations)
     )
   )
-  # Get the 'vectors' table entries referenced by column geom_id
-  geom_ids <- unique(locs$geom_id)
-  vect <- DBI::dbGetQuery(
-    con,
-    sprintf(
-      "SELECT * FROM vectors WHERE geom_id IN (%s)",
-      paste(geom_ids, collapse = ", ")
+
+  # Drainage basins are no longer referenced directly from locations.
+  vect <- if (nrow(locs) > 0) {
+    DBI::dbGetQuery(
+      con,
+      sprintf(
+        "SELECT *
+         FROM spatial.vectors
+         WHERE feature_name IN (%s)
+           AND layer_name = 'Drainage_basins'",
+        value_csv(locs$location_code)
+      )
     )
-  )
-  # Append the vectors entries to the test database
-  message("Loading table spatial.vectors into the test database...")
-  DBI::dbAppendTable(test_con, DBI::SQL("spatial.vectors"), vect)
-  message("Loading table public.locations into the test database...")
-  DBI::dbAppendTable(test_con, "locations", locs)
+  } else {
+    empty_table("spatial.vectors")
+  }
+  append_if_rows("spatial.vectors", vect)
+  append_if_rows("public.locations", locs)
 
   sub_locations <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT * FROM sub_locations WHERE location_id IN (%s)",
-      paste(locations, collapse = ", ")
+      "SELECT * FROM public.sub_locations WHERE location_id IN (%s)",
+      id_csv(locations)
     )
   )
-  if (nrow(sub_locations) > 0) {
-    message("Loading table public.sub_locations into the test database...")
-    DBI::dbAppendTable(test_con, DBI::SQL("public.sub_locations"), sub_locations)
-  }
+  append_if_rows("public.sub_locations", sub_locations)
 
   loc_z <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT * FROM locations_z WHERE location_id IN (%s)",
-      paste(locations, collapse = ", ")
+      "SELECT * FROM public.locations_z WHERE location_id IN (%s)",
+      id_csv(locations)
     )
   )
-  if (nrow(loc_z) > 0) {
-    message("Loading table public.locations_z into the test database...")
-    DBI::dbAppendTable(test_con, DBI::SQL("public.locations_z"), loc_z)
-  }
+  append_if_rows("public.locations_z", loc_z)
 
   # Select entries in locations_networks and locations_projects that match the selected locations
   loc_networks <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT * FROM locations_networks WHERE location_id IN (%s)",
-      paste(locations, collapse = ", ")
+      "SELECT * FROM public.locations_networks WHERE location_id IN (%s)",
+      id_csv(locations)
     )
   )
   loc_projects <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT * FROM locations_projects WHERE location_id IN (%s)",
-      paste(locations, collapse = ", ")
+      "SELECT * FROM public.locations_projects WHERE location_id IN (%s)",
+      id_csv(locations)
     )
   )
   # Select and append the relevant networks and projects
@@ -375,110 +542,204 @@ create_test_db <- function(
     networks <- DBI::dbGetQuery(
       con,
       sprintf(
-        "SELECT * FROM networks WHERE network_id IN (%s)",
-        paste(unique(loc_networks$network_id), collapse = ", ")
+        "SELECT * FROM public.networks WHERE network_id IN (%s)",
+        id_csv(loc_networks$network_id)
       )
     )
-    message("Loading table public.networks into the test database...")
-    DBI::dbAppendTable(test_con, DBI::SQL("public.networks"), networks)
-    message("Loading table public.locations_networks into the test database...")
-    DBI::dbAppendTable(
-      test_con,
-      DBI::SQL("public.locations_networks"),
-      loc_networks
-    )
+    append_if_rows("public.networks", networks)
+    append_if_rows("public.locations_networks", loc_networks)
   }
   if (nrow(loc_projects) > 0) {
     projects <- DBI::dbGetQuery(
       con,
       sprintf(
-        "SELECT * FROM projects WHERE project_id IN (%s)",
-        paste(unique(loc_projects$project_id), collapse = ", ")
+        "SELECT * FROM public.projects WHERE project_id IN (%s)",
+        id_csv(loc_projects$project_id)
       )
     )
-    message("Loading table public.projects into the test database...")
-    DBI::dbAppendTable(test_con, DBI::SQL("public.projects"), projects)
-    message("Loading table public.locations_projects into the test database...")
-    DBI::dbAppendTable(
-      test_con,
-      DBI::SQL("public.locations_projects"),
-      loc_projects
-    )
+    append_if_rows("public.projects", projects)
+    append_if_rows("public.locations_projects", loc_projects)
   }
 
   # datum conversions (applies to discrete or continuous)
   dc <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT * FROM datum_conversions WHERE location_id IN (%s)",
-      paste(locations, collapse = ",")
+      "SELECT * FROM public.datum_conversions WHERE location_id IN (%s)",
+      id_csv(locations)
     )
   )
-  message("Loading table public.datum_conversions into the test database...")
-  DBI::dbAppendTable(test_con, "datum_conversions", dc)
+  append_if_rows("public.datum_conversions", dc)
 
-  # Continuous data --------------------------------------------------------
-  if (length(continuous_locations) > 0) {
-    ts <- DBI::dbGetQuery(
+  ts_ids <- if (nrow(ts) > 0) {
+    id_csv(ts$timeseries_id)
+  } else {
+    NULL
+  }
+
+  agreements <- if (!is.null(ts_ids)) {
+    DBI::dbGetQuery(
       con,
       sprintf(
-        "SELECT * FROM timeseries WHERE location_id IN (%s)",
-        paste(continuous_locations, collapse = ",")
+        "SELECT *
+         FROM continuous.timeseries_data_sharing_agreements
+         WHERE timeseries_id IN (%s)",
+        ts_ids
       )
     )
-    if (nrow(ts) > 0) {
-      message("Loading table continuous.timeseries into the test database")
-      DBI::dbAppendTable(test_con, "timeseries", ts)
+  } else {
+    empty_table("continuous.timeseries_data_sharing_agreements")
+  }
 
-      ts_ids <- paste(ts$timeseries_id, collapse = ",")
+  document_ids <- integer()
+  if (
+    nrow(ts) > 0 &&
+      "default_data_sharing_agreement_id" %in% names(ts)
+  ) {
+    document_ids <- c(document_ids, ts$default_data_sharing_agreement_id)
+  }
+  if (nrow(agreements) > 0) {
+    document_ids <- c(document_ids, agreements$data_sharing_agreement_id)
+  }
+  if (
+    nrow(samples) > 0 &&
+      "data_sharing_agreement_id" %in% names(samples)
+  ) {
+    document_ids <- c(document_ids, samples$data_sharing_agreement_id)
+  }
+  document_ids <- unique(document_ids[!is.na(document_ids)])
+
+  if (length(document_ids) > 0) {
+    documents <- DBI::dbGetQuery(
+      con,
+      sprintf(
+        "SELECT *
+         FROM files.documents
+         WHERE document_id IN (%s)",
+        id_csv(document_ids)
+      )
+    )
+    append_if_rows("files.documents", documents)
+  }
+
+  location_names <- DBI::dbGetQuery(
+    con,
+    sprintf(
+      "SELECT *
+       FROM public.location_names
+       WHERE location_id IN (%s)",
+      id_csv(locations)
+    )
+  )
+  append_if_rows("public.location_names", location_names)
+
+  # Continuous data --------------------------------------------------------
+  if (length(continuous_location_ids) > 0) {
+    if (nrow(ts) > 0) {
+      append_if_rows("continuous.timeseries", ts)
+
+      compounds <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT *
+           FROM continuous.timeseries_compounds
+           WHERE timeseries_id IN (%s)",
+          ts_ids
+        )
+      )
+      append_if_rows("continuous.timeseries_compounds", compounds)
+
+      compound_members <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT *
+           FROM continuous.timeseries_compound_members
+           WHERE timeseries_id IN (%s)",
+          ts_ids
+        )
+      )
+      append_if_rows(
+        "continuous.timeseries_compound_members",
+        compound_members
+      )
 
       g <- DBI::dbGetQuery(
         con,
-        paste0("SELECT * FROM grades WHERE timeseries_id IN (", ts_ids, ")")
+        paste0(
+          "SELECT * FROM continuous.grades WHERE timeseries_id IN (",
+          ts_ids,
+          ")"
+        )
       )
-      message("Loading table continuous.grades into the test database")
-      DBI::dbAppendTable(test_con, "grades", g)
+      append_if_rows("continuous.grades", g)
 
       a <- DBI::dbGetQuery(
         con,
-        paste0("SELECT * FROM approvals WHERE timeseries_id IN (", ts_ids, ")")
+        paste0(
+          "SELECT * FROM continuous.approvals WHERE timeseries_id IN (",
+          ts_ids,
+          ")"
+        )
       )
-      message("Loading table continuous.approvals into the test database")
-      DBI::dbAppendTable(test_con, "approvals", a)
+      append_if_rows("continuous.approvals", a)
 
       q <- DBI::dbGetQuery(
         con,
-        paste0("SELECT * FROM qualifiers WHERE timeseries_id IN (", ts_ids, ")")
+        paste0(
+          "SELECT * FROM continuous.qualifiers WHERE timeseries_id IN (",
+          ts_ids,
+          ")"
+        )
       )
-      message("Loading table continuous.qualifiers into the test database")
-      DBI::dbAppendTable(test_con, "qualifiers", q)
+      append_if_rows("continuous.qualifiers", q)
+
+      owners <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT * FROM continuous.owners WHERE timeseries_id IN (",
+          ts_ids,
+          ")"
+        )
+      )
+      append_if_rows("continuous.owners", owners)
+
+      contributors <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT * FROM continuous.contributors WHERE timeseries_id IN (",
+          ts_ids,
+          ")"
+        )
+      )
+      append_if_rows("continuous.contributors", contributors)
 
       mc <- DBI::dbGetQuery(
         con,
         sprintf(
-          "SELECT * FROM measurements_continuous WHERE timeseries_id IN (%s) AND datetime >= '%s' AND datetime <= '%s'",
+          "SELECT *
+           FROM continuous.measurements_continuous
+           WHERE timeseries_id IN (%s)
+             AND datetime >= %s
+             AND datetime <= %s",
           ts_ids,
-          start_datetime,
-          end_datetime
+          quote_sql(start_datetime),
+          quote_sql(end_datetime)
         )
       )
-      message(
-        "Loading table continuous.measurements_continuous into the test database"
-      )
-      DBI::dbAppendTable(test_con, "measurements_continuous", mc)
+      append_if_rows("continuous.measurements_continuous", mc)
 
       md <- DBI::dbGetQuery(
         con,
         sprintf(
-          "SELECT * FROM measurements_calculated_daily WHERE timeseries_id IN (%s) AND date <= '%s'",
+          "SELECT *
+           FROM continuous.measurements_calculated_daily
+           WHERE timeseries_id IN (%s)
+             AND date <= %s",
           ts_ids,
-          end_datetime
+          quote_sql(as.Date(end_datetime))
         )
       )
-      message(
-        "Loading table continuous.measurements_calculated_daily into the test database"
-      )
-      DBI::dbAppendTable(test_con, "measurements_calculated_daily", md)
+      append_if_rows("continuous.measurements_calculated_daily", md)
 
       corr <- DBI::dbGetQuery(
         con,
@@ -487,31 +748,12 @@ create_test_db <- function(
           ts_ids
         )
       )
-      message("Loading table continuous.corrections into the test database")
-      DBI::dbAppendTable(test_con, "corrections", corr)
+      append_if_rows("continuous.corrections", corr)
 
-      message(
-        "Loading continuous.timeseries_data_sharing_agreements into the test database"
-      )
-      agreements <- DBI::dbGetQuery(
-        con,
-        "SELECT * FROM continuous.timeseries_data_sharing_agreements"
-      )
-      DBI::dbAppendTable(
-        test_con,
-        "timeseries_data_sharing_agreements",
+      append_if_rows(
+        "continuous.timeseries_data_sharing_agreements",
         agreements
       )
-
-      message("Loading public.location_names into the test database")
-      location_names <- DBI::dbGetQuery(
-        con,
-        sprintf(
-          "SELECT * FROM public.location_names WHERE location_id IN (%s)",
-          paste(locations, collapse = ",")
-        )
-      )
-      DBI::dbAppendTable(test_con, "location_names", location_names)
 
       if (
         DBI::dbExistsTable(
@@ -522,21 +764,34 @@ create_test_db <- function(
         lmi <- DBI::dbGetQuery(
           con,
           sprintf(
-            "SELECT * FROM public.locations_metadata_instruments WHERE location_id IN (%s)",
-            paste(locations, collapse = ",")
+            "SELECT *
+             FROM public.locations_metadata_instruments
+             WHERE location_id IN (%s)
+               AND (
+                 timeseries_id IS NULL OR
+                 timeseries_id IN (%s)
+               )",
+            id_csv(locations),
+            ts_ids
           )
         )
         if (nrow(lmi) > 0) {
-          metadata_ids <- paste(lmi$metadata_id, collapse = ",")
+          metadata_ids <- id_csv(lmi$metadata_id)
 
-          message(
-            "Loading table public.locations_metadata_instruments into the test database"
-          )
-          DBI::dbAppendTable(
-            test_con,
-            DBI::SQL("public.locations_metadata_instruments"),
-            lmi
-          )
+          if (any(!is.na(lmi$instrument_id))) {
+            lmi_instruments <- DBI::dbGetQuery(
+              con,
+              sprintf(
+                "SELECT *
+                 FROM instruments.instruments
+                 WHERE instrument_id IN (%s)",
+                id_csv(lmi$instrument_id)
+              )
+            )
+            append_if_rows("instruments.instruments", lmi_instruments)
+          }
+
+          append_if_rows("public.locations_metadata_instruments", lmi)
 
           if (
             DBI::dbExistsTable(
@@ -550,30 +805,21 @@ create_test_db <- function(
             connections <- DBI::dbGetQuery(
               con,
               sprintf(
-                paste(
-                  "SELECT *",
-                  "FROM public.locations_metadata_instrument_connections",
-                  "WHERE instrument_metadata_id IN (%s)",
-                  "   OR logger_metadata_id IN (%s)"
-                ),
+                "SELECT *
+                 FROM public.locations_metadata_instrument_connections
+                 WHERE instrument_metadata_id IN (%s)
+                    OR logger_metadata_id IN (%s)",
                 metadata_ids,
                 metadata_ids
               )
             )
             if (nrow(connections) > 0) {
-              message(
-                paste(
-                  "Loading table public.locations_metadata_instrument_connections",
-                  "into the test database"
-                )
-              )
-              DBI::dbAppendTable(
-                test_con,
-                DBI::SQL("public.locations_metadata_instrument_connections"),
+              append_if_rows(
+                "public.locations_metadata_instrument_connections",
                 connections
               )
 
-              connection_ids <- paste(connections$connection_id, collapse = ",")
+              connection_ids <- id_csv(connections$connection_id)
               if (
                 DBI::dbExistsTable(
                   con,
@@ -586,30 +832,21 @@ create_test_db <- function(
                 connection_signals <- DBI::dbGetQuery(
                   con,
                   sprintf(
-                    paste(
-                      "SELECT *",
-                      "FROM public.locations_metadata_instrument_connection_signals",
-                      "WHERE connection_id IN (%s)"
-                    ),
-                    connection_ids
+                    "SELECT *
+                     FROM public.locations_metadata_instrument_connection_signals
+                     WHERE connection_id IN (%s)
+                       AND (
+                         timeseries_id IS NULL OR
+                         timeseries_id IN (%s)
+                       )",
+                    connection_ids,
+                    ts_ids
                   )
                 )
-                if (nrow(connection_signals) > 0) {
-                  message(
-                    paste(
-                      "Loading table",
-                      "public.locations_metadata_instrument_connection_signals",
-                      "into the test database"
-                    )
-                  )
-                  DBI::dbAppendTable(
-                    test_con,
-                    DBI::SQL(
-                      "public.locations_metadata_instrument_connection_signals"
-                    ),
-                    connection_signals
-                  )
-                }
+                append_if_rows(
+                  "public.locations_metadata_instrument_connection_signals",
+                  connection_signals
+                )
               }
             }
           }
@@ -626,31 +863,19 @@ create_test_db <- function(
             transmission_setups <- DBI::dbGetQuery(
               con,
               sprintf(
-                paste(
-                  "SELECT *",
-                  "FROM public.locations_metadata_transmission_setups",
-                  "WHERE logger_metadata_id IN (%s)"
-                ),
+                "SELECT *
+                 FROM public.locations_metadata_transmission_setups
+                 WHERE logger_metadata_id IN (%s)",
                 metadata_ids
               )
             )
             if (nrow(transmission_setups) > 0) {
-              message(
-                paste(
-                  "Loading table public.locations_metadata_transmission_setups",
-                  "into the test database"
-                )
-              )
-              DBI::dbAppendTable(
-                test_con,
-                DBI::SQL("public.locations_metadata_transmission_setups"),
+              append_if_rows(
+                "public.locations_metadata_transmission_setups",
                 transmission_setups
               )
 
-              setup_ids <- paste(
-                transmission_setups$transmission_setup_id,
-                collapse = ","
-              )
+              setup_ids <- id_csv(transmission_setups$transmission_setup_id)
               if (
                 DBI::dbExistsTable(
                   con,
@@ -663,27 +888,16 @@ create_test_db <- function(
                 transmission_routes <- DBI::dbGetQuery(
                   con,
                   sprintf(
-                    paste(
-                      "SELECT *",
-                      "FROM public.locations_metadata_transmission_routes",
-                      "WHERE transmission_setup_id IN (%s)"
-                    ),
+                    "SELECT *
+                     FROM public.locations_metadata_transmission_routes
+                     WHERE transmission_setup_id IN (%s)",
                     setup_ids
                   )
                 )
-                if (nrow(transmission_routes) > 0) {
-                  message(
-                    paste(
-                      "Loading table public.locations_metadata_transmission_routes",
-                      "into the test database"
-                    )
-                  )
-                  DBI::dbAppendTable(
-                    test_con,
-                    DBI::SQL("public.locations_metadata_transmission_routes"),
-                    transmission_routes
-                  )
-                }
+                append_if_rows(
+                  "public.locations_metadata_transmission_routes",
+                  transmission_routes
+                )
               }
 
               if (
@@ -698,28 +912,16 @@ create_test_db <- function(
                 transmission_components <- DBI::dbGetQuery(
                   con,
                   sprintf(
-                    paste(
-                      "SELECT *",
-                      "FROM public.locations_metadata_transmission_components",
-                      "WHERE transmission_setup_id IN (%s)"
-                    ),
+                    "SELECT *
+                     FROM public.locations_metadata_transmission_components
+                     WHERE transmission_setup_id IN (%s)",
                     setup_ids
                   )
                 )
-                if (nrow(transmission_components) > 0) {
-                  message(
-                    paste(
-                      "Loading table",
-                      "public.locations_metadata_transmission_components",
-                      "into the test database"
-                    )
-                  )
-                  DBI::dbAppendTable(
-                    test_con,
-                    DBI::SQL("public.locations_metadata_transmission_components"),
-                    transmission_components
-                  )
-                }
+                append_if_rows(
+                  "public.locations_metadata_transmission_components",
+                  transmission_components
+                )
               }
             }
           }
@@ -731,37 +933,49 @@ create_test_db <- function(
   }
 
   # Discrete data ---------------------------------------------------------
-  if (length(discrete_locations) > 0) {
+  if (length(discrete_location_ids) > 0) {
     ss <- DBI::dbGetQuery(
       con,
       sprintf(
-        "SELECT * FROM sample_series WHERE location_id IN (%s)",
-        paste(discrete_locations, collapse = ",")
+        "SELECT *
+         FROM discrete.sample_series
+         WHERE location_id IN (%s)",
+        id_csv(discrete_location_ids)
       )
     )
-    message("Loading table discrete.sample_series into the test database")
-    DBI::dbAppendTable(test_con, "sample_series", ss)
-
-    samples <- DBI::dbGetQuery(
-      con,
-      sprintf(
-        "SELECT * FROM samples WHERE location_id IN (%s) AND datetime >= '%s' AND datetime <= '%s'",
-        paste(discrete_locations, collapse = ","),
-        start_datetime,
-        end_datetime
-      )
-    )
+    append_if_rows("discrete.sample_series", ss)
 
     if (nrow(samples) > 0) {
-      message("Loading table discrete.samples into the test database")
-      DBI::dbAppendTable(test_con, "samples", samples)
-      sample_ids <- paste(samples$sample_id, collapse = ",")
+      if (
+        "field_visit_id" %in%
+          names(samples) &&
+          any(!is.na(samples$field_visit_id)) &&
+          table_exists("field", "field_visits")
+      ) {
+        field_visits <- DBI::dbGetQuery(
+          con,
+          sprintf(
+            "SELECT *
+             FROM field.field_visits
+             WHERE field_visit_id IN (%s)",
+            id_csv(samples$field_visit_id)
+          )
+        )
+        append_if_rows("field.field_visits", field_visits)
+      }
+
+      append_if_rows("discrete.samples", samples)
+      sample_ids <- id_csv(samples$sample_id)
       results <- DBI::dbGetQuery(
         con,
-        sprintf("SELECT * FROM results WHERE sample_id IN (%s)", sample_ids)
+        sprintf(
+          "SELECT *
+           FROM discrete.results
+           WHERE sample_id IN (%s)",
+          sample_ids
+        )
       )
-      message("Loading table discrete.results into the test database")
-      DBI::dbAppendTable(test_con, "results", results)
+      append_if_rows("discrete.results", results)
     } else {
       warning("No discrete samples found for the specified locations.")
     }
@@ -777,6 +991,8 @@ create_test_db <- function(
   }
 
   dump_args <- c(
+    "--no-owner", # do not include commands to set ownership of objects to the original owner
+    "--no-acl", # do not include commands to set access privileges (grant/revoke
     "-U",
     username,
     "-h",
@@ -817,13 +1033,13 @@ create_test_db <- function(
   }
 
   # append statement to set search_path on restore
-  alter_stmt <- paste(
-    "-- ensure search_path is set when restoring the database",
-    "DO $$",
-    "BEGIN",
-    "  EXECUTE format('ALTER DATABASE %I SET search_path TO public, continuous, discrete, spatial, files, instruments, boreholes, information, application;', current_database());",
-    "END$$;",
-    sep = "\n"
+  alter_stmt <- sprintf(
+    "-- ensure search_path is set when restoring the database
+DO $$
+BEGIN
+  EXECUTE format('ALTER DATABASE %%I SET search_path TO %s;', current_database());
+END$$;",
+    db_search_path
   )
   cat(alter_stmt, file = outpath, append = TRUE)
 

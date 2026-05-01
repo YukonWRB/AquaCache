@@ -107,6 +107,181 @@ tryCatch(
       )
     }
 
+    # Patch 38 used jsonb_object_length() in audit.if_modified_func(), but
+    # that helper is not available on all supported PostgreSQL versions.
+    # Refresh the trigger function here before patch 39 performs audited
+    # updates so existing databases patched with the older definition can
+    # continue safely.
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION audit.if_modified_func()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       SECURITY DEFINER
+       SET search_path = pg_catalog, public, audit
+       AS $function$
+       DECLARE
+         v_user_name TEXT := current_user::TEXT;
+         v_actor_user TEXT := COALESCE(
+           NULLIF(current_setting('aquacache.audit_user', true), ''),
+           session_user::TEXT
+         );
+         v_application_name TEXT := NULLIF(
+           current_setting('application_name', true),
+           ''
+         );
+         v_skip_audit BOOLEAN := FALSE;
+         v_row_created TIMESTAMPTZ;
+         v_row_modified TIMESTAMPTZ;
+         v_old_data JSONB;
+         v_new_data JSONB;
+         v_changed_fields JSONB;
+         v_old_end_dt TIMESTAMPTZ;
+         v_new_end_dt TIMESTAMPTZ;
+         v_segment_start_dt TIMESTAMPTZ;
+         v_timeseries_id INTEGER;
+       BEGIN
+         IF TG_OP = 'DELETE' THEN
+           v_row_created := (to_jsonb(OLD) ->> 'created')::timestamptz;
+           v_row_modified := (to_jsonb(OLD) ->> 'modified')::timestamptz;
+           v_old_data := to_jsonb(OLD)
+             - 'created' - 'modified' - 'created_by' - 'modified_by';
+
+           INSERT INTO audit.general_log (
+             schema_name,
+             table_name,
+             user_name,
+             actor_user,
+             application_name,
+             action,
+             row_created,
+             row_modified,
+             original_data,
+             new_data,
+             changed_fields,
+             action_timestamp,
+             transaction_id
+           ) VALUES (
+             TG_TABLE_SCHEMA,
+             TG_TABLE_NAME,
+             v_user_name,
+             v_actor_user,
+             v_application_name,
+             TG_OP,
+             v_row_created,
+             v_row_modified,
+             v_old_data,
+             NULL,
+             NULL,
+             clock_timestamp(),
+             txid_current()
+           );
+
+           RETURN OLD;
+         END IF;
+
+         v_row_created := COALESCE(
+           (to_jsonb(NEW) ->> 'created')::timestamptz,
+           (to_jsonb(OLD) ->> 'created')::timestamptz
+         );
+         v_row_modified := COALESCE(
+           (to_jsonb(NEW) ->> 'modified')::timestamptz,
+           (to_jsonb(OLD) ->> 'modified')::timestamptz
+         );
+         v_old_data := to_jsonb(OLD)
+           - 'created' - 'modified' - 'created_by' - 'modified_by';
+         v_new_data := to_jsonb(NEW)
+           - 'created' - 'modified' - 'created_by' - 'modified_by';
+
+         -- Ignore automatically maintained sync timestamps on timeseries
+         IF TG_TABLE_SCHEMA = 'continuous' AND TG_TABLE_NAME = 'timeseries' THEN
+           v_old_data := v_old_data
+             - 'last_new_data' - 'last_synchronize' - 'last_daily_calculation' - 'end_datetime' - 'start_datetime' - 'last_synchronize' - 'last_new_data' - 'last_daily_calculation';
+           v_new_data := v_new_data
+             - 'last_new_data' - 'last_synchronize' - 'last_daily_calculation' - 'end_datetime' - 'start_datetime' - 'last_synchronize' - 'last_new_data' - 'last_daily_calculation';
+         END IF;
+
+         v_changed_fields := audit.jsonb_changed_fields(v_old_data, v_new_data);
+
+         -- Skip noisy sync-style updates that only extend the latest
+         -- temporal segment on qualifying metadata tables.
+         IF
+           TG_OP = 'UPDATE' AND
+             TG_TABLE_SCHEMA = 'continuous' AND
+             TG_TABLE_NAME = ANY(ARRAY[
+               'approvals',
+               'grades',
+               'qualifiers',
+               'owners',
+               'contributors'
+             ]) AND
+             v_changed_fields ? 'end_dt' AND
+             (v_changed_fields - 'end_dt') = '{}'::jsonb
+         THEN
+           v_old_end_dt := (to_jsonb(OLD) ->> 'end_dt')::timestamptz;
+           v_new_end_dt := (to_jsonb(NEW) ->> 'end_dt')::timestamptz;
+           v_segment_start_dt := (to_jsonb(NEW) ->> 'start_dt')::timestamptz;
+           v_timeseries_id := (to_jsonb(NEW) ->> 'timeseries_id')::integer;
+
+           IF v_new_end_dt > v_old_end_dt THEN
+             EXECUTE format(
+               'SELECT NOT EXISTS (
+                  SELECT 1
+                  FROM %I.%I t
+                  WHERE t.timeseries_id = $1
+                    AND t.start_dt > $2
+                )',
+               TG_TABLE_SCHEMA,
+               TG_TABLE_NAME
+             )
+             INTO v_skip_audit
+             USING v_timeseries_id, v_segment_start_dt;
+           END IF;
+         END IF;
+
+         IF v_changed_fields = '{}'::jsonb THEN
+           RETURN NEW;
+         END IF;
+
+         IF v_skip_audit THEN
+           RETURN NEW;
+         END IF;
+
+         INSERT INTO audit.general_log (
+           schema_name,
+           table_name,
+           user_name,
+           actor_user,
+           application_name,
+           action,
+           row_created,
+           row_modified,
+           original_data,
+           new_data,
+           changed_fields,
+           action_timestamp,
+           transaction_id
+         ) VALUES (
+           TG_TABLE_SCHEMA,
+           TG_TABLE_NAME,
+           v_user_name,
+           v_actor_user,
+           v_application_name,
+           TG_OP,
+           v_row_created,
+           v_row_modified,
+           v_old_data,
+           v_new_data,
+           v_changed_fields,
+           clock_timestamp(),
+           txid_current()
+         );
+
+         RETURN NEW;
+       END;
+       $function$;"
+    )
+
     legacy_cols <- DBI::dbGetQuery(
       con,
       "SELECT column_name
@@ -1576,6 +1751,12 @@ tryCatch(
     DBI::dbExecute(
       con,
       "ALTER VIEW continuous.timeseries_metadata_en OWNER TO admin;"
+    )
+
+    # Drop and re-create the French view to update the parameter unit selection
+    DBI::dbExecute(
+      con,
+      "DROP VIEW IF EXISTS continuous.timeseries_metadata_fr;"
     )
 
     DBI::dbExecute(

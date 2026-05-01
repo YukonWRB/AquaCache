@@ -2,7 +2,7 @@
 % Please edit documentation in R/addNewContinuous.R
 \name{addNewContinuous}
 \alias{addNewContinuous}
-\title{Add new data to the measurements_continuous or measurements_calculated_daily tables}
+\title{Add new data to the measurements_continuous table}
 \usage{
 addNewContinuous(tsid, df, con = NULL, target = "realtime", overwrite = "no")
 }
@@ -13,7 +13,7 @@ addNewContinuous(tsid, df, con = NULL, target = "realtime", overwrite = "no")
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
 
-\item{target}{One of 'realtime' or 'daily'. Default is 'realtime'. You would only want to append directly to the 'daily' table if adding pre-calculated daily means with the aim of adding higher frequency data to the 'measurements_continuous' table later. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.}
+\item{target}{One of 'realtime' or 'daily'. Default is 'realtime'. Daily data are written to \code{measurements_continuous} as one-day-period rows at local noon UTC and then summarized by database triggers. As an extra check, the data.frame passed in argument 'df' must contain a column named 'datetime' or 'date' to match this parameter.}
 
 \item{overwrite}{Select one of "no", "all", "conflict". Default is "no", which will not overwrite any existing data (and fail if there is a conflict). "all" will wipe and replace all database entries for the target timeseries in the temporal range of \code{df}, while "conflict" will overwrite only those entries that conflict with the data in \code{df} (i.e. have the same datetime or date).}
 }
@@ -21,5 +21,5 @@ addNewContinuous(tsid, df, con = NULL, target = "realtime", overwrite = "no")
 Nothing; data is added to the database silently.
 }
 \description{
-This function can be used to append new contiuous type data directly to the database without downloading it from a remote source. Differs from \code{\link[=getNewContinuous]{getNewContinuous()}} as the later is used to pull data from a remote before append.
+This function can be used to append new continuous type data directly to the database without downloading it from a remote source. Differs from \code{\link[=getNewContinuous]{getNewContinuous()}} as the latter is used to pull data from a remote before append. New data can only be appended to basic timeseries.
 }

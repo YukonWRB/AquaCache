@@ -7,6 +7,76 @@
 #' @export
 fmt <- function(x) format(x, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
 
+#' @title Temporarily clear PostgreSQL spatial environment variables
+#' @description
+#' Internal helper used around raster workflows to avoid `terra` picking up
+#' PostgreSQL-installed `PROJ_LIB` or `GDAL_DATA` paths that can break raster
+#' reads and writes. Returns a restore function when any variables are unset.
+#' @return Either `NULL` when no PostgreSQL spatial environment variables were
+#' detected, or a function that restores the original values.
+#' @noRd
+#' @keywords internal
+unset_postgres_spatial_env <- function() {
+  env_vars <- c("PROJ_LIB", "GDAL_DATA")
+  old_env <- Sys.getenv(env_vars, unset = NA_character_)
+  postgres_vars <- !is.na(old_env) &
+    grepl("PostgreSQL", old_env, ignore.case = TRUE)
+
+  if (!any(postgres_vars)) {
+    return(NULL)
+  }
+
+  vars_to_unset <- env_vars[postgres_vars]
+  old_vals <- old_env[postgres_vars]
+  Sys.unsetenv(vars_to_unset)
+
+  function() {
+    for (nm in names(old_vals)) {
+      if (is.na(old_vals[[nm]])) {
+        Sys.unsetenv(nm)
+      } else {
+        do.call(Sys.setenv, stats::setNames(list(old_vals[[nm]]), nm))
+      }
+    }
+  }
+}
+
+#' @title Find a PostgreSQL command line utility
+#' @description
+#' Internal helper that first checks `Sys.which()` and, on Windows, falls back
+#' to common PostgreSQL installation directories under Program Files.
+#' @param name The base utility name, such as `"psql"` or `"raster2pgsql"`.
+#' @return A single path to the requested utility, or `""` if it could not be
+#' found.
+#' @noRd
+#' @keywords internal
+find_postgres_utility <- function(name) {
+  utility_path <- Sys.which(name)
+  if (nzchar(utility_path) || .Platform$OS.type != "windows") {
+    return(utility_path)
+  }
+
+  patterns <- c(
+    file.path("C:/Program Files/PostgreSQL", "*", "bin", paste0(name, ".exe")),
+    file.path(
+      "C:/Program Files (x86)/PostgreSQL",
+      "*",
+      "bin",
+      paste0(name, ".exe")
+    )
+  )
+  candidates <- unique(unlist(lapply(patterns, Sys.glob), use.names = FALSE))
+  if (!length(candidates)) {
+    return("")
+  }
+
+  normalizePath(
+    sort(candidates, decreasing = TRUE)[1],
+    winslash = "\\",
+    mustWork = FALSE
+  )
+}
+
 
 #' @title Begin a transaction
 #' @description
@@ -255,196 +325,23 @@ inf_to_na <- function(x) {
   return(x)
 }
 
-#' @title Create an empty daily stats data frame with the correct structure
+#' @title Convert a date to a daily datetime in UTC
 #' @description
-#' Utility function to create an empty daily stats data frame with the correct structure
-#' @return An empty data frame with the correct columns and types for daily stats
-#' @noRd
-#' @keywords internal
-empty_daily_stats <- function() {
-  data.frame(
-    timeseries_id = integer(),
-    date = as.Date(character()),
-    value = numeric(),
-    imputed = logical(),
-    percent_historic_range = numeric(),
-    max = numeric(),
-    min = numeric(),
-    q90 = numeric(),
-    q75 = numeric(),
-    q50 = numeric(),
-    q25 = numeric(),
-    q10 = numeric(),
-    mean = numeric(),
-    doy_count = integer()
-  )
-}
-
-#' @title Normalize daily stats data frame
-#' @description
-#' Utility function to normalize a daily stats data frame to ensure it has the correct structure and types, and to fill in any missing columns with NA values. Also ensures the data frame is ordered by date.
-#' @param df A data frame containing daily stats data, which may have missing columns or incorrect types.
-#' @param timeseries_id The timeseries_id to fill in for any missing timeseries_id column.
-#' @return A normalized data frame with the correct structure and types for daily stats, with missing columns filled in with NA and ordered by date.
+#' Utility function to convert a date to a daily datetime in UTC, with an optional timezone offset in hours. The resulting datetime will be at noon UTC by default, or adjusted based on the provided timezone offset.
+#' @param date A date object or a string that can be converted to a date.
+#' @param timezone_offset_hours An optional integer representing the timezone offset in hours from UTC.
+#' @return A POSIXct datetime object in UTC corresponding to the input date at noon UTC, adjusted for the timezone offset if provided.
 #' @noRd
 #' @keywords internal
 
-normalize_daily_stats <- function(df, timeseries_id) {
-  if (nrow(df) == 0) {
-    return(empty_daily_stats())
+daily_datetime_utc <- function(date, timezone_offset_hours = 0L) {
+  timezone_offset_hours <- suppressWarnings(as.integer(timezone_offset_hours))
+  if (length(timezone_offset_hours) == 0 || is.na(timezone_offset_hours)) {
+    timezone_offset_hours <- 0L
   }
 
-  cols <- c(
-    "timeseries_id",
-    "date",
-    "value",
-    "imputed",
-    "percent_historic_range",
-    "max",
-    "min",
-    "q90",
-    "q75",
-    "q50",
-    "q25",
-    "q10",
-    "mean",
-    "doy_count"
-  )
-  col_defaults <- list(
-    timeseries_id = as.integer(NA),
-    date = as.Date(NA),
-    value = as.numeric(NA),
-    imputed = as.logical(NA),
-    percent_historic_range = as.numeric(NA),
-    max = as.numeric(NA),
-    min = as.numeric(NA),
-    q90 = as.numeric(NA),
-    q75 = as.numeric(NA),
-    q50 = as.numeric(NA),
-    q25 = as.numeric(NA),
-    q10 = as.numeric(NA),
-    mean = as.numeric(NA),
-    doy_count = as.integer(NA)
-  )
-  numeric_cols <- c(
-    "value",
-    "percent_historic_range",
-    "max",
-    "min",
-    "q90",
-    "q75",
-    "q50",
-    "q25",
-    "q10",
-    "mean"
-  )
-
-  df <- as.data.frame(df, stringsAsFactors = FALSE)
-  if (!("timeseries_id" %in% names(df))) {
-    df$timeseries_id <- timeseries_id
-  }
-
-  for (col in setdiff(cols, names(df))) {
-    df[[col]] <- rep(col_defaults[[col]], nrow(df))
-  }
-
-  df <- df[, cols, drop = FALSE]
-  df$timeseries_id <- as.integer(df$timeseries_id)
-  df$date <- as.Date(df$date)
-  for (col in numeric_cols) {
-    df[[col]] <- as.numeric(df[[col]])
-  }
-  df$imputed <- as.logical(df$imputed)
-  df$doy_count <- as.integer(df$doy_count)
-  df[order(df$date), , drop = FALSE]
-}
-
-#' @title Generate a unique key for daily stats rows
-#' @description
-#' Utility function to generate a unique key for daily stats rows based on the values of all columns. This is used to compare rows and determine if they have changed.
-#' @param df A data frame containing daily stats data, which must have the columns: timeseries_id, date, value, imputed, percent_historic_range, max, min, q90, q75, q50, q25, q10, mean, doy_count.
-#' @return A character vector of unique keys for each row, generated by concatenating the values of all columns with a separator. NA values are represented as "NA" in the key.
-#' @noRd
-#' @keywords internal
-
-daily_stats_row_key <- function(df) {
-  if (nrow(df) == 0) {
-    return(character())
-  }
-
-  paste(
-    ifelse(is.na(df$timeseries_id), "NA", as.character(df$timeseries_id)),
-    as.character(df$date),
-    ifelse(is.na(df$value), "NA", as.character(df$value)),
-    ifelse(is.na(df$imputed), "NA", as.character(df$imputed)),
-    ifelse(
-      is.na(df$percent_historic_range),
-      "NA",
-      as.character(df$percent_historic_range)
-    ),
-    ifelse(is.na(df$max), "NA", as.character(df$max)),
-    ifelse(is.na(df$min), "NA", as.character(df$min)),
-    ifelse(is.na(df$q90), "NA", as.character(df$q90)),
-    ifelse(is.na(df$q75), "NA", as.character(df$q75)),
-    ifelse(is.na(df$q50), "NA", as.character(df$q50)),
-    ifelse(is.na(df$q25), "NA", as.character(df$q25)),
-    ifelse(is.na(df$q10), "NA", as.character(df$q10)),
-    ifelse(is.na(df$mean), "NA", as.character(df$mean)),
-    ifelse(is.na(df$doy_count), "NA", as.character(df$doy_count)),
-    sep = "|"
-  )
-}
-
-#' @title Retain only rows with changed daily stats
-#' @description
-#' Compares a data frame of daily stats rows to existing rows in the database for the same timeseries_id and date, and retains only the rows that have different values in any of the daily stats columns (value, imputed, percent_historic_range, max, min, q90, q75, q50, q25, q10, mean, doy_count). If there are no existing rows for the same timeseries_id and date, all rows are treated as changed and retained. This function is used to minimize the number of rows that need to be updated in the database by only updating rows where the daily stats have actually changed.
-#' @param con A database connection object.
-#' @param timeseries_id The timeseries_id for which to compare daily stats rows.
-#' @param rows A data frame of daily stats rows to compare, which must have the columns: timeseries_id, date, value, imputed, percent_historic_range, max, min, q90, q75, q50, q25, q10, mean, doy_count.
-#' @return A data frame containing only the rows from `rows` that have different values in any of the daily stats columns compared to the existing rows in the database for the same timeseries_id and date. If there are no existing rows for the same timeseries_id and date, all rows from `rows` are returned.
-#' @noRd
-#' @keywords internal
-select_changed_daily_stats <- function(con, timeseries_id, rows) {
-  rows <- normalize_daily_stats(rows, timeseries_id)
-  if (nrow(rows) == 0) {
-    return(rows)
-  }
-
-  existing <- DBI::dbGetQuery(
-    con,
-    paste0(
-      "SELECT timeseries_id, date, value, imputed, percent_historic_range, ",
-      "max, min, q90, q75, q50, q25, q10, mean, doy_count ",
-      "FROM measurements_calculated_daily WHERE timeseries_id = ",
-      timeseries_id,
-      " AND date IN ('",
-      paste(rows$date, collapse = "', '"),
-      "');"
-    )
-  )
-  existing <- normalize_daily_stats(existing, timeseries_id)
-
-  existing_keys <- stats::setNames(
-    daily_stats_row_key(existing),
-    as.character(existing$date)
-  )
-  row_keys <- daily_stats_row_key(rows)
-  changed <- vapply(
-    seq_len(nrow(rows)),
-    function(idx) {
-      existing_key <- unname(existing_keys[as.character(rows$date[idx])])
-      if (length(existing_key) == 0) {
-        return(TRUE)
-      }
-      !identical(
-        existing_key,
-        row_keys[idx]
-      )
-    },
-    logical(1)
-  )
-
-  rows[changed, , drop = FALSE]
+  as.POSIXct(as.Date(date), tz = "UTC") +
+    (12L - timezone_offset_hours) * 3600
 }
 
 #' @title Resolve a matrix state identifier
