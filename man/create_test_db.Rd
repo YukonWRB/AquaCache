@@ -40,9 +40,9 @@ create_test_db(
 
 \item{psql}{The path to the psql utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.}
 
-\item{continuous_locations}{Character vector of location codes to retain in continuous tables. Defaults to the first location found in the database when \code{NULL}.}
+\item{continuous_locations}{Vector of location IDs, location codes, or aliases to retain in continuous tables. Defaults to selected long-lived hydrometric and meteorological locations when \code{NULL}.}
 
-\item{discrete_locations}{Character vector of location codes to retain in discrete tables.  Defaults to \code{continuous_locations} when \code{NULL}.}
+\item{discrete_locations}{Vector of location IDs, location codes, or aliases to retain in discrete tables. Defaults to selected snow-course locations when \code{NULL}.}
 
 \item{start_datetime}{The start datetime for the data to be copied.  If \code{NULL}, data is copied from the beginning of records to \code{end_datetime} for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records - this is to enable historic range and return period calculations to be reproduced.}
 
