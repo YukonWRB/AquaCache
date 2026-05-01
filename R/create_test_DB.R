@@ -158,6 +158,8 @@ create_test_db <- function(
   schema_outfile <- normalizePath(schema_outfile, mustWork = FALSE)
   dump_args <- c(
     "-s", # schema only
+    "--no-owner", # do not include commands to set ownership of objects to the original owner
+    "--no-acl", # do not include commands to set access privileges (grant/revoke) of objects
     "-U",
     username,
     "-h",
@@ -945,7 +947,8 @@ create_test_db <- function(
 
     if (nrow(samples) > 0) {
       if (
-        "field_visit_id" %in% names(samples) &&
+        "field_visit_id" %in%
+          names(samples) &&
           any(!is.na(samples$field_visit_id)) &&
           table_exists("field", "field_visits")
       ) {
@@ -988,6 +991,8 @@ create_test_db <- function(
   }
 
   dump_args <- c(
+    "--no-owner", # do not include commands to set ownership of objects to the original owner
+    "--no-acl", # do not include commands to set access privileges (grant/revoke
     "-U",
     username,
     "-h",

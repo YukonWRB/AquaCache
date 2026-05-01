@@ -4037,25 +4037,16 @@ EXECUTE FUNCTION continuous.refresh_calculated_daily_compound_definition_trg();"
              FROM daily
            ),
            existing_days AS MATERIALIZED (
-             SELECT
-               (mc.datetime + make_interval(hours => t.timezone_daily_calc))::date AS date,
-               bool_or(
-                 mc.period IS DISTINCT FROM interval '1 day'
-                 OR mc.datetime IS DISTINCT FROM continuous.local_noon_to_utc(
-                   (mc.datetime + make_interval(hours => t.timezone_daily_calc))::date,
-                   t.timezone_daily_calc
-                 )
-               ) AS has_higher_frequency
+             SELECT DISTINCT
+               (mc.datetime + make_interval(hours => t.timezone_daily_calc))::date AS date
              FROM continuous.measurements_continuous mc
              JOIN continuous.timeseries t
                ON t.timeseries_id = mc.timeseries_id
              CROSS JOIN bounds b
-             WHERE mc.timeseries_id = $1
-               AND mc.datetime >= b.start_datetime - interval '1 day'
-               AND mc.datetime <= b.end_datetime + interval '1 day'
-             GROUP BY
-               (mc.datetime + make_interval(hours => t.timezone_daily_calc))::date
-           )
+              WHERE mc.timeseries_id = $1
+                AND mc.datetime >= b.start_datetime - interval '1 day'
+                AND mc.datetime <= b.end_datetime + interval '1 day'
+            )
            INSERT INTO continuous.measurements_continuous (
              timeseries_id,
              datetime,
@@ -4072,27 +4063,24 @@ EXECUTE FUNCTION continuous.refresh_calculated_daily_compound_definition_trg();"
            FROM daily
            LEFT JOIN existing_days e
              ON e.date = daily.date
-           WHERE COALESCE(e.has_higher_frequency, FALSE) = FALSE
-           ON CONFLICT (timeseries_id, datetime) DO UPDATE
-           SET
-             value = EXCLUDED.value,
-             period = EXCLUDED.period,
-             imputed = EXCLUDED.imputed,
-             modified = CURRENT_TIMESTAMP,
-             modified_by = CURRENT_USER
-           WHERE continuous.measurements_continuous.period = interval '1 day'
-             AND (
-               continuous.measurements_continuous.value IS DISTINCT FROM EXCLUDED.value
-               OR continuous.measurements_continuous.period IS DISTINCT FROM EXCLUDED.period
-               OR continuous.measurements_continuous.imputed IS DISTINCT FROM EXCLUDED.imputed
-             )",
+           WHERE e.date IS NULL
+           ON CONFLICT (timeseries_id, datetime) DO NOTHING",
             params = list(tsid)
           )
+        DBI::dbExecute(
+          con,
+          "SELECT continuous.refresh_calculated_daily(
+             $1::integer,
+             NULL::date,
+             NULL::date
+           )",
+          params = list(tsid)
+        )
       }
       message(
-        "Backfilled or updated ",
+        "Backfilled ",
         hydat_backfill_rows,
-        " WSC HYDAT daily rows in measurements_continuous."
+        " WSC HYDAT daily rows into measurements_continuous and refreshed calculated daily statistics."
       )
     }
 
