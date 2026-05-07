@@ -15,6 +15,7 @@
 #' @param username Username. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminUser:"username".
 #' @param password Password. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminPass:"password".
 #' @param silent TRUE suppresses messages except for errors and login messages.
+#' @param check If TRUE, checks for patches to apply to the database and prompts the user to apply them. If FALSE, skips patch check and connection messages. Default is TRUE.
 #'
 #' @return A connection to the database.
 #'
@@ -26,7 +27,8 @@ AquaConnect <- function(
   port = Sys.getenv("aquacachePort"),
   username = Sys.getenv("aquacacheAdminUser"),
   password = Sys.getenv("aquacacheAdminPass"),
-  silent = FALSE
+  silent = FALSE,
+  check = TRUE
 ) {
   tryCatch(
     {
@@ -55,82 +57,84 @@ AquaConnect <- function(
   )
 
   # Check for patches to apply ####################
-  if (user[1, 1] %in% c("postgres", "admin")) {
-    # See if table information.version_info exists, else set last_patch to 0
-    if (!DBI::dbExistsTable(con, DBI::SQL('"information"."version_info"'))) {
-      last_patch <- 0
-    } else {
-      # Get last patch applied from DB
-      last_patch <- DBI::dbGetQuery(
-        con,
-        "SELECT version FROM information.version_info WHERE item  = 'Last patch number'"
-      )
-      if (nrow(last_patch) == 0) {
+  if (check) {
+    if (user[1, 1] %in% c("postgres", "admin")) {
+      # See if table information.version_info exists, else set last_patch to 0
+      if (!DBI::dbExistsTable(con, DBI::SQL('"information"."version_info"'))) {
         last_patch <- 0
       } else {
-        last_patch <- as.numeric(last_patch$version)
-      }
-    }
-    # Get last patch available from package. These are in inst/patches folder and named "patch_X.R"
-    patch_files <- list.files(
-      system.file("patches", package = "AquaCache"),
-      pattern = "^patch_[0-9]+\\.R",
-      full.names = FALSE
-    )
-    last_patch_file <- max(as.numeric(gsub("patch_|.R", "", patch_files)))
-
-    if (last_patch < last_patch_file) {
-      message(
-        "There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recommend doing so before running any functions from this package. \n 1 = apply patches now \n 2 = continue without applying patches  \n"
-      )
-      choice <- readline(prompt = "Enter 1 or 2: ")
-
-      if (choice == 1) {
-        message(
-          "It is HIGHLY recommended that your database is backed up. Take the time to do this now or make sure your automatic workflow actually did its job. \n Hit enter to continue."
+        # Get last patch applied from DB
+        last_patch <- DBI::dbGetQuery(
+          con,
+          "SELECT version FROM information.version_info WHERE item  = 'Last patch number'"
         )
-        readline(prompt = "")
+        if (nrow(last_patch) == 0) {
+          last_patch <- 0
+        } else {
+          last_patch <- as.numeric(last_patch$version)
+        }
+      }
+      # Get last patch available from package. These are in inst/patches folder and named "patch_X.R"
+      patch_files <- list.files(
+        system.file("patches", package = "AquaCache"),
+        pattern = "^patch_[0-9]+\\.R",
+        full.names = FALSE
+      )
+      last_patch_file <- max(as.numeric(gsub("patch_|.R", "", patch_files)))
 
-        # Apply patches in order
-        tryCatch(
-          {
-            for (patch in (last_patch + 1):last_patch_file) {
-              source(
-                system.file(
-                  "patches",
-                  paste0("patch_", patch, ".R"),
-                  package = "AquaCache"
-                ),
-                local = TRUE
+      if (last_patch < last_patch_file) {
+        message(
+          "There are patches available to apply to the database. Do you want to apply them now? We HIGHLY recommend doing so before running any functions from this package. \n 1 = apply patches now \n 2 = continue without applying patches  \n"
+        )
+        choice <- readline(prompt = "Enter 1 or 2: ")
+
+        if (choice == 1) {
+          message(
+            "It is HIGHLY recommended that your database is backed up. Take the time to do this now or make sure your automatic workflow actually did its job. \n Hit enter to continue."
+          )
+          readline(prompt = "")
+
+          # Apply patches in order
+          tryCatch(
+            {
+              for (patch in (last_patch + 1):last_patch_file) {
+                source(
+                  system.file(
+                    "patches",
+                    paste0("patch_", patch, ".R"),
+                    package = "AquaCache"
+                  ),
+                  local = TRUE
+                )
+              }
+              message("Patches applied successfully.\n")
+            },
+            error = function(e) {
+              stop(
+                "Patches not applied. An error occurred in patch ",
+                patch,
+                " : ",
+                e$message,
+                "\n"
               )
             }
-            message("Patches applied successfully.\n")
-          },
-          error = function(e) {
-            stop(
-              "Patches not applied. An error occurred in patch ",
-              patch,
-              " : ",
-              e$message,
-              "\n"
-            )
-          }
-        )
-      } else if (choice == 2) {
-        warning(
-          "Patches not applied. Please apply patches before running any functions from this package.\n"
-        )
-      } else {
-        warning(
-          "Invalid choice. Patches not applied. Please apply patches before running any functions from this package.\n"
+          )
+        } else if (choice == 2) {
+          warning(
+            "Patches not applied. Please apply patches before running any functions from this package.\n"
+          )
+        } else {
+          warning(
+            "Invalid choice. Patches not applied. Please apply patches before running any functions from this package.\n"
+          )
+        }
+      }
+    } else {
+      if (!silent) {
+        message(
+          "You are not connecting to the database as a superuser or admin, so no checks for applicable patches will be done.\n"
         )
       }
-    }
-  } else {
-    if (!silent) {
-      message(
-        "You are not connecting to the database as a superuser or admin, so no checks for applicable patches will be done.\n"
-      )
     }
   }
 
