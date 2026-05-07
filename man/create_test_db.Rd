@@ -14,11 +14,8 @@ create_test_db(
   replace = TRUE,
   pg_dump = NULL,
   psql = NULL,
-  continuous_locations = NULL,
-  discrete_locations = NULL,
-  start_datetime = "2020-01-01 00:00",
-  end_datetime = "2024-01-01 00:00",
-  delete = TRUE
+  delete = TRUE,
+  everything = FALSE
 )
 }
 \arguments{
@@ -36,25 +33,19 @@ create_test_db(
 
 \item{replace}{If TRUE and a file of name testdb.sql.gz exists in \code{outpath} will attempt to replaced the file.}
 
-\item{pg_dump}{The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.}
+\item{pg_dump}{The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility and if that fails will look in normal default locations, but this might not always work.}
 
-\item{psql}{The path to the psql utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.}
+\item{psql}{The path to the psql utility. By default (NULL), the function searches the PATH for the utility and if that fails will look in normal default locations, but this might not always work.}
 
-\item{continuous_locations}{Vector of location IDs, location codes, or aliases to retain in continuous tables. Defaults to selected long-lived hydrometric and meteorological locations when \code{NULL}.}
+\item{delete}{If TRUE, will delete the testdb database after the function is done. If FALSE, the database will remain for further testing.}
 
-\item{discrete_locations}{Vector of location IDs, location codes, or aliases to retain in discrete tables. Defaults to selected snow-course locations when \code{NULL}.}
-
-\item{start_datetime}{The start datetime for the data to be copied.  If \code{NULL}, data is copied from the beginning of records to \code{end_datetime} for the affected locations. This does not apply to the 'measurements_calculated_daily' table, which is always copied from the beginning of records - this is to enable historic range and return period calculations to be reproduced.}
-
-\item{end_datetime}{The end datetime for the data to be copied.  If \code{NULL}, all data is copied from \code{start_datetime} to the end of records for the affected locations. This \strong{does} apply to the 'measurements_calculated_daily' table.}
-
-\item{delete}{If TRUE, will delete the test_temp database after the function is done. If FALSE, the database will remain for further testing.}
+\item{everything}{If TRUE, will include additional lookup tables needed by fuller restored test instances. Measurement and location-specific tables are still populated with deterministic synthetic data only.}
 }
 \value{
 An SQL file containing the schema definition saved to the 'outfile' path.
 }
 \description{
-This function uses the \code{pg_dump} utility to create a dump of the schema and a subset of the data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes a command to set the database \code{search_path} on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
+This function uses the \code{pg_dump} utility to create a dump of the schema and deterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes a command to set the database \code{search_path} on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
 }
 \seealso{
 \code{\link[=db_dump]{db_dump()}}
