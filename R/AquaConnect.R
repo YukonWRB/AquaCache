@@ -107,11 +107,11 @@ AquaConnect <- function(
                   local = TRUE
                 )
               }
-              message("Patches applied successfully.\n")
+              message("\nPatches applied successfully.\n")
             },
             error = function(e) {
               stop(
-                "Patches not applied. An error occurred in patch ",
+                "\nPatches not applied. An error occurred in patch ",
                 patch,
                 " : ",
                 e$message,
