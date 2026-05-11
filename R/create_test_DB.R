@@ -16,7 +16,7 @@
 #'
 #' @seealso [db_dump()]
 #'
-#' @returns An SQL file containing the schema definition saved to the 'outfile' path.
+#' @returns Path to a gzipped SQL dump containing schema and deterministic fixture data.
 #' @export
 #'
 
@@ -70,7 +70,7 @@ create_test_db <- function(
     if (nchar(pg_dump) == 0) {
       if (.Platform$OS.type == "windows") {
         possible_paths <- c(
-          "C:/Program Files/PostgreSQL/20/bin/pg_dump.exe",
+          "C:/Program Files/PostgreSQL/21/bin/pg_dump.exe",
           "C:/Program Files/PostgreSQL/20/bin/pg_dump.exe",
           "C:/Program Files/PostgreSQL/19/bin/pg_dump.exe",
           "C:/Program Files/PostgreSQL/18/bin/pg_dump.exe",
@@ -102,6 +102,7 @@ create_test_db <- function(
       # Windows
       if (.Platform$OS.type == "windows") {
         possible_paths <- c(
+          "C:/Program Files/PostgreSQL/21/bin/psql.exe",
           "C:/Program Files/PostgreSQL/20/bin/psql.exe",
           "C:/Program Files/PostgreSQL/19/bin/psql.exe",
           "C:/Program Files/PostgreSQL/18/bin/psql.exe",
@@ -123,6 +124,29 @@ create_test_db <- function(
   }
   if (!file.exists(psql)) {
     stop("The specified psql utility does not exist or could not be found.")
+  }
+
+  # Function to check for spatial extensions
+  check_required_extensions <- function(
+    con,
+    required = c("postgis", "postgis_raster")
+  ) {
+    installed <- DBI::dbGetQuery(
+      con,
+      "SELECT extname FROM pg_extension"
+    )$extname
+
+    missing <- setdiff(required, installed)
+
+    if (length(missing) > 0) {
+      stop(
+        "Database is missing required PostgreSQL extension(s): ",
+        paste(missing, collapse = ", "),
+        ". Install them before creating the test database."
+      )
+    }
+
+    invisible(TRUE)
   }
 
   # Connect to the PostgreSQL database using AquaConnect
@@ -177,14 +201,21 @@ create_test_db <- function(
     password = password
   )
 
-  # delete the testdb database after the function is done
+  # delete the testdb database after the function is done and disconnect from both databases
   on.exit(
     {
-      DBI::dbDisconnect(test_con)
-      if (delete) {
-        DBI::dbExecute(con, "DROP DATABASE IF EXISTS testdb WITH (FORCE);")
-      } else {
-        NULL
+      if (exists("test_con") && DBI::dbIsValid(test_con)) {
+        try(DBI::dbDisconnect(test_con), silent = TRUE)
+      }
+
+      if (exists("con") && DBI::dbIsValid(con)) {
+        if (delete) {
+          try(
+            DBI::dbExecute(con, "DROP DATABASE IF EXISTS testdb WITH (FORCE);"),
+            silent = TRUE
+          )
+        }
+        try(DBI::dbDisconnect(con), silent = TRUE)
       }
     },
     add = TRUE
@@ -192,6 +223,11 @@ create_test_db <- function(
 
   # pg_dump from the original database to the test database without data
   Sys.setenv(PGPASSWORD = password) # Pass the password securely
+  on.exit(
+    # Clear the password environment variable
+    Sys.unsetenv("PGPASSWORD"),
+    add = TRUE
+  )
 
   # Create the pg_dump command for schema/data
   schema_outfile <- file.path(tempdir(), paste0(name, "_schema_dump.sql"))
@@ -208,7 +244,7 @@ create_test_db <- function(
     "-p",
     port,
     "-f",
-    shQuote(schema_outfile),
+    schema_outfile,
     name # the database to dump
   )
 
@@ -240,16 +276,37 @@ create_test_db <- function(
   }
 
   # Load the schema dump into the test database using psql
-  load_command <- sprintf(
-    '"%s" -U %s -h %s -p %s -d testdb -f "%s"',
-    psql,
-    username,
-    host,
-    port,
-    schema_outfile
+  load_out <- system2(
+    command = psql,
+    args = c(
+      "-U",
+      username,
+      "-h",
+      host,
+      "-p",
+      port,
+      "-d",
+      "testdb",
+      "-f",
+      schema_outfile
+    ),
+    stdout = TRUE,
+    stderr = TRUE
   )
 
-  res <- system(load_command, intern = TRUE, ignore.stderr = FALSE)
+  load_status <- attr(load_out, "status")
+  if (is.null(load_status)) {
+    load_status <- 0
+  }
+
+  if (load_status != 0) {
+    stop(
+      "psql failed loading schema (exit ",
+      load_status,
+      ")\n",
+      paste(load_out, collapse = "\n")
+    )
+  }
 
   # Check if the schema was loaded successfully
   if (
@@ -296,29 +353,6 @@ create_test_db <- function(
     test_con,
     sprintf("SET search_path TO %s;", db_search_path)
   )
-  quote_sql <- function(x) {
-    as.character(DBI::dbQuoteString(con, as.character(x)))
-  }
-
-  id_csv <- function(x) {
-    x <- unique(x[!is.na(x)])
-    if (length(x) == 0) {
-      return(NULL)
-    }
-    paste(as.integer(x), collapse = ",")
-  }
-
-  value_csv <- function(x) {
-    x <- unique(x[!is.na(x)])
-    if (length(x) == 0) {
-      return(NULL)
-    }
-    paste(quote_sql(x), collapse = ",")
-  }
-
-  empty_table <- function(tbl) {
-    DBI::dbGetQuery(con, paste0("SELECT * FROM ", tbl, " WHERE FALSE"))
-  }
 
   append_if_rows <- function(tbl, data, label = tbl) {
     if (nrow(data) == 0) {
@@ -327,51 +361,6 @@ create_test_db <- function(
     message("Loading table ", label, " into the test database...")
     DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
     invisible(TRUE)
-  }
-
-  table_exists <- function(schema, table) {
-    DBI::dbExistsTable(con, DBI::Id(schema = schema, table = table))
-  }
-
-  resolve_location_ids <- function(x) {
-    if (is.null(x) || length(x) == 0) {
-      return(integer())
-    }
-    x <- unique(x[!is.na(x)])
-    numeric_ids <- suppressWarnings(as.integer(x))
-    numeric_ids <- unique(numeric_ids[!is.na(numeric_ids)])
-
-    ids <- integer()
-    if (length(numeric_ids) > 0) {
-      ids <- DBI::dbGetQuery(
-        con,
-        sprintf(
-          "SELECT location_id
-           FROM public.locations
-           WHERE location_id IN (%s)",
-          id_csv(numeric_ids)
-        )
-      )$location_id
-    }
-
-    text_values <- as.character(x)
-    text_values <- text_values[!text_values %in% as.character(numeric_ids)]
-    if (length(text_values) > 0) {
-      text_ids <- DBI::dbGetQuery(
-        con,
-        sprintf(
-          "SELECT location_id
-           FROM public.locations
-           WHERE location_code IN (%s)
-              OR alias IN (%s)",
-          value_csv(text_values),
-          value_csv(text_values)
-        )
-      )$location_id
-      ids <- c(ids, text_ids)
-    }
-
-    unique(as.integer(ids))
   }
 
   message("Loading ancillary tables...")
@@ -394,9 +383,9 @@ create_test_db <- function(
     "information.version_info",
     "instruments.communication_protocol_families",
     "instruments.communication_protocols",
-    "instruments.instrument_type",
-    "instruments.instrument_make",
-    "instruments.instrument_model",
+    "instruments.instrument_types",
+    "instruments.instrument_makes",
+    "instruments.instrument_models",
     "instruments.sensor_types",
     "instruments.suppliers",
     "instruments.transmission_component_roles",
@@ -467,14 +456,14 @@ create_test_db <- function(
     first_id(fallback_sql, paste0("parameter ", name))
   }
 
-  fake_location_id <- 900001L
-  fake_sub_location_id <- 900001L
-  fake_z_surface <- 900001L
-  fake_z_air <- 900002L
-  fake_z_snow <- 900003L
-  fake_network_id <- 900001L
-  fake_project_id <- 900001L
-  fake_organization_id <- 900001L
+  fake_location_id <- 1L
+  fake_sub_location_id <- 1L
+  fake_z_surface <- 1L
+  fake_z_air <- 2L
+  fake_z_snow <- 3L
+  fake_network_id <- 1L
+  fake_project_id <- 1L
+  fake_organization_id <- 1L
 
   DBI::dbExecute(
     test_con,
@@ -727,41 +716,41 @@ create_test_db <- function(
          timezone_daily_calc, sync_remote, matrix_state_id,
          timeseries_type, publicly_visible
        ) VALUES
-         (1001, %d, %d, %d, NULL, NULL, NULL,
+         (1, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"water_level\"}'::jsonb,
           'Synthetic 15-minute water level.', interval '15 minutes',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
-         (1002, %d, %d, %d, NULL, NULL, NULL,
+         (2, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"water_temperature\"}'::jsonb,
           'Synthetic 15-minute water temperature.', interval '15 minutes',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
-         (1003, %d, %d, %d, NULL, NULL, NULL,
+         (3, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"air_temperature\"}'::jsonb,
           'Synthetic hourly air temperature.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
-         (1004, %d, %d, %d, NULL, NULL, NULL,
+         (4, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"precipitation\"}'::jsonb,
           'Synthetic hourly precipitation totals.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
-         (1005, %d, %d, %d, NULL, NULL, NULL,
+         (5, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"swe\"}'::jsonb,
           'Synthetic daily snow water equivalent.', interval '1 day',
           %d, %d, true, ARRAY['public_reader'], %d, 1, %d, 0, true,
           %d, 'basic', true),
-         (1006, %d, %d, %d, NULL, NULL, NULL,
+         (6, %d, %d, %d, NULL, NULL, NULL,
           NULL, NULL, 'Synthetic compound fallback water level.', interval '15 minutes',
           %d, %d, true, ARRAY['public_reader'], %d, 2, NULL, 0, true,
           %d, 'compound', true),
-         (1007, %d, %d, %d, NULL, NULL, NULL,
+         (7, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"conductance\"}'::jsonb,
           'Synthetic hourly specific conductance.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
-         (1008, %d, %d, %d, NULL, NULL, NULL,
+         (8, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"water_flow\"}'::jsonb,
           'Synthetic hourly water flow.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
@@ -830,7 +819,7 @@ create_test_db <- function(
     test_con,
     "INSERT INTO continuous.timeseries_compounds (
        timeseries_id, expression_sql
-     ) VALUES (1006, NULL)"
+     ) VALUES (6, NULL)"
   )
   DBI::dbExecute(
     test_con,
@@ -838,8 +827,8 @@ create_test_db <- function(
        timeseries_id, member_alias, member_timeseries_id,
        member_priority, use_from, use_to
      ) VALUES
-       (1006, 'primary_level', 1001, 1, NULL, NULL),
-       (1006, 'backup_level', 1002, 2, '2023-01-05 00:00+00', NULL)"
+       (6, 'primary_level', 1, 1, NULL, NULL),
+       (6, 'backup_level', 2, 2, '2023-01-05 00:00+00', NULL)"
   )
 
   DBI::dbExecute(
@@ -849,7 +838,7 @@ create_test_db <- function(
        measurement_row_id
      )
      SELECT
-       1001,
+       1,
        gs.datetime,
        round(
          (10 + sin(extract(epoch FROM gs.datetime) / 86400.0) * 0.25)::numeric,
@@ -872,7 +861,7 @@ create_test_db <- function(
        measurement_row_id
      )
      SELECT
-       1002,
+       2,
        gs.datetime,
        round(
          (4 + cos(extract(epoch FROM gs.datetime) / 43200.0) * 1.5)::numeric,
@@ -895,7 +884,7 @@ create_test_db <- function(
        measurement_row_id
      )
      SELECT
-       1003,
+       3,
        gs.datetime,
        round(
          (-12 + sin(extract(epoch FROM gs.datetime) / 172800.0) * 8)::numeric,
@@ -918,7 +907,7 @@ create_test_db <- function(
        measurement_row_id
      )
      SELECT
-       1004,
+       4,
        gs.datetime,
        CASE
          WHEN mod((row_number() OVER (ORDER BY gs.datetime))::integer, 8) = 0 THEN 0.6
@@ -942,7 +931,7 @@ create_test_db <- function(
        measurement_row_id
      )
      SELECT
-       1005,
+       5,
        gs.datetime,
        100 + row_number() OVER (ORDER BY gs.datetime) * 3,
        interval '1 day',
@@ -962,7 +951,7 @@ create_test_db <- function(
        measurement_row_id
      )
      SELECT
-       1007,
+       7,
        gs.datetime,
        150 + row_number() OVER (ORDER BY gs.datetime) * 0.5,
        interval '1 hour',
@@ -982,7 +971,7 @@ create_test_db <- function(
        measurement_row_id
      )
      SELECT
-       1008,
+       8,
        gs.datetime,
        round(
          (25 + sin(extract(epoch FROM gs.datetime) / 129600.0) * 4)::numeric,
@@ -1005,9 +994,9 @@ create_test_db <- function(
       "INSERT INTO continuous.grades (
          grade_id, timeseries_id, grade_type_id, start_dt, end_dt
        ) VALUES
-         (900001, 1001, %d, '2020-01-01 00:00+00', '2022-01-01 00:00+00'),
-         (900002, 1001, %d, '2022-01-01 00:00+00', '2024-01-02 00:00+00'),
-         (900003, 1002, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (1, 1, %d, '2020-01-01 00:00+00', '2022-01-01 00:00+00'),
+         (2, 1, %d, '2022-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (3, 2, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
       grade_a,
       grade_b,
       grade_a
@@ -1019,9 +1008,9 @@ create_test_db <- function(
       "INSERT INTO continuous.approvals (
          approval_id, timeseries_id, approval_type_id, start_dt, end_dt
        ) VALUES
-         (900001, 1001, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
-         (900002, 1001, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
-         (900003, 1003, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
+         (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
+         (3, 3, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
       approval_a,
       approval_n,
       approval_a
@@ -1033,8 +1022,8 @@ create_test_db <- function(
       "INSERT INTO continuous.qualifiers (
          qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt
        ) VALUES
-         (900001, 1001, %d, '2023-01-03 00:00+00', '2023-01-04 00:00+00'),
-         (900002, 1002, %d, '2023-01-02 00:00+00', '2023-01-02 12:00+00')",
+         (1, 1, %d, '2023-01-03 00:00+00', '2023-01-04 00:00+00'),
+         (2, 2, %d, '2023-01-02 00:00+00', '2023-01-02 12:00+00')",
       qualifier_ice,
       qualifier_ice
     )
@@ -1045,9 +1034,9 @@ create_test_db <- function(
       "INSERT INTO continuous.owners (
          owner_id, timeseries_id, organization_id, start_dt, end_dt
        ) VALUES
-         (900001, 1001, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
-         (900002, 1001, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
-         (900003, 1002, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
+         (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
+         (3, 2, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
       owner_org,
       contributor_org,
       owner_org
@@ -1059,9 +1048,9 @@ create_test_db <- function(
       "INSERT INTO continuous.contributors (
          contributor_id, timeseries_id, organization_id, start_dt, end_dt
        ) VALUES
-         (900001, 1001, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
-         (900002, 1001, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
-         (900003, 1003, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
+         (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
+         (3, 3, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
       contributor_org,
       owner_org,
       contributor_org
@@ -1074,7 +1063,7 @@ create_test_db <- function(
          correction_id, timeseries_id, start_dt, end_dt,
          correction_type, value1, value2, timestep_window, equation
        ) VALUES
-         (900001, 1001, '2023-01-03 00:00+00', '2023-01-04 00:00+00',
+         (1, 1, '2023-01-03 00:00+00', '2023-01-04 00:00+00',
           %d, 0.25, NULL, NULL, NULL)",
       correction_offset
     )
@@ -1088,7 +1077,7 @@ create_test_db <- function(
          synch_to, default_owner, default_contributor, last_new_data,
          active, source_fx, source_fx_args, note, sync_remote
        ) VALUES (
-         900001, %d, %d, '2023-01-01 00:00+00',
+         1, %d, %d, '2023-01-01 00:00+00',
          '2023-01-10 00:00+00', %d, %d, '2023-01-10 00:00+00',
          true, 'downloadSyntheticDiscrete',
          '{\"series\":\"synthetic_samples\"}'::jsonb,
@@ -1110,15 +1099,15 @@ create_test_db <- function(
          contributor, sampling_org, share_with, import_source,
          no_update, note, import_source_id
        ) VALUES
-         (900001, %d, %d, %d, 0.5, '2023-01-01 12:00+00',
+         (1, %d, %d, %d, 0.5, '2023-01-01 12:00+00',
           '2023-01-01 12:00+00', %d, %d, 250, %d, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Synthetic water quality sample 1.', 'SYN-S1'),
-         (900002, %d, %d, %d, 0.5, '2023-02-01 12:00+00',
+         (2, %d, %d, %d, 0.5, '2023-02-01 12:00+00',
           '2023-02-01 12:00+00', %d, %d, 250, %d, %d, NULL,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Synthetic water quality sample 2.', 'SYN-S2'),
-         (900003, %d, %d, %d, 0.5, '2023-03-01 12:00+00',
+         (3, %d, %d, %d, 0.5, '2023-03-01 12:00+00',
           '2023-03-01 12:00+00', %d, %d, 500, %d, %d, NULL,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Synthetic water quality sample 3.', 'SYN-S3')",
@@ -1164,15 +1153,15 @@ create_test_db <- function(
          result_value_type, analysis_datetime, share_with, no_update,
          matrix_state_id
        ) VALUES
-         (900001, 900001, %d, %d, %d, 6.7, NULL, NULL, %d,
+         (1, 1, %d, %d, %d, 6.7, NULL, NULL, %d,
           '2023-01-02 12:00+00', ARRAY['public_reader'], false, %d),
-         (900002, 900001, %d, %d, %d, 118, NULL, NULL, %d,
+         (2, 1, %d, %d, %d, 118, NULL, NULL, %d,
           '2023-01-02 12:00+00', ARRAY['public_reader'], false, %d),
-         (900003, 900002, %d, %d, %d, 6.9, NULL, NULL, %d,
+         (3, 2, %d, %d, %d, 6.9, NULL, NULL, %d,
           '2023-02-02 12:00+00', ARRAY['public_reader'], false, %d),
-         (900004, 900002, %d, %d, %d, 124, NULL, NULL, %d,
+         (4, 2, %d, %d, %d, 124, NULL, NULL, %d,
           '2023-02-02 12:00+00', ARRAY['public_reader'], false, %d),
-         (900005, 900003, %d, %d, %d, NULL, %d, 0.01, %d,
+         (5, 3, %d, %d, %d, NULL, %d, 0.01, %d,
           '2023-03-02 12:00+00', ARRAY['public_reader'], false, %d)",
       result_type_field,
       ph_param,
@@ -1203,6 +1192,79 @@ create_test_db <- function(
     )
   )
 
+  # Reset all sequences in the test database to avoid conflicts with future inserts
+  reset_identity_sequences <- function(con) {
+    sql <- "
+    SELECT
+      seq_ns.nspname AS sequence_schema,
+      seq.relname AS sequence_name,
+      tbl_ns.nspname AS table_schema,
+      tbl.relname AS table_name,
+      col.attname AS column_name
+    FROM pg_class seq
+    JOIN pg_namespace seq_ns
+      ON seq_ns.oid = seq.relnamespace
+    JOIN pg_depend dep
+      ON dep.objid = seq.oid
+    JOIN pg_class tbl
+      ON tbl.oid = dep.refobjid
+    JOIN pg_namespace tbl_ns
+      ON tbl_ns.oid = tbl.relnamespace
+    JOIN pg_attribute col
+      ON col.attrelid = tbl.oid
+     AND col.attnum = dep.refobjsubid
+    WHERE seq.relkind = 'S'
+      AND dep.deptype IN ('a', 'i')
+      AND seq_ns.nspname NOT IN ('pg_catalog', 'information_schema');
+    "
+
+    seqs <- DBI::dbGetQuery(con, sql)
+
+    for (i in seq_len(nrow(seqs))) {
+      seq_name <- DBI::dbQuoteIdentifier(
+        con,
+        DBI::Id(
+          schema = seqs$sequence_schema[i],
+          table = seqs$sequence_name[i]
+        )
+      )
+
+      tbl_name <- DBI::dbQuoteIdentifier(
+        con,
+        DBI::Id(
+          schema = seqs$table_schema[i],
+          table = seqs$table_name[i]
+        )
+      )
+
+      col_name <- DBI::dbQuoteIdentifier(con, seqs$column_name[i])
+
+      reset_sql <- sprintf(
+        "SELECT setval(
+           %s::regclass,
+           CASE
+             WHEN (SELECT MAX(%s) FROM %s) IS NULL THEN 1
+             ELSE (SELECT MAX(%s) FROM %s)
+           END,
+           (SELECT MAX(%s) FROM %s) IS NOT NULL
+         );",
+        DBI::dbQuoteString(con, as.character(seq_name)),
+        col_name,
+        tbl_name,
+        col_name,
+        tbl_name,
+        col_name,
+        tbl_name
+      )
+
+      DBI::dbExecute(con, reset_sql)
+    }
+
+    invisible(seqs)
+  }
+  message("Resetting identity sequences in the test database...")
+  reset_identity_sequences(test_con)
+
   # Do a final dump of the test database schema and data
   # Create the pg_dump command for schema/data
   outpath <- file.path(paste0(outpath, "/test_db.sql"))
@@ -1215,7 +1277,7 @@ create_test_db <- function(
   dump_args <- c(
     "--no-owner", # do not include commands to set ownership of objects to the original owner
     "--no-acl", # do not include commands to set access privileges (grant/revoke)
-    "--exclude-extension=pg_stat_statements",
+    "--exclude-extension=pg_stat_statements", # Leaves postgis extensions in
     "-U",
     username,
     "-h",
@@ -1223,8 +1285,9 @@ create_test_db <- function(
     "-p",
     port,
     "-f",
-    shQuote(outpath),
-    "-d testdb"
+    outpath,
+    "-d",
+    "testdb"
   )
 
   message("\nCreating final schema and data dump...")
@@ -1280,9 +1343,6 @@ END$$;",
   R.utils::gzip(outpath, destname = schema_outfile, remove = TRUE)
 
   message("Test database .sql dump created successfully at ", schema_outfile)
-
-  # Clear the password environment variable
-  Sys.unsetenv("PGPASSWORD")
 
   # Return paths of the output file
   return(schema_outfile)
