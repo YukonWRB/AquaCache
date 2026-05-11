@@ -5,7 +5,7 @@
 #' This function is intended to be run on a daily or near-daily basis to ensure data integrity. Pulls in new data, calculates statistics where necessary, and performs cross-checks on several tables (see details for more information).
 #'
 #' @details
-#'Calls several functions in sequence: [getNewContinuous()] to pull in new data into the measurements_continuous table, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [getNewImages()] to get new images in a series, [getNewRasters()] to get new model rasters, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, [update_hydat_datums()] to update the datums table with any new datums present in HYDAT, and [calculate_stats()] to calculate new statistics where necessary.
+#'Calls several functions in sequence: [getNewContinuous()] to pull in new data into the measurements_continuous table and update daily statistics for those imports, [getNewDiscrete()] to pull in new data to the measurements_discrete table, [getNewImages()] to get new images in a series, [getNewRasters()] to get new model rasters, [update_hydat()] to check for a new HYDAT database version (hydrometric data from the WSC) and incorporate daily means which differ from those already calculated in the dabatabase, and [update_hydat_datums()] to update the datums table with any new datums present in HYDAT.
 #'
 #' Note that new timeseries should be added using function [addACTimeseries()].
 #'
@@ -97,7 +97,8 @@ dailyUpdate <- function(
           rt_start <- Sys.time()
           getNewContinuous(
             con = con,
-            timeseries_id = continuous_ts$timeseries_id
+            timeseries_id = continuous_ts$timeseries_id,
+            stats = TRUE
           )
           rt_duration <- Sys.time() - rt_start
           message(
@@ -260,55 +261,6 @@ dailyUpdate <- function(
       error = function(e) {
         warning(
           "dailyUpdate: error when checking for new HYDAT database or when updating datums. Returned message: ",
-          e$message
-        )
-      }
-    )
-  }
-
-  ### Calculate new daily means and stats from realtime data where necessary #######
-  if (nrow(continuous_ts) > 0) {
-    message("Calculating daily means and statistics where necessary...")
-    tryCatch(
-      {
-        stat_start <- Sys.time()
-        calc_ts <- DBI::dbGetQuery(
-          con,
-          paste0(
-            "SELECT timeseries_id, last_daily_calculation, last_new_data FROM timeseries WHERE timeseries_id IN (",
-            paste(continuous_ts$timeseries_id, collapse = ", "),
-            ") AND record_rate <= '1 day';"
-          )
-        )
-        needs_calc <- calc_ts[is.na(calc_ts$last_daily_calculation), ] #All of these need a new calculation.
-        has_last_new_data <- calc_ts[
-          !is.na(calc_ts$last_new_data) &
-            !is.na(calc_ts$last_daily_calculation),
-        ] #only a subset of these need new calculation. Those that have a calculation and don't have an entry for new data don't need calculations.
-        if (nrow(has_last_new_data) > 0) {
-          #Take subset of has_last_new_data where the last calculation was before new data being added.
-          needs_new_calc <- has_last_new_data[
-            (has_last_new_data$last_new_data) >
-              has_last_new_data$last_daily_calculation,
-          ]
-          needs_calc <- rbind(needs_calc, needs_new_calc)
-        }
-        if (nrow(needs_calc) > 0) {
-          calculate_stats(timeseries_id = needs_calc$timeseries_id, con = con)
-          stats_diff <- Sys.time() - stat_start
-          message(
-            "Daily means and statistics calculated in ",
-            round(stats_diff[[1]], 2),
-            " ",
-            units(stats_diff)
-          )
-        } else {
-          message("No daily means and stats to calculate, skipping.")
-        }
-      },
-      error = function(e) {
-        warning(
-          "dailyUpdate: error when trying to calculate new daily means and statistics. Returned message: ",
           e$message
         )
       }

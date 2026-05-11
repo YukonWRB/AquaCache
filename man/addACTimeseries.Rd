@@ -75,7 +75,7 @@ You can add the new timeseries by directly editing the database, but this functi
 
 If specifying a data.frame for argument \code{data}, different criteria applies depending on if the timeseries is categorized as continuous or discrete.
 For continuous data:
-The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered directly to the 'measurements_calculated_daily' table with no entry to measurements_continuous. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function \code{\link[=addNewContinuous]{addNewContinuous()}} will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
+The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered to \code{measurements_continuous} as one-day-period rows and database triggers maintain \code{measurements_calculated_daily}. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function \code{\link[=addNewContinuous]{addNewContinuous()}} will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
 For discrete data:
 This is not supported yet.
 

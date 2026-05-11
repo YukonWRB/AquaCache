@@ -4,7 +4,13 @@ test_that("addNewContinuous inserts a new measurement", {
 
   tsid <- DBI::dbGetQuery(
     con,
-    "SELECT timeseries_id FROM timeseries LIMIT 1"
+    "SELECT t.timeseries_id
+     FROM timeseries t
+     JOIN measurements_continuous mc
+       ON mc.timeseries_id = t.timeseries_id
+     WHERE t.timeseries_type = 'basic'
+     GROUP BY t.timeseries_id
+     LIMIT 1"
   )[[1]]
   if (is.na(tsid)) {
     testthat::skip("No timeseries data available for addNewContinuous test.")
@@ -51,7 +57,10 @@ test_that("addNewContinuous errors when datetime is missing", {
 
   tsid <- DBI::dbGetQuery(
     con,
-    "SELECT timeseries_id FROM timeseries LIMIT 1"
+    "SELECT timeseries_id
+     FROM timeseries
+     WHERE timeseries_type = 'basic'
+     LIMIT 1"
   )[[1]]
   if (is.na(tsid)) {
     testthat::skip("No timeseries data available for addNewContinuous test.")
@@ -64,5 +73,29 @@ test_that("addNewContinuous errors when datetime is missing", {
       target = "realtime"
     ),
     "must contain a column named 'datetime'"
+  )
+})
+
+test_that("addNewContinuous rejects compound timeseries", {
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, params = NULL, ...) {
+      data.frame(
+        timeseries_id = params[[1]],
+        timeseries_type = "compound"
+      )
+    },
+    .package = "DBI"
+  )
+
+  expect_error(
+    addNewContinuous(
+      9001L,
+      data.frame(
+        datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        value = 1
+      ),
+      con = structure(list(), class = "mock_con")
+    ),
+    "only be added to basic timeseries"
   )
 })

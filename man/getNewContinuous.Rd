@@ -8,15 +8,33 @@ getNewContinuous(
   con = NULL,
   timeseries_id = "all",
   active = "default",
+  dbName = NULL,
+  dbHost = NULL,
+  dbPort = NULL,
+  dbUser = NULL,
+  dbPass = NULL,
+  stats = TRUE,
   verbose = FALSE
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. If you wish to run this function in parallel you MUST leave this argument NULL. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.}
 
 \item{active}{Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.}
+
+\item{dbName}{The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbHost}{The host address of the database. If left NULL, the function will use the default host address from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbPort}{The port of the database. If left NULL, the function will use the default port from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbUser}{The username for the database. If left NULL, the function will use the default username from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{stats}{Deprecated compatibility argument. Daily calculations are maintained by database triggers after measurements are changed.}
 
 \item{verbose}{If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.}
 }
@@ -24,7 +42,7 @@ getNewContinuous(
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on stations that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for how to add new stations. Does not work on any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified souce_fx will be ignored.
+Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on basic timeseries that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for how to add new stations. Does not work on derived/compound timeseries or any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified source_fx will be ignored.
 \subsection{Default arguments passed to 'source_fx' functions:}{
 
 This function passes default arguments to the "source_fx" function for start_datetime, defaults to the instant after the last point already existing in the DB. The rest of the fetch parameters are set using the "source_fx_args" column in the "timeseries" table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.

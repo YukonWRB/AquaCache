@@ -1,0 +1,33 @@
+---
+title: "AquaCache Database Schema Documentation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{AquaCache Database Schema Documentation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, include = FALSE}
+library(AquaCache)
+```
+
+```{r content, echo = FALSE, results = 'asis', message = FALSE, warning = FALSE}
+# Build the html reference
+path <- tempfile(fileext = ".html")
+generateACDatabaseReference(
+  output_file = path,
+  standalone = FALSE,
+  open = FALSE
+)
+
+
+# Including the html reference in the vignette
+htmltools::includeHTML(path)
+```

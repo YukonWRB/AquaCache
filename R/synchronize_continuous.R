@@ -16,7 +16,7 @@
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
 #' @param active Sets behavior for checking timeseries or not. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all timeseries
-#' @param sync_remote_false Controls whether to synchronize timeseries that have the `sync_remote` column set to FALSE in the `timeseries` table.
+#' @param sync_remote_false Controls whether to synchronize timeseries that have the `sync_remote` column set to FALSE in the `timeseries` table. Use with extreme caution as setting to TRUE will override the timeseries' intended behavior and overwrite local data with remote data.
 #' @param dbName The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per [AquaConnect()].
 #' @param dbHost The host address of the database. If left NULL, the function will use the default host address from the .Renviron file as per [AquaConnect()].
 #' @param dbPort The port of the database. If left NULL, the function will use the default port from the .Renviron file as per [AquaConnect()].
@@ -106,7 +106,7 @@ synchronize_continuous <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
-  #Check length of start_datetime is either 1 of same as timeseries_id
+  # Check length of start_datetime is either 1 of same as timeseries_id
   if (length(start_datetime) != 1) {
     if (length(start_datetime) != length(timeseries_id)) {
       stop(
@@ -184,15 +184,166 @@ synchronize_continuous <- function(
   }
 
   build_status_row <- function(
+    row_index,
     timeseries_id,
     success,
     message = NA_character_
   ) {
     data.frame(
+      row_index = row_index,
       timeseries_id = timeseries_id,
       success = success,
       message = if (isTRUE(success)) NA_character_ else as.character(message),
       stringsAsFactors = FALSE
+    )
+  }
+
+  parse_source_fx_args_safe <- function(source_fx_args) {
+    if (length(source_fx_args) == 0 || is.na(source_fx_args)) {
+      return(NULL)
+    }
+
+    tryCatch(
+      {
+        args <- jsonlite::fromJSON(source_fx_args)
+        if (is.null(args) || is.null(names(args))) {
+          return(NULL)
+        }
+
+        lapply(args, as.character)
+      },
+      error = function(e) NULL
+    )
+  }
+
+  get_source_fx_arg <- function(args, name, default = NULL) {
+    if (is.null(args) || is.null(args[[name]]) || length(args[[name]]) == 0) {
+      return(default)
+    }
+
+    value <- as.character(args[[name]][[1]])
+    if (is.na(value) || !nzchar(value)) {
+      return(default)
+    }
+
+    value
+  }
+
+  get_row_start_datetime <- function(i) {
+    if (length(start_datetime) > 1) {
+      start_datetime[[i]]
+    } else {
+      start_datetime
+    }
+  }
+
+  get_parallel_group_key <- function(i) {
+    source_fx <- all_timeseries$source_fx[[i]]
+    args <- parse_source_fx_args_safe(all_timeseries$source_fx_args[[i]])
+
+    if (identical(source_fx, "downloadECCCwx")) {
+      location <- get_source_fx_arg(args, "location")
+      interval <- get_source_fx_arg(args, "interval")
+      if (!is.null(location) && !is.null(interval)) {
+        return(paste(source_fx, location, interval, sep = "|"))
+      }
+    }
+
+    if (identical(source_fx, "downloadECCCwxMinute")) {
+      location <- get_source_fx_arg(args, "location")
+      station_type <- get_source_fx_arg(args, "station_type", default = "AUTO")
+      if (!is.null(location) && !is.null(station_type)) {
+        return(paste(source_fx, location, station_type, sep = "|"))
+      }
+    }
+
+    paste0("timeseries|", all_timeseries$timeseries_id[[i]])
+  }
+
+  order_parallel_group_members <- function(indices) {
+    if (length(indices) <= 1) {
+      return(indices)
+    }
+
+    start_seconds <- vapply(
+      indices,
+      function(idx) as.numeric(get_row_start_datetime(idx)),
+      numeric(1)
+    )
+    indices[order(
+      start_seconds,
+      all_timeseries$timeseries_id[indices],
+      na.last = TRUE
+    )]
+  }
+
+  build_parallel_groups <- function() {
+    if (nrow(all_timeseries) == 0) {
+      return(list())
+    }
+
+    group_keys <- vapply(
+      seq_len(nrow(all_timeseries)),
+      get_parallel_group_key,
+      character(1)
+    )
+    split_indices <- split(
+      seq_len(nrow(all_timeseries)),
+      factor(group_keys, levels = unique(group_keys))
+    )
+    lapply(split_indices, order_parallel_group_members)
+  }
+
+  summarize_task_groups <- function(task_groups) {
+    if (length(task_groups) == 0) {
+      return(list(
+        task_group_count = 0L,
+        task_group_sizes = integer(),
+        cache_group_count = 0L,
+        cache_timeseries_count = 0L,
+        largest_group_size = 0L,
+        cache_source_message = NULL
+      ))
+    }
+
+    task_group_sizes <- lengths(task_groups)
+    task_group_names <- names(task_groups)
+    cache_group_flags <- !startsWith(task_group_names, "timeseries|")
+    cache_group_sizes <- task_group_sizes[cache_group_flags]
+
+    cache_source_message <- NULL
+    if (any(cache_group_flags)) {
+      cache_sources <- sub("\\|.*$", "", task_group_names[cache_group_flags])
+      cache_group_counts <- tapply(
+        rep.int(1L, length(cache_sources)),
+        cache_sources,
+        sum
+      )
+      cache_timeseries_counts <- tapply(
+        cache_group_sizes,
+        cache_sources,
+        sum
+      )
+      cache_source_message <- paste(
+        paste0(
+          names(cache_timeseries_counts),
+          "=",
+          as.integer(cache_timeseries_counts),
+          " timeseries in ",
+          as.integer(cache_group_counts),
+          " groups"
+        ),
+        collapse = "; "
+      )
+    }
+
+    list(
+      task_group_count = length(task_groups),
+      task_group_sizes = task_group_sizes,
+      cache_group_count = sum(cache_group_flags),
+      cache_timeseries_count = sum(cache_group_sizes),
+      largest_group_size = max(task_group_sizes),
+      cache_source_message = cache_source_message
     )
   }
 
@@ -219,17 +370,28 @@ synchronize_continuous <- function(
       start_datetime
     }
 
-    # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewContinuous
-    # IMPORTANT: this lock will wait for other processes to release the lock, so if another process is stuck, this will be stuck too.
     lock_namespace <- "aquacache_timeseries"
-    advisory_lock_acquire(
-      con = con,
-      namespace = lock_namespace,
-      key = tsid,
-      wait = TRUE
-    )
+    lock_acquired <- FALSE
+    acquire_timeseries_lock <- function() {
+      if (!lock_acquired) {
+        # This lock waits for other processes to release the lock, but only
+        # after the remote fetch has completed so cache-sharing work is not
+        # serialized behind DB writes.
+        advisory_lock_acquire(
+          con = con,
+          namespace = lock_namespace,
+          key = tsid,
+          wait = TRUE
+        )
+        lock_acquired <<- TRUE
+      }
+    }
     on.exit(
-      advisory_lock_release(con, lock_namespace, tsid),
+      {
+        if (lock_acquired) {
+          advisory_lock_release(con, lock_namespace, tsid)
+        }
+      },
       add = TRUE
     )
 
@@ -325,6 +487,7 @@ synchronize_continuous <- function(
 
     if (nrow(inRemote) == 0) {
       # There was no data in remote for the date range specified
+      acquire_timeseries_lock()
       run_db_updates(function() {
         DBI::dbExecute(
           con,
@@ -344,6 +507,7 @@ synchronize_continuous <- function(
       )
     }
 
+    acquire_timeseries_lock()
     inDB <- DBI::dbGetQuery(
       con,
       paste0(
@@ -548,11 +712,6 @@ synchronize_continuous <- function(
           c("datetime", "value", "period", "imputed"),
           drop = FALSE
         ]
-        affected_dates <- sort(unique(as.Date(c(
-          delete_datetimes,
-          append_rows$datetime
-        ))))
-
         if (length(delete_datetimes) > 0) {
           DBI::dbExecute(
             con,
@@ -561,19 +720,6 @@ synchronize_continuous <- function(
               tsid,
               " AND datetime IN ('",
               paste(fmt(delete_datetimes), collapse = "', '"),
-              "');"
-            )
-          )
-        }
-
-        if (length(affected_dates) > 0) {
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
-              tsid,
-              " AND date IN ('",
-              paste(affected_dates, collapse = "', '"),
               "');"
             )
           )
@@ -593,77 +739,11 @@ synchronize_continuous <- function(
             )]
           )
         }
-
-        if (length(affected_dates) > 0) {
-          #Recalculate daily means and statistics
-          calculate_stats(
-            timeseries_id = tsid,
-            con = con,
-            start_recalc = min(affected_dates)
-          )
-        }
-        # adjust entries in table 'timeseries' to reflect the new data
-        end <- max(
-          DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-              tsid,
-              ";"
-            )
-          )[[1]],
-          as.POSIXct(
-            DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MAX(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
-            )[[1]],
-            tz = "UTC"
-          )
-        )
         DBI::dbExecute(
           con,
           paste0(
-            "UPDATE timeseries SET end_datetime = '",
-            end,
-            "', last_new_data = '",
+            "UPDATE timeseries SET last_synchronize = '",
             .POSIXct(Sys.time(), "UTC"),
-            "', last_synchronize = '",
-            .POSIXct(Sys.time(), "UTC"),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
-        )
-        earliest <- min(
-          DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-              tsid,
-              ";"
-            )
-          )[[1]],
-          as.POSIXct(
-            DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
-            )[[1]],
-            tz = "UTC"
-          )
-        )
-        DBI::dbExecute(
-          con,
-          paste0(
-            "UPDATE timeseries SET start_datetime = '",
-            earliest,
             "' WHERE timeseries_id = ",
             tsid,
             ";"
@@ -723,42 +803,7 @@ synchronize_continuous <- function(
           )
         )
 
-        # Check to make sure start_datetime in the timeseries table is accurate based on what's in the DB (this isn't regularly done otherwise and is quick to do). This doesn't deal with HYDAT historical means, but that's done by the HYDAT sync/update functions.
-
-        # double check the earliest time in DB in case there's an error in the timeseries table
-        earliest <- min(
-          min(write_remote$datetime),
-          DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-              tsid,
-              ";"
-            )
-          )[[1]],
-          as.POSIXct(
-            DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MIN(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
-                tsid,
-                ";"
-              )
-            )[[1]],
-            tz = "UTC"
-          )
-        )
-
-        DBI::dbExecute(
-          con,
-          paste0(
-            "UPDATE timeseries SET start_datetime = '",
-            fmt(earliest),
-            "' WHERE timeseries_id = ",
-            tsid,
-            ";"
-          )
-        )
+        # Bounds are maintained by database triggers.
       })
     }
   } # End of worker function
@@ -776,10 +821,11 @@ synchronize_continuous <- function(
           parallel = parallel,
           con = con
         )
-        build_status_row(all_timeseries$timeseries_id[i], TRUE)
+        build_status_row(i, all_timeseries$timeseries_id[i], TRUE)
       },
       warning = function(w) {
         build_status_row(
+          i,
           all_timeseries$timeseries_id[i],
           FALSE,
           paste0("Warning: ", conditionMessage(w))
@@ -792,6 +838,7 @@ synchronize_continuous <- function(
           "Error: "
         }
         build_status_row(
+          i,
           all_timeseries$timeseries_id[i],
           FALSE,
           paste0(prefix, conditionMessage(e))
@@ -799,6 +846,23 @@ synchronize_continuous <- function(
       }
     )
   }
+
+  run_worker_group <- function(indices, con, parallel) {
+    updated_group <- vector("list", length(indices))
+
+    for (j in seq_along(indices)) {
+      updated_group[[j]] <- run_worker_iteration(
+        indices[[j]],
+        con = con,
+        parallel = parallel
+      )
+    }
+
+    do.call(rbind, updated_group)
+  }
+
+  task_groups <- build_parallel_groups()
+  task_summary <- summarize_task_groups(task_groups)
 
   start <- Sys.time()
 
@@ -809,13 +873,19 @@ synchronize_continuous <- function(
   }
 
   if (nrow(all_timeseries) == 0) {
-    updated <- build_status_row(numeric(), logical(), character())
+    updated <- build_status_row(
+      integer(),
+      numeric(),
+      logical(),
+      character()
+    )
   } else if (parallel) {
     # !Important note when troubleshooting parallel stuff: load_all() doesn't work, as the .packages argument of foreach::foreach attaches the installed version of AquaCache.
     n.cores <- parallel::detectCores() - 2
-    # Limit the number of cores to the number of timeseries so as to free up resources
-    if (n.cores > nrow(all_timeseries)) {
-      n.cores <- nrow(all_timeseries)
+    # Limit the number of cores to the number of independent cache-sharing task
+    # groups so as to free up resources.
+    if (n.cores > length(task_groups)) {
+      n.cores <- length(task_groups)
     }
     if (n.cores < 1) {
       n.cores <- 1
@@ -838,7 +908,8 @@ synchronize_continuous <- function(
         "dbHost",
         "dbPort",
         "dbUser",
-        "dbPass"
+        "dbPass",
+        "task_groups"
       ),
       envir = environment()
     )
@@ -846,20 +917,45 @@ synchronize_continuous <- function(
     doSNOW::registerDoSNOW(cl)
     if (interactive()) {
       message(
-        "\nIterating through ",
+        "\nParallel plan: ",
         nrow(all_timeseries),
-        " timeseries in parallel with ",
+        " timeseries across ",
+        task_summary$task_group_count,
+        " task groups"
+      )
+      if (task_summary$cache_timeseries_count > 0) {
+        message(
+          "Cache-sharing groups cover ",
+          task_summary$cache_timeseries_count,
+          " timeseries across ",
+          task_summary$cache_group_count,
+          " groups; largest group size = ",
+          task_summary$largest_group_size,
+          ". ",
+          task_summary$cache_source_message
+        )
+      }
+      message(
+        "Iterating in parallel with ",
         n.cores,
         " CPU cores"
       )
 
       progress <- function(n) {
-        utils::setTxtProgressBar(pb, n)
+        completed_groups <- min(as.integer(n), length(task_groups))
+        if (is.na(completed_groups) || completed_groups < 1) {
+          utils::setTxtProgressBar(pb, 0)
+        } else {
+          utils::setTxtProgressBar(
+            pb,
+            sum(task_summary$task_group_sizes[seq_len(completed_groups)])
+          )
+        }
       }
       opts <- list(progress = progress)
 
       updated <- foreach::foreach(
-        i = seq_len(nrow(all_timeseries)),
+        i = seq_along(task_groups),
         .packages = c(
           "DBI",
           "jsonlite",
@@ -884,7 +980,7 @@ synchronize_continuous <- function(
                 password = dbPass,
                 silent = TRUE
               )
-              run_worker_iteration(i, con = parcon, parallel = TRUE)
+              run_worker_group(task_groups[[i]], con = parcon, parallel = TRUE)
             },
             finally = {
               # Close the connection if it was opened in this iteration
@@ -896,7 +992,7 @@ synchronize_continuous <- function(
         }
     } else {
       updated <- foreach::foreach(
-        i = seq_len(nrow(all_timeseries)),
+        i = seq_along(task_groups),
         .packages = c(
           "DBI",
           "jsonlite",
@@ -920,7 +1016,7 @@ synchronize_continuous <- function(
                 password = dbPass,
                 silent = TRUE
               )
-              run_worker_iteration(i, con = parcon, parallel = TRUE)
+              run_worker_group(task_groups[[i]], con = parcon, parallel = TRUE)
             },
             finally = {
               # Close the connection if it was opened in this iteration
@@ -938,6 +1034,15 @@ synchronize_continuous <- function(
       nrow(all_timeseries),
       " timeseries in sequence. This may take a while, please be patient."
     )
+    if (task_summary$cache_timeseries_count > 0) {
+      message(
+        "Detected ",
+        task_summary$cache_timeseries_count,
+        " cache-sharing timeseries across ",
+        task_summary$cache_group_count,
+        " groups; sequential mode can reuse the session cache directly."
+      )
+    }
     updated <- vector("list", nrow(all_timeseries))
 
     for (j in seq_len(nrow(all_timeseries))) {
@@ -953,6 +1058,11 @@ synchronize_continuous <- function(
   if (interactive()) {
     close(pb)
   }
+
+  if (nrow(updated) > 0) {
+    updated <- updated[order(updated$row_index), , drop = FALSE]
+  }
+  updated$row_index <- NULL
 
   DBI::dbExecute(
     con,

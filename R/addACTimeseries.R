@@ -11,7 +11,7 @@
 #'
 #' If specifying a data.frame for argument `data`, different criteria applies depending on if the timeseries is categorized as continuous or discrete.
 #' For continuous data:
-#' The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered directly to the 'measurements_calculated_daily' table with no entry to measurements_continuous. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function [addNewContinuous()] will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
+#' The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered to `measurements_continuous` as one-day-period rows and database triggers maintain `measurements_calculated_daily`. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function [addNewContinuous()] will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
 #' For discrete data:
 #' This is not supported yet.
 #'
@@ -601,7 +601,7 @@ addACTimeseries <- function(
           {
             new_tsid <- DBI::dbGetQuery(
               con,
-              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note, end_datetime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14, $15) RETURNING timeseries_id;",
+              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14) RETURNING timeseries_id;",
               params = list(
                 add$location_id,
                 add$sub_location_id,
@@ -616,8 +616,7 @@ addACTimeseries <- function(
                 add$default_owner,
                 add$source_fx,
                 add$source_fx_args,
-                add$note,
-                add$end_datetime
+                add$note
               )
             )[1, 1]
 
@@ -675,12 +674,6 @@ addACTimeseries <- function(
             if (is.na(new_tsid)) {
               stop(conditionMessage(e))
             }
-            # Modify the end_datetime in the DB to be one second before the start_datetime
-            DBI::dbExecute(
-              con,
-              "UPDATE timeseries SET end_datetime = $1 WHERE timeseries_id = $2;",
-              params = list(add$end_datetime, new_tsid)
-            )
           }
         )
 
@@ -714,27 +707,6 @@ addACTimeseries <- function(
               target = 'realtime',
               con = con
             ) # Calculates stats within the function
-
-            add$end_datetime <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-                new_tsid,
-                ";"
-              )
-            )[1, 1] +
-              1
-
-            DBI::dbExecute(
-              con,
-              paste0(
-                "UPDATE timeseries SET start_datetime = (SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-                new_tsid,
-                ") WHERE timeseries_id = ",
-                new_tsid,
-                ";"
-              )
-            )
           }
         }
 
@@ -763,24 +735,10 @@ addACTimeseries <- function(
                   "';"
                 )
               )
-              getNewContinuous(con = con, timeseries_id = new_tsid)
-              new_start <- DBI::dbGetQuery(
-                con,
-                paste0(
-                  "SELECT MIN(datetime) FROM measurements_continuous WHERE timeseries_id = ",
-                  new_tsid,
-                  ";"
-                )
-              )
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE timeseries SET start_datetime = '",
-                  new_start$min,
-                  "' WHERE timeseries_id = ",
-                  new_tsid,
-                  ";"
-                )
+              getNewContinuous(
+                con = con,
+                timeseries_id = new_tsid,
+                stats = TRUE
               )
             },
             error = function(e) {
@@ -857,54 +815,17 @@ addACTimeseries <- function(
               }
             }
           }
-          tryCatch(
-            {
-              if (
-                lubridate::period(add$record_rate) <= lubridate::period("1 day")
-              ) {
-                calculate_stats(
-                  timeseries_id = new_tsid,
-                  con = con,
-                  start_recalc = NULL
-                )
-                message(
-                  "Success! Calculated daily means and statistics for ",
-                  loc_label,
-                  " and parameter ",
-                  param_name,
-                  "."
-                )
-              } else {
-                message(
-                  "Not calculating daily statistics for ",
-                  loc_label,
-                  " and parameter ",
-                  param_name,
-                  " as recording rate is greater than 1 day."
-                )
-              }
-            },
-            error = function(e) {
-              message(
-                "Unable to calculate daily means and statistics for ",
-                loc_label,
-                " and parameter ",
-                param_name,
-                " with message ",
-                e$message,
-                "."
-              )
-            },
-            warning = function(e) {
-              message(
-                "May have failed to calculate daily means and statistics for ",
-                loc_label,
-                " and parameter ",
-                param_name,
-                "."
-              )
-            }
-          )
+          if (
+            lubridate::period(add$record_rate) > lubridate::period("1 day")
+          ) {
+            message(
+              "Not calculating daily statistics for ",
+              loc_label,
+              " and parameter ",
+              param_name,
+              " as recording rate is greater than 1 day."
+            )
+          }
         } else {
           message(
             "You didn't specify a source_fx. No data was added to the measurements_continuous or measurements_discrete table, so make sure you go and add that data ASAP. If you made a mistake delete the timeseries from the timeseries table and restart. The timeseries ID for this new entry is ",

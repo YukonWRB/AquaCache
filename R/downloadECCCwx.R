@@ -2,7 +2,7 @@
 #'
 #'@description
 #'
-#' A function used to fetch weather data from ECCC, using the weathercan package for speed and simplicity. Since ECCC weather data comes in as a tibble with ~36 rows (all parameters)and there is no way to tailor the request to a single parameter, this function will save the output of the first download as an .rdata file to the session temporary folder. Subsequent runs of the function will search the temporary folder for a suitable file and attempt to use it, downloading again only if no suitable file is found. Temporary folder contents are deleted when the R session is closed.
+#' A function used to fetch weather data from ECCC, using the weathercan package for speed and simplicity. Since ECCC weather data comes in as a tibble with ~36 rows (all parameters)and there is no way to tailor the request to a single parameter, this function will save the output of the first download as an .rdata file to the session temporary folder. Subsequent runs of the function will search the temporary folder for a suitable file and attempt to use it, downloading again only if no suitable file is found. Cached files covering a broader date range can also be reused for narrower requests. Temporary folder contents are deleted when the R session is closed.
 #'
 #' @param location An ECCC Station ID (not to be mistaken for other IDs such as the Nav Canada ID, the WMO ID, or the Climate ID). See [weathercan::stations()] for help finding the right ID.
 #' @param parameter The name of the column containing the desired data, as output in the data.frame given by [weathercan::weather_dl()]. Taken from the source_fx_args in the timeseries table table. Note that this column name varies depending on the interval specified (hour, day, month).
@@ -74,43 +74,22 @@ downloadECCCwx <- function(
     }
   )
 
-  # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
-  files <- list.files(paste0(tempdir(), "/downloadECCCwx"))
-
-  if (length(files) == 0) {
-    file_exists <- FALSE
-  } else {
-    name <- paste0(
-      location,
-      "_",
-      interval,
-      "_",
-      substr(start_datetime, 1, 10),
-      "_",
-      substr(end_datetime, 1, 10),
-      ".rdata"
+  dl <- NULL
+  cache_file <- dlECCCwx_find_cache(
+    location = location,
+    interval = interval,
+    start_datetime = start_datetime,
+    end_datetime = end_datetime
+  )
+  if (!is.null(cache_file)) {
+    dl <- tryCatch(
+      dlECCCwx_load_cache(cache_file),
+      error = function(e) NULL
     )
-    if (name %in% files) {
-      load(paste0(
-        tempdir(),
-        "/downloadECCCwx/",
-        location,
-        "_",
-        interval,
-        "_",
-        substr(start_datetime, 1, 10),
-        "_",
-        substr(end_datetime, 1, 10),
-        ".rdata"
-      ))
-      file_exists <- TRUE
-    } else {
-      file_exists <- FALSE
-    }
   }
 
   # If there is no file that matches necessary use, download
-  if (!file_exists) {
+  if (is.null(dl)) {
     # weather_dl deals annoyingly with timezones, so we're fetching a bit more data than we need and filtering later
     dl <- suppressMessages(weathercan::weather_dl(
       location,
@@ -121,20 +100,14 @@ downloadECCCwx <- function(
       quiet = TRUE
     ))
     # Save the file to the tempdir, from which it will be deleted once the R session ends
-    dir.create(paste0(tempdir(), "/downloadECCCwx"), showWarnings = FALSE)
+    dir.create(dlECCCwx_cache_dir(), showWarnings = FALSE)
     save(
       dl,
-      file = paste0(
-        tempdir(),
-        "/downloadECCCwx/",
-        location,
-        "_",
-        interval,
-        "_",
-        substr(start_datetime, 1, 10),
-        "_",
-        substr(end_datetime, 1, 10),
-        ".rdata"
+      file = dlECCCwx_cache_path(
+        location = location,
+        interval = interval,
+        start_datetime = start_datetime,
+        end_datetime = end_datetime
       )
     )
   }
@@ -216,4 +189,124 @@ downloadECCCwx <- function(
   }
 
   return(data)
+}
+
+#' downloadECCCwx helper
+#' @keywords internal
+#' @noRd
+dlECCCwx_cache_dir <- function() {
+  file.path(tempdir(), "downloadECCCwx")
+}
+
+#' downloadECCCwx helper
+#' @keywords internal
+#' @noRd
+dlECCCwx_cache_filename <- function(
+  location,
+  interval,
+  start_datetime,
+  end_datetime
+) {
+  paste0(
+    location,
+    "_",
+    interval,
+    "_",
+    format(as.Date(start_datetime, tz = "UTC"), "%Y-%m-%d"),
+    "_",
+    format(as.Date(end_datetime, tz = "UTC"), "%Y-%m-%d"),
+    ".rdata"
+  )
+}
+
+#' downloadECCCwx helper
+#' @keywords internal
+#' @noRd
+dlECCCwx_cache_path <- function(
+  location,
+  interval,
+  start_datetime,
+  end_datetime
+) {
+  file.path(
+    dlECCCwx_cache_dir(),
+    dlECCCwx_cache_filename(
+      location = location,
+      interval = interval,
+      start_datetime = start_datetime,
+      end_datetime = end_datetime
+    )
+  )
+}
+
+#' downloadECCCwx helper
+#' @keywords internal
+#' @noRd
+dlECCCwx_find_cache <- function(
+  location,
+  interval,
+  start_datetime,
+  end_datetime
+) {
+  cache_dir <- dlECCCwx_cache_dir()
+  if (!dir.exists(cache_dir)) {
+    return(NULL)
+  }
+
+  prefix <- paste0(location, "_", interval, "_")
+  files <- list.files(cache_dir, pattern = "\\.rdata$")
+  files <- files[startsWith(files, prefix)]
+  if (length(files) == 0) {
+    return(NULL)
+  }
+
+  bounds_chr <- substr(
+    files,
+    nchar(prefix) + 1L,
+    nchar(files) - nchar(".rdata")
+  )
+  bounds <- strsplit(bounds_chr, "_", fixed = TRUE)
+  valid <- lengths(bounds) == 2L
+  if (!any(valid)) {
+    return(NULL)
+  }
+
+  files <- files[valid]
+  bounds <- bounds[valid]
+  cache_start <- as.Date(vapply(bounds, `[[`, character(1), 1L))
+  cache_end <- as.Date(vapply(bounds, `[[`, character(1), 2L))
+  valid_dates <- !is.na(cache_start) & !is.na(cache_end)
+  if (!any(valid_dates)) {
+    return(NULL)
+  }
+
+  files <- files[valid_dates]
+  cache_start <- cache_start[valid_dates]
+  cache_end <- cache_end[valid_dates]
+
+  requested_start <- as.Date(start_datetime, tz = "UTC")
+  requested_end <- as.Date(end_datetime, tz = "UTC")
+  covers_request <- cache_start <= requested_start & cache_end >= requested_end
+  if (!any(covers_request)) {
+    return(NULL)
+  }
+
+  candidate_files <- files[covers_request]
+  candidate_start <- cache_start[covers_request]
+  candidate_end <- cache_end[covers_request]
+  widths <- as.integer(candidate_end - candidate_start)
+  file.path(cache_dir, candidate_files[[which.min(widths)]])
+}
+
+#' downloadECCCwx helper
+#' @keywords internal
+#' @noRd
+dlECCCwx_load_cache <- function(cache_file) {
+  cache_env <- new.env(parent = emptyenv())
+  load(cache_file, envir = cache_env)
+  if (!exists("dl", envir = cache_env, inherits = FALSE)) {
+    stop("downloadECCCwx: Cached weather data is missing object 'dl'.")
+  }
+
+  get("dl", envir = cache_env, inherits = FALSE)
 }

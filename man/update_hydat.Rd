@@ -15,11 +15,15 @@ update_hydat(
 
 \item{timeseries_id}{Character vector of timeseries_ids for which to look for updates. "all" will attempt to update all timeseries where the import function is downloadWSC.}
 
-\item{force_update}{Set TRUE if you want to force a check of each location against the local copy of HYDAT.}
+\item{force_update}{Set TRUE to force a check of each location against the local copy of HYDAT.}
 }
 \value{
-Updated daily means where HYDAT values were replaced by updated values, and TRUE if a new version of hydat was found.
+TRUE if a new HYDAT version was found, otherwise FALSE.
 }
 \description{
-First checks the local version of HYDAT using function \code{\link[=hydat_check]{hydat_check()}} and updates if needed, then checks the local copy against the one last used by the database. If needed or if force_update == TRUE, proceeds to checking each location specified for new data and replaces old data wherever a discrepancy is noted. If all WSC timeseries in the WRB hydro database are in parameter timeseries_id, will also update the internal_status table with the HYDAT version used for the update.
+Checks the local version of HYDAT using \code{\link[=hydat_check]{hydat_check()}} and updates WSC flow
+and water-level timeseries when the local HYDAT copy has changed or when
+\code{force_update = TRUE}. HYDAT daily means are stored as one-day-period rows in
+\code{measurements_continuous} on days that do not already have higher-frequency
+measurements. Database triggers maintain \code{measurements_calculated_daily}.
 }

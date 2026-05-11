@@ -63,7 +63,7 @@ imputeMissing <- function(
   entry <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT l.name, l.location_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.timeseries_id = ",
+      "SELECT l.name, l.location_id, p.param_name AS parameter, at.aggregation_type, t.record_rate, t.timezone_daily_calc FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.timeseries_id = ",
       tsid,
       ";"
     )
@@ -1286,31 +1286,28 @@ imputeMissing <- function(
 
     if (daily) {
       to_push$date <- as.Date(to_push$datetime)
-      to_push$datetime <- NULL
+      to_push$datetime <- daily_datetime_utc(
+        to_push$date,
+        entry$timezone_daily_calc[[1]]
+      )
+      to_push$period <- "P1D"
       DBI::dbExecute(
         con,
         paste0(
-          "DELETE FROM measurements_calculated_daily WHERE timeseries_id = ",
+          "DELETE FROM measurements_continuous WHERE timeseries_id = ",
           tsid,
-          " AND date IN ('",
-          paste(to_push$date, collapse = "', '"),
-          "')"
+          " AND datetime IN ('",
+          paste(to_push$datetime, collapse = "', '"),
+          "') AND period = interval '1 day'"
         )
       ) #delete is here in case previously imputed values are being over-written
 
       dbAppendTableRLS(
         con,
-        "measurements_calculated_daily",
-        to_push[, c("timeseries_id", "date", "value", "imputed")]
+        "measurements_continuous",
+        to_push[, c("timeseries_id", "datetime", "value", "imputed", "period")]
       )
 
-      calculate_stats(
-        con = con,
-        timeseries_id = tsid,
-        start_recalc = min(to_push$date)
-      )
-
-      to_push$datetime <- as.POSIXct(to_push$date, tz = "UTC")
       adjust_grade(
         con = con,
         timeseries_id = tsid,
@@ -1365,12 +1362,6 @@ imputeMissing <- function(
         con,
         "measurements_continuous",
         to_push[, c("timeseries_id", "datetime", "value", "imputed", "period")]
-      )
-
-      calculate_stats(
-        con = con,
-        timeseries_id = tsid,
-        start_recalc = min(to_push$datetime)
       )
 
       adjust_grade(

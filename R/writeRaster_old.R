@@ -41,6 +41,11 @@ writeRaster_old <- function(
   blocks = NULL,
   constraints = TRUE
 ) {
+  restore_spatial_env <- unset_postgres_spatial_env()
+  if (is.function(restore_spatial_env)) {
+    on.exit(restore_spatial_env(), add = TRUE)
+  }
+
   if (!suppressMessages(rpostgis::pgPostGIS(con))) {
     stop("PostGIS is not enabled on this database.")
   }
@@ -464,7 +469,7 @@ writeRaster_old <- function(
     try({
       # re-index existing table for performance
       tmp.query <- paste0(
-        "REINDEX INDEX CONCURRENTLY ",
+        "REINDEX INDEX ",
         gsub("\"", "", rast_table),
         "_rast_st_conhull_idx;"
       )
