@@ -290,6 +290,24 @@ restore_seed_db <- function(
     )
   }
 
+  DBI::dbExecute(
+    target_con,
+    aquacache_public_reader_grants_sql(
+      con = target_con,
+      excluded_tables = c(
+        "continuous.measurements_continuous",
+        "application.api_requests",
+        "application.feedback",
+        "application.images",
+        "application.notifications"
+      ),
+      excluded_functions = NULL,
+      excluded_schemas = c(
+        "audit"
+      )
+    )
+  )
+
   restore_complete <- TRUE
   message(
     "Restored AquaCache seed database '",
@@ -530,6 +548,137 @@ BEGIN
 END
 $aquacache$;
 "
+}
+
+#' @keywords internal
+#' @noRd
+aquacache_public_reader_grants_sql <- function(
+  con,
+  excluded_tables = NULL,
+  excluded_functions = NULL,
+  excluded_schemas = NULL
+) {
+  excluded_tables_sql <- aquacache_sql_text_array(con, excluded_tables)
+  excluded_functions_sql <- aquacache_sql_text_array(con, excluded_functions)
+  excluded_schemas_sql <- aquacache_sql_text_array(con, excluded_schemas)
+
+  paste0(
+    "DO $aquacache$
+DECLARE
+  r record;
+  excluded_tables text[] := ",
+    excluded_tables_sql,
+    ";
+  excluded_functions text[] := ",
+    excluded_functions_sql,
+    ";
+  excluded_schemas text[] := ",
+    excluded_schemas_sql,
+    ";
+BEGIN
+  -- Schema USAGE
+  FOR r IN
+    SELECT n.nspname AS schema_name
+    FROM pg_catalog.pg_namespace n
+    WHERE n.nspname NOT LIKE 'pg_%'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> ALL(excluded_schemas)
+  LOOP
+    EXECUTE format(
+      'GRANT USAGE ON SCHEMA %I TO public_reader',
+      r.schema_name
+    );
+  END LOOP;
+
+  -- Table / view SELECT
+  FOR r IN
+    SELECT
+      n.nspname AS schema_name,
+      c.relname AS object_name
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n
+      ON n.oid = c.relnamespace
+    WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      AND n.nspname NOT LIKE 'pg_%'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> ALL(excluded_schemas)
+      AND format('%I.%I', n.nspname, c.relname) <> ALL(excluded_tables)
+  LOOP
+    EXECUTE format(
+      'GRANT SELECT ON TABLE %I.%I TO public_reader',
+      r.schema_name,
+      r.object_name
+    );
+  END LOOP;
+
+  -- Sequence USAGE/SELECT, useful if any views/functions expose currval/nextval patterns
+  FOR r IN
+    SELECT
+      n.nspname AS schema_name,
+      c.relname AS object_name
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n
+      ON n.oid = c.relnamespace
+    WHERE c.relkind = 'S'
+      AND n.nspname NOT LIKE 'pg_%'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> ALL(excluded_schemas)
+  LOOP
+    EXECUTE format(
+      'GRANT USAGE, SELECT ON SEQUENCE %I.%I TO public_reader',
+      r.schema_name,
+      r.object_name
+    );
+  END LOOP;
+
+  -- Function / procedure EXECUTE
+  FOR r IN
+    SELECT
+      n.nspname AS schema_name,
+      p.proname AS function_name,
+      pg_catalog.pg_get_function_identity_arguments(p.oid) AS identity_args
+    FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n
+      ON n.oid = p.pronamespace
+    WHERE n.nspname NOT LIKE 'pg_%'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> ALL(excluded_schemas)
+      AND format(
+            '%I.%I(%s)',
+            n.nspname,
+            p.proname,
+            pg_catalog.pg_get_function_identity_arguments(p.oid)
+          ) <> ALL(excluded_functions)
+  LOOP
+    EXECUTE format(
+      'GRANT EXECUTE ON FUNCTION %I.%I(%s) TO public_reader',
+      r.schema_name,
+      r.function_name,
+      r.identity_args
+    );
+  END LOOP;
+END
+$aquacache$;
+"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+aquacache_sql_text_array <- function(con, x) {
+  if (is.null(x) || length(x) == 0L) {
+    return("ARRAY[]::text[]")
+  }
+
+  if (!is.character(x) || anyNA(x)) {
+    stop("Grant exclusion lists must be character vectors without NA values.")
+  }
+
+  paste0(
+    "ARRAY[",
+    paste(DBI::dbQuoteString(con, x), collapse = ", "),
+    "]::text[]"
+  )
 }
 
 #' @keywords internal

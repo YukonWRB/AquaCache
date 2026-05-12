@@ -1125,6 +1125,52 @@ create_test_db <- function(
     )
   )
 
+  # Insert basic application schema data
+
+  text <- data.frame(
+    id = c("news_head", "news_body", "hr"),
+    text_en = c(
+      "<h3>Updates and changes</h3><br>",
+      "This page can be used to post news and updates about this application or the underlying data. It is currently just a placeholder to demonstrate how to include static text content in the database and display it on the frontend.",
+      "<hr>"
+    ),
+    text_fr = c(
+      "<h3>Mises à jour et changements</h3><br>",
+      "Cette page peut être utilisée pour publier des nouvelles et des mises à jour sur cette application ou les données sous-jacentes. Il s'agit actuellement d'un simple espace réservé pour démontrer comment inclure du contenu texte statique dans la base de données et l'afficher sur cette application.",
+      "<hr>"
+    )
+  )
+  for (i in seq_len(nrow(text))) {
+    DBI::dbExecute(
+      test_con,
+      sprintf(
+        "INSERT INTO application.text (id, text_en, text_fr)
+         VALUES (%s, %s, %s)",
+        DBI::dbQuoteString(test_con, text$id[i]),
+        DBI::dbQuoteString(test_con, text$text_en[i]),
+        DBI::dbQuoteString(test_con, text$text_fr[i])
+      )
+    )
+  }
+
+  content <- DBI::dbGetQuery(
+    con,
+    "SELECT page, position, content_type, content_id FROM page_content WHERE content_id IN ('news_head', 'news_body', 'hr')"
+  )
+  for (i in seq_len(nrow(content))) {
+    DBI::dbExecute(
+      test_con,
+      sprintf(
+        "INSERT INTO page_content (page, position, content_type, content_id)
+         VALUES (%s, %d, %s, %s)",
+        DBI::dbQuoteString(test_con, content$page[i]),
+        content$position[i],
+        DBI::dbQuoteString(test_con, content$content_type[i]),
+        DBI::dbQuoteString(test_con, content$content_id[i])
+      )
+    )
+  }
+
   # Reset all sequences in the test database to avoid conflicts with future inserts
   reset_identity_sequences <- function(con) {
     sql <- "
