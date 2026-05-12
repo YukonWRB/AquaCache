@@ -10,8 +10,8 @@
 #' @param username Username. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminUser="username".
 #' @param password Password. By default searches the .Renviron file for parameter:value pair of form aquacacheAdminPass="password".
 #' @param outpath The path to the folder/location where the schema dump will be saved. If "choose", the user will be prompted to select a folder. Separate files will be created for the outputs of pg_dumpall and pg_dump.
-#' @param pg_dump The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
-#' @param pg_dumpall The path to the pg_dumpall utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.
+#' @param pg_dump The path to the pg_dump utility. By default (NULL), the function searches for the utility, but this might not always work.
+#' @param pg_dumpall The path to the pg_dumpall utility. By default (NULL), the function searches for the utility, but this might not always work.
 #' @param data Should the contents of the target database be included in the dump? Default is FALSE.
 #'
 #' @returns An SQL file containing the schema definition saved to the 'outfile' path.
@@ -43,7 +43,7 @@ db_dump <- function(
 
   # Validate the `pg_dump` utility
   if (is.null(pg_dump)) {
-    pg_dump <- Sys.which("pg_dump")
+    pg_dump <- find_postgres_utility("pg_dump")
   }
   if (!file.exists(pg_dump)) {
     stop("The specified pg_dump utility does not exist or could not be found.")
@@ -51,7 +51,7 @@ db_dump <- function(
 
   # Validate the `pg_dumpall` utility
   if (is.null(pg_dumpall)) {
-    pg_dumpall <- Sys.which("pg_dumpall")
+    pg_dumpall <- find_postgres_utility("pg_dumpall")
   }
   if (!file.exists(pg_dumpall)) {
     stop(

@@ -1,6 +1,6 @@
 #' Create a small test database
 #'
-#' This function uses the `pg_dump` utility to create a dump of the schema and deterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes a command to set the database `search_path` on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
+#' This function uses the `pg_dump` utility to create a dump of the schema and deterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `"aquacache"`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
 #'
 #' @param name Target database name (i.e. the one to be dumped). By default, it is set to "aquacache". If you want to dump a different database, specify its name here.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost="hostname".
@@ -12,7 +12,6 @@
 #' @param pg_dump The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility and if that fails will look in normal default locations, but this might not always work.
 #' @param psql The path to the psql utility. By default (NULL), the function searches the PATH for the utility and if that fails will look in normal default locations, but this might not always work.
 #' @param delete If TRUE, will delete the testdb database after the function is done. If FALSE, the database will remain for further testing.
-#' @param everything If TRUE, will include additional lookup tables needed by fuller restored test instances. Measurement and location-specific tables are still populated with deterministic synthetic data only.
 #'
 #' @seealso [db_dump()]
 #'
@@ -30,8 +29,7 @@ create_test_db <- function(
   replace = TRUE,
   pg_dump = NULL,
   psql = NULL,
-  delete = TRUE,
-  everything = FALSE
+  delete = TRUE
 ) {
   # Quick parameter setting for testing
   # name <- "aquacache"
@@ -44,51 +42,16 @@ create_test_db <- function(
   # pg_dump <- "C:/Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe"
   # psql <- "C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe"
   # delete = TRUE
-  # everything = TRUE
-
   rlang::check_installed("R.utils", reason = "to gzip the output file")
 
-  # Check or prompt for output path
-  if (outpath == "choose") {
-    if (!interactive()) {
-      stop("You must specify a save path when running in non-interactive mode.")
-    }
-    message(
-      "Select the path to the folder where you want the zipped SQL file saved."
-    )
-    outpath <- rstudioapi::selectDirectory(
-      caption = "Select Save Folder",
-      path = file.path(Sys.getenv("USERPROFILE"), "Desktop")
-    )
+  # Ensure that 'outpath' exists and is a directory
+  if (!dir.exists(outpath)) {
+    stop("The specified outpath does not exist or is not a directory.")
   }
 
   # Validate the `pg_dump` utility
   if (is.null(pg_dump)) {
-    pg_dump <- Sys.which("pg_dump")
-    # Try to find it in common installation paths not found in PATH
-    # For Windows:
-    if (nchar(pg_dump) == 0) {
-      if (.Platform$OS.type == "windows") {
-        possible_paths <- c(
-          "C:/Program Files/PostgreSQL/21/bin/pg_dump.exe",
-          "C:/Program Files/PostgreSQL/20/bin/pg_dump.exe",
-          "C:/Program Files/PostgreSQL/19/bin/pg_dump.exe",
-          "C:/Program Files/PostgreSQL/18/bin/pg_dump.exe",
-          "C:/Program Files/PostgreSQL/17/bin/pg_dump.exe",
-          "C:/Program Files/PostgreSQL/16/bin/pg_dump.exe"
-        )
-        pg_dump <- possible_paths[file.exists(possible_paths)][1]
-      } else if (.Platform$OS.type == "unix") {
-        # For Unix-like systems, check common locations if not found in PATH
-        possible_paths <- c(
-          "/usr/bin/pg_dump",
-          "/usr/local/bin/pg_dump",
-          "/opt/homebrew/bin/pg_dump", # common for Homebrew on Apple Silicon
-          "/opt/local/bin/pg_dump" # common for MacPorts
-        )
-        pg_dump <- possible_paths[file.exists(possible_paths)][1]
-      }
-    }
+    pg_dump <- find_postgres_utility("pg_dump")
   }
   if (!file.exists(pg_dump)) {
     stop("The specified pg_dump utility does not exist or could not be found.")
@@ -96,31 +59,7 @@ create_test_db <- function(
 
   # Validate the `psql` utility
   if (is.null(psql)) {
-    psql <- Sys.which("psql")
-    # Try to find it in common installation paths on Windows if not found in PATH
-    if (nchar(psql) == 0) {
-      # Windows
-      if (.Platform$OS.type == "windows") {
-        possible_paths <- c(
-          "C:/Program Files/PostgreSQL/21/bin/psql.exe",
-          "C:/Program Files/PostgreSQL/20/bin/psql.exe",
-          "C:/Program Files/PostgreSQL/19/bin/psql.exe",
-          "C:/Program Files/PostgreSQL/18/bin/psql.exe",
-          "C:/Program Files/PostgreSQL/17/bin/psql.exe",
-          "C:/Program Files/PostgreSQL/16/bin/psql.exe"
-        )
-        psql <- possible_paths[file.exists(possible_paths)][1]
-      } else if (.Platform$OS.type == "unix") {
-        # For Unix-like systems, check common locations if not found in PATH
-        possible_paths <- c(
-          "/usr/bin/psql",
-          "/usr/local/bin/psql",
-          "/opt/homebrew/bin/psql", # common for Homebrew on Apple Silicon
-          "/opt/local/bin/psql" # common for MacPorts
-        )
-        psql <- possible_paths[file.exists(possible_paths)][1]
-      }
-    }
+    psql <- find_postgres_utility("psql")
   }
   if (!file.exists(psql)) {
     stop("The specified psql utility does not exist or could not be found.")
@@ -200,9 +139,6 @@ create_test_db <- function(
     user = username,
     password = password
   )
-
-  # Make sure postgis + raster are available
-  check_required_extensions(test_con)
 
   # delete the testdb database after the function is done and disconnect from both databases
   on.exit(
@@ -408,22 +344,16 @@ create_test_db <- function(
     "public.parameters",
     "public.parameter_relationships",
     "public.qualifier_types",
-    "spatial.raster_types"
+    "spatial.raster_types",
+    "boreholes.borehole_well_purposes",
+    "boreholes.casing_materials",
+    "boreholes.drillers",
+    "discrete.guideline_publishers",
+    "discrete.guideline_series",
+    "discrete.guidelines",
+    "discrete.guidelines_fractions",
+    "discrete.guidelines_media_types"
   )
-
-  if (everything) {
-    full_tbls <- c(
-      full_tbls,
-      "boreholes.borehole_well_purposes",
-      "boreholes.casing_materials",
-      "boreholes.drillers",
-      "discrete.guideline_publishers",
-      "discrete.guideline_series",
-      "discrete.guidelines",
-      "discrete.guidelines_fractions",
-      "discrete.guidelines_media_types"
-    )
-  }
 
   # Load the ancillary tables into the test database using DBI
   for (tbl in full_tbls) {
@@ -1320,6 +1250,19 @@ create_test_db <- function(
   if (!file.exists(outpath) || file.info(outpath)$size == 0) {
     stop("schema dump did not produce a valid file at ", outpath)
   }
+
+  dump_patch_number <- aquacache_db_patch_number(test_con)
+  aquacache_prepend_lines_to_file(
+    outpath,
+    c(
+      aquacache_seed_dump_metadata_lines(
+        source_database = name,
+        patch_number = dump_patch_number
+      ),
+      "-- ensure public_reader exists for restores that do not use restore_seed_db()",
+      aquacache_public_reader_role_sql()
+    )
+  )
 
   # append statement to set search_path on restore
   alter_stmt <- sprintf(
