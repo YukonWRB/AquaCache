@@ -149,7 +149,7 @@ create_test_db <- function(
     invisible(TRUE)
   }
 
-  # Connect to the PostgreSQL database using AquaConnect
+  # Connect to the target PostgreSQL database using AquaConnect
   con <- AquaConnect(
     name = name,
     host = host,
@@ -200,6 +200,9 @@ create_test_db <- function(
     user = username,
     password = password
   )
+
+  # Make sure postgis + raster are available
+  check_required_extensions(test_con)
 
   # delete the testdb database after the function is done and disconnect from both databases
   on.exit(
