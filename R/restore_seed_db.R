@@ -50,12 +50,23 @@ restore_seed_db <- function(
   psql = NULL,
   cleanup_on_error = TRUE
 ) {
+  # IF 'file' is a URL, download to a temp file and use that for restore, then delete the temp file
+  if (aquacache_is_url(file)) {
+    downloaded <- aquacache_download_seed_dump(file)
+    file <- downloaded$path
+    on.exit(downloaded$cleanup(), add = TRUE)
+  }
+
+  message("Validating file...")
+
   file <- aquacache_validate_seed_dump_file(file)
   name <- aquacache_validate_restore_target_name(name)
   maintenance_db <- aquacache_validate_restore_maintenance_db(
     maintenance_db,
     name
   )
+
+  message("Connecting to database server...")
 
   aquacache_validate_restore_connection_arg(host, "host")
   aquacache_validate_restore_connection_arg(port, "port")
@@ -379,13 +390,22 @@ restore_seed_db <- function(
 #' @noRd
 aquacache_validate_seed_dump_file <- function(file) {
   if (!is.character(file) || length(file) != 1L || is.na(file)) {
-    stop("`file` must be a single path to a .sql or gzipped SQL dump.")
+    stop("`file` must be a single path to a .sql or gzipped .sql.gz dump.")
   }
 
   file <- normalizePath(file, winslash = "\\", mustWork = TRUE)
   lower_file <- tolower(file)
-  if (!grepl("\\.sql$", lower_file) && !grepl("\\.gz$", lower_file)) {
-    stop("`file` must point to a plain .sql dump or gzipped SQL dump.")
+
+  if (!grepl("\\.sql$", lower_file) && !grepl("\\.sql\\.gz$", lower_file)) {
+    stop("`file` must point to a plain .sql dump or gzipped .sql.gz dump.")
+  }
+
+  if (grepl("\\.sql\\.gz$", lower_file) && !aquacache_file_is_gzip(file)) {
+    stop(
+      "`file` has extension .sql.gz but is not gzip-compressed. ",
+      "Check that the file is a real dump and not an HTML/error page.",
+      call. = FALSE
+    )
   }
 
   file
@@ -1011,4 +1031,262 @@ aquacache_sql_dump_uses_restrict <- function(file) {
       return(TRUE)
     }
   }
+}
+
+#' @keywords internal
+#' @noRd
+aquacache_is_url <- function(x) {
+  is.character(x) &&
+    length(x) == 1L &&
+    !is.na(x) &&
+    grepl("^https?://", x, ignore.case = TRUE)
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_download_seed_dump <- function(url) {
+  ext <- aquacache_url_seed_dump_ext(url)
+  path <- tempfile(fileext = ext)
+
+  cleanup <- function() {
+    if (file.exists(path)) {
+      unlink(path)
+    }
+    invisible(TRUE)
+  }
+
+  message("Downloading SQL dump from URL...")
+
+  status <- tryCatch(
+    utils::download.file(
+      url = url,
+      destfile = path,
+      mode = "wb",
+      quiet = TRUE
+    ),
+    error = function(e) {
+      cleanup()
+      stop(
+        "Failed to download SQL dump from URL.\n",
+        "URL: ",
+        url,
+        "\n",
+        "Original error: ",
+        e$message,
+        call. = FALSE
+      )
+    }
+  )
+
+  if (!identical(status, 0L)) {
+    cleanup()
+    stop(
+      "Failed to download SQL dump from URL. download.file() returned status ",
+      status,
+      ".\nURL: ",
+      url,
+      call. = FALSE
+    )
+  }
+
+  aquacache_validate_downloaded_seed_dump(path, url)
+
+  list(
+    path = path,
+    cleanup = cleanup
+  )
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_url_seed_dump_ext <- function(url) {
+  clean_url <- sub("[?#].*$", "", url)
+  clean_url <- tolower(clean_url)
+
+  if (grepl("\\.sql\\.gz$", clean_url)) {
+    return(".sql.gz")
+  }
+
+  if (grepl("\\.sql$", clean_url)) {
+    return(".sql")
+  }
+
+  if (grepl("\\.gz$", clean_url)) {
+    return(".sql.gz")
+  }
+
+  # Default is fine, but we still validate the bytes after download.
+  ".sql.gz"
+}
+
+#' @keywords internal
+#' @noRd
+aquacache_validate_downloaded_seed_dump <- function(path, url) {
+  if (!file.exists(path)) {
+    stop("Downloaded SQL dump was not created.", call. = FALSE)
+  }
+
+  size <- file.info(path)$size
+
+  if (is.na(size) || size == 0) {
+    stop(
+      "Downloaded SQL dump is empty.\nURL: ",
+      url,
+      call. = FALSE
+    )
+  }
+
+  first_bytes <- aquacache_read_first_bytes(path, n = 512L)
+
+  # Binary gzip dump: valid. Do not inspect as text.
+  if (aquacache_bytes_are_gzip(first_bytes)) {
+    return(invisible(TRUE))
+  }
+
+  first_text <- aquacache_bytes_to_safe_ascii(first_bytes)
+
+  if (aquacache_download_looks_like_html(first_text)) {
+    stop(
+      "The URL did not return a SQL dump. It returned an HTML document instead.\n\n",
+      "This usually means the URL points to a web page, login page, ",
+      "access-denied page, or repository 'blob' page rather than a raw .sql ",
+      "or .sql.gz file.\n\n",
+      "URL: ",
+      url,
+      call. = FALSE
+    )
+  }
+
+  if (aquacache_file_has_gzip_extension(path)) {
+    stop(
+      "Downloaded file has a .gz extension but is not gzip-compressed.\n\n",
+      "URL: ",
+      url,
+      "\n\n",
+      "The server may have returned an error page or an uncompressed file.",
+      call. = FALSE
+    )
+  }
+
+  if (!aquacache_download_looks_like_sql(first_text)) {
+    warning(
+      "Downloaded file does not look like a typical SQL dump from its first ",
+      "bytes. Restore will continue, but the file may not be a valid dump.",
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+aquacache_bytes_are_gzip <- function(bytes) {
+  length(bytes) >= 2L &&
+    as.integer(bytes[[1L]]) == 0x1f &&
+    as.integer(bytes[[2L]]) == 0x8b
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_bytes_to_safe_ascii <- function(bytes) {
+  if (!length(bytes)) {
+    return("")
+  }
+
+  # Stop before embedded NUL if present.
+  nul <- which(bytes == as.raw(0x00))
+  if (length(nul)) {
+    bytes <- bytes[seq_len(nul[[1L]] - 1L)]
+  }
+
+  if (!length(bytes)) {
+    return("")
+  }
+
+  ints <- as.integer(bytes)
+
+  # Keep printable ASCII and common whitespace only.
+  keep <- ints %in% c(9L, 10L, 13L) | (ints >= 32L & ints <= 126L)
+  ints <- ints[keep]
+
+  if (!length(ints)) {
+    return("")
+  }
+
+  rawToChar(as.raw(ints), multiple = FALSE)
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_read_first_bytes <- function(path, n = 512L) {
+  con <- file(path, open = "rb")
+  on.exit(close(con), add = TRUE)
+
+  readBin(con, what = "raw", n = n)
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_download_looks_like_html <- function(x) {
+  x <- tolower(trimws(enc2utf8(x)))
+
+  grepl("^<!doctype html", x) ||
+    grepl("^<html", x) ||
+    grepl("<head[[:space:]>]", x) ||
+    grepl("<body[[:space:]>]", x) ||
+    grepl("<title[[:space:]>]", x)
+}
+
+#' @keywords internal
+#' @noRd
+aquacache_download_looks_like_sql <- function(x) {
+  x <- trimws(enc2utf8(x))
+
+  grepl("^--", x) ||
+    grepl("^SET\\s", x, ignore.case = TRUE) ||
+    grepl("^CREATE\\s", x, ignore.case = TRUE) ||
+    grepl("^DO\\s", x, ignore.case = TRUE) ||
+    grepl("^\\\\restrict", x)
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_file_has_gzip_extension <- function(path) {
+  grepl("\\.gz$", tolower(path))
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_file_is_gzip <- function(path) {
+  aquacache_bytes_are_gzip(aquacache_read_first_bytes(path, n = 2L))
+}
+
+#' @keywords internal
+#' @noRd
+aquacache_read_first_text <- function(path, n = 512L) {
+  bytes <- aquacache_read_first_bytes(path, n = n)
+
+  if (!length(bytes)) {
+    return("")
+  }
+
+  nul <- which(bytes == as.raw(0x00))
+
+  if (length(nul)) {
+    bytes <- bytes[seq_len(nul[[1L]] - 1L)]
+  }
+
+  if (!length(bytes)) {
+    return("")
+  }
+
+  rawToChar(bytes, multiple = FALSE)
 }
