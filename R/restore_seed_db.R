@@ -308,6 +308,54 @@ restore_seed_db <- function(
     )
   )
 
+  # Give more expansive permissions to select 'application' schema tables
+  # Grant permissions on the new tables to everyone (read, write, update)
+  DBI::dbExecute(
+    target_con,
+    "REVOKE ALL ON application.shiny_app_usage FROM PUBLIC;"
+  )
+
+  DBI::dbExecute(
+    target_con,
+    "GRANT INSERT ON application.shiny_app_usage TO PUBLIC;"
+  )
+  DBI::dbExecute(
+    target_con,
+    "GRANT UPDATE (session_end, login_to, error_message)
+    ON application.shiny_app_usage
+    TO PUBLIC;"
+  )
+  # Technically not necessary because the apps use RETURNING id and select isn't needed for that
+  DBI::dbExecute(
+    target_con,
+    "GRANT SELECT (id)
+    ON application.shiny_app_usage
+    TO PUBLIC;"
+  )
+  DBI::dbExecute(
+    target_con,
+    "REVOKE ALL ON application.shiny_app_usage_event FROM PUBLIC;"
+  )
+  DBI::dbExecute(
+    target_con,
+    "GRANT INSERT ON application.shiny_app_usage_event TO PUBLIC;"
+  )
+
+  DBI::dbExecute(
+    target_con,
+    "REVOKE ALL ON application.api_requests FROM PUBLIC;"
+  )
+  DBI::dbExecute(
+    target_con,
+    "GRANT INSERT ON application.api_requests TO PUBLIC;"
+  )
+  DBI::dbExecute(
+    target_con,
+    "GRANT UPDATE (session_end, status_code, success)
+    ON application.api_requests
+    TO PUBLIC;"
+  )
+
   restore_complete <- TRUE
   message(
     "Restored AquaCache seed database '",
