@@ -209,7 +209,7 @@ create_test_db <- function(
     )
   }
 
-  # sanity‑check that the file exists & is non‑empty
+  # sanity check that the file exists & is non empty
   if (!file.exists(schema_outfile) || file.info(schema_outfile)$size == 0) {
     stop("schema dump did not produce a valid file at ", schema_outfile)
   }
@@ -1135,8 +1135,8 @@ create_test_db <- function(
       "<hr>"
     ),
     text_fr = c(
-      "<h3>Mises à jour et changements</h3><br>",
-      "Cette page peut être utilisée pour publier des nouvelles et des mises à jour sur cette application ou les données sous-jacentes. Il s'agit actuellement d'un simple espace réservé pour démontrer comment inclure du contenu texte statique dans la base de données et l'afficher sur cette application.",
+      "<h3>Mises \u00e0 jour et changements</h3><br>",
+      "Cette page peut \u00eatre utilis\u00e9e pour publier des nouvelles et des mises \u00e0 jour sur cette application ou les donn\u00e9es sous-jacentes. Il s'agit actuellement d'un simple espace r\u00e9serv\u00e9 pour d\u00e9montrer comment inclure du contenu texte statique dans la base de donn\u00e9es et l'afficher sur cette application.",
       "<hr>"
     )
   )
@@ -1292,7 +1292,7 @@ create_test_db <- function(
     )
   }
 
-  # sanity‑check that the file exists & is non‑empty
+  # sanity check that the file exists & is non empty
   if (!file.exists(outpath) || file.info(outpath)$size == 0) {
     stop("schema dump did not produce a valid file at ", outpath)
   }
