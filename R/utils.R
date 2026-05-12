@@ -43,38 +43,305 @@ unset_postgres_spatial_env <- function() {
 
 #' @title Find a PostgreSQL command line utility
 #' @description
-#' Internal helper that first checks `Sys.which()` and, on Windows, falls back
-#' to common PostgreSQL installation directories under Program Files.
+#' Finds a PostgreSQL/PostGIS command line utility by checking PATH and common
+#' installation directories, then choosing the newest detected version.
 #' @param name The base utility name, such as `"psql"` or `"raster2pgsql"`.
-#' @return A single path to the requested utility, or `""` if it could not be
-#' found.
+#' @param version_ok Optional predicate used to filter candidate versions.
+#'   It is called as `version_ok(major, minor, patch, label, path)`.
+#' @param prefer_newest If `TRUE`, choose the newest version found. If `FALSE`,
+#'   choose the first discovered candidate.
+#' @return A single normalized path, or `""` if no suitable utility is found.
 #' @noRd
 #' @keywords internal
-find_postgres_utility <- function(name) {
-  utility_path <- Sys.which(name)
-  if (nzchar(utility_path) || .Platform$OS.type != "windows") {
-    return(utility_path)
-  }
+find_postgres_utility <- function(
+  name,
+  version_ok = NULL,
+  prefer_newest = TRUE
+) {
+  candidates <- aquacache_postgres_utility_candidates(name)
 
-  patterns <- c(
-    file.path("C:/Program Files/PostgreSQL", "*", "bin", paste0(name, ".exe")),
-    file.path(
-      "C:/Program Files (x86)/PostgreSQL",
-      "*",
-      "bin",
-      paste0(name, ".exe")
-    )
-  )
-  candidates <- unique(unlist(lapply(patterns, Sys.glob), use.names = FALSE))
   if (!length(candidates)) {
     return("")
   }
 
-  normalizePath(
-    sort(candidates, decreasing = TRUE)[1],
+  if (!is.null(version_ok) && !is.function(version_ok)) {
+    stop("`version_ok` must be NULL or a function.", call. = FALSE)
+  }
+
+  info <- aquacache_postgres_utility_info(candidates)
+
+  if (!is.null(version_ok)) {
+    keep <- vapply(
+      seq_len(nrow(info)),
+      function(i) {
+        isTRUE(version_ok(
+          major = info$major[[i]],
+          minor = info$minor[[i]],
+          patch = info$patch[[i]],
+          label = info$version_label[[i]],
+          path = info$path[[i]]
+        ))
+      },
+      logical(1)
+    )
+
+    info <- info[keep, , drop = FALSE]
+
+    if (!nrow(info)) {
+      return("")
+    }
+  }
+
+  if (!prefer_newest) {
+    return(info$path[[1L]])
+  }
+
+  parsed <- !is.na(info$major)
+
+  if (any(parsed)) {
+    ranked <- info[parsed, , drop = FALSE]
+
+    ord <- order(
+      -ranked$major,
+      -ranked$minor,
+      -ranked$patch,
+      ranked$source_rank
+    )
+
+    return(ranked$path[[ord[[1L]]]])
+  }
+
+  # Fallback for utilities whose version cannot be parsed.
+  info$path[[1L]]
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_postgres_utility_candidates <- function(name) {
+  candidates <- character()
+
+  path_hit <- unname(Sys.which(name))
+  if (nzchar(path_hit)) {
+    candidates <- c(candidates, path_hit)
+  }
+
+  path_dirs <- strsplit(
+    Sys.getenv("PATH", unset = ""),
+    .Platform$path.sep,
+    fixed = TRUE
+  )[[1]]
+
+  path_dirs <- gsub('^"|"$', "", path_dirs)
+  path_dirs <- path_dirs[nzchar(path_dirs)]
+
+  if (.Platform$OS.type == "windows") {
+    has_extension <- grepl("\\.[A-Za-z0-9]+$", basename(name))
+
+    if (has_extension) {
+      path_names <- name
+    } else {
+      path_ext <- strsplit(
+        Sys.getenv("PATHEXT", unset = ".COM;.EXE;.BAT;.CMD"),
+        ";",
+        fixed = TRUE
+      )[[1]]
+
+      path_ext <- unique(tolower(path_ext[nzchar(path_ext)]))
+      path_names <- unique(c(
+        paste0(name, path_ext),
+        paste0(name, ".exe"),
+        name
+      ))
+    }
+
+    if (length(path_dirs)) {
+      candidates <- c(
+        candidates,
+        unlist(
+          lapply(path_dirs, function(d) file.path(d, path_names)),
+          use.names = FALSE
+        )
+      )
+    }
+
+    exe_name <- if (grepl("\\.exe$", name, ignore.case = TRUE)) {
+      name
+    } else {
+      paste0(name, ".exe")
+    }
+
+    program_dirs <- unique(c(
+      Sys.getenv("ProgramFiles", unset = ""),
+      "C:/Program Files",
+      Sys.getenv("ProgramFiles(x86)", unset = ""),
+      "C:/Program Files (x86)"
+    ))
+
+    program_dirs <- program_dirs[nzchar(program_dirs)]
+
+    patterns <- file.path(
+      program_dirs,
+      "PostgreSQL",
+      "*",
+      "bin",
+      exe_name
+    )
+
+    candidates <- c(
+      candidates,
+      unlist(lapply(patterns, Sys.glob), use.names = FALSE)
+    )
+  } else {
+    if (length(path_dirs)) {
+      candidates <- c(candidates, file.path(path_dirs, name))
+    }
+
+    candidates <- c(
+      candidates,
+      file.path(
+        c("/usr/bin", "/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin"),
+        name
+      )
+    )
+
+    patterns <- c(
+      file.path("/Library/PostgreSQL", "*", "bin", name),
+      file.path(
+        "/Applications/Postgres.app/Contents/Versions",
+        "*",
+        "bin",
+        name
+      )
+    )
+
+    candidates <- c(
+      candidates,
+      unlist(lapply(patterns, Sys.glob), use.names = FALSE)
+    )
+  }
+
+  candidates <- candidates[nzchar(candidates)]
+  candidates <- candidates[file.exists(candidates)]
+
+  if (.Platform$OS.type != "windows") {
+    access <- file.access(candidates, mode = 1L)
+    candidates <- candidates[!is.na(access) & access == 0L]
+  }
+
+  if (!length(candidates)) {
+    return(character())
+  }
+
+  unique(normalizePath(
+    candidates,
     winslash = "\\",
     mustWork = FALSE
+  ))
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_postgres_utility_info <- function(paths) {
+  versions <- lapply(paths, aquacache_postgres_utility_version)
+
+  data.frame(
+    path = paths,
+    version_label = vapply(versions, `[[`, character(1), "label"),
+    major = vapply(versions, `[[`, integer(1), "major"),
+    minor = vapply(versions, `[[`, integer(1), "minor"),
+    patch = vapply(versions, `[[`, integer(1), "patch"),
+    source_rank = seq_along(paths),
+    stringsAsFactors = FALSE
   )
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_postgres_utility_version <- function(path) {
+  unknown <- function(label = NA_character_) {
+    list(
+      label = label,
+      major = NA_integer_,
+      minor = NA_integer_,
+      patch = NA_integer_
+    )
+  }
+
+  out <- tryCatch(
+    suppressWarnings(system2(path, "--version", stdout = TRUE, stderr = TRUE)),
+    error = function(e) character()
+  )
+
+  status <- attr(out, "status")
+
+  if (!length(out) || (!is.null(status) && as.integer(status) != 0L)) {
+    return(unknown())
+  }
+
+  label <- paste(out, collapse = " ")
+
+  matches <- regmatches(
+    label,
+    gregexpr("[0-9]+(\\.[0-9]+){1,3}", label, perl = TRUE)
+  )[[1]]
+
+  if (!length(matches) || identical(matches, character(0))) {
+    return(unknown(label))
+  }
+
+  # Use the last version-like token. This avoids reading the "2" in
+  # utility names like raster2pgsql as the version.
+  version <- tail(matches, 1L)
+  parts <- suppressWarnings(as.integer(strsplit(version, ".", fixed = TRUE)[[
+    1
+  ]]))
+
+  if (length(parts) < 2L || anyNA(parts)) {
+    return(unknown(label))
+  }
+
+  parts <- c(parts, 0L, 0L, 0L)[1:3]
+
+  list(
+    label = label,
+    major = parts[[1L]],
+    minor = parts[[2L]],
+    patch = parts[[3L]]
+  )
+}
+
+#' Check if a given PostgreSQL version supports the RESTRICT option
+#' @keywords internal
+#' @noRd
+aquacache_psql_supports_restrict <- function(
+  major,
+  minor,
+  patch = 0L,
+  label = NULL,
+  path = NULL
+) {
+  if (is.na(major) || is.na(minor)) {
+    return(FALSE)
+  }
+
+  if (major >= 18L) {
+    return(TRUE)
+  }
+
+  fixed_minor <- c(
+    `13` = 22L,
+    `14` = 19L,
+    `15` = 14L,
+    `16` = 10L,
+    `17` = 6L
+  )
+
+  major_chr <- as.character(major)
+
+  major_chr %in% names(fixed_minor) && minor >= fixed_minor[[major_chr]]
 }
 
 

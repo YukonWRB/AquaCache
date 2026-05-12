@@ -29,9 +29,9 @@ db_dump(
 
 \item{outpath}{The path to the folder/location where the schema dump will be saved. If "choose", the user will be prompted to select a folder. Separate files will be created for the outputs of pg_dumpall and pg_dump.}
 
-\item{pg_dump}{The path to the pg_dump utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.}
+\item{pg_dump}{The path to the pg_dump utility. By default (NULL), the function searches for the utility, but this might not always work.}
 
-\item{pg_dumpall}{The path to the pg_dumpall utility. By default (NULL), the function searches the PATH for the utility, but this might not always work.}
+\item{pg_dumpall}{The path to the pg_dumpall utility. By default (NULL), the function searches for the utility, but this might not always work.}
 
 \item{data}{Should the contents of the target database be included in the dump? Default is FALSE.}
 }
