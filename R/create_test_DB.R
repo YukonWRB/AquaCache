@@ -435,6 +435,14 @@ create_test_db <- function(
     "SELECT media_id FROM public.media_types WHERE media_type = 'snow' LIMIT 1",
     "snow media"
   )
+  media_groundwater <- first_id(
+    "SELECT media_id FROM public.media_types WHERE media_type = 'groundwater' LIMIT 1",
+    "groundwater media"
+  )
+  media_rain <- first_id(
+    "SELECT media_id FROM public.media_types WHERE media_type = 'rain water' LIMIT 1",
+    "rain water media"
+  )
   matrix_liquid <- first_id(
     "SELECT matrix_state_id FROM public.matrix_states WHERE matrix_state_code = 'liquid' LIMIT 1",
     "liquid matrix"
@@ -483,8 +491,32 @@ create_test_db <- function(
     "specific conductance",
     "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
   )
+  conductivity_param <- parameter_id(
+    "conductivity",
+    "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
+  )
   ph_param <- parameter_id(
     "pH",
+    "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
+  )
+  turbidity_param <- parameter_id(
+    "turbidity",
+    "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
+  )
+  alkalinity_param <- parameter_id(
+    "alkalinity",
+    "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
+  )
+  hardness_param <- parameter_id(
+    "hardness",
+    "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
+  )
+  chloride_param <- parameter_id(
+    "chloride",
+    "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
+  )
+  sulfate_param <- parameter_id(
+    "sulfate",
     "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
   )
   grade_a <- first_id(
@@ -515,9 +547,29 @@ create_test_db <- function(
     "SELECT collection_method_id FROM discrete.collection_methods ORDER BY collection_method_id LIMIT 1",
     "collection method"
   )
+  collection_method_pump <- first_id(
+    "SELECT collection_method_id FROM discrete.collection_methods WHERE collection_method = 'Pump' LIMIT 1",
+    "pump collection method"
+  )
+  collection_method_bottle <- first_id(
+    "SELECT collection_method_id FROM discrete.collection_methods WHERE collection_method = 'Water Bottle (direct fill)' LIMIT 1",
+    "water bottle collection method"
+  )
   sample_type_id <- first_id(
     "SELECT sample_type_id FROM discrete.sample_types ORDER BY sample_type_id LIMIT 1",
     "sample type"
+  )
+  sample_type_routine <- first_id(
+    "SELECT sample_type_id FROM discrete.sample_types WHERE sample_type = 'sample-routine' LIMIT 1",
+    "routine sample type"
+  )
+  sample_type_field_blank <- first_id(
+    "SELECT sample_type_id FROM discrete.sample_types WHERE sample_type = 'QC-sample-field blank' LIMIT 1",
+    "field blank sample type"
+  )
+  sample_type_field_replicate <- first_id(
+    "SELECT sample_type_id FROM discrete.sample_types WHERE sample_type = 'QC-sample-field replicate' LIMIT 1",
+    "field replicate sample type"
   )
   result_type_field <- first_id(
     "SELECT result_type_id FROM discrete.result_types WHERE result_type = 'field' LIMIT 1",
@@ -531,13 +583,37 @@ create_test_db <- function(
     "SELECT sample_fraction_id FROM discrete.sample_fractions WHERE sample_fraction = 'total' LIMIT 1",
     "total sample fraction"
   )
+  sample_fraction_dissolved <- first_id(
+    "SELECT sample_fraction_id FROM discrete.sample_fractions WHERE sample_fraction = 'dissolved' LIMIT 1",
+    "dissolved sample fraction"
+  )
   result_value_actual <- first_id(
-    "SELECT result_value_type_id FROM discrete.result_value_types ORDER BY result_value_type_id LIMIT 1",
-    "result value type"
+    "SELECT result_value_type_id FROM discrete.result_value_types WHERE result_value_type = 'Actual' LIMIT 1",
+    "actual result value type"
+  )
+  result_value_calculated <- first_id(
+    "SELECT result_value_type_id FROM discrete.result_value_types WHERE result_value_type = 'Calculated' LIMIT 1",
+    "calculated result value type"
+  )
+  result_value_estimated <- first_id(
+    "SELECT result_value_type_id FROM discrete.result_value_types WHERE result_value_type = 'Estimated' LIMIT 1",
+    "estimated result value type"
   )
   result_condition_id <- first_id(
     "SELECT result_condition_id FROM discrete.result_conditions ORDER BY result_condition_id LIMIT 1",
     "result condition"
+  )
+  result_speciation_caco3 <- first_id(
+    "SELECT result_speciation_id FROM discrete.result_speciations WHERE result_speciation = 'as CaCO3' LIMIT 1",
+    "CaCO3 result speciation"
+  )
+  protocol_method_id <- first_id(
+    "SELECT protocol_id FROM discrete.protocols_methods ORDER BY protocol_id LIMIT 1",
+    "protocol/method"
+  )
+  laboratory_id <- first_id(
+    "SELECT lab_id FROM discrete.laboratories ORDER BY lab_id LIMIT 1",
+    "laboratory"
   )
 
   DBI::dbExecute(
@@ -680,14 +756,25 @@ create_test_db <- function(
           %d, 'compound', true),
          (7, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"conductance\"}'::jsonb,
-          'Synthetic hourly specific conductance.', interval '1 hour',
+         'Synthetic hourly specific conductance.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (8, %d, %d, %d, NULL, NULL, NULL,
           'downloadSynthetic', '{\"series\":\"water_flow\"}'::jsonb,
           'Synthetic hourly water flow.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
-          %d, 'basic', true)",
+          %d, 'basic', true),
+         (9, %d, %d, %d, NULL, NULL, NULL,
+          'downloadSynthetic', '{\"series\":\"conductivity\"}'::jsonb,
+          'Synthetic hourly conductivity used as a compound member.', interval '1 hour',
+          %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
+          %d, 'basic', true),
+         (10, %d, %d, %d, NULL, NULL, NULL,
+          NULL, NULL,
+          'Synthetic temperature-corrected specific conductance derived from conductivity and water temperature.',
+          interval '1 hour',
+          %d, %d, true, ARRAY['public_reader'], %d, 2, NULL, 0, true,
+          %d, 'compound', true)",
       water_level_param,
       media_surface,
       agg_instant,
@@ -744,6 +831,20 @@ create_test_db <- function(
       fake_location_id,
       fake_z_surface,
       owner_org,
+      matrix_liquid,
+      conductivity_param,
+      media_surface,
+      agg_mean,
+      fake_location_id,
+      fake_z_surface,
+      owner_org,
+      matrix_liquid,
+      conductance_param,
+      media_surface,
+      agg_mean,
+      fake_location_id,
+      fake_z_surface,
+      owner_org,
       matrix_liquid
     )
   )
@@ -752,7 +853,9 @@ create_test_db <- function(
     test_con,
     "INSERT INTO continuous.timeseries_compounds (
        timeseries_id, expression_sql
-     ) VALUES (6, NULL)"
+     ) VALUES
+       (6, NULL),
+       (10, 'cond / (1 + 0.0191 * (temp - 25))')"
   )
   DBI::dbExecute(
     test_con,
@@ -761,7 +864,9 @@ create_test_db <- function(
        member_priority, use_from, use_to
      ) VALUES
        (6, 'primary_level', 1, 1, NULL, NULL),
-       (6, 'backup_level', 2, 2, '2023-01-05 00:00+00', NULL)"
+       (6, 'backup_level', 2, 2, '2023-01-05 00:00+00', NULL),
+       (10, 'temp', 2, 1, NULL, NULL),
+       (10, 'cond', 9, 1, NULL, NULL)"
   )
 
   DBI::dbExecute(
@@ -920,6 +1025,30 @@ create_test_db <- function(
        interval '1 hour'
      ) AS gs(datetime)"
   )
+  DBI::dbExecute(
+    test_con,
+    "INSERT INTO continuous.measurements_continuous (
+       timeseries_id, datetime, value, period, imputed, no_update,
+       measurement_row_id
+     )
+     SELECT
+       9,
+       gs.datetime,
+       round(
+         (138 + sin(extract(epoch FROM gs.datetime) / 216000.0) * 18 +
+          cos(extract(epoch FROM gs.datetime) / 604800.0) * 7)::numeric,
+         3
+       ),
+       interval '1 hour',
+       false,
+       false,
+       1009000000 + row_number() OVER (ORDER BY gs.datetime)
+     FROM generate_series(
+       '2020-01-01 00:00+00'::timestamptz,
+       '2024-01-01 00:00+00'::timestamptz,
+       interval '1 hour'
+     ) AS gs(datetime)"
+  )
 
   DBI::dbExecute(
     test_con,
@@ -929,7 +1058,11 @@ create_test_db <- function(
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-01-01 00:00+00'),
          (2, 1, %d, '2022-01-01 00:00+00', '2024-01-02 00:00+00'),
-         (3, 2, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (3, 2, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (4, 9, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (5, 10, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+      grade_a,
+      grade_b,
       grade_a,
       grade_b,
       grade_a
@@ -943,9 +1076,13 @@ create_test_db <- function(
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
          (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
-         (3, 3, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (3, 3, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (4, 9, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (5, 10, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
       approval_a,
       approval_n,
+      approval_a,
+      approval_a,
       approval_a
     )
   )
@@ -969,9 +1106,13 @@ create_test_db <- function(
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
          (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
-         (3, 2, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (3, 2, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (4, 9, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (5, 10, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
       owner_org,
       contributor_org,
+      owner_org,
+      owner_org,
       owner_org
     )
   )
@@ -983,9 +1124,13 @@ create_test_db <- function(
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
          (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
-         (3, 3, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
+         (3, 3, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (4, 9, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00'),
+         (5, 10, %d, '2020-01-01 00:00+00', '2024-01-02 00:00+00')",
       contributor_org,
       owner_org,
+      contributor_org,
+      contributor_org,
       contributor_org
     )
   )
@@ -1080,6 +1225,94 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     sprintf(
+      "INSERT INTO discrete.samples (
+         sample_id, location_id, sub_location_id, media_id, z, datetime,
+         target_datetime, collection_method, sample_type, linked_with,
+         sample_volume_ml, purge_volume_l, purge_time_min, flow_rate_l_min,
+         sample_grade, sample_approval, sample_qualifier, owner,
+         contributor, sampling_org, share_with, import_source,
+         no_update, note, import_source_id
+       ) VALUES
+         (4, %d, %d, %d, 0.5, '2023-04-01 12:00+00',
+          '2023-04-01 12:00+00', %d, %d, NULL,
+          1000, NULL, NULL, NULL, %d, %d, NULL,
+          %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
+          false, 'Routine spring freshet surface-water chemistry sample.', 'SYN-S4'),
+         (5, %d, %d, %d, 0.5, '2023-04-01 12:05+00',
+          '2023-04-01 12:00+00', %d, %d, 4,
+          1000, NULL, NULL, NULL, %d, %d, NULL,
+          %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
+          false, 'Field replicate paired with SYN-S4.', 'SYN-S5'),
+         (6, %d, %d, %d, 0.5, '2023-04-01 12:10+00',
+          '2023-04-01 12:00+00', %d, %d, 4,
+          500, NULL, NULL, NULL, %d, %d, NULL,
+          %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
+          true, 'Field blank paired with the April surface-water sample.', 'SYN-S6'),
+         (7, %d, %d, %d, -4.2, '2023-05-15 18:00+00',
+          '2023-05-15 18:00+00', %d, %d, NULL,
+          1000, 18.5, 21, 0.9, %d, %d, NULL,
+          %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
+          false, 'Pumped groundwater chemistry sample with purge metadata.', 'SYN-S7'),
+         (8, %d, %d, %d, NULL, '2023-06-01 09:00+00',
+          '2023-06-01 09:00+00', %d, %d, NULL,
+          750, NULL, NULL, NULL, %d, %d, NULL,
+          %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
+          false, 'Rain-water grab sample after a synthetic storm event.', 'SYN-S8')",
+      fake_location_id,
+      fake_sub_location_id,
+      media_surface,
+      collection_method_bottle,
+      sample_type_routine,
+      grade_a,
+      approval_a,
+      owner_org,
+      contributor_org,
+      owner_org,
+      fake_location_id,
+      fake_sub_location_id,
+      media_surface,
+      collection_method_bottle,
+      sample_type_field_replicate,
+      grade_a,
+      approval_a,
+      owner_org,
+      contributor_org,
+      owner_org,
+      fake_location_id,
+      fake_sub_location_id,
+      media_surface,
+      collection_method_bottle,
+      sample_type_field_blank,
+      grade_a,
+      approval_a,
+      owner_org,
+      contributor_org,
+      owner_org,
+      fake_location_id,
+      fake_sub_location_id,
+      media_groundwater,
+      collection_method_pump,
+      sample_type_routine,
+      grade_b,
+      approval_n,
+      owner_org,
+      contributor_org,
+      owner_org,
+      fake_location_id,
+      fake_sub_location_id,
+      media_rain,
+      collection_method_id,
+      sample_type_routine,
+      grade_a,
+      approval_a,
+      owner_org,
+      contributor_org,
+      owner_org
+    )
+  )
+  DBI::dbExecute(
+    test_con,
+    sprintf(
       "INSERT INTO discrete.results (
          result_id, sample_id, result_type, parameter_id, sample_fraction_id,
          result, result_condition, result_condition_value,
@@ -1121,6 +1354,184 @@ create_test_db <- function(
       sample_fraction_total,
       result_condition_id,
       result_value_actual,
+      matrix_liquid
+    )
+  )
+  DBI::dbExecute(
+    test_con,
+    sprintf(
+      "INSERT INTO discrete.results (
+         result_id, sample_id, result_type, parameter_id, sample_fraction_id,
+         result, result_condition, result_condition_value,
+         result_value_type, result_speciation_id, protocol_method,
+         laboratory, analysis_datetime, share_with, no_update,
+         matrix_state_id
+       ) VALUES
+         (6, 4, %d, %d, NULL, 7.1, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
+         (7, 4, %d, %d, NULL, 5.8, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
+         (8, 4, %d, %d, NULL, 3.4, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
+         (9, 4, %d, %d, NULL, 129.6, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
+         (10, 4, %d, %d, %d, 68, NULL, NULL, %d, %d, %d, %d,
+          '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+         (11, 4, %d, %d, %d, 74, NULL, NULL, %d, %d, %d, %d,
+          '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+         (12, 4, %d, %d, %d, 1.7, NULL, NULL, %d, NULL, %d, %d,
+          '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+         (13, 4, %d, %d, %d, 3.6, NULL, NULL, %d, NULL, %d, %d,
+          '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+         (14, 5, %d, %d, NULL, 7.0, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-04-01 12:10+00', ARRAY['public_reader'], false, %d),
+         (15, 5, %d, %d, NULL, 127.9, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-04-01 12:10+00', ARRAY['public_reader'], false, %d),
+         (16, 6, %d, %d, %d, NULL, %d, 0.02, %d, NULL, %d, %d,
+          '2023-04-02 09:30+00', ARRAY['public_reader'], true, %d),
+         (17, 6, %d, %d, %d, NULL, %d, 0.05, %d, NULL, %d, %d,
+          '2023-04-02 09:30+00', ARRAY['public_reader'], true, %d),
+         (18, 7, %d, %d, NULL, 6.8, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-05-15 18:15+00', ARRAY['public_reader'], false, %d),
+         (19, 7, %d, %d, NULL, 412, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-05-15 18:15+00', ARRAY['public_reader'], false, %d),
+         (20, 7, %d, %d, %d, 182, NULL, NULL, %d, %d, %d, %d,
+          '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+         (21, 7, %d, %d, %d, 96, NULL, NULL, %d, %d, %d, %d,
+          '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+         (22, 7, %d, %d, %d, 12.4, NULL, NULL, %d, NULL, %d, %d,
+          '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+         (23, 7, %d, %d, %d, 18.1, NULL, NULL, %d, NULL, %d, %d,
+          '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+         (24, 8, %d, %d, NULL, 5.6, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-06-01 09:15+00', ARRAY['public_reader'], false, %d),
+         (25, 8, %d, %d, NULL, 22.5, NULL, NULL, %d, NULL, NULL, NULL,
+          '2023-06-01 09:15+00', ARRAY['public_reader'], false, %d),
+         (26, 8, %d, %d, %d, NULL, %d, 0.02, %d, NULL, %d, %d,
+          '2023-06-02 08:00+00', ARRAY['public_reader'], false, %d)",
+      result_type_field,
+      ph_param,
+      result_value_actual,
+      matrix_liquid,
+      result_type_field,
+      water_temp_param,
+      result_value_actual,
+      matrix_liquid,
+      result_type_field,
+      turbidity_param,
+      result_value_estimated,
+      matrix_liquid,
+      result_type_field,
+      conductance_param,
+      result_value_calculated,
+      matrix_liquid,
+      result_type_lab,
+      alkalinity_param,
+      sample_fraction_total,
+      result_value_actual,
+      result_speciation_caco3,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_lab,
+      hardness_param,
+      sample_fraction_total,
+      result_value_actual,
+      result_speciation_caco3,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_lab,
+      chloride_param,
+      sample_fraction_dissolved,
+      result_value_actual,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_lab,
+      sulfate_param,
+      sample_fraction_dissolved,
+      result_value_actual,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_field,
+      ph_param,
+      result_value_actual,
+      matrix_liquid,
+      result_type_field,
+      conductance_param,
+      result_value_actual,
+      matrix_liquid,
+      result_type_lab,
+      chloride_param,
+      sample_fraction_dissolved,
+      result_condition_id,
+      result_value_actual,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_lab,
+      sulfate_param,
+      sample_fraction_dissolved,
+      result_condition_id,
+      result_value_actual,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_field,
+      ph_param,
+      result_value_actual,
+      matrix_liquid,
+      result_type_field,
+      conductivity_param,
+      result_value_actual,
+      matrix_liquid,
+      result_type_lab,
+      alkalinity_param,
+      sample_fraction_total,
+      result_value_actual,
+      result_speciation_caco3,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_lab,
+      hardness_param,
+      sample_fraction_total,
+      result_value_actual,
+      result_speciation_caco3,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_lab,
+      chloride_param,
+      sample_fraction_dissolved,
+      result_value_actual,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_lab,
+      sulfate_param,
+      sample_fraction_dissolved,
+      result_value_actual,
+      protocol_method_id,
+      laboratory_id,
+      matrix_liquid,
+      result_type_field,
+      ph_param,
+      result_value_actual,
+      matrix_liquid,
+      result_type_field,
+      conductivity_param,
+      result_value_estimated,
+      matrix_liquid,
+      result_type_lab,
+      chloride_param,
+      sample_fraction_dissolved,
+      result_condition_id,
+      result_value_actual,
+      protocol_method_id,
+      laboratory_id,
       matrix_liquid
     )
   )
