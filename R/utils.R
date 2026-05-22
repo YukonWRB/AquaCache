@@ -882,3 +882,49 @@ resolve_discrete_result_matrix_state <- function(
     params = list(sample_media_id, parameter_id, matrix_state_id)
   )[1, 1]
 }
+
+
+#' @title Get free disk space in gigabytes
+#' @description
+#' Utility function to get the amount of free disk space in gigabytes for a given path. If no path is provided, it defaults to the root directory ("/") on Unix-like systems or the C: drive on Windows. The function uses platform-specific commands to determine free disk space and returns the result in gigabytes.
+#' @param path An optional path to check for free disk space. Defaults to "/" on Unix-like systems and "C:" on Windows.
+#' @return The amount of free disk space in gigabytes for the specified path.
+#' @export
+
+get_free_space_gb <- function(path = NULL) {
+  if (.Platform$OS.type == "windows") {
+    if (is.null(path)) {
+      path <- "C:"
+    }
+
+    # WMIC is deprecated on newer Windows but still commonly available
+    cmd <- sprintf(
+      'wmic logicaldisk where "DeviceID=\'%s\'" get FreeSpace /value',
+      gsub("/", "", path)
+    )
+
+    x <- system(cmd, intern = TRUE)
+
+    free <- sub("FreeSpace=", "", grep("FreeSpace=", x, value = TRUE))
+
+    as.numeric(free) / 1024^3
+  } else {
+    if (is.null(path)) {
+      path <- "/"
+    }
+
+    x <- system2(
+      "df",
+      args = c("-Pk", shQuote(path)),
+      stdout = TRUE
+    )
+
+    vals <- strsplit(x[2], "[[:space:]]+")[[1]]
+    vals <- vals[vals != ""]
+
+    # "Available" column in KB
+    available_kb <- as.numeric(vals[4])
+
+    available_kb / 1024^2
+  }
+}

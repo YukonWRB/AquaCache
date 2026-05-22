@@ -4,16 +4,15 @@
 #'
 #' Use this function to add a vector file to the database. Ensures that database constraints are met and permits spatial queries. If you need to delete (not overwrite) a vector for any reason you'll have to use SQL (perhaps via R using the DBI package).
 #'
+#' NOTE: multi-row vector files will first be aggregated by the `feature_name_col` column if specified, so that each feature (row) in the database corresponds to a unique value in that column. If `feature_name_col` is not specified, each row in the vector file will be entered as a separate feature in the database.
+#'
 #' ## Extracting from the database
 #' Use function [YGwater::getVector()] to retrieve a point, line, or polygon from the database.
 #'
 #' ## Attribute tables:
-#' The attribute table of the object will be retained in the `attributes` JSON column for all fields that are not already
-#' represented by dedicated columns in the `vectors` table. This preserves additional metadata for each feature while still
-#' allowing spatial relationships to be maintained within the database. Fields supplied through `feature_name`/`feature_name_col`
-#' and `description`/`description_col` are still written to their respective columns, with all remaining fields stored as JSON.
+#' The attribute table of the object will be retained in the `attributes` JSON column for all fields that are not already represented by dedicated columns in the `vectors` table. This preserves additional metadata for each feature while still allowing spatial relationships to be maintained within the database. Fields supplied through `feature_name`/`feature_name_col` and `description`/`description_col` are still written to their respective columns, with all remaining fields stored as JSON.
 #'
-#' @param geom The geometry object to add to the database, as a [terra::vect()] object or as a file path to a shapefile, geopackage or something else that terra::vect() van use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.
+#' @param geom The geometry object to add to the database, as a [terra::vect()] object or as a file path to a shapefile, geopackage or something else that terra::vect() can use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.
 #' @param layer_name The name to give to the vector layer, which defines which layer_name it gets assigned to in the database. This should always be an existing layer_name unless you have a good reason to create a new one.
 #' @param feature_name A short but descriptive name to give to the geom feature. Leave NULL if specified with parameter `feature_name_col` instead. This parameter only works for geoms with a single feature (row).
 #' @param description Optional but highly recommended long-form description of the geometry feature. Leave NULL is specifying a `description_col` instead.
@@ -99,10 +98,15 @@ insertACVector <- function(
     if (!(feature_name_col %in% names(geom))) {
       stop("You specified a non-existent column for 'feature_name_col.'")
     }
-    # Aggregate on the feature_name_col and drop column 'agg_n'
-    geom <- terra::aggregate(geom, by = feature_name_col)
-    geom[["agg_n"]] <- NULL
+    # Aggregate on the feature_name_col
+    geom <- terra::aggregate(
+      geom,
+      by = feature_name_col,
+      count = FALSE,
+      dissolve = TRUE
+    )
   }
+
   if (!is.null(feature_name) & nrow(geom) > 1) {
     stop(
       "You specified the parameter 'feature_name' but this only works for vector files with one feature. Please review the help file."
