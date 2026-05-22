@@ -256,7 +256,9 @@ addACTimeseries <- function(
     sub_location <- rep(sub_location, maxlength)
   }
   if (any(!is.na(sub_location))) {
-    if (!inherits(sub_location, "numeric") && !inherits(sub_location, "integer")) {
+    if (
+      !inherits(sub_location, "numeric") && !inherits(sub_location, "integer")
+    ) {
       stop("sub_location must be a numeric or integer vector or left as NA.")
     }
     db_sub_loc <- DBI::dbGetQuery(
@@ -704,7 +706,6 @@ addACTimeseries <- function(
             addNewContinuous(
               tsid = new_tsid,
               df = data[[i]],
-              target = 'realtime',
               con = con
             ) # Calculates stats within the function
           }
@@ -815,9 +816,7 @@ addACTimeseries <- function(
               }
             }
           }
-          if (
-            lubridate::period(add$record_rate) > lubridate::period("1 day")
-          ) {
+          if (lubridate::period(add$record_rate) > lubridate::period("1 day")) {
             message(
               "Not calculating daily statistics for ",
               loc_label,
