@@ -241,6 +241,232 @@ aquacache_postgres_utility_candidates <- function(name) {
 }
 
 
+#' @title Find a GDAL command line utility
+#' @description
+#' Finds a GDAL/OGR command line utility by checking PATH and common GDAL,
+#' QGIS, OSGeo4W, PostgreSQL, Homebrew, and Linux installation directories.
+#' @param name The base utility name, such as `"ogr2ogr"`.
+#' @return A single normalized path, or `""` if no suitable utility is found.
+#' @noRd
+#' @keywords internal
+find_gdal_utility <- function(name) {
+  candidates <- aquacache_gdal_utility_candidates(name)
+
+  if (!length(candidates)) {
+    return("")
+  }
+
+  info <- aquacache_postgres_utility_info(candidates)
+  parsed <- !is.na(info$major)
+
+  if (any(parsed)) {
+    ranked <- info[parsed, , drop = FALSE]
+    ord <- order(
+      -ranked$major,
+      -ranked$minor,
+      -ranked$patch,
+      ranked$source_rank
+    )
+    return(ranked$path[[ord[[1L]]]])
+  }
+
+  info$path[[1L]]
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_gdal_utility_candidates <- function(name) {
+  candidates <- aquacache_postgres_utility_candidates(name)
+
+  path_dirs <- strsplit(
+    Sys.getenv("PATH", unset = ""),
+    .Platform$path.sep,
+    fixed = TRUE
+  )[[1]]
+  path_dirs <- gsub('^"|"$', "", path_dirs)
+  path_dirs <- path_dirs[nzchar(path_dirs)]
+
+  if (.Platform$OS.type == "windows") {
+    exe_name <- if (grepl("\\.exe$", name, ignore.case = TRUE)) {
+      name
+    } else {
+      paste0(name, ".exe")
+    }
+
+    program_dirs <- unique(c(
+      Sys.getenv("ProgramFiles", unset = ""),
+      "C:/Program Files",
+      Sys.getenv("ProgramFiles(x86)", unset = ""),
+      "C:/Program Files (x86)"
+    ))
+    program_dirs <- program_dirs[nzchar(program_dirs)]
+
+    patterns <- c(
+      file.path(program_dirs, "QGIS*", "bin", exe_name),
+      file.path(program_dirs, "QGIS*", "apps", "gdal", "bin", exe_name),
+      file.path(program_dirs, "OSGeo4W", "bin", exe_name),
+      file.path(program_dirs, "OSGeo4W64", "bin", exe_name),
+      file.path("C:/OSGeo4W", "bin", exe_name),
+      file.path("C:/OSGeo4W64", "bin", exe_name)
+    )
+
+    candidates <- c(
+      candidates,
+      unlist(lapply(patterns, Sys.glob), use.names = FALSE)
+    )
+  } else {
+    candidates <- c(
+      candidates,
+      file.path(path_dirs, name),
+      file.path(
+        c(
+          "/usr/bin",
+          "/usr/local/bin",
+          "/opt/homebrew/bin",
+          "/opt/local/bin",
+          "/usr/local/opt/gdal/bin",
+          "/opt/qgis/bin"
+        ),
+        name
+      )
+    )
+  }
+
+  candidates <- candidates[nzchar(candidates)]
+  candidates <- candidates[file.exists(candidates)]
+
+  if (.Platform$OS.type != "windows") {
+    access <- file.access(candidates, mode = 1L)
+    candidates <- candidates[!is.na(access) & access == 0L]
+  }
+
+  if (!length(candidates)) {
+    return(character())
+  }
+
+  unique(normalizePath(
+    candidates,
+    winslash = "\\",
+    mustWork = FALSE
+  ))
+}
+
+
+#' @keywords internal
+#' @noRd
+aquacache_try_install_ogr2ogr <- function(ask = interactive()) {
+  existing <- find_gdal_utility("ogr2ogr")
+  if (nzchar(existing)) {
+    return(existing)
+  }
+
+  if (!isTRUE(ask)) {
+    return("")
+  }
+
+  install_cmd <- NULL
+  install_args <- NULL
+  install_label <- NULL
+
+  if (.Platform$OS.type == "windows") {
+    winget <- unname(Sys.which("winget"))
+    choco <- unname(Sys.which("choco"))
+
+    if (nzchar(winget)) {
+      install_cmd <- winget
+      install_args <- c(
+        "install",
+        "--id", "OSGeo.QGIS_LTR",
+        "--exact",
+        "--silent",
+        "--accept-package-agreements",
+        "--accept-source-agreements"
+      )
+      install_label <- "QGIS LTR with GDAL/OGR using winget"
+    } else if (nzchar(choco)) {
+      install_cmd <- choco
+      install_args <- c("install", "qgis-ltr", "-y")
+      install_label <- "QGIS LTR with GDAL/OGR using Chocolatey"
+    }
+  } else {
+    brew <- unname(Sys.which("brew"))
+    apt_get <- unname(Sys.which("apt-get"))
+    dnf <- unname(Sys.which("dnf"))
+    yum <- unname(Sys.which("yum"))
+    pacman <- unname(Sys.which("pacman"))
+    zypper <- unname(Sys.which("zypper"))
+    apk <- unname(Sys.which("apk"))
+
+    if (nzchar(brew)) {
+      install_cmd <- brew
+      install_args <- c("install", "gdal")
+      install_label <- "GDAL using Homebrew"
+    } else if (nzchar(apt_get)) {
+      install_cmd <- "sudo"
+      install_args <- c(apt_get, "install", "-y", "gdal-bin")
+      install_label <- "gdal-bin using apt-get"
+    } else if (nzchar(dnf)) {
+      install_cmd <- "sudo"
+      install_args <- c(dnf, "install", "-y", "gdal")
+      install_label <- "GDAL using dnf"
+    } else if (nzchar(yum)) {
+      install_cmd <- "sudo"
+      install_args <- c(yum, "install", "-y", "gdal")
+      install_label <- "GDAL using yum"
+    } else if (nzchar(pacman)) {
+      install_cmd <- "sudo"
+      install_args <- c(pacman, "-S", "--noconfirm", "gdal")
+      install_label <- "GDAL using pacman"
+    } else if (nzchar(zypper)) {
+      install_cmd <- "sudo"
+      install_args <- c(zypper, "--non-interactive", "install", "gdal")
+      install_label <- "GDAL using zypper"
+    } else if (nzchar(apk)) {
+      install_cmd <- "sudo"
+      install_args <- c(apk, "add", "gdal-tools")
+      install_label <- "GDAL tools using apk"
+    }
+  }
+
+  if (is.null(install_cmd)) {
+    message(
+      "Could not find a supported package manager to install ogr2ogr automatically. ",
+      "Install GDAL/QGIS/OSGeo4W and ensure ogr2ogr is on PATH."
+    )
+    return("")
+  }
+
+  message(
+    "ogr2ogr was not found. AquaCache can try to install ",
+    install_label,
+    ". This may require administrator privileges and may take several minutes."
+  )
+  commit <- readline(prompt = "Install now? 1 = yes, 2 = no: ")
+  if (!identical(as.numeric(commit), 1)) {
+    return("")
+  }
+
+  status <- tryCatch(
+    system2(install_cmd, install_args),
+    error = function(e) {
+      warning("Failed to run ogr2ogr installer: ", conditionMessage(e))
+      1L
+    }
+  )
+
+  if (!identical(status, 0L)) {
+    warning(
+      "The ogr2ogr installation command did not complete successfully. ",
+      "Falling back to the R-only vector insert method."
+    )
+    return("")
+  }
+
+  find_gdal_utility("ogr2ogr")
+}
+
+
 #' @keywords internal
 #' @noRd
 aquacache_postgres_utility_info <- function(paths) {

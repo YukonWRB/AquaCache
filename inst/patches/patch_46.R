@@ -19,6 +19,29 @@ message(
 tryCatch(
   {
     message(
+      "Ensuring spatial.vectors.geom_id has a sequence-backed default for bulk inserts."
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE SEQUENCE IF NOT EXISTS spatial.vectors_geom_id_seq
+       OWNED BY spatial.vectors.geom_id;"
+    )
+    DBI::dbExecute(
+      con,
+      "SELECT setval(
+         'spatial.vectors_geom_id_seq'::regclass,
+         COALESCE((SELECT MAX(geom_id) FROM spatial.vectors), 0),
+         COALESCE((SELECT MAX(geom_id) FROM spatial.vectors), 0) > 0
+       );"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.vectors
+       ALTER COLUMN geom_id
+       SET DEFAULT nextval('spatial.vectors_geom_id_seq'::regclass);"
+    )
+
+    message(
       "Adding a GIN index on the attributes column of spatial.vectors to speed up queries that filter on attributes."
     )
     DBI::dbExecute(

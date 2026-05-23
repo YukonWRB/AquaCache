@@ -23,12 +23,122 @@
 #' @param geom_col The name of the database table column in which to insert the geometry object.
 #' @param overwrite If a row already exists for the combination of layer_name, name,  and geometry type (point, line, or polygon), should it be overwritten?
 #' @param ask Whether to ask for user confirmation when creating a new layer_name or overwriting existing entries. Default TRUE.
+#' @param use_ogr2ogr Whether to use the `ogr2ogr` command line utility when it
+#'   is available. This is much faster for multi-feature vector loads. If
+#'   `ogr2ogr` is unavailable or the fast path fails, the existing R-only
+#'   workflow is used.
+#' @param install_ogr2ogr Whether to offer an interactive attempt to install a
+#'   GDAL distribution that includes `ogr2ogr` when the utility cannot be found.
+#'   This is only attempted when `use_ogr2ogr = TRUE`.
 #' @param con A connection to the database. Default NULL will use the utility function [AquaConnect()] and disconnect afterwards.
 #'
-#' @return A boolean vector, one element per feature.Messages will also be printed to the console.
+#' @return A boolean vector, one element per feature. Messages will also be printed to the console.
 #' @export
 
 insertACVector <- function(
+  geom,
+  layer_name,
+  feature_name = NULL,
+  description = NULL,
+  feature_name_col = NULL,
+  description_col = NULL,
+  table = "vectors",
+  schema = "spatial",
+  geom_col = "geom",
+  overwrite = FALSE,
+  ask = TRUE,
+  use_ogr2ogr = TRUE,
+  install_ogr2ogr = interactive(),
+  con = NULL
+) {
+  if (!isTRUE(use_ogr2ogr)) {
+    return(insertACVector_old(
+      geom = geom,
+      layer_name = layer_name,
+      feature_name = feature_name,
+      description = description,
+      feature_name_col = feature_name_col,
+      description_col = description_col,
+      table = table,
+      schema = schema,
+      geom_col = geom_col,
+      overwrite = overwrite,
+      ask = ask,
+      con = con
+    ))
+  }
+
+  ogr2ogr_path <- find_gdal_utility("ogr2ogr")
+
+  if (!nzchar(ogr2ogr_path) && isTRUE(install_ogr2ogr)) {
+    ogr2ogr_path <- aquacache_try_install_ogr2ogr(ask = ask)
+  }
+
+  if (!nzchar(ogr2ogr_path)) {
+    message(
+      "ogr2ogr was not found. Defaulting to the existing slower R-only vector insert method."
+    )
+    return(insertACVector_old(
+      geom = geom,
+      layer_name = layer_name,
+      feature_name = feature_name,
+      description = description,
+      feature_name_col = feature_name_col,
+      description_col = description_col,
+      table = table,
+      schema = schema,
+      geom_col = geom_col,
+      overwrite = overwrite,
+      ask = ask,
+      con = con
+    ))
+  }
+
+  tryCatch(
+    insertACVector_ogr2ogr(
+      geom = geom,
+      layer_name = layer_name,
+      feature_name = feature_name,
+      description = description,
+      feature_name_col = feature_name_col,
+      description_col = description_col,
+      table = table,
+      schema = schema,
+      geom_col = geom_col,
+      overwrite = overwrite,
+      ask = ask,
+      con = con,
+      ogr2ogr_path = ogr2ogr_path
+    ),
+    error = function(e) {
+      warning(
+        "ogr2ogr vector insert failed: ",
+        conditionMessage(e),
+        "\nDefaulting to the existing slower R-only vector insert method.",
+        call. = FALSE
+      )
+      insertACVector_old(
+        geom = geom,
+        layer_name = layer_name,
+        feature_name = feature_name,
+        description = description,
+        feature_name_col = feature_name_col,
+        description_col = description_col,
+        table = table,
+        schema = schema,
+        geom_col = geom_col,
+        overwrite = overwrite,
+        ask = ask,
+        con = con
+      )
+    }
+  )
+}
+
+
+#' @keywords internal
+#' @noRd
+insertACVector_old <- function(
   geom,
   layer_name,
   feature_name = NULL,
@@ -329,4 +439,588 @@ insertACVector <- function(
   }
 
   return(success)
+}
+
+
+#' @keywords internal
+#' @noRd
+insertACVector_ogr2ogr <- function(
+  geom,
+  layer_name,
+  feature_name = NULL,
+  description = NULL,
+  feature_name_col = NULL,
+  description_col = NULL,
+  table = "vectors",
+  schema = "spatial",
+  geom_col = "geom",
+  overwrite = FALSE,
+  ask = TRUE,
+  con = NULL,
+  ogr2ogr_path
+) {
+  if (is.null(con)) {
+    con <- AquaConnect(silent = TRUE)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+  }
+
+  DBI::dbExecute(con, "SET timezone = 'UTC'")
+
+  target_id <- if (is.null(schema) || !nzchar(schema)) {
+    DBI::Id(table = table)
+  } else {
+    DBI::Id(schema = schema, table = table)
+  }
+  target_sql <- as.character(DBI::dbQuoteIdentifier(con, target_id))
+  geom_col_sql <- as.character(DBI::dbQuoteIdentifier(con, geom_col))
+
+  exist_layer_names <- DBI::dbGetQuery(
+    con,
+    paste0("SELECT DISTINCT layer_name FROM ", target_sql, ";")
+  )
+
+  if (!layer_name %in% exist_layer_names$layer_name) {
+    if (ask) {
+      message(
+        "The layer_name you specified does not exist yet. Are you sure you want to create it? The current entries are:\n",
+        paste(exist_layer_names$layer_name, collapse = "\n")
+      )
+      commit <- readline(
+        prompt = writeLines(paste(
+          "\n1: Definitely not",
+          "\n2: Maybe?",
+          "\n3: Yes, I want to create it."
+        ))
+      )
+      commit <- as.numeric(commit)
+    } else {
+      commit <- 3
+    }
+    if (commit != 3) {
+      stop("Allright, come back when you're ready.")
+    }
+  }
+
+  if (inherits(geom, "character")) {
+    geom <- terra::vect(geom)
+  } else if (!inherits(geom, "SpatVector")) {
+    stop(
+      "The 'geom' parameter must be a file path to a vector file or a terra::vect() object."
+    )
+  }
+
+  if (is.null(feature_name) & is.null(feature_name_col)) {
+    stop("You need to specify either a 'feature_name' or 'feature_name_col.'")
+  }
+
+  if (!is.null(feature_name_col) & !is.null(feature_name)) {
+    stop(
+      "You specified a 'feature_name' as well as a 'feature_name_col.' Choose only one. 'feature_name' only works for objects with one feature, 'feature_name_col' works for multiple features."
+    )
+  }
+
+  if (!is.null(feature_name_col)) {
+    if (!(feature_name_col %in% names(geom))) {
+      stop("You specified a non-existent column for 'feature_name_col.'")
+    }
+    geom <- terra::aggregate(
+      geom,
+      by = feature_name_col,
+      count = FALSE,
+      dissolve = TRUE
+    )
+  }
+
+  if (!is.null(feature_name) & nrow(geom) > 1) {
+    stop(
+      "You specified the parameter 'feature_name' but this only works for vector files with one feature. Please review the help file."
+    )
+  }
+
+  if (!is.null(description_col) && !(description_col %in% names(geom))) {
+    stop("You specified a non-existent column for 'description_col.'")
+  }
+
+  if (!(terra::same.crs(geom, "epsg:4269"))) {
+    geom <- terra::project(geom, "epsg:4269")
+  }
+
+  valid <- terra::is.valid(geom)
+  valid <- as.logical(valid)
+  valid[is.na(valid)] <- FALSE
+  if (any(!valid)) {
+    geom <- terra::makeValid(geom)
+    message(
+      "geom object had invalid geometry, fix attempted using terra::makeValid()."
+    )
+  }
+
+  tbl <- as.data.frame(geom)
+  n_features <- nrow(geom)
+
+  feature_names <- if (!is.null(feature_name)) {
+    rep(as.character(feature_name), n_features)
+  } else {
+    as.character(tbl[[feature_name_col]])
+  }
+
+  descriptions <- if (!is.null(description)) {
+    rep(as.character(description), n_features)
+  } else if (!is.null(description_col)) {
+    as.character(tbl[[description_col]])
+  } else {
+    rep(NA_character_, n_features)
+  }
+
+  attr_json <- vapply(
+    seq_len(n_features),
+    function(i) {
+      attribute_data <- tbl[i, , drop = FALSE]
+      drop_cols <- c("layer_name", "feature_name", "description")
+      if (!is.null(feature_name_col)) {
+        drop_cols <- c(drop_cols, feature_name_col)
+      }
+      if (!is.null(description_col)) {
+        drop_cols <- c(drop_cols, description_col)
+      }
+      drop_cols <- unique(drop_cols)
+      if (length(drop_cols) > 0) {
+        attribute_data <- attribute_data[
+          ,
+          setdiff(names(attribute_data), drop_cols),
+          drop = FALSE
+        ]
+      }
+
+      if (ncol(attribute_data) == 0) {
+        return(NA_character_)
+      }
+
+      attribute_list <- as.list(attribute_data[1, , drop = FALSE])
+      attribute_list <- lapply(attribute_list, function(value) {
+        val <- value[[1]]
+        if (inherits(val, "POSIXct")) {
+          val <- format(val, tz = "UTC", usetz = TRUE)
+        } else if (inherits(val, "Date")) {
+          val <- format(val, "%Y-%m-%d")
+        } else if (is.factor(val)) {
+          val <- as.character(val)
+        }
+        val
+      })
+      as.character(jsonlite::toJSON(
+        attribute_list,
+        auto_unbox = TRUE,
+        null = "null",
+        na = "null",
+        POSIXt = "ISO8601",
+        digits = NA
+      ))
+    },
+    character(1)
+  )
+
+  existing <- insertACVector_fetch_existing(
+    con = con,
+    target_sql = target_sql,
+    layer_name = layer_name,
+    feature_names = feature_names
+  )
+
+  actions <- rep("insert", n_features)
+  update_geom_ids <- rep(NA_integer_, n_features)
+
+  for (i in seq_len(n_features)) {
+    exist <- existing[existing$feature_name == feature_names[[i]], , drop = FALSE]
+
+    if (overwrite) {
+      if (nrow(exist) == 1) {
+        message(
+          "Updating entry for layer_name = ",
+          layer_name,
+          ", feature_name = ",
+          feature_names[[i]],
+          "."
+        )
+        actions[[i]] <- "update"
+        update_geom_ids[[i]] <- exist$geom_id[[1]]
+      } else if (nrow(exist) > 1) {
+        stop(
+          "Multiple existing database entries match layer_name = '",
+          layer_name,
+          "' and feature_name = '",
+          feature_names[[i]],
+          "'. The ogr2ogr fast path cannot choose which row to update."
+        )
+      }
+    } else if (nrow(exist) != 0) {
+      if (ask) {
+        message(
+          "There is already an entry for layer_name = ",
+          layer_name,
+          " and feature_name = ",
+          feature_names[[i]],
+          " but you didn't ask to overwrite it. Would you like to delete the old feature and replace it with the new one?"
+        )
+        agg <- readline(
+          prompt = writeLines(paste("\n1: Yes", "\n2: No way!"))
+        )
+      } else {
+        agg <- 2
+      }
+      agg <- as.numeric(agg)
+      if (agg != 1) {
+        if (ask) {
+          warning(
+            "Not writing layer_name = ",
+            layer_name,
+            ", feature_name = ",
+            feature_names[[i]],
+            ". There is already an entry matching this but parameter overwrite is FALSE."
+          )
+        }
+        actions[[i]] <- "skip"
+      } else {
+        actions[[i]] <- "deleteinsert"
+      }
+    }
+  }
+
+  success <- actions != "skip"
+  if (!any(success)) {
+    return(success)
+  }
+
+  load_geom <- geom[success, 0]
+  load_geom$ac_row <- which(success)
+  load_geom$ac_action <- actions[success]
+  load_geom$ac_geom_id <- update_geom_ids[success]
+  load_geom$layer_name <- layer_name
+  load_geom$feature_name <- feature_names[success]
+  load_geom$description <- descriptions[success]
+  load_geom$attributes <- attr_json[success]
+
+  tmp_gpkg <- tempfile(fileext = ".gpkg")
+  on.exit(unlink(tmp_gpkg), add = TRUE)
+  terra::writeVector(
+    load_geom,
+    filename = tmp_gpkg,
+    layer = "vectors",
+    filetype = "GPKG",
+    overwrite = TRUE
+  )
+
+  stage_table <- paste0(
+    "aquacache_vector_stage_",
+    Sys.getpid(),
+    "_",
+    sample.int(1000000L, 1L)
+  )
+  stage_id <- if (is.null(schema) || !nzchar(schema)) {
+    DBI::Id(table = stage_table)
+  } else {
+    DBI::Id(schema = schema, table = stage_table)
+  }
+  stage_sql <- as.character(DBI::dbQuoteIdentifier(con, stage_id))
+  on.exit(
+    try(DBI::dbExecute(con, paste0("DROP TABLE IF EXISTS ", stage_sql)), silent = TRUE),
+    add = TRUE
+  )
+
+  insertACVector_run_ogr2ogr(
+    con = con,
+    ogr2ogr_path = ogr2ogr_path,
+    source_file = tmp_gpkg,
+    source_layer = "vectors",
+    stage_table = stage_table,
+    stage_schema = schema
+  )
+
+  target_cols <- DBI::dbGetQuery(
+    con,
+    paste(
+      "SELECT column_name",
+      "FROM information_schema.columns",
+      "WHERE table_schema = $1",
+      "  AND table_name = $2"
+    ),
+    params = list(schema, table)
+  )$column_name
+  has_attributes <- "attributes" %in% target_cols
+
+  seq_name <- DBI::dbGetQuery(
+    con,
+    "SELECT pg_get_serial_sequence($1, 'geom_id') AS seqname;",
+    params = list(if (is.null(schema) || !nzchar(schema)) {
+      table
+    } else {
+      paste0(schema, ".", table)
+    })
+  )$seqname[[1]]
+  if (is.na(seq_name) || !nzchar(seq_name)) {
+    stop(
+      "Could not find the geom_id sequence for ",
+      target_sql,
+      ". The ogr2ogr fast path needs this sequence to bulk insert rows."
+    )
+  }
+
+  attr_update_sql <- if (has_attributes) {
+    ", attributes = NULLIF(s.attributes, '')::jsonb"
+  } else {
+    ""
+  }
+  attr_insert_cols_sql <- if (has_attributes) {
+    ", attributes"
+  } else {
+    ""
+  }
+  attr_insert_vals_sql <- if (has_attributes) {
+    ", NULLIF(s.attributes, '')::jsonb"
+  } else {
+    ""
+  }
+
+  geom_expr <- paste0("ST_SetSRID(ST_Force2D(s.", geom_col_sql, "), 4269)")
+
+  delete_sql <- paste0(
+    "DELETE FROM ", target_sql, " t ",
+    "USING ", stage_sql, " s ",
+    "WHERE s.ac_action = 'deleteinsert' ",
+    "  AND t.layer_name = s.layer_name ",
+    "  AND t.feature_name = s.feature_name;"
+  )
+  update_sql <- paste0(
+    "UPDATE ", target_sql, " t SET ",
+    "layer_name = s.layer_name, ",
+    "feature_name = s.feature_name, ",
+    "description = NULLIF(s.description, '')",
+    attr_update_sql,
+    ", ", geom_col_sql, " = ", geom_expr, " ",
+    "FROM ", stage_sql, " s ",
+    "WHERE s.ac_action = 'update' ",
+    "  AND t.geom_id = s.ac_geom_id;"
+  )
+  insert_sql <- paste0(
+    "INSERT INTO ", target_sql, " (geom_id, layer_name, feature_name, description",
+    attr_insert_cols_sql,
+    ", ", geom_col_sql, ") ",
+    "SELECT nextval(",
+    DBI::dbQuoteString(con, seq_name),
+    "::regclass), ",
+    "s.layer_name, s.feature_name, NULLIF(s.description, '')",
+    attr_insert_vals_sql,
+    ", ", geom_expr, " ",
+    "FROM ", stage_sql, " s ",
+    "WHERE s.ac_action IN ('insert', 'deleteinsert');"
+  )
+
+  in_transaction <- dbTransCheck(con)
+  if (!isTRUE(in_transaction)) {
+    DBI::dbExecute(con, "BEGIN;")
+  }
+
+  tryCatch(
+    {
+      DBI::dbExecute(con, delete_sql)
+      DBI::dbExecute(con, update_sql)
+      DBI::dbExecute(con, insert_sql)
+      if (!isTRUE(in_transaction)) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
+    },
+    error = function(e) {
+      if (!isTRUE(in_transaction)) {
+        try(DBI::dbExecute(con, "ROLLBACK;"), silent = TRUE)
+      }
+      stop(e)
+    }
+  )
+
+  message(
+    "Succeeded in adding ",
+    sum(actions %in% c("insert", "deleteinsert")),
+    " and updating ",
+    sum(actions == "update"),
+    " vector feature(s) using ogr2ogr."
+  )
+
+  success
+}
+
+
+#' @keywords internal
+#' @noRd
+insertACVector_fetch_existing <- function(
+  con,
+  target_sql,
+  layer_name,
+  feature_names
+) {
+  feature_names <- unique(feature_names)
+  feature_names <- feature_names[!is.na(feature_names) & nzchar(feature_names)]
+  if (!length(feature_names)) {
+    return(data.frame(
+      feature_name = character(),
+      geom_id = integer(),
+      geom_type = character()
+    ))
+  }
+
+  chunks <- split(feature_names, ceiling(seq_along(feature_names) / 1000L))
+  out <- lapply(chunks, function(chunk) {
+    feature_sql <- paste(DBI::dbQuoteString(con, chunk), collapse = ", ")
+    DBI::dbGetQuery(
+      con,
+      paste0(
+        "SELECT feature_name, geom_id, geom_type FROM ",
+        target_sql,
+        " WHERE layer_name = ",
+        DBI::dbQuoteString(con, layer_name),
+        " AND feature_name IN (",
+        feature_sql,
+        ");"
+      )
+    )
+  })
+
+  do.call(rbind, out)
+}
+
+
+#' @keywords internal
+#' @noRd
+insertACVector_run_ogr2ogr <- function(
+  con,
+  ogr2ogr_path,
+  source_file,
+  source_layer,
+  stage_table,
+  stage_schema = NULL
+) {
+  psql_path <- find_postgres_utility("psql")
+  if (!nzchar(psql_path)) {
+    stop("psql was not found, so ogr2ogr PGDump output cannot be loaded.")
+  }
+
+  conn_info <- tryCatch(DBI::dbGetInfo(con), error = function(e) list())
+
+  old_env <- Sys.getenv(
+    c(
+      "PGHOST",
+      "PGPORT",
+      "PGDATABASE",
+      "PGUSER",
+      "PGPASSWORD",
+      "PSQLRC"
+    ),
+    unset = NA_character_
+  )
+  on.exit(
+    invisible(mapply(
+      function(k, v) if (is.na(v)) Sys.unsetenv(k) else Sys.setenv(k = v),
+      names(old_env),
+      old_env
+    )),
+    add = TRUE
+  )
+
+  if (!is.null(conn_info$host) && nzchar(conn_info$host)) {
+    Sys.setenv(PGHOST = conn_info$host)
+  }
+  if (!is.null(conn_info$port) && nzchar(as.character(conn_info$port))) {
+    Sys.setenv(PGPORT = as.character(conn_info$port))
+  }
+  if (!is.null(conn_info$dbname) && nzchar(conn_info$dbname)) {
+    Sys.setenv(PGDATABASE = conn_info$dbname)
+  }
+  if (!is.null(conn_info$user) && nzchar(conn_info$user)) {
+    Sys.setenv(PGUSER = conn_info$user)
+  }
+
+  pg_pass <- Sys.getenv("aquacacheAdminPass", unset = NA_character_)
+  if (!is.na(pg_pass) && nzchar(pg_pass)) {
+    Sys.setenv(PGPASSWORD = pg_pass)
+  }
+  Sys.setenv(
+    PSQLRC = if (.Platform$OS.type == "windows") "NUL" else "/dev/null"
+  )
+
+  tmp_sql <- tempfile(fileext = ".sql")
+  tmp_ogr_out <- tempfile(fileext = ".log")
+  tmp_ogr_err <- tempfile(fileext = ".log")
+  tmp_psql_out <- tempfile(fileext = ".log")
+  tmp_psql_err <- tempfile(fileext = ".log")
+  on.exit(
+    unlink(c(tmp_sql, tmp_ogr_out, tmp_ogr_err, tmp_psql_out, tmp_psql_err)),
+    add = TRUE
+  )
+
+  args <- c(
+    "-f", "PGDUMP",
+    shQuote(tmp_sql),
+    shQuote(source_file),
+    source_layer,
+    "-nln", stage_table,
+    "-overwrite",
+    "-lco", "GEOMETRY_NAME=geom",
+    "-lco", "FID=ogr_fid",
+    "-lco", "DROP_TABLE=IF_EXISTS",
+    "-lco", "CREATE_SCHEMA=NO",
+    "-lco", "SPATIAL_INDEX=NONE",
+    "-lco", "SRID=4269",
+    "-dim", "XY",
+    "-t_srs", "EPSG:4269"
+  )
+
+  if (!is.null(stage_schema) && nzchar(stage_schema)) {
+    args <- c(args, "-lco", paste0("SCHEMA=", stage_schema))
+  }
+
+  status <- system2(
+    command = ogr2ogr_path,
+    args = args,
+    stdout = tmp_ogr_out,
+    stderr = tmp_ogr_err
+  )
+
+  if (!identical(status, 0L)) {
+    err <- readLines(tmp_ogr_err, warn = FALSE)
+    out <- readLines(tmp_ogr_out, warn = FALSE)
+    msg <- c(err, out)
+    if (!length(msg)) {
+      msg <- "ogr2ogr exited with a non-zero status but produced no output."
+    }
+    stop(paste(msg, collapse = "\n"))
+  }
+
+  psql_args <- c(
+    "-X",
+    "--no-password",
+    "--no-psqlrc",
+    "--echo-errors",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-f",
+    shQuote(tmp_sql)
+  )
+
+  psql_status <- system2(
+    command = psql_path,
+    args = psql_args,
+    stdout = tmp_psql_out,
+    stderr = tmp_psql_err
+  )
+
+  if (!identical(psql_status, 0L)) {
+    err <- readLines(tmp_psql_err, warn = FALSE)
+    out <- readLines(tmp_psql_out, warn = FALSE)
+    msg <- c(err, out)
+    if (!length(msg)) {
+      msg <- "psql exited with a non-zero status while loading ogr2ogr PGDump output."
+    }
+    stop(paste(msg, collapse = "\n"))
+  }
+
+  invisible(TRUE)
 }
