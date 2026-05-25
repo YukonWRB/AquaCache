@@ -60,8 +60,6 @@ A boolean vector, one element per feature. Messages will also be printed to the 
 }
 \description{
 Use this function to add a vector file to the database. Ensures that database constraints are met and permits spatial queries. If you need to delete (not overwrite) a vector for any reason you'll have to use SQL (perhaps via R using the DBI package).
-
-NOTE: multi-row vector files will first be aggregated by the \code{feature_name_col} column if specified, so that each feature (row) in the database corresponds to a unique value in that column. If \code{feature_name_col} is not specified, each row in the vector file will be entered as a separate feature in the database.
 \subsection{Extracting from the database}{
 
 Use function \code{\link[YGwater:getVector]{YGwater::getVector()}} to retrieve a point, line, or polygon from the database.

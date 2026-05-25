@@ -4,8 +4,6 @@
 #'
 #' Use this function to add a vector file to the database. Ensures that database constraints are met and permits spatial queries. If you need to delete (not overwrite) a vector for any reason you'll have to use SQL (perhaps via R using the DBI package).
 #'
-#' NOTE: multi-row vector files will first be aggregated by the `feature_name_col` column if specified, so that each feature (row) in the database corresponds to a unique value in that column. If `feature_name_col` is not specified, each row in the vector file will be entered as a separate feature in the database.
-#'
 #' ## Extracting from the database
 #' Use function [YGwater::getVector()] to retrieve a point, line, or polygon from the database.
 #'
@@ -208,13 +206,11 @@ insertACVector_old <- function(
     if (!(feature_name_col %in% names(geom))) {
       stop("You specified a non-existent column for 'feature_name_col.'")
     }
-    # Aggregate on the feature_name_col
-    geom <- terra::aggregate(
-      geom,
-      by = feature_name_col,
-      count = FALSE,
-      dissolve = TRUE
-    )
+    if (any(duplicated(geom[[feature_name_col]]))) {
+      stop(
+        "Multiple rows share the same value in the 'feature_name_col' column. You can either modify the column values or aggregate geometries on this column, i.e. using terra::aggregation(geom, by = feature_name_col, dissolve = TRUE)."
+      )
+    }
   }
 
   if (!is.null(feature_name) & nrow(geom) > 1) {
@@ -523,12 +519,11 @@ insertACVector_ogr2ogr <- function(
     if (!(feature_name_col %in% names(geom))) {
       stop("You specified a non-existent column for 'feature_name_col.'")
     }
-    geom <- terra::aggregate(
-      geom,
-      by = feature_name_col,
-      count = FALSE,
-      dissolve = TRUE
-    )
+    if (any(duplicated(geom[[feature_name_col]]))) {
+      stop(
+        "Multiple rows share the same value in the 'feature_name_col' column. You can either modify the column values or aggregate geometries on this column, i.e. using terra::aggregation(geom, by = feature_name_col, dissolve = TRUE)."
+      )
+    }
   }
 
   if (!is.null(feature_name) & nrow(geom) > 1) {
@@ -585,8 +580,7 @@ insertACVector_ogr2ogr <- function(
       }
       drop_cols <- unique(drop_cols)
       if (length(drop_cols) > 0) {
-        attribute_data <- attribute_data[
-          ,
+        attribute_data <- attribute_data[,
           setdiff(names(attribute_data), drop_cols),
           drop = FALSE
         ]
@@ -631,7 +625,11 @@ insertACVector_ogr2ogr <- function(
   update_geom_ids <- rep(NA_integer_, n_features)
 
   for (i in seq_len(n_features)) {
-    exist <- existing[existing$feature_name == feature_names[[i]], , drop = FALSE]
+    exist <- existing[
+      existing$feature_name == feature_names[[i]],
+      ,
+      drop = FALSE
+    ]
 
     if (overwrite) {
       if (nrow(exist) == 1) {
@@ -723,7 +721,10 @@ insertACVector_ogr2ogr <- function(
   }
   stage_sql <- as.character(DBI::dbQuoteIdentifier(con, stage_id))
   on.exit(
-    try(DBI::dbExecute(con, paste0("DROP TABLE IF EXISTS ", stage_sql)), silent = TRUE),
+    try(
+      DBI::dbExecute(con, paste0("DROP TABLE IF EXISTS ", stage_sql)),
+      silent = TRUE
+    ),
     add = TRUE
   )
 
@@ -751,11 +752,13 @@ insertACVector_ogr2ogr <- function(
   seq_name <- DBI::dbGetQuery(
     con,
     "SELECT pg_get_serial_sequence($1, 'geom_id') AS seqname;",
-    params = list(if (is.null(schema) || !nzchar(schema)) {
-      table
-    } else {
-      paste0(schema, ".", table)
-    })
+    params = list(
+      if (is.null(schema) || !nzchar(schema)) {
+        table
+      } else {
+        paste0(schema, ".", table)
+      }
+    )
   )$seqname[[1]]
   if (is.na(seq_name) || !nzchar(seq_name)) {
     stop(
@@ -784,34 +787,54 @@ insertACVector_ogr2ogr <- function(
   geom_expr <- paste0("ST_SetSRID(ST_Force2D(s.", geom_col_sql, "), 4269)")
 
   delete_sql <- paste0(
-    "DELETE FROM ", target_sql, " t ",
-    "USING ", stage_sql, " s ",
+    "DELETE FROM ",
+    target_sql,
+    " t ",
+    "USING ",
+    stage_sql,
+    " s ",
     "WHERE s.ac_action = 'deleteinsert' ",
     "  AND t.layer_name = s.layer_name ",
     "  AND t.feature_name = s.feature_name;"
   )
   update_sql <- paste0(
-    "UPDATE ", target_sql, " t SET ",
+    "UPDATE ",
+    target_sql,
+    " t SET ",
     "layer_name = s.layer_name, ",
     "feature_name = s.feature_name, ",
     "description = NULLIF(s.description, '')",
     attr_update_sql,
-    ", ", geom_col_sql, " = ", geom_expr, " ",
-    "FROM ", stage_sql, " s ",
+    ", ",
+    geom_col_sql,
+    " = ",
+    geom_expr,
+    " ",
+    "FROM ",
+    stage_sql,
+    " s ",
     "WHERE s.ac_action = 'update' ",
     "  AND t.geom_id = s.ac_geom_id;"
   )
   insert_sql <- paste0(
-    "INSERT INTO ", target_sql, " (geom_id, layer_name, feature_name, description",
+    "INSERT INTO ",
+    target_sql,
+    " (geom_id, layer_name, feature_name, description",
     attr_insert_cols_sql,
-    ", ", geom_col_sql, ") ",
+    ", ",
+    geom_col_sql,
+    ") ",
     "SELECT nextval(",
     DBI::dbQuoteString(con, seq_name),
     "::regclass), ",
     "s.layer_name, s.feature_name, NULLIF(s.description, '')",
     attr_insert_vals_sql,
-    ", ", geom_expr, " ",
-    "FROM ", stage_sql, " s ",
+    ", ",
+    geom_expr,
+    " ",
+    "FROM ",
+    stage_sql,
+    " s ",
     "WHERE s.ac_action IN ('insert', 'deleteinsert');"
   )
 
@@ -957,20 +980,30 @@ insertACVector_run_ogr2ogr <- function(
   )
 
   args <- c(
-    "-f", "PGDUMP",
+    "-f",
+    "PGDUMP",
     shQuote(tmp_sql),
     shQuote(source_file),
     source_layer,
-    "-nln", stage_table,
+    "-nln",
+    stage_table,
     "-overwrite",
-    "-lco", "GEOMETRY_NAME=geom",
-    "-lco", "FID=ogr_fid",
-    "-lco", "DROP_TABLE=IF_EXISTS",
-    "-lco", "CREATE_SCHEMA=NO",
-    "-lco", "SPATIAL_INDEX=NONE",
-    "-lco", "SRID=4269",
-    "-dim", "XY",
-    "-t_srs", "EPSG:4269"
+    "-lco",
+    "GEOMETRY_NAME=geom",
+    "-lco",
+    "FID=ogr_fid",
+    "-lco",
+    "DROP_TABLE=IF_EXISTS",
+    "-lco",
+    "CREATE_SCHEMA=NO",
+    "-lco",
+    "SPATIAL_INDEX=NONE",
+    "-lco",
+    "SRID=4269",
+    "-dim",
+    "XY",
+    "-t_srs",
+    "EPSG:4269"
   )
 
   if (!is.null(stage_schema) && nzchar(stage_schema)) {
