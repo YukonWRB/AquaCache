@@ -6,10 +6,12 @@
 \usage{
 load_nhn(
   con = NULL,
-  targets = c("basins", "flowpaths", "littoral", "banks", "watercourses", "waterbodies",
-    "islands"),
+  targets = c("basins", "junctions", "flowpaths", "littoral", "banks", "watercourses",
+    "waterbodies", "islands"),
   clip = NULL,
   bbox = NULL,
+  hnet_gpkg = NULL,
+  hhyd_gpkg = NULL,
   overwrite = FALSE,
   table = "vectors",
   schema = "spatial",
@@ -19,11 +21,15 @@ load_nhn(
 \arguments{
 \item{con}{A connection to the database, created using the utility function \code{\link[=AquaConnect]{AquaConnect()}} or \code{\link[DBI:dbConnect]{DBI::dbConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and its default parameters and closed afterwards.}
 
-\item{targets}{A character vector specifying which NHN layers to load. Valid options include "basins", "flowpaths", "littoral", "banks", "watercourses", "waterbodies", and "islands". By default, all layers will be loaded. Note that the "flowpaths", "littoral", and "banks" layers are all in the same Geopackage file, so they will be downloaded together if any of them are included in the targets. The same applies to the "watercourses", "waterbodies", and "islands" layers, which are also in the same Geopackage file. Consider adding these together to minimize the number of large downloads.}
+\item{targets}{A character vector specifying which NHN layers to load. Valid options include "basins", "junctions", "flowpaths", "littoral", "banks", "watercourses", "waterbodies", and "islands". By default, all layers will be loaded. Note that the "junctions", "flowpaths", "littoral", and "banks" layers are all in the same Geopackage file, so they will be downloaded together if any of them are included in the targets. The same applies to the "watercourses", "waterbodies", and "islands" layers, which are also in the same Geopackage file. Consider adding these together to minimize the number of large downloads.}
 
 \item{clip}{Optional but highly recommended unless storage space is no concern. The top-level NHN regions to retain. Valid options range from '01' to '11' and correspond to the major hydrological regions of Canada. If NULL (default), all regions will be loaded. Note that this doesn't affect the download size, as the entire dataset will still be downloaded, but it will limit the data that is loaded into the database.}
 
 \item{bbox}{Optional but also recommended, as the 'clip' parameter uses very broad regions; for example, '10' includes all waters draining to the Arctic ocean. Specify a bounding box as a numeric vector of the form c(xmin, xmax, ymin, ymax) in the coordinate reference system of the NHN data (EPSG:4617). Can be used with or without the \code{clip} parameter. If provided, only features that intersect with this bounding box will be loaded into the database. Note that this doesn't affect the download size as the entire dataset will still be downloaded, but it will limit the data that is loaded into the database.}
+
+\item{hnet_gpkg}{Optional path to an already-downloaded \code{rhn_nhn_hnet.gpkg} file. If supplied, the flowpath, littoral, bank, and hydro junction layers are read from this file instead of downloading the national archive again.}
+
+\item{hhyd_gpkg}{Optional path to an already-downloaded \code{rhn_nhn_hhyd.gpkg} file. If supplied, the watercourse, waterbody, and island layers are read from this file instead of downloading the national archive again.}
 
 \item{overwrite}{A logical value indicating whether to overwrite existing data in the database. Default is FALSE, which will not overwrite existing data and will fail if there is a conflict. If TRUE, existing data for the specified layers will be replaced.}
 

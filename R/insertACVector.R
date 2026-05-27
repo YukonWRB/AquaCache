@@ -224,6 +224,11 @@ insertACVector_old <- function(
     geom <- terra::project(geom, "epsg:4269")
   }
   tbl <- as.data.frame(geom)
+  attr_json <- insertACVector_attribute_json(
+    tbl = tbl,
+    feature_name_col = feature_name_col,
+    description_col = description_col
+  )
 
   success <- vector()
   for (i in 1:nrow(geom)) {
@@ -246,48 +251,7 @@ insertACVector_old <- function(
           sub.geom$description <- desc
         }
 
-        # Prepare JSON attribute payload for any remaining columns
-        attribute_data <- tbl[i, , drop = FALSE]
-        drop_cols <- c("layer_name", "feature_name", "description")
-        if (!is.null(feature_name_col)) {
-          drop_cols <- c(drop_cols, feature_name_col)
-        }
-        if (!is.null(description_col)) {
-          drop_cols <- c(drop_cols, description_col)
-        }
-        drop_cols <- unique(drop_cols)
-        if (length(drop_cols) > 0) {
-          attribute_data <- attribute_data[,
-            setdiff(names(attribute_data), drop_cols),
-            drop = FALSE
-          ]
-        }
-
-        if (ncol(attribute_data) > 0) {
-          attribute_list <- as.list(attribute_data[1, , drop = FALSE])
-          attribute_list <- lapply(attribute_list, function(value) {
-            val <- value[[1]]
-            if (inherits(val, "POSIXct")) {
-              val <- format(val, tz = "UTC", usetz = TRUE)
-            } else if (inherits(val, "Date")) {
-              val <- format(val, "%Y-%m-%d")
-            } else if (is.factor(val)) {
-              val <- as.character(val)
-            }
-            val
-          })
-          attr_json <- jsonlite::toJSON(
-            attribute_list,
-            auto_unbox = TRUE,
-            null = "null",
-            na = "null",
-            POSIXt = "ISO8601",
-            digits = NA
-          )
-          sub.geom$attributes <- as.character(attr_json)
-        } else {
-          sub.geom$attributes <- NA
-        }
+        sub.geom$attributes <- attr_json[[i]]
 
         if (!terra::is.valid(sub.geom)) {
           sub.geom <- terra::makeValid(sub.geom)
@@ -438,6 +402,70 @@ insertACVector_old <- function(
 }
 
 
+#' Build vector attribute JSON by column
+#'
+#' @keywords internal
+#' @noRd
+insertACVector_attribute_json <- function(
+  tbl,
+  feature_name_col = NULL,
+  description_col = NULL
+) {
+  n_features <- nrow(tbl)
+  drop_cols <- c("layer_name", "feature_name", "description")
+  if (!is.null(feature_name_col)) {
+    drop_cols <- c(drop_cols, feature_name_col)
+  }
+  if (!is.null(description_col)) {
+    drop_cols <- c(drop_cols, description_col)
+  }
+  keep_cols <- setdiff(names(tbl), unique(drop_cols))
+  if (!length(keep_cols)) {
+    return(rep(NA_character_, n_features))
+  }
+
+  attribute_data <- tbl[, keep_cols, drop = FALSE]
+  json_names <- as.character(jsonlite::toJSON(
+    names(attribute_data),
+    auto_unbox = FALSE,
+    na = "null",
+    collapse = FALSE
+  ))
+
+  json_cols <- vector("list", length(attribute_data))
+  for (j in seq_along(attribute_data)) {
+    values <- attribute_data[[j]]
+    if (inherits(values, "POSIXct")) {
+      values <- format(values, tz = "UTC", usetz = TRUE)
+    } else if (inherits(values, "Date")) {
+      values <- format(values, "%Y-%m-%d")
+    } else if (is.factor(values)) {
+      values <- as.character(values)
+    }
+
+    json_values <- as.character(jsonlite::toJSON(
+      values,
+      auto_unbox = FALSE,
+      null = "null",
+      na = "null",
+      POSIXt = "ISO8601",
+      digits = NA,
+      collapse = FALSE
+    ))
+    if (length(json_values) != n_features) {
+      stop(
+        "Could not serialize vector attribute column '",
+        names(attribute_data)[[j]],
+        "' as one JSON value per feature."
+      )
+    }
+    json_cols[[j]] <- paste0(json_names[[j]], ":", json_values)
+  }
+
+  paste0("{", do.call(paste, c(json_cols, sep = ",")), "}")
+}
+
+
 #' @keywords internal
 #' @noRd
 insertACVector_ogr2ogr <- function(
@@ -567,51 +595,10 @@ insertACVector_ogr2ogr <- function(
     rep(NA_character_, n_features)
   }
 
-  attr_json <- vapply(
-    seq_len(n_features),
-    function(i) {
-      attribute_data <- tbl[i, , drop = FALSE]
-      drop_cols <- c("layer_name", "feature_name", "description")
-      if (!is.null(feature_name_col)) {
-        drop_cols <- c(drop_cols, feature_name_col)
-      }
-      if (!is.null(description_col)) {
-        drop_cols <- c(drop_cols, description_col)
-      }
-      drop_cols <- unique(drop_cols)
-      if (length(drop_cols) > 0) {
-        attribute_data <- attribute_data[,
-          setdiff(names(attribute_data), drop_cols),
-          drop = FALSE
-        ]
-      }
-
-      if (ncol(attribute_data) == 0) {
-        return(NA_character_)
-      }
-
-      attribute_list <- as.list(attribute_data[1, , drop = FALSE])
-      attribute_list <- lapply(attribute_list, function(value) {
-        val <- value[[1]]
-        if (inherits(val, "POSIXct")) {
-          val <- format(val, tz = "UTC", usetz = TRUE)
-        } else if (inherits(val, "Date")) {
-          val <- format(val, "%Y-%m-%d")
-        } else if (is.factor(val)) {
-          val <- as.character(val)
-        }
-        val
-      })
-      as.character(jsonlite::toJSON(
-        attribute_list,
-        auto_unbox = TRUE,
-        null = "null",
-        na = "null",
-        POSIXt = "ISO8601",
-        digits = NA
-      ))
-    },
-    character(1)
+  attr_json <- insertACVector_attribute_json(
+    tbl = tbl,
+    feature_name_col = feature_name_col,
+    description_col = description_col
   )
 
   existing <- insertACVector_fetch_existing(
@@ -621,71 +608,25 @@ insertACVector_ogr2ogr <- function(
     feature_names = feature_names
   )
 
-  actions <- rep("insert", n_features)
-  update_geom_ids <- rep(NA_integer_, n_features)
-
-  for (i in seq_len(n_features)) {
-    exist <- existing[
-      existing$feature_name == feature_names[[i]],
-      ,
-      drop = FALSE
-    ]
-
-    if (overwrite) {
-      if (nrow(exist) == 1) {
-        message(
-          "Updating entry for layer_name = ",
-          layer_name,
-          ", feature_name = ",
-          feature_names[[i]],
-          "."
-        )
-        actions[[i]] <- "update"
-        update_geom_ids[[i]] <- exist$geom_id[[1]]
-      } else if (nrow(exist) > 1) {
-        stop(
-          "Multiple existing database entries match layer_name = '",
-          layer_name,
-          "' and feature_name = '",
-          feature_names[[i]],
-          "'. The ogr2ogr fast path cannot choose which row to update."
-        )
-      }
-    } else if (nrow(exist) != 0) {
-      if (ask) {
-        message(
-          "There is already an entry for layer_name = ",
-          layer_name,
-          " and feature_name = ",
-          feature_names[[i]],
-          " but you didn't ask to overwrite it. Would you like to delete the old feature and replace it with the new one?"
-        )
-        agg <- readline(
-          prompt = writeLines(paste("\n1: Yes", "\n2: No way!"))
-        )
-      } else {
-        agg <- 2
-      }
-      agg <- as.numeric(agg)
-      if (agg != 1) {
-        if (ask) {
-          warning(
-            "Not writing layer_name = ",
-            layer_name,
-            ", feature_name = ",
-            feature_names[[i]],
-            ". There is already an entry matching this but parameter overwrite is FALSE."
-          )
-        }
-        actions[[i]] <- "skip"
-      } else {
-        actions[[i]] <- "deleteinsert"
-      }
-    }
-  }
+  resolved <- insertACVector_resolve_actions(
+    existing = existing,
+    feature_names = feature_names,
+    layer_name = layer_name,
+    overwrite = overwrite,
+    ask = ask
+  )
+  actions <- resolved$actions
+  update_geom_ids <- resolved$update_geom_ids
 
   success <- actions != "skip"
   if (!any(success)) {
+    message(
+      "No vector features were written. All ",
+      length(success),
+      " feature(s) already exist for layer_name = ",
+      layer_name,
+      " and overwrite is FALSE or replacement was declined."
+    )
     return(success)
   }
 
@@ -784,7 +725,7 @@ insertACVector_ogr2ogr <- function(
     ""
   }
 
-  geom_expr <- paste0("ST_SetSRID(ST_Force2D(s.", geom_col_sql, "), 4269)")
+  geom_expr <- paste0("s.", geom_col_sql)
 
   delete_sql <- paste0(
     "DELETE FROM ",
@@ -845,6 +786,7 @@ insertACVector_ogr2ogr <- function(
 
   tryCatch(
     {
+      DBI::dbExecute(con, "SET LOCAL synchronous_commit = off;")
       DBI::dbExecute(con, delete_sql)
       DBI::dbExecute(con, update_sql)
       DBI::dbExecute(con, insert_sql)
@@ -872,6 +814,91 @@ insertACVector_ogr2ogr <- function(
 }
 
 
+#' Resolve vector insert/update/skip actions
+#'
+#' @keywords internal
+#' @noRd
+insertACVector_resolve_actions <- function(
+  existing,
+  feature_names,
+  layer_name,
+  overwrite = FALSE,
+  ask = TRUE
+) {
+  n_features <- length(feature_names)
+  actions <- rep("insert", n_features)
+  update_geom_ids <- rep(NA_integer_, n_features)
+
+  if (!nrow(existing)) {
+    return(list(actions = actions, update_geom_ids = update_geom_ids))
+  }
+
+  existing_feature_names <- as.character(existing$feature_name)
+  existing_match <- match(existing_feature_names, feature_names, nomatch = 0L)
+  existing_counts <- tabulate(existing_match, nbins = n_features)
+  existing_idx <- which(existing_counts > 0L)
+  if (!length(existing_idx)) {
+    return(list(actions = actions, update_geom_ids = update_geom_ids))
+  }
+
+  if (overwrite) {
+    duplicate_idx <- which(existing_counts > 1L)
+    if (length(duplicate_idx)) {
+      stop(
+        "Multiple existing database entries match layer_name = '",
+        layer_name,
+        "' and feature_name = '",
+        feature_names[[duplicate_idx[[1]]]],
+        "'. The ogr2ogr fast path cannot choose which row to update."
+      )
+    }
+
+    existing_row <- match(feature_names[existing_idx], existing_feature_names)
+    actions[existing_idx] <- "update"
+    update_geom_ids[existing_idx] <- existing$geom_id[existing_row]
+    message(
+      "Updating ",
+      length(existing_idx),
+      " existing vector feature(s) for layer_name = ",
+      layer_name,
+      "."
+    )
+    return(list(actions = actions, update_geom_ids = update_geom_ids))
+  }
+
+  if (!ask) {
+    actions[existing_idx] <- "skip"
+    return(list(actions = actions, update_geom_ids = update_geom_ids))
+  }
+
+  for (i in existing_idx) {
+    message(
+      "There is already an entry for layer_name = ",
+      layer_name,
+      " and feature_name = ",
+      feature_names[[i]],
+      " but you didn't ask to overwrite it. Would you like to delete the old feature and replace it with the new one?"
+    )
+    agg <- readline(prompt = writeLines(paste("\n1: Yes", "\n2: No way!")))
+    agg <- as.numeric(agg)
+    if (agg != 1) {
+      warning(
+        "Not writing layer_name = ",
+        layer_name,
+        ", feature_name = ",
+        feature_names[[i]],
+        ". There is already an entry matching this but parameter overwrite is FALSE."
+      )
+      actions[[i]] <- "skip"
+    } else {
+      actions[[i]] <- "deleteinsert"
+    }
+  }
+
+  list(actions = actions, update_geom_ids = update_geom_ids)
+}
+
+
 #' @keywords internal
 #' @noRd
 insertACVector_fetch_existing <- function(
@@ -888,6 +915,70 @@ insertACVector_fetch_existing <- function(
       geom_id = integer(),
       geom_type = character()
     ))
+  }
+
+  layer_exists <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT 1 FROM ",
+      target_sql,
+      " WHERE layer_name = ",
+      DBI::dbQuoteString(con, layer_name),
+      " LIMIT 1;"
+    )
+  )
+  if (!nrow(layer_exists)) {
+    return(data.frame(
+      feature_name = character(),
+      geom_id = integer(),
+      geom_type = character()
+    ))
+  }
+
+  if (length(feature_names) > 1000L) {
+    temp_table <- paste0(
+      "aquacache_vector_features_",
+      Sys.getpid(),
+      "_",
+      sample.int(1000000L, 1L)
+    )
+    temp_id <- DBI::Id(table = temp_table)
+    temp_sql <- as.character(DBI::dbQuoteIdentifier(con, temp_id))
+    temp_result <- tryCatch(
+      {
+        DBI::dbWriteTable(
+          con,
+          name = temp_id,
+          value = data.frame(feature_name = feature_names),
+          temporary = TRUE,
+          overwrite = TRUE
+        )
+        on.exit(
+          try(
+            DBI::dbExecute(con, paste0("DROP TABLE IF EXISTS ", temp_sql)),
+            silent = TRUE
+          ),
+          add = TRUE
+        )
+        DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT v.feature_name, v.geom_id, v.geom_type FROM ",
+            target_sql,
+            " v INNER JOIN ",
+            temp_sql,
+            " f ON v.feature_name = f.feature_name",
+            " WHERE v.layer_name = ",
+            DBI::dbQuoteString(con, layer_name),
+            ";"
+          )
+        )
+      },
+      error = function(e) NULL
+    )
+    if (!is.null(temp_result)) {
+      return(temp_result)
+    }
   }
 
   chunks <- split(feature_names, ceiling(seq_along(feature_names) / 1000L))
@@ -935,7 +1026,8 @@ insertACVector_run_ogr2ogr <- function(
       "PGDATABASE",
       "PGUSER",
       "PGPASSWORD",
-      "PSQLRC"
+      "PSQLRC",
+      "PGOPTIONS"
     ),
     unset = NA_character_
   )
@@ -968,6 +1060,7 @@ insertACVector_run_ogr2ogr <- function(
   Sys.setenv(
     PSQLRC = if (.Platform$OS.type == "windows") "NUL" else "/dev/null"
   )
+  Sys.setenv(PGOPTIONS = "-c synchronous_commit=off")
 
   tmp_sql <- tempfile(fileext = ".sql")
   tmp_ogr_out <- tempfile(fileext = ".log")
@@ -998,6 +1091,8 @@ insertACVector_run_ogr2ogr <- function(
     "CREATE_SCHEMA=NO",
     "-lco",
     "SPATIAL_INDEX=NONE",
+    "-lco",
+    "UNLOGGED=ON",
     "-lco",
     "SRID=4269",
     "-dim",
