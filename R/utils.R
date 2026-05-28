@@ -69,6 +69,11 @@ find_postgres_utility <- function(
   }
 
   info <- aquacache_postgres_utility_info(candidates)
+  info <- info[info$available, , drop = FALSE]
+
+  if (!nrow(info)) {
+    return("")
+  }
 
   if (!is.null(version_ok)) {
     keep <- vapply(
@@ -206,6 +211,8 @@ aquacache_postgres_utility_candidates <- function(name) {
     )
 
     patterns <- c(
+      file.path("/usr/lib/postgresql", "*", "bin", name),
+      file.path("/usr/pgsql-*", "bin", name),
       file.path("/Library/PostgreSQL", "*", "bin", name),
       file.path(
         "/Applications/Postgres.app/Contents/Versions",
@@ -475,6 +482,7 @@ aquacache_postgres_utility_info <- function(paths) {
   data.frame(
     path = paths,
     version_label = vapply(versions, `[[`, character(1), "label"),
+    available = vapply(versions, `[[`, logical(1), "available"),
     major = vapply(versions, `[[`, integer(1), "major"),
     minor = vapply(versions, `[[`, integer(1), "minor"),
     patch = vapply(versions, `[[`, integer(1), "patch"),
@@ -487,9 +495,10 @@ aquacache_postgres_utility_info <- function(paths) {
 #' @keywords internal
 #' @noRd
 aquacache_postgres_utility_version <- function(path) {
-  unknown <- function(label = NA_character_) {
+  unknown <- function(label = NA_character_, available = FALSE) {
     list(
       label = label,
+      available = available,
       major = NA_integer_,
       minor = NA_integer_,
       patch = NA_integer_
@@ -502,9 +511,10 @@ aquacache_postgres_utility_version <- function(path) {
   )
 
   status <- attr(out, "status")
+  available <- is.null(status) || identical(as.integer(status), 0L)
 
-  if (!length(out) || (!is.null(status) && as.integer(status) != 0L)) {
-    return(unknown())
+  if (!length(out) || !available) {
+    return(unknown(paste(out, collapse = " "), available = available))
   }
 
   label <- paste(out, collapse = " ")
@@ -515,7 +525,7 @@ aquacache_postgres_utility_version <- function(path) {
   )[[1]]
 
   if (!length(matches) || identical(matches, character(0))) {
-    return(unknown(label))
+    return(unknown(label, available = TRUE))
   }
 
   # Use the last version-like token. This avoids reading the "2" in
@@ -526,13 +536,14 @@ aquacache_postgres_utility_version <- function(path) {
   ]]))
 
   if (length(parts) < 2L || anyNA(parts)) {
-    return(unknown(label))
+    return(unknown(label, available = TRUE))
   }
 
   parts <- c(parts, 0L, 0L, 0L)[1:3]
 
   list(
     label = label,
+    available = TRUE,
     major = parts[[1L]],
     minor = parts[[2L]],
     patch = parts[[3L]]
