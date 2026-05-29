@@ -72,15 +72,6 @@ addNewContinuous <- function(
     )
   }
 
-  grade_unknown <- DBI::dbGetQuery(
-    con,
-    "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';"
-  )[1, 1]
-  if (is.na(grade_unknown)) {
-    stop(
-      "addNewContinuous: Could not find grade type 'Unknown' in the database."
-    )
-  }
   grade_unspecified <- DBI::dbGetQuery(
     con,
     "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS';"
@@ -90,15 +81,6 @@ addNewContinuous <- function(
       "addNewContinuous: Could not find grade type 'Unspecified' in the database."
     )
   }
-  approval_unknown <- DBI::dbGetQuery(
-    con,
-    "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';"
-  )[1, 1]
-  if (is.na(approval_unknown)) {
-    stop(
-      "addNewContinuous: Could not find approval type 'Unknown' in the database."
-    )
-  }
   approval_unspecified <- DBI::dbGetQuery(
     con,
     "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNS';"
@@ -106,15 +88,6 @@ addNewContinuous <- function(
   if (is.na(approval_unspecified)) {
     stop(
       "addNewContinuous: Could not find approval type 'Unspecified' in the database."
-    )
-  }
-  qualifier_unknown <- DBI::dbGetQuery(
-    con,
-    "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';"
-  )[1, 1]
-  if (is.na(qualifier_unknown)) {
-    stop(
-      "addNewContinuous: Could not find qualifier type 'Unknown' in the database."
     )
   }
   qualifier_unspecified <- DBI::dbGetQuery(
