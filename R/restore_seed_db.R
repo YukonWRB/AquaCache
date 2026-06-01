@@ -301,6 +301,29 @@ restore_seed_db <- function(
     )
   }
 
+  # Download and insert the NHN basin polygons
+  ans <- readline(
+    prompt = "Download and load NHN Basins now? Approximately 242 MB. (y/n): "
+  )
+  if (tolower(ans) == "y") {
+    message("Downloading and loading NHN basins...")
+    tryCatch(
+      {
+        load_nhn(target = 'basins', con = target_con)
+      },
+      error = function(e) {
+        warning(
+          "Failed to download or load NHN basins. You can try troubleshooting this again with function load_nhn(). Error message was: ",
+          e$message
+        )
+      }
+    )
+  } else {
+    message(
+      "Skipping download of NHN basins. You will be prompted again to download them from the YGwater::YGwater Shiny application if necessary."
+    )
+  }
+
   DBI::dbExecute(
     target_con,
     aquacache_public_reader_grants_sql(
@@ -376,14 +399,20 @@ restore_seed_db <- function(
     "."
   )
 
-  invisible(list(
+  message(
+    "\nNOTICES:\n
+  1. You can use the Shiny application at YGwater::YGwater() to explore the restored/installed database.\n
+  2. This R package includes a vignette which details the database's schemas, tables, and non-standard functions. You can access it with 'vignette(package = 'AquaCache', topic = 'AquaCache_DB_documentation')' OR via the Shiny application's Help menu, once logged in.\n
+  3. If you want to pre-load some useful hydrological reference data such as that from the National Hydro Network, see function load_nhn(). You will require, at minimum, the 'basins' dataset to use the Shiny application's automatic location code generation, and you can load the other datasets for additional reference data in your database."
+  )
+  return(invisible(list(
     database = name,
     host = host,
     port = port,
     patch_number = patch_number,
     file = file,
     psql = psql
-  ))
+  )))
 }
 
 #' @keywords internal

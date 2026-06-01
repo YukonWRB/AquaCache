@@ -13,6 +13,11 @@ Set of functions for the ongoing maintenance of the Yukon Government's hydromete
 \author{
 \strong{Maintainer}: Ghislain de Laplante \email{ghislain.delaplante@yukon.ca} (\href{https://orcid.org/0000-0002-5093-9185}{ORCID})
 
+Authors:
+\itemize{
+  \item Ghislain de Laplante \email{ghislain.delaplante@yukon.ca} (\href{https://orcid.org/0000-0002-5093-9185}{ORCID})
+}
+
 Other contributors:
 \itemize{
   \item Emilie Stewart-Jones \email{emilie.stewart-jones@yukon.ca} (\href{https://orcid.org/0000-0002-0013-8953}{ORCID}) [contributor]

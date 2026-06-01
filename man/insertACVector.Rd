@@ -16,11 +16,13 @@ insertACVector(
   geom_col = "geom",
   overwrite = FALSE,
   ask = TRUE,
+  use_ogr2ogr = TRUE,
+  install_ogr2ogr = interactive(),
   con = NULL
 )
 }
 \arguments{
-\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object or as a file path to a shapefile, geopackage or something else that terra::vect() van use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.}
+\item{geom}{The geometry object to add to the database, as a \code{\link[terra:vect]{terra::vect()}} object or as a file path to a shapefile, geopackage or something else that terra::vect() can use. Conversion will automatically be made to epsg:4269, NAD83 lat/long decimal degrees. Can be points, lines, or polygons with one or more features. Multi-feature geoms will be split up into individual database entries.}
 
 \item{layer_name}{The name to give to the vector layer, which defines which layer_name it gets assigned to in the database. This should always be an existing layer_name unless you have a good reason to create a new one.}
 
@@ -42,10 +44,19 @@ insertACVector(
 
 \item{ask}{Whether to ask for user confirmation when creating a new layer_name or overwriting existing entries. Default TRUE.}
 
+\item{use_ogr2ogr}{Whether to use the \code{ogr2ogr} command line utility when it
+is available. This is much faster for multi-feature vector loads. If
+\code{ogr2ogr} is unavailable or the fast path fails, the existing R-only
+workflow is used.}
+
+\item{install_ogr2ogr}{Whether to offer an interactive attempt to install a
+GDAL distribution that includes \code{ogr2ogr} when the utility cannot be found.
+This is only attempted when \code{use_ogr2ogr = TRUE}.}
+
 \item{con}{A connection to the database. Default NULL will use the utility function \code{\link[=AquaConnect]{AquaConnect()}} and disconnect afterwards.}
 }
 \value{
-A boolean vector, one element per feature.Messages will also be printed to the console.
+A boolean vector, one element per feature. Messages will also be printed to the console.
 }
 \description{
 Use this function to add a vector file to the database. Ensures that database constraints are met and permits spatial queries. If you need to delete (not overwrite) a vector for any reason you'll have to use SQL (perhaps via R using the DBI package).
@@ -56,9 +67,6 @@ Use function \code{\link[YGwater:getVector]{YGwater::getVector()}} to retrieve a
 
 \subsection{Attribute tables:}{
 
-The attribute table of the object will be retained in the \code{attributes} JSON column for all fields that are not already
-represented by dedicated columns in the \code{vectors} table. This preserves additional metadata for each feature while still
-allowing spatial relationships to be maintained within the database. Fields supplied through \code{feature_name}/\code{feature_name_col}
-and \code{description}/\code{description_col} are still written to their respective columns, with all remaining fields stored as JSON.
+The attribute table of the object will be retained in the \code{attributes} JSON column for all fields that are not already represented by dedicated columns in the \code{vectors} table. This preserves additional metadata for each feature while still allowing spatial relationships to be maintained within the database. Fields supplied through \code{feature_name}/\code{feature_name_col} and \code{description}/\code{description_col} are still written to their respective columns, with all remaining fields stored as JSON.
 }
 }

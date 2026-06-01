@@ -39,7 +39,7 @@ test_that("addNewContinuous inserts a new measurement", {
   active <- dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
 
-  addNewContinuous(tsid, df, con = con, target = "realtime", overwrite = "no")
+  addNewContinuous(tsid, df, con = con, overwrite = "no")
 
   inserted <- DBI::dbGetQuery(
     con,
@@ -69,8 +69,7 @@ test_that("addNewContinuous errors when datetime is missing", {
     addNewContinuous(
       tsid,
       data.frame(value = 1),
-      con = con,
-      target = "realtime"
+      con = con
     ),
     "must contain a column named 'datetime'"
   )

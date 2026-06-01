@@ -54,3 +54,63 @@ test_that("inf_to_na returns NAs on vectors", {
   result <- inf_to_na(test)
   expect_false(any(is.infinite(result)))
 })
+
+
+test_that("PostgreSQL utility checks reject wrappers without a real client", {
+  ext <- if (.Platform$OS.type == "windows") ".bat" else ".sh"
+  broken <- tempfile("psql-broken-", fileext = ext)
+
+  if (.Platform$OS.type == "windows") {
+    writeLines(
+      c(
+        "@echo off",
+        "echo Error: You must install at least one postgresql-client-<version> package 1>&2",
+        "exit /B 1"
+      ),
+      broken
+    )
+  } else {
+    writeLines(
+      c(
+        "#!/bin/sh",
+        "echo 'Error: You must install at least one postgresql-client-<version> package' >&2",
+        "exit 1"
+      ),
+      broken
+    )
+    Sys.chmod(broken, mode = "0755")
+  }
+
+  info <- aquacache_postgres_utility_info(broken)
+  expect_false(info$available)
+  expect_true(is.na(info$major))
+})
+
+
+test_that("PostgreSQL utility checks keep working utilities with unparsed versions", {
+  ext <- if (.Platform$OS.type == "windows") ".bat" else ".sh"
+  utility <- tempfile("psql-custom-", fileext = ext)
+
+  if (.Platform$OS.type == "windows") {
+    writeLines(
+      c(
+        "@echo off",
+        "echo custom PostgreSQL utility"
+      ),
+      utility
+    )
+  } else {
+    writeLines(
+      c(
+        "#!/bin/sh",
+        "echo 'custom PostgreSQL utility'"
+      ),
+      utility
+    )
+    Sys.chmod(utility, mode = "0755")
+  }
+
+  info <- aquacache_postgres_utility_info(utility)
+  expect_true(info$available)
+  expect_true(is.na(info$major))
+})
