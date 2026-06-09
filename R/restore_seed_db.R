@@ -303,28 +303,6 @@ restore_seed_db <- function(
     )
   }
 
-  # Insert a sample row into spatial.vectors
-  df <- data.frame(
-    feature_name = "sample_feature",
-    description = "This is a sample vector layer.",
-    x = 0,
-    y = 0,
-    stringsAsFactors = FALSE
-  )
-  test_vect <- terra::vect(
-    x = df,
-    geom = c("x", "y"),
-    crs = "EPSG:4326"
-  )
-  insertACVector(
-    con = target_con,
-    geom = test_vect,
-    layer_name = "sample_layer",
-    feature_name_col = "feature_name",
-    description_col = "description",
-    ask = FALSE
-  )
-
   if (nhn) {
     # Download and insert the NHN basin polygons
     ans <- readline(
