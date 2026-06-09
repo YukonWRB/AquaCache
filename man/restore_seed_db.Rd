@@ -16,7 +16,8 @@ restore_seed_db(
   require_current_patch = TRUE,
   apply_patches = TRUE,
   psql = NULL,
-  cleanup_on_error = TRUE
+  cleanup_on_error = TRUE,
+  nhn = TRUE
 )
 }
 \arguments{
@@ -51,6 +52,8 @@ system PATH and common PostgreSQL installation directories.}
 
 \item{cleanup_on_error}{If \code{TRUE}, drop the newly created target database if
 restore or validation fails.}
+
+\item{nhn}{If \code{TRUE}, offer to download and load the National Hydro Network basins dataset after restore, which is used for location code generation in the Shiny application. Defaults to \code{TRUE}.}
 }
 \value{
 Invisibly returns a list with the restored database name, connection
