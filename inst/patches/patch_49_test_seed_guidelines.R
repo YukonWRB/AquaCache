@@ -71,7 +71,7 @@ parameter_id <- function(pattern, label, preferred = character()) {
 upsert_publisher <- function(code, name, url, note = NULL) {
   DBI::dbExecute(
     con,
-    "UPDATE discrete.guideline_publishers
+    "UPDATE criteria.guideline_publishers
      SET publisher_name = $2,
          publisher_url = $3,
          note = $4
@@ -82,7 +82,7 @@ upsert_publisher <- function(code, name, url, note = NULL) {
   existing <- DBI::dbGetQuery(
     con,
     "SELECT publisher_id
-     FROM discrete.guideline_publishers
+     FROM criteria.guideline_publishers
      WHERE publisher_code = $1",
     params = list(code)
   )
@@ -91,7 +91,7 @@ upsert_publisher <- function(code, name, url, note = NULL) {
   }
 
   one_value(
-    "INSERT INTO discrete.guideline_publishers (
+    "INSERT INTO criteria.guideline_publishers (
        publisher_code, publisher_name, publisher_url, note
      )
      VALUES ($1, $2, $3, $4)
@@ -111,7 +111,7 @@ upsert_series <- function(
 ) {
   DBI::dbExecute(
     con,
-    "UPDATE discrete.guideline_series
+    "UPDATE criteria.guideline_series
      SET series_name = $1,
          series_url = $2,
          citation = $3,
@@ -123,7 +123,7 @@ upsert_series <- function(
   existing <- DBI::dbGetQuery(
     con,
     "SELECT series_id
-     FROM discrete.guideline_series
+     FROM criteria.guideline_series
      WHERE series_code = $1",
     params = list(code)
   )
@@ -132,7 +132,7 @@ upsert_series <- function(
   }
 
   one_value(
-    "INSERT INTO discrete.guideline_series (
+    "INSERT INTO criteria.guideline_series (
        series_code, series_name, series_url, citation, note, publisher_id
      )
      VALUES ($1, $2, $3, $4, $5 , $6)
@@ -198,23 +198,23 @@ upsert_guideline_ref <- function(table, id_col, code_col, name_col, prefix,
 }
 
 jurisdiction_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_jurisdictions", "jurisdiction_id",
+  "criteria.guideline_jurisdictions", "jurisdiction_id",
   "jurisdiction_code", "jurisdiction_name", "JUR", name
 )
 jurisdiction_level_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_jurisdiction_levels", "jurisdiction_level_id",
+  "criteria.guideline_jurisdiction_levels", "jurisdiction_level_id",
   "jurisdiction_level_code", "jurisdiction_level_name", "LEVEL", name
 )
 protection_goal_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_protection_goals", "protection_goal_id",
+  "criteria.guideline_protection_goals", "protection_goal_id",
   "protection_goal_code", "protection_goal_name", "GOAL", name
 )
 exposure_duration_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_exposure_durations", "exposure_duration_id",
+  "criteria.guideline_exposure_durations", "exposure_duration_id",
   "exposure_duration_code", "exposure_duration_name", "EXPOSURE", name
 )
 averaging_period_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_averaging_periods", "averaging_period_id",
+  "criteria.guideline_averaging_periods", "averaging_period_id",
   "averaging_period_code", "averaging_period_name", "AVG", name
 )
 
@@ -262,9 +262,9 @@ invisible(tryCatch(
   required_tables <- DBI::dbGetQuery(
     con,
     "SELECT
-       to_regclass('discrete.guideline_models') IS NOT NULL AS has_models,
+       to_regclass('criteria.guideline_models') IS NOT NULL AS has_models,
        to_regprocedure(
-         'discrete.guideline_collect_rule_inputs(integer, integer)'
+         'criteria.guideline_collect_rule_inputs(integer, integer)'
        ) IS NOT NULL AS has_input_collector"
   )
   if (
@@ -427,12 +427,12 @@ invisible(tryCatch(
 
   DBI::dbExecute(
     con,
-    "DELETE FROM discrete.guideline_model_results
+    "DELETE FROM criteria.guideline_model_results
      WHERE model_code IN ('BC_BLM_CU_SIMPLIFIED', 'BC_BLM_CU_FULL')"
   )
   DBI::dbExecute(
     con,
-    "DELETE FROM discrete.guidelines
+    "DELETE FROM criteria.guidelines
      WHERE guideline_code IN (
        'BC-CU-BLM-CHRONIC-2019',
        'BC-CU-BLM-ACUTE-2019'
@@ -440,13 +440,13 @@ invisible(tryCatch(
   )
   DBI::dbExecute(
     con,
-    "DELETE FROM discrete.guideline_models
+    "DELETE FROM criteria.guideline_models
      WHERE model_code IN ('BC_BLM_CU_SIMPLIFIED', 'BC_BLM_CU_FULL')"
   )
 
   DBI::dbExecute(
     con,
-    "INSERT INTO discrete.guideline_models (
+    "INSERT INTO criteria.guideline_models (
        model_code, model_name, publisher_id, model_version, model_type,
        source_document_title, source_url, executable_url, description
      )
@@ -487,7 +487,7 @@ invisible(tryCatch(
   ) {
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guideline_model_inputs (
+      "INSERT INTO criteria.guideline_model_inputs (
          model_code, input_code, input_name, parameter_id, matrix_state_id,
          sample_fraction_id, result_speciation_id, input_units,
          required, sort_order, note
@@ -574,25 +574,48 @@ invisible(tryCatch(
     }
   }
 
-  DBI::dbExecute(
-    con,
-    "INSERT INTO discrete.guideline_model_outputs (
-       model_code, output_code, output_name, comparison_operator_code,
-       output_units, exposure_duration_id, averaging_period_id, note
-     )
-     VALUES
-       ('BC_BLM_CU_SIMPLIFIED', 'chronic', 'Long-term chronic dissolved copper WQG', 'lte', $1, $2, $3, 'Output value stored in the database copper parameter units.'),
-       ('BC_BLM_CU_SIMPLIFIED', 'acute', 'Short-term acute dissolved copper WQG', 'lte', $1, $4, $5, 'Output value stored in the database copper parameter units.'),
-       ('BC_BLM_CU_FULL', 'chronic', 'Long-term chronic dissolved copper WQG', 'lte', $1, $2, $3, 'Output value stored in the database copper parameter units.'),
-       ('BC_BLM_CU_FULL', 'acute', 'Short-term acute dissolved copper WQG', 'lte', $1, $4, $5, 'Output value stored in the database copper parameter units.')",
-    params = list(
-      copper_unit,
-      exposure_duration_id("long-term chronic"),
-      averaging_period_id("sample-specific; see source document"),
-      exposure_duration_id("short-term acute"),
-      averaging_period_id("sample-specific")
+  chronic_exposure_id <- exposure_duration_id("long-term chronic")
+  chronic_averaging_id <- averaging_period_id("sample-specific; see source document")
+  acute_exposure_id <- exposure_duration_id("short-term acute")
+  acute_averaging_id <- averaging_period_id("sample-specific")
+  for (model_output in list(
+    list(
+      "BC_BLM_CU_SIMPLIFIED", "chronic",
+      "Long-term chronic dissolved copper WQG",
+      chronic_exposure_id, chronic_averaging_id
+    ),
+    list(
+      "BC_BLM_CU_SIMPLIFIED", "acute",
+      "Short-term acute dissolved copper WQG",
+      acute_exposure_id, acute_averaging_id
+    ),
+    list(
+      "BC_BLM_CU_FULL", "chronic",
+      "Long-term chronic dissolved copper WQG",
+      chronic_exposure_id, chronic_averaging_id
+    ),
+    list(
+      "BC_BLM_CU_FULL", "acute",
+      "Short-term acute dissolved copper WQG",
+      acute_exposure_id, acute_averaging_id
     )
-  )
+  )) {
+    DBI::dbExecute(
+      con,
+      "INSERT INTO criteria.guideline_model_outputs (
+         model_code, output_code, output_name, comparison_operator_code,
+         output_units, exposure_duration_id, averaging_period_id, note
+       )
+       VALUES (
+         $1, $2, $3, 'lte', $4, $5, $6,
+         'Output value stored in the database copper parameter units.'
+       )",
+      params = list(
+        model_output[[1]], model_output[[2]], model_output[[3]],
+        copper_unit, model_output[[4]], model_output[[5]]
+      )
+    )
+  }
 
   insert_guideline <- function(code, name, exposure, averaging, output_code) {
     jurisdiction_id_value <- jurisdiction_id("British Columbia")
@@ -601,7 +624,7 @@ invisible(tryCatch(
     exposure_duration_id_value <- exposure_duration_id(exposure)
     averaging_period_id_value <- averaging_period_id(averaging)
     guideline_id <- one_value(
-      "INSERT INTO discrete.guidelines (
+      "INSERT INTO criteria.guidelines (
          guideline_code, 
          guideline_name, 
          publisher_id, 
@@ -649,19 +672,19 @@ invisible(tryCatch(
 
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guidelines_media_types (guideline_id, media_id)
+      "INSERT INTO criteria.guidelines_media_types (guideline_id, media_id)
        VALUES ($1, $2)",
       params = list(guideline_id, media_surface)
     )
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guidelines_fractions (guideline_id, fraction_id)
+      "INSERT INTO criteria.guidelines_fractions (guideline_id, fraction_id)
        VALUES ($1, $2)",
       params = list(guideline_id, fraction_dissolved)
     )
 
     rule_id <- one_value(
-      "INSERT INTO discrete.guideline_value_rules (
+      "INSERT INTO criteria.guideline_value_rules (
          guideline_id, model_code, model_output_code, bound_code,
          algorithm_code, missing_input_policy, rule_priority,
          precision_note, note
@@ -680,7 +703,7 @@ invisible(tryCatch(
     for (input in simplified_inputs) {
       DBI::dbExecute(
         con,
-        "INSERT INTO discrete.guideline_rule_inputs (
+        "INSERT INTO criteria.guideline_rule_inputs (
            rule_id, input_code, input_name, parameter_id, matrix_state_id,
            sample_fraction_id, result_speciation_id, result_type,
            aggregate_method, allow_condition_value, required, note
@@ -857,13 +880,13 @@ invisible(tryCatch(
     chronic_inputs <- DBI::dbGetQuery(
       con,
       "SELECT *
-       FROM discrete.guideline_collect_rule_inputs($1, $2)",
+       FROM criteria.guideline_collect_rule_inputs($1, $2)",
       params = list(chronic_rule, sample_ids[[i]])
     )
     acute_inputs <- DBI::dbGetQuery(
       con,
       "SELECT *
-       FROM discrete.guideline_collect_rule_inputs($1, $2)",
+       FROM criteria.guideline_collect_rule_inputs($1, $2)",
       params = list(acute_rule, sample_ids[[i]])
     )
 
@@ -876,7 +899,7 @@ invisible(tryCatch(
 
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guideline_model_results (
+      "INSERT INTO criteria.guideline_model_results (
          model_code, model_output_code, sample_id, guideline_value,
          output_status, input_payload, input_hash, model_version,
          source_artifact, message, note
@@ -918,11 +941,11 @@ invisible(tryCatch(
      JOIN discrete.results r
        ON r.sample_id = s.sample_id
       AND r.parameter_id = $1
-     JOIN discrete.applicable_guidelines_for_result(
+     JOIN criteria.applicable_guidelines_for_result(
        r.result_id, CURRENT_DATE, TRUE
      ) ag
        ON true
-     JOIN discrete.guidelines g
+     JOIN criteria.guidelines g
        ON g.guideline_id = ag.guideline_id
      WHERE s.import_source = 'patch_47_bc_blm_fixture'
        AND g.guideline_code LIKE 'BC-CU-BLM-%'

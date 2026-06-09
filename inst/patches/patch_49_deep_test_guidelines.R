@@ -71,7 +71,7 @@ parameter_id <- function(pattern, label, preferred = character()) {
 upsert_publisher <- function(code, name, url, note = NA_character_) {
   DBI::dbExecute(
     con,
-    "UPDATE discrete.guideline_publishers
+    "UPDATE criteria.guideline_publishers
      SET publisher_name = $2,
          publisher_url = $3,
          note = $4
@@ -82,7 +82,7 @@ upsert_publisher <- function(code, name, url, note = NA_character_) {
   existing <- DBI::dbGetQuery(
     con,
     "SELECT publisher_id
-     FROM discrete.guideline_publishers
+     FROM criteria.guideline_publishers
      WHERE publisher_code = $1",
     params = list(code)
   )
@@ -91,7 +91,7 @@ upsert_publisher <- function(code, name, url, note = NA_character_) {
   }
 
   one_value(
-    "INSERT INTO discrete.guideline_publishers (
+    "INSERT INTO criteria.guideline_publishers (
        publisher_code, publisher_name, publisher_url, note
      )
      VALUES ($1, $2, $3, $4)
@@ -105,7 +105,7 @@ upsert_series <- function(code, name, publisher_id, url, citation,
                           note = NA_character_) {
   DBI::dbExecute(
     con,
-    "UPDATE discrete.guideline_series
+    "UPDATE criteria.guideline_series
      SET series_name = $2,
          publisher_id = $3,
          series_url = $4,
@@ -118,7 +118,7 @@ upsert_series <- function(code, name, publisher_id, url, citation,
   existing <- DBI::dbGetQuery(
     con,
     "SELECT series_id
-     FROM discrete.guideline_series
+     FROM criteria.guideline_series
      WHERE series_code = $1",
     params = list(code)
   )
@@ -127,7 +127,7 @@ upsert_series <- function(code, name, publisher_id, url, citation,
   }
 
   one_value(
-    "INSERT INTO discrete.guideline_series (
+    "INSERT INTO criteria.guideline_series (
        series_code, series_name, publisher_id, series_url, citation, note
      )
      VALUES ($1, $2, $3, $4, $5, $6)
@@ -193,23 +193,23 @@ upsert_guideline_ref <- function(table, id_col, code_col, name_col, prefix,
 }
 
 jurisdiction_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_jurisdictions", "jurisdiction_id",
+  "criteria.guideline_jurisdictions", "jurisdiction_id",
   "jurisdiction_code", "jurisdiction_name", "JUR", name
 )
 jurisdiction_level_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_jurisdiction_levels", "jurisdiction_level_id",
+  "criteria.guideline_jurisdiction_levels", "jurisdiction_level_id",
   "jurisdiction_level_code", "jurisdiction_level_name", "LEVEL", name
 )
 protection_goal_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_protection_goals", "protection_goal_id",
+  "criteria.guideline_protection_goals", "protection_goal_id",
   "protection_goal_code", "protection_goal_name", "GOAL", name
 )
 exposure_duration_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_exposure_durations", "exposure_duration_id",
+  "criteria.guideline_exposure_durations", "exposure_duration_id",
   "exposure_duration_code", "exposure_duration_name", "EXPOSURE", name
 )
 averaging_period_id <- function(name) upsert_guideline_ref(
-  "discrete.guideline_averaging_periods", "averaging_period_id",
+  "criteria.guideline_averaging_periods", "averaging_period_id",
   "averaging_period_code", "averaging_period_name", "AVG", name
 )
 
@@ -253,7 +253,7 @@ insert_guideline <- function(code, name, publisher_id, series_id,
   exposure_duration_id_value <- exposure_duration_id(exposure_duration)
   averaging_period_id_value <- averaging_period_id(averaging_period)
   guideline_id <- one_value(
-    "INSERT INTO discrete.guidelines (
+    "INSERT INTO criteria.guidelines (
        guideline_code, guideline_name, publisher_id, series_id,
        parameter_id, matrix_state_id, comparison_operator_code,
        jurisdiction_id, jurisdiction_level_id, protection_goal_id,
@@ -280,7 +280,7 @@ insert_guideline <- function(code, name, publisher_id, series_id,
   if (!is.na(media_id)) {
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guidelines_media_types (guideline_id, media_id)
+      "INSERT INTO criteria.guidelines_media_types (guideline_id, media_id)
        VALUES ($1, $2)",
       params = list(guideline_id, media_id)
     )
@@ -289,7 +289,7 @@ insert_guideline <- function(code, name, publisher_id, series_id,
   if (!is.na(fraction_id)) {
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guidelines_fractions (guideline_id, fraction_id)
+      "INSERT INTO criteria.guidelines_fractions (guideline_id, fraction_id)
        VALUES ($1, $2)",
       params = list(guideline_id, fraction_id)
     )
@@ -301,7 +301,7 @@ insert_guideline <- function(code, name, publisher_id, series_id,
 constant_rule <- function(guideline_id, bound_code, value, note = NA_character_,
                           priority = 100L) {
   one_value(
-    "INSERT INTO discrete.guideline_value_rules (
+    "INSERT INTO criteria.guideline_value_rules (
        guideline_id, bound_code, algorithm_code, fixed_value,
        rule_priority, note
      )
@@ -319,9 +319,9 @@ invisible(tryCatch(
   required <- DBI::dbGetQuery(
     con,
     "SELECT
-       to_regclass('discrete.guideline_value_rules') IS NOT NULL AS has_rules,
+       to_regclass('criteria.guideline_value_rules') IS NOT NULL AS has_rules,
        to_regprocedure(
-         'discrete.guideline_collect_rule_inputs(integer, integer)'
+         'criteria.guideline_collect_rule_inputs(integer, integer)'
        ) IS NOT NULL AS has_collector"
   )
   if (!isTRUE(required$has_rules[[1]]) ||
@@ -426,23 +426,20 @@ invisible(tryCatch(
     "BC-SO4-FW-LT-HARDNESS-2013",
     "EPA-PH-FW-RANGE-1986",
     "BC-DO-FW-MIN-1997",
-    "CCME-ZN-FW-ST-DOC-HARDNESS",
     "CCME-ZN-FW-ST-DOC-HARDNESS-SQLSCALAR",
+    "TEST-ZN-FW-ST-HARDNESS-DOC-GRID",
     "BC-TURBIDITY-FW-BACKGROUND-NARRATIVE"
   )
   for (code in fixture_guideline_codes) {
     DBI::dbExecute(
       con,
-      "DELETE FROM discrete.guidelines
+      "DELETE FROM criteria.guidelines
        WHERE guideline_code = $1",
       params = list(code)
     )
   }
-  DBI::dbExecute(
-    con,
-    "DELETE FROM discrete.guideline_models
-     WHERE model_code = 'CCME_ZN_SHORT_TERM'"
-  )
+  DBI::dbExecute(con, "DROP FUNCTION IF EXISTS criteria.test_ccme_zinc_short_term(JSONB)")
+  DBI::dbExecute(con, "DROP FUNCTION IF EXISTS discrete.test_ccme_zinc_short_term(JSONB)")
 
   ccme_id <- upsert_publisher(
     "CCME",
@@ -544,7 +541,7 @@ invisible(tryCatch(
     fraction_id = fraction_total, media_id = media_surface
   )
   sulfate_rule <- one_value(
-    "INSERT INTO discrete.guideline_value_rules (
+    "INSERT INTO criteria.guideline_value_rules (
        guideline_id, bound_code, algorithm_code, rule_priority, note
      )
      VALUES ($1, 'upper', 'lookup_range', 10, 'B.C. sulphate lookup by hardness as CaCO3.')
@@ -554,23 +551,24 @@ invisible(tryCatch(
   )
   DBI::dbExecute(
     con,
-    "INSERT INTO discrete.guideline_rule_inputs (
-       rule_id, input_code, input_name, parameter_id, matrix_state_id,
-       sample_fraction_id, result_speciation_id, result_type,
+    "INSERT INTO criteria.guideline_rule_inputs (
+       rule_id, input_code, input_name, input_source,
+       parameter_id, matrix_state_id, sample_fraction_id,
+       result_speciation_id, result_type, result_type_preference,
        aggregate_method, required
      )
      VALUES (
-       $1, 'hardness_mg_l_caco3', 'Hardness as CaCO3', $2, $3,
-       $4, $5, $6, 'single', true
+       $1, 'hardness_mg_l_caco3', 'Hardness as CaCO3 (preferred)',
+       'hardness_helper', $2, $3, NULL, NULL, NULL, ARRAY[$4]::integer[],
+       'single', true
      )",
     params = list(
-      sulfate_rule, hardness_param, matrix_liquid, fraction_total,
-      spec_caco3, result_type_lab
+      sulfate_rule, hardness_param, matrix_liquid, result_type_lab
     )
   )
   DBI::dbExecute(
     con,
-    "INSERT INTO discrete.guideline_lookup_values (
+    "INSERT INTO criteria.guideline_lookup_values (
        rule_id, input_code, lower_bound, upper_bound,
        lower_inclusive, upper_inclusive, output_value,
        output_status, output_label, sort_order
@@ -607,159 +605,7 @@ invisible(tryCatch(
   )
   constant_rule(do_guideline, "lower", 5, "Minimum dissolved oxygen fixture value in mg/L.", 10)
 
-  message("  adding zinc database function")
-  DBI::dbExecute(
-    con,
-    "CREATE OR REPLACE FUNCTION discrete.test_ccme_zinc_short_term(
-       inputs JSONB
-     )
-     RETURNS NUMERIC
-     LANGUAGE sql
-     IMMUTABLE
-     AS $function$
-       WITH values AS (
-         SELECT
-           max((entry->>'value')::NUMERIC)
-             FILTER (WHERE entry->>'input_code' = 'hardness_mg_l_caco3') AS hardness,
-           max((entry->>'value')::NUMERIC)
-             FILTER (WHERE entry->>'input_code' = 'doc_mg_l') AS doc
-         FROM jsonb_array_elements(inputs) AS items(entry)
-       )
-       SELECT CASE
-         WHEN hardness IS NULL OR doc IS NULL OR hardness <= 0 OR doc <= 0
-           THEN NULL::NUMERIC
-         ELSE exp(0.833 * ln(hardness) + 0.240 * ln(doc) + 0.526) / 1000
-       END
-       FROM values;
-     $function$;"
-  )
-  DBI::dbExecute(
-    con,
-    "ALTER FUNCTION discrete.test_ccme_zinc_short_term(JSONB)
-     OWNER TO admin;"
-  )
-
-  DBI::dbExecute(
-    con,
-    "INSERT INTO discrete.guideline_models (
-       model_code, model_name, publisher_id, model_version, model_type,
-       source_document_title, source_url, description
-     )
-     VALUES (
-       'CCME_ZN_SHORT_TERM',
-       'CCME dissolved zinc short-term benchmark equation',
-       $1,
-       'current CCME web value',
-       'database_function',
-       'CCME zinc water quality guideline page',
-       $2,
-       'Multi-input dissolved zinc benchmark equation using hardness and DOC.'
-     )",
-    params = list(ccme_id, zinc_source)
-  )
-  zinc_unit <- one_value(
-    "SELECT public.get_parameter_unit_id($1, $2)",
-    params = list(zinc_param, matrix_liquid),
-    label = "zinc unit"
-  )
-  zinc_exposure_duration <- exposure_duration_id("short-term")
-  zinc_averaging_period <- averaging_period_id("sample-specific")
-  DBI::dbExecute(
-    con,
-    "INSERT INTO discrete.guideline_model_outputs (
-       model_code, output_code, output_name, comparison_operator_code,
-       output_units, exposure_duration_id, averaging_period_id, note
-     )
-     VALUES (
-       'CCME_ZN_SHORT_TERM', 'short_term',
-       'Short-term dissolved zinc benchmark', 'lte', $1,
-       $2, $3,
-       'Function returns database zinc units; source equation is published in ug/L.'
-     )",
-    params = list(
-      zinc_unit,
-      zinc_exposure_duration,
-      zinc_averaging_period
-    )
-  )
-  add_zinc_model_input <- function(input_code, input_name, parameter_id,
-                                   fraction_id, speciation_id,
-                                   lower_bound, upper_bound,
-                                   sort_order) {
-    DBI::dbExecute(
-      con,
-      "INSERT INTO discrete.guideline_model_inputs (
-         model_code, input_code, input_name, parameter_id, matrix_state_id,
-         sample_fraction_id, result_speciation_id, input_units,
-         lower_calibrated_bound, upper_calibrated_bound,
-         bounds_action, required, sort_order
-       )
-       VALUES (
-         'CCME_ZN_SHORT_TERM', $1, $2, $3, $4, $5, $6,
-         public.get_parameter_unit_id($3, $4), $7, $8,
-         'reject', true, $9
-       )",
-      params = list(
-        input_code, input_name, parameter_id, matrix_liquid, fraction_id,
-        speciation_id, lower_bound, upper_bound, sort_order
-      )
-    )
-  }
-  add_zinc_model_input(
-    "hardness_mg_l_caco3", "Hardness as CaCO3", hardness_param,
-    fraction_total, spec_caco3, 13.8, 250.5, 10
-  )
-  add_zinc_model_input(
-    "doc_mg_l", "Dissolved organic carbon", doc_param,
-    fraction_dissolved, NA_integer_, 0.3, 17.3, 20
-  )
-
-  zinc_guideline <- insert_guideline(
-    "CCME-ZN-FW-ST-DOC-HARDNESS",
-    "CCME dissolved zinc short-term benchmark by hardness and DOC",
-    ccme_id, ccme_series, zinc_param, matrix_liquid, "lte",
-    zinc_source, "CCME zinc guideline page",
-    "short-term", "sample-specific", "Freshwater aquatic life",
-    "Canada", source_section = "short-term benchmark equation",
-    fraction_id = fraction_dissolved, media_id = media_surface
-  )
-  zinc_rule <- one_value(
-    "INSERT INTO discrete.guideline_value_rules (
-       guideline_id, model_code, model_output_code, function_schema,
-       function_name, bound_code, algorithm_code, missing_input_policy,
-       rule_priority, note
-     )
-     VALUES (
-       $1, 'CCME_ZN_SHORT_TERM', 'short_term', 'discrete',
-       'test_ccme_zinc_short_term', 'upper', 'db_function',
-       'no_value', 10,
-       'CCME equation: exp(0.833 ln(hardness) + 0.240 ln(DOC) + 0.526), converted from ug/L to mg/L.'
-     )
-     RETURNING rule_id",
-    params = list(zinc_guideline),
-    label = "zinc rule"
-  )
-  for (input in list(
-    list("hardness_mg_l_caco3", "Hardness as CaCO3", hardness_param, fraction_total, spec_caco3),
-    list("doc_mg_l", "Dissolved organic carbon", doc_param, fraction_dissolved, NA_integer_)
-  )) {
-    DBI::dbExecute(
-      con,
-      "INSERT INTO discrete.guideline_rule_inputs (
-         rule_id, input_code, input_name, parameter_id, matrix_state_id,
-         sample_fraction_id, result_speciation_id, result_type,
-         aggregate_method, required
-       )
-       VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, 'single', true
-       )",
-      params = list(
-        zinc_rule, input[[1]], input[[2]], input[[3]], matrix_liquid,
-        input[[4]], input[[5]], result_type_lab
-      )
-    )
-  }
-
+  message("  adding zinc lookup grid and SQL scalar")
   zinc_grid_guideline <- insert_guideline(
     "TEST-ZN-FW-ST-HARDNESS-DOC-GRID",
     "Test fixture dissolved zinc benchmark by hardness and DOC lookup grid",
@@ -770,7 +616,7 @@ invisible(tryCatch(
     fraction_id = fraction_dissolved, media_id = media_surface
   )
   zinc_grid_rule <- one_value(
-    "INSERT INTO discrete.guideline_value_rules (
+    "INSERT INTO criteria.guideline_value_rules (
        guideline_id, bound_code, algorithm_code, missing_input_policy,
        rule_priority, note
      )
@@ -788,7 +634,7 @@ invisible(tryCatch(
   )) {
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guideline_rule_inputs (
+      "INSERT INTO criteria.guideline_rule_inputs (
          rule_id, input_code, input_name, parameter_id, matrix_state_id,
          sample_fraction_id, result_speciation_id, result_type,
          aggregate_method, required
@@ -803,7 +649,7 @@ invisible(tryCatch(
     )
   }
   zinc_grid_table <- one_value(
-    "INSERT INTO discrete.guideline_lookup_tables (
+    "INSERT INTO criteria.guideline_lookup_tables (
        rule_id, table_code, table_name, no_match_status, note
      )
      VALUES (
@@ -818,7 +664,7 @@ invisible(tryCatch(
   )
   zinc_grid_dimensions <- DBI::dbGetQuery(
     con,
-    "INSERT INTO discrete.guideline_lookup_dimensions (
+    "INSERT INTO criteria.guideline_lookup_dimensions (
        lookup_table_id, rule_id, input_code, sort_order
      )
      VALUES
@@ -835,7 +681,7 @@ invisible(tryCatch(
   add_zinc_grid_cell <- function(label, h_low, h_high, doc_low, doc_high,
                                  output, sort_order) {
     cell_id <- one_value(
-      "INSERT INTO discrete.guideline_lookup_cells (
+      "INSERT INTO criteria.guideline_lookup_cells (
          lookup_table_id, output_value, output_status, output_label, sort_order
        )
        VALUES ($1, $2, 'value', $3, $4)
@@ -845,7 +691,7 @@ invisible(tryCatch(
     )
     DBI::dbExecute(
       con,
-      "INSERT INTO discrete.guideline_lookup_cell_ranges (
+      "INSERT INTO criteria.guideline_lookup_cell_ranges (
          cell_id, lookup_table_id, dimension_id, lower_bound, upper_bound,
          lower_inclusive, upper_inclusive
        )
@@ -902,18 +748,40 @@ invisible(tryCatch(
     doc_param,
     fraction_dissolved
   )
-  DBI::dbExecute(
-    con,
-    "INSERT INTO discrete.guideline_value_rules (
+  zinc_sql_rule <- one_value(
+    "INSERT INTO criteria.guideline_value_rules (
        guideline_id, bound_code, algorithm_code, formula_sql,
        missing_input_policy, rule_priority, note
      )
      VALUES (
        $1, 'upper', 'sql_scalar', $2, 'no_value', 20,
-       'Legacy-style multi-input SQL scalar fixture for comparison with the governed db_function rule.'
-     )",
-    params = list(zinc_sql_guideline, zinc_formula_sql)
+       'Multi-input SQL scalar fixture for guidelines not yet represented by declarative tables or formulas.'
+     )
+     RETURNING rule_id",
+    params = list(zinc_sql_guideline, zinc_formula_sql),
+    label = "zinc SQL scalar rule"
   )
+  for (input in list(
+    list("hardness_mg_l_caco3", "Hardness as CaCO3", hardness_param, fraction_total, spec_caco3),
+    list("doc_mg_l", "Dissolved organic carbon", doc_param, fraction_dissolved, NA_integer_)
+  )) {
+    DBI::dbExecute(
+      con,
+      "INSERT INTO criteria.guideline_rule_inputs (
+         rule_id, input_code, input_name, parameter_id, matrix_state_id,
+         sample_fraction_id, result_speciation_id, result_type,
+         aggregate_method, required, note
+       )
+       VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, 'single', true,
+         'SQL scalar dependency metadata; the formula_sql text performs the calculation.'
+       )",
+      params = list(
+        zinc_sql_rule, input[[1]], input[[2]], input[[3]], matrix_liquid,
+        input[[4]], input[[5]], result_type_lab
+      )
+    )
+  }
 
   message("  adding turbidity narrative")
   turbidity_guideline <- insert_guideline(
@@ -927,13 +795,44 @@ invisible(tryCatch(
   )
   DBI::dbExecute(
     con,
-    "INSERT INTO discrete.guideline_value_rules (
+    "INSERT INTO criteria.guideline_value_rules (
        guideline_id, bound_code, algorithm_code, rule_priority, note
      )
      VALUES (
        $1, NULL, 'narrative', 10,
        'Guideline is expressed as an allowed change from background that depends on flow/background condition and duration.'
      )",
+    params = list(turbidity_guideline)
+  )
+  DBI::dbExecute(
+    con,
+    "INSERT INTO criteria.guideline_narrative_values (
+       guideline_id, value_code, condition_label,
+       max_change_value, max_change_percent, change_unit,
+       background_lower_bound, background_upper_bound, background_unit,
+       duration_label, flow_condition, sort_order, note
+     )
+     VALUES
+       ($1, 'CLEAR_24H_8_NTU',
+        'Clear flows or clear waters, short-term maximum',
+        8, NULL, 'NTU', NULL, NULL, 'NTU',
+        '24 h', 'clear flows or clear waters', 10,
+        'Maximum change from background at any one time.'),
+       ($1, 'CLEAR_30D_2_NTU',
+        'Clear flows or clear waters, longer-term maximum',
+        2, NULL, 'NTU', NULL, NULL, 'NTU',
+        '30 d', 'clear flows or clear waters', 20,
+        'Maximum change from background at any one time.'),
+       ($1, 'TURBID_8_50_5_NTU',
+        'High flows or turbid waters, background 8-50 NTU',
+        5, NULL, 'NTU', 8, 50, 'NTU',
+        'any time', 'high flows or turbid waters', 30,
+        'Maximum change from background when background turbidity is 8-50 NTU.'),
+       ($1, 'TURBID_GT_50_10_PERCENT',
+        'High flows or turbid waters, background >50 NTU',
+        NULL, 10, NULL, 50, NULL, 'NTU',
+        'any time', 'high flows or turbid waters', 40,
+        'Maximum 10 percent change from background when background turbidity is greater than 50 NTU.')",
     params = list(turbidity_guideline)
   )
 
@@ -1039,19 +938,28 @@ invisible(tryCatch(
 
   expect_status <- function(source_id, parameter_id, guideline_code,
                             expected_output, expected_comparison) {
+    message("    checking ", source_id, " / ", guideline_code)
     result_id <- as.integer(result_for(source_id, parameter_id))
     guideline_literal <- DBI::dbQuoteLiteral(con, guideline_code)
-    row <- DBI::dbGetQuery(
-      con,
-      paste0(
+    guideline_query <- paste0(
         "SELECT lower_guideline_value, upper_guideline_value,
           output_status, comparison_status
-       FROM discrete.applicable_guidelines_for_result(",
+       FROM criteria.applicable_guidelines_for_result(",
         result_id,
         ", CURRENT_DATE, TRUE)
        WHERE guideline_code = ",
         guideline_literal
       )
+    row <- tryCatch(
+      DBI::dbGetQuery(con, guideline_query),
+      error = function(e) {
+        stop(
+          "Could not evaluate ", source_id, " / ", guideline_code,
+          " with result_id ", result_id, ": ", conditionMessage(e),
+          "\nSQL: ", guideline_query,
+          call. = FALSE
+        )
+      }
     )
     if (nrow(row) != 1) {
       stop("Expected one guideline row for ", source_id, " / ", guideline_code)
@@ -1078,9 +986,6 @@ invisible(tryCatch(
   expect_status("WQG-DEEP-PASS", do_param, "BC-DO-FW-MIN-1997", "value", "meets")
   expect_status("WQG-DEEP-FAIL", do_param, "BC-DO-FW-MIN-1997", "value", "below")
   expect_status("WQG-DEEP-PASS", turbidity_param, "BC-TURBIDITY-FW-BACKGROUND-NARRATIVE", "narrative", "narrative")
-  expect_status("WQG-DEEP-ZN-OK", zinc_param, "CCME-ZN-FW-ST-DOC-HARDNESS", "value", "meets")
-  expect_status("WQG-DEEP-ZN-BAD", zinc_param, "CCME-ZN-FW-ST-DOC-HARDNESS", "value", "exceeds")
-  expect_status("WQG-DEEP-ZN-OUT", zinc_param, "CCME-ZN-FW-ST-DOC-HARDNESS", "outside_calibrated_range", "outside_calibrated_range")
   expect_status("WQG-DEEP-ZN-OK", zinc_param, "TEST-ZN-FW-ST-HARDNESS-DOC-GRID", "value", "meets")
   expect_status("WQG-DEEP-ZN-BAD", zinc_param, "TEST-ZN-FW-ST-HARDNESS-DOC-GRID", "value", "exceeds")
   expect_status("WQG-DEEP-ZN-OUT", zinc_param, "TEST-ZN-FW-ST-HARDNESS-DOC-GRID", "no_matching_cell", "no_matching_cell")
