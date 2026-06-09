@@ -383,24 +383,36 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         stop("Column 'datetime' must be of class POSIXct.")
       }
 
+      grade_table <- DBI::dbGetQuery(
+        con,
+        "SELECT grade_type_id, grade_type_code FROM grade_types;"
+      )
+
+      unspecified_grade <- grade_table[
+        grade_table$grade_type_code == "UNS",
+        "grade_type_id"
+      ]
+      unknown_grade <- grade_table[
+        grade_table$grade_type_code == "UNK",
+        "grade_type_id"
+      ]
+      data$grade[is.na(data$grade)] <- unspecified_grade
+
       # Check if 'grade' is character, if so match those characters to 'grade_type_code' in the 'grades' table
       if (inherits(data$grade[1], "character")) {
-        grade_table <- DBI::dbGetQuery(
-          con,
-          "SELECT grade_type_id, grade_type_code FROM grade_types;"
-        )
         data$grade <- grade_table$grade_type_id[match(
           data$grade,
           grade_table$grade_type_code
         )]
       }
 
-      unknown_grade <- DBI::dbGetQuery(
-        con,
-        "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK'"
-      )[1, 1]
+      data$grade <- as.integer(data$grade)
 
-      data$grade[is.na(data$grade)] <- unknown_grade
+      # Ensure that all grades left in the table match to a grade_type_id in the database, if not assign them to 'UNK' for unknown
+      data[
+        !data$grade %in% grade_table$grade_type_id,
+        "grade"
+      ] <- unknown_grade
 
       # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
       min_datetime <- fmt(min(data$datetime))
@@ -552,12 +564,17 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         con,
         "SELECT qualifier_type_id, qualifier_type_code FROM qualifier_types;"
       )
+
+      unspecified_qualifier <- qualifier_table[
+        qualifier_table$qualifier_type_code == "UNS",
+        "qualifier_type_id"
+      ]
       unknown_qualifier <- qualifier_table[
         qualifier_table$qualifier_type_code == "UNK",
         "qualifier_type_id"
       ]
 
-      data$qualifier[is.na(data$qualifier)] <- unknown_qualifier
+      data$qualifier[is.na(data$qualifier)] <- unspecified_qualifier
 
       # Split the 'qualifier' column into separate rows if it contains multiple values separated by commas
 
@@ -585,6 +602,11 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
       }
 
       data$qualifier <- as.integer(data$qualifier)
+
+      data[
+        !data$qualifier %in% qualifier_table$qualifier_type_id,
+        "qualifier"
+      ] <- unknown_qualifier
 
       # Break 'data' into a data.frame for each unique 'rank'
       datalist <- split(data, data$rank)
@@ -779,24 +801,36 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         stop("Column 'datetime' must be of class POSIXct.")
       }
 
+      approval_table <- DBI::dbGetQuery(
+        con,
+        "SELECT approval_type_id, approval_type_code FROM approval_types;"
+      )
+
+      unspecified_approval <- approval_table[
+        approval_table$approval_type_code == "UNS",
+        "approval_type_id"
+      ]
+      unknown_approval <- approval_table[
+        approval_table$approval_type_code == "UNK",
+        "approval_type_id"
+      ]
+      data$approval[is.na(data$approval)] <- unspecified_approval
+
       # Check if 'approval' is character, if so match those characters to 'approval_type_code' in the 'approvals' table
       if (inherits(data$approval[1], "character")) {
-        approval_table <- DBI::dbGetQuery(
-          con,
-          "SELECT approval_type_id, approval_type_code FROM approval_types;"
-        )
         data$approval <- approval_table$approval_type_id[match(
           data$approval,
           approval_table$approval_type_code
         )]
       }
 
-      unknown_approval <- DBI::dbGetQuery(
-        con,
-        "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK'"
-      )[1, 1]
+      data$approval <- as.integer(data$approval)
 
-      data$approval[is.na(data$approval)] <- unknown_approval
+      # Ensure that all approvals left in the table match to an approval_type_id in the database, if not assign them to 'UNK' for unknown
+      data[
+        !data$approval %in% approval_table$approval_type_id,
+        "approval"
+      ] <- unknown_approval
 
       # Format the datetime to UTC. 'fmt' is a utility function in file utils.R
       min_datetime <- fmt(min(data$datetime))
