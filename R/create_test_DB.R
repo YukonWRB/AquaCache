@@ -31,17 +31,7 @@ create_test_db <- function(
   psql = NULL,
   delete = TRUE
 ) {
-  # Quick parameter setting for testing
-  # name <- "aquacache"
-  # host <- Sys.getenv("aquacacheHost")
-  # port <- Sys.getenv("aquacachePort")
-  # username <- "postgres"
-  # replace <- TRUE
-  # password <- Sys.getenv("aquacacheAdminPass")
-  # outpath <- testthat::test_path("fixtures")
-  # pg_dump <- "C:/Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe"
-  # psql <- "C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe"
-  # delete = TRUE
+
   rlang::check_installed("R.utils", reason = "to gzip the output file")
 
   # Ensure that 'outpath' exists and is a directory
@@ -424,7 +414,7 @@ create_test_db <- function(
     "network/project type"
   )
   media_surface <- first_id(
-    "SELECT media_id FROM public.media_types WHERE media_type = 'surface water' LIMIT 1",
+    "SELECT media_id FROM public.media_types WHERE media_type = 'surface water' OR media_type = 'freshwater (surface)' OR media_type = 'fresh water (surface)' LIMIT 1",
     "surface water media"
   )
   media_atmospheric <- first_id(
@@ -1552,6 +1542,7 @@ create_test_db <- function(
     )
   )
 
+  message("Inserting sample spatial data...")
   # Insert a sample row into spatial.vectors
   df <- data.frame(
     feature_name = "sample_feature",
@@ -1565,17 +1556,17 @@ create_test_db <- function(
     geom = c("x", "y"),
     crs = "EPSG:4326"
   )
-  insertACVector(
-    con = target_con,
+  suppressWarnings(insertACVector(
+    con = test_con,
     geom = test_vect,
     layer_name = "sample_layer",
     feature_name_col = "feature_name",
     description_col = "description",
     ask = FALSE
-  )
+  ))
 
   # Insert basic application schema data
-
+message("Inserting placeholder data for application user set text...")
   text <- data.frame(
     id = c("news_head", "news_body", "hr"),
     text_en = c(
