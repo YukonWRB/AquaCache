@@ -32,6 +32,7 @@
 #'   system PATH and common PostgreSQL installation directories.
 #' @param cleanup_on_error If `TRUE`, drop the newly created target database if
 #'   restore or validation fails.
+#' @param nhn If `TRUE`, offer to download and load the National Hydro Network basins dataset after restore, which is used for location code generation in the Shiny application. Defaults to `TRUE`.
 #'
 #' @return Invisibly returns a list with the restored database name, connection
 #'   host/port, and final patch number.
@@ -48,7 +49,8 @@ restore_seed_db <- function(
   require_current_patch = TRUE,
   apply_patches = TRUE,
   psql = NULL,
-  cleanup_on_error = TRUE
+  cleanup_on_error = TRUE,
+  nhn = TRUE
 ) {
   # IF 'file' is a URL, download to a temp file and use that for restore, then delete the temp file
   if (aquacache_is_url(file)) {
@@ -323,27 +325,29 @@ restore_seed_db <- function(
     ask = FALSE
   )
 
-  # Download and insert the NHN basin polygons
-  ans <- readline(
-    prompt = "Download and load NHN Basins now? Approximately 242 MB. (y/n): "
-  )
-  if (tolower(ans) == "y") {
-    message("Downloading and loading NHN basins...")
-    tryCatch(
-      {
-        load_nhn(target = 'basins', con = target_con)
-      },
-      error = function(e) {
-        warning(
-          "Failed to download or load NHN basins. You can try troubleshooting this again with function load_nhn(). Error message was: ",
-          e$message
-        )
-      }
+  if (nhn) {
+    # Download and insert the NHN basin polygons
+    ans <- readline(
+      prompt = "Download and load NHN Basins now? Approximately 242 MB. (y/n): "
     )
-  } else {
-    message(
-      "Skipping download of NHN basins. You will be prompted again to download them from the YGwater::YGwater Shiny application if necessary."
-    )
+    if (tolower(ans) == "y") {
+      message("Downloading and loading NHN basins...")
+      tryCatch(
+        {
+          load_nhn(target = 'basins', con = target_con)
+        },
+        error = function(e) {
+          warning(
+            "Failed to download or load NHN basins. You can try troubleshooting this again with function load_nhn(). Error message was: ",
+            e$message
+          )
+        }
+      )
+    } else {
+      message(
+        "Skipping download of NHN basins. You will be prompted again to download them from the YGwater::YGwater Shiny application if necessary."
+      )
+    }
   }
 
   DBI::dbExecute(
