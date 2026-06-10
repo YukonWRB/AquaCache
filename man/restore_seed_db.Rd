@@ -17,7 +17,8 @@ restore_seed_db(
   apply_patches = TRUE,
   psql = NULL,
   cleanup_on_error = TRUE,
-  nhn = TRUE
+  nhn = TRUE,
+  nhn_ask = TRUE
 )
 }
 \arguments{
@@ -54,6 +55,8 @@ system PATH and common PostgreSQL installation directories.}
 restore or validation fails.}
 
 \item{nhn}{If \code{TRUE}, offer to download and load the National Hydro Network basins dataset after restore, which is used for location code generation in the Shiny application. Defaults to \code{TRUE}.}
+
+\item{nhn_ask}{If \code{nhn} is \code{TRUE}, whether to prompt the user before downloading/loading the NHN basins dataset. Defaults to \code{TRUE}.}
 }
 \value{
 Invisibly returns a list with the restored database name, connection
