@@ -37,6 +37,7 @@
 #' @return Invisibly returns a list with the restored database name, connection
 #'   host/port, and final patch number.
 #' @export
+
 restore_seed_db <- function(
   file,
   name = Sys.getenv("aquacacheName", "aquacache"),
