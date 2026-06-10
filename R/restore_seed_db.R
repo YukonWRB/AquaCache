@@ -574,7 +574,9 @@ restore_seed_db <- function(
     "\nNOTICES:\n
   1. You can use the Shiny application at YGwater::YGwater() to explore the restored/installed database.\n
   2. This R package includes a vignette which details the database's schemas, tables, and non-standard functions. You can access it with 'vignette(package = 'AquaCache', topic = 'AquaCache_DB_documentation')' OR via the Shiny application's Help menu, once logged in.\n
-  3. If you want to pre-load some useful hydrological reference data such as that from the National Hydro Network, see function load_nhn(). You will require, at minimum, the 'basins' dataset to use the Shiny application's automatic location code generation, and you can load the other datasets for additional reference data in your database."
+  3. If you want to pre-load some useful hydrological reference data such as that from the National Hydro Network, see function load_nhn(). You will require, at minimum, the 'basins' dataset to use the Shiny application's automatic location code generation, and you can load the other datasets for additional reference data in your database.\n
+  4. The 'tester' role was created with password 'tester' and permissions on this database only, for testing purposes. You can connect with that role to test permissions or application behavior for a non-superuser role, but it is not required for normal use of the database or applications.\n
+   5. The 'public_reader' role was created or updated with password 'aquacache' and granted permissions on all non-excluded tables, schemas, and functions. This role is used in AquaCache row-level security policies and grants, so it must exist with that name and password for the database and Shiny application to function properly. You can also use it to connect read-only applications to the database if desired."
   )
   return(invisible(list(
     database = name,
