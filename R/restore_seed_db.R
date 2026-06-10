@@ -32,12 +32,10 @@
 #'   system PATH and common PostgreSQL installation directories.
 #' @param cleanup_on_error If `TRUE`, drop the newly created target database if
 #'   restore or validation fails.
-#' @param nhn If `TRUE`, offer to download and load the National Hydro Network basins dataset after restore, which is used for location code generation in the Shiny application. Defaults to `TRUE`.
 #'
 #' @return Invisibly returns a list with the restored database name, connection
 #'   host/port, and final patch number.
 #' @export
-
 restore_seed_db <- function(
   file,
   name = Sys.getenv("aquacacheName", "aquacache"),
@@ -50,8 +48,7 @@ restore_seed_db <- function(
   require_current_patch = TRUE,
   apply_patches = TRUE,
   psql = NULL,
-  cleanup_on_error = TRUE,
-  nhn = TRUE
+  cleanup_on_error = TRUE
 ) {
   # IF 'file' is a URL, download to a temp file and use that for restore, then delete the temp file
   if (aquacache_is_url(file)) {
@@ -304,29 +301,49 @@ restore_seed_db <- function(
     )
   }
 
-  if (nhn) {
-    # Download and insert the NHN basin polygons
-    ans <- readline(
-      prompt = "Download and load NHN Basins now? Approximately 242 MB. (y/n): "
+  # Insert a sample row into spatial.vectors
+  df <- data.frame(
+    feature_name = "sample_feature",
+    description = "This is a sample vector layer.",
+    x = 0,
+    y = 0,
+    stringsAsFactors = FALSE
+  )
+  test_vect <- terra::vect(
+    x = df,
+    geom = c("x", "y"),
+    crs = "EPSG:4326"
+  )
+  insertACVector(
+    con = target_con,
+    geom = test_vect,
+    layer_name = "sample_layer",
+    feature_name_col = "feature_name",
+    description_col = "description",
+    ask = FALSE
+  )
+
+  # Download and insert the NHN basin polygons
+  ans <- readline(
+    prompt = "Download and load NHN Basins now? Approximately 242 MB. (y/n): "
+  )
+  if (tolower(ans) == "y") {
+    message("Downloading and loading NHN basins...")
+    tryCatch(
+      {
+        load_nhn(target = 'basins', con = target_con)
+      },
+      error = function(e) {
+        warning(
+          "Failed to download or load NHN basins. You can try troubleshooting this again with function load_nhn(). Error message was: ",
+          e$message
+        )
+      }
     )
-    if (tolower(ans) == "y") {
-      message("Downloading and loading NHN basins...")
-      tryCatch(
-        {
-          load_nhn(target = 'basins', con = target_con)
-        },
-        error = function(e) {
-          warning(
-            "Failed to download or load NHN basins. You can try troubleshooting this again with function load_nhn(). Error message was: ",
-            e$message
-          )
-        }
-      )
-    } else {
-      message(
-        "Skipping download of NHN basins. You will be prompted again to download them from the YGwater::YGwater Shiny application if necessary."
-      )
-    }
+  } else {
+    message(
+      "Skipping download of NHN basins. You will be prompted again to download them from the YGwater::YGwater Shiny application if necessary."
+    )
   }
 
   DBI::dbExecute(
@@ -394,6 +411,143 @@ restore_seed_db <- function(
     ON application.api_requests
     TO PUBLIC;"
   )
+
+  # Set search path in case it didn't get set from the dump file
+  schemas <-
+    c(
+      "public",
+      "continuous",
+      "discrete",
+      "spatial",
+      "files",
+      "instruments",
+      "field",
+      "boreholes",
+      "information",
+      "application",
+      "audit"
+    )
+
+  # Set the search path (takes effect at next connection)
+  DBI::dbExecute(
+    target_con,
+    paste0(
+      "ALTER DATABASE ",
+      name,
+      " SET search_path TO ",
+      paste(schemas, collapse = ", "),
+      ";"
+    )
+  )
+
+  # Create a superuser but JUST with privileges on this database, for application testing purposes.
+  # Remove the 'tester' user and its privileges on other databases if it already exists, then create it with privileges on this database only.
+  dbs <- DBI::dbGetQuery(target_con, "SELECT datname FROM pg_database;")
+  # Check if role exists
+  test_exists <- nrow(DBI::dbGetQuery(
+    target_con,
+    "SELECT 1 FROM pg_roles WHERE rolname = 'tester';"
+  )) >
+    0
+
+  if (test_exists) {
+    # Run inside target database first
+    DBI::dbExecute(target_con, "REASSIGN OWNED BY tester TO postgres;")
+    DBI::dbExecute(target_con, "DROP OWNED BY tester;")
+
+    for (i in seq_len(nrow(dbs))) {
+      DBI::dbExecute(
+        target_con,
+        sprintf(
+          "REVOKE ALL PRIVILEGES ON DATABASE %s FROM tester;",
+          DBI::dbQuoteIdentifier(target_con, dbs$datname[[i]])
+        )
+      )
+    }
+    # Drop the 'tester' role
+    DBI::dbExecute(
+      target_con,
+      "DROP ROLE tester;"
+    )
+  }
+  DBI::dbExecute(
+    target_con,
+    paste0(
+      "DO $$
+    BEGIN
+        CREATE ROLE tester WITH LOGIN PASSWORD 'tester' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        GRANT CONNECT, TEMPORARY ON DATABASE ",
+      name,
+      " TO tester;
+    END
+    $$;"
+    )
+  )
+  # Make sure 'tester' cannot connect or do anything to other databases
+  for (db in dbs$datname) {
+    if (db != name) {
+      DBI::dbExecute(
+        target_con,
+        sprintf(
+          "REVOKE ALL PRIVILEGES ON DATABASE %s FROM tester;",
+          DBI::dbQuoteIdentifier(target_con, db)
+        )
+      )
+      DBI::dbExecute(
+        target_con,
+        sprintf(
+          "REVOKE CONNECT, TEMPORARY ON DATABASE %s FROM tester;",
+          DBI::dbQuoteIdentifier(target_con, db)
+        )
+      )
+    }
+  }
+
+  for (i in schemas) {
+    schema_sql <- DBI::dbQuoteIdentifier(target_con, i)
+    DBI::dbExecute(
+      target_con,
+      sprintf(
+        "GRANT USAGE ON SCHEMA %s TO tester;",
+        schema_sql
+      )
+    )
+
+    DBI::dbExecute(
+      target_con,
+      sprintf(
+        "REVOKE CREATE ON SCHEMA %s FROM tester;",
+        schema_sql
+      )
+    )
+
+    DBI::dbExecute(
+      target_con,
+      sprintf(
+        "GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+     ON ALL TABLES IN SCHEMA %s TO tester;",
+        schema_sql
+      )
+    )
+
+    DBI::dbExecute(
+      target_con,
+      sprintf(
+        "GRANT USAGE, SELECT, UPDATE
+     ON ALL SEQUENCES IN SCHEMA %s TO tester;",
+        schema_sql
+      )
+    )
+
+    DBI::dbExecute(
+      target_con,
+      sprintf(
+        "GRANT EXECUTE
+     ON ALL FUNCTIONS IN SCHEMA %s TO tester;",
+        schema_sql
+      )
+    )
+  }
 
   restore_complete <- TRUE
   message(
