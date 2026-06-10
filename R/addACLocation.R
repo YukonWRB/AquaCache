@@ -2,7 +2,7 @@
 #'
 #' Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
-#' @param df A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
+#' @param df A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. Optional columns are exact_share_with, public_geom_type, min_offset_m, max_offset_m, public_accuracy_m, mask_method, and mask_seed. If this parameter is provided, all other parameters except for `con` must be left as their default values.
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French.
 #' @param alias A character vector of the location alias(es). This is optional, leave NA if not needed.
@@ -10,6 +10,13 @@
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
 #' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default public group is "public_reader".
+#' @param exact_share_with A character vector of the user group(s) allowed to see exact coordinates in public-safe views, separated by a comma. Defaults to `share_with` when the database has the `locations.exact_share_with` column.
+#' @param public_geom_type Public geometry to create for the location when the database has `location_public_geometries`. One of "exact_point" or "masked_point". Defaults to "exact_point".
+#' @param min_offset_m Minimum masking offset in metres for `public_geom_type = "masked_point"`.
+#' @param max_offset_m Maximum masking offset in metres for `public_geom_type = "masked_point"`.
+#' @param public_accuracy_m Public geometry accuracy in metres. Defaults to 0 for exact points and `max_offset_m` for masked points.
+#' @param mask_method Optional public geometry method label. Defaults to "exact" or "stable_toroid".
+#' @param mask_seed Optional deterministic seed for masked points. Defaults to `location_code`.
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
 #' @param note A character vector of notes for the location(s) (optional).
 #' @param contact A character vector of the contact(s) for the location(s) (optional).
@@ -33,6 +40,13 @@ addACLocation <- function(
   latitude = NA,
   longitude = NA,
   share_with = NA,
+  exact_share_with = NA,
+  public_geom_type = "exact_point",
+  min_offset_m = NA,
+  max_offset_m = NA,
+  public_accuracy_m = NA,
+  mask_method = NA,
+  mask_seed = NA,
   location_type = NA,
   note = NA,
   contact = NA,
@@ -152,6 +166,27 @@ addACLocation <- function(
     latitude <- df$latitude
     longitude <- df$longitude
     share_with <- df$share_with
+    if ("exact_share_with" %in% names(df)) {
+      exact_share_with <- df$exact_share_with
+    }
+    if ("public_geom_type" %in% names(df)) {
+      public_geom_type <- df$public_geom_type
+    }
+    if ("min_offset_m" %in% names(df)) {
+      min_offset_m <- df$min_offset_m
+    }
+    if ("max_offset_m" %in% names(df)) {
+      max_offset_m <- df$max_offset_m
+    }
+    if ("public_accuracy_m" %in% names(df)) {
+      public_accuracy_m <- df$public_accuracy_m
+    }
+    if ("mask_method" %in% names(df)) {
+      mask_method <- df$mask_method
+    }
+    if ("mask_seed" %in% names(df)) {
+      mask_seed <- df$mask_seed
+    }
     location_type <- df$location_type
     note <- df$note
     contact <- df$contact
@@ -166,6 +201,28 @@ addACLocation <- function(
   # Convert lat/long to numeric, which will result in NAs if the user provided invalid values
   latitude <- as.numeric(latitude)
   longitude <- as.numeric(longitude)
+  min_offset_m <- as.numeric(min_offset_m)
+  max_offset_m <- as.numeric(max_offset_m)
+  public_accuracy_m <- as.numeric(public_accuracy_m)
+
+  recycle_arg <- function(x, n, arg_name) {
+    if (length(x) == n) {
+      return(x)
+    }
+    if (length(x) == 1L) {
+      return(rep(x, n))
+    }
+    stop(arg_name, " must be length 1 or the same length as name/location_code.")
+  }
+
+  n_locations <- length(name)
+  public_geom_type <- recycle_arg(public_geom_type, n_locations, "public_geom_type")
+  exact_share_with <- recycle_arg(exact_share_with, n_locations, "exact_share_with")
+  min_offset_m <- recycle_arg(min_offset_m, n_locations, "min_offset_m")
+  max_offset_m <- recycle_arg(max_offset_m, n_locations, "max_offset_m")
+  public_accuracy_m <- recycle_arg(public_accuracy_m, n_locations, "public_accuracy_m")
+  mask_method <- recycle_arg(mask_method, n_locations, "mask_method")
+  mask_seed <- recycle_arg(mask_seed, n_locations, "mask_seed")
 
   # Begin checks ############################
   lengths <- c(
@@ -176,6 +233,13 @@ addACLocation <- function(
     length(latitude),
     length(longitude),
     length(share_with),
+    length(exact_share_with),
+    length(public_geom_type),
+    length(min_offset_m),
+    length(max_offset_m),
+    length(public_accuracy_m),
+    length(mask_method),
+    length(mask_seed),
     length(location_type),
     length(note),
     length(contact),
@@ -212,6 +276,16 @@ addACLocation <- function(
   if (any(is.na(share_with))) {
     share_with[is.na(share_with)] <- "public_reader"
   }
+  if (any(is.na(exact_share_with))) {
+    exact_share_with[is.na(exact_share_with)] <- share_with[is.na(exact_share_with)]
+  }
+  if (any(is.na(public_geom_type) | trimws(public_geom_type) == "")) {
+    public_geom_type[is.na(public_geom_type) | trimws(public_geom_type) == ""] <- "exact_point"
+  }
+  public_geom_type <- trimws(public_geom_type)
+  if (!all(public_geom_type %in% c("exact_point", "masked_point"))) {
+    stop("public_geom_type must be one of 'exact_point' or 'masked_point'.")
+  }
   if (any(is.na(datum_id_from))) {
     datum_id_from[is.na(datum_id_from)] <- 10
   }
@@ -233,6 +307,50 @@ addACLocation <- function(
   }
   if (any(longitude > 180) | any(longitude < -180)) {
     stop("At least one of your longitude entries appears to be invalid.")
+  }
+  masked <- public_geom_type == "masked_point"
+  if (any(masked)) {
+    if (any(is.na(min_offset_m[masked])) || any(is.na(max_offset_m[masked]))) {
+      stop("min_offset_m and max_offset_m must be provided for masked public geometry.")
+    }
+    if (any(min_offset_m[masked] < 0) || any(max_offset_m[masked] < 0)) {
+      stop("min_offset_m and max_offset_m must be non-negative.")
+    }
+    if (any(max_offset_m[masked] < min_offset_m[masked])) {
+      stop("max_offset_m must be greater than or equal to min_offset_m.")
+    }
+  }
+
+  role_array_literal <- function(x) {
+    roles <- trimws(unlist(strsplit(as.character(x), ","), use.names = FALSE))
+    roles <- roles[nzchar(roles)]
+    if (length(roles) == 0L) {
+      stop("Role arrays cannot be empty.")
+    }
+    paste0("{", paste(roles, collapse = ","), "}")
+  }
+
+  patch_48_support <- DBI::dbGetQuery(
+    con,
+    "SELECT
+       EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'locations'
+           AND column_name = 'exact_share_with'
+       ) AS has_exact_share_with,
+       to_regclass('public.location_public_geometries') IS NOT NULL
+         AS has_public_geometries,
+       to_regprocedure(
+         'public.location_masked_point(numeric,numeric,numeric,numeric,text)'
+       ) IS NOT NULL AS has_masked_point"
+  )
+  has_exact_share_with <- isTRUE(patch_48_support$has_exact_share_with[[1]])
+  has_public_geometries <- isTRUE(patch_48_support$has_public_geometries[[1]])
+  has_masked_point <- isTRUE(patch_48_support$has_masked_point[[1]])
+  if (any(masked) && !has_masked_point) {
+    stop("Masked public geometry requires public.location_masked_point().")
   }
 
   # Check that the location code does not already exist
@@ -367,22 +485,118 @@ addACLocation <- function(
         active <- dbTransBegin(con)
 
         # Add the location to the 'locations' table ############################
-        location_id <- DBI::dbGetQuery(
-          con,
-          "INSERT INTO locations (location_code, name, name_fr, alias, latitude, longitude, share_with, location_type, note, contact) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING location_id;",
-          params = list(
+        insert_columns <- c(
+          "location_code",
+          "name",
+          "name_fr",
+          "alias",
+          "latitude",
+          "longitude",
+          "share_with",
+          "location_type",
+          "note",
+          "contact"
+        )
+        insert_params <- list(
             location_code[i],
             name[i],
             name_fr[i],
             alias[i],
             latitude[i],
             longitude[i],
-            paste0("{", paste(share_with, collapse = ", "), "}"),
+            role_array_literal(share_with[i]),
             location_type[i],
             note[i],
             contact[i]
+        )
+        if (has_exact_share_with) {
+          insert_columns <- c(insert_columns, "exact_share_with")
+          insert_params <- c(
+            insert_params,
+            list(role_array_literal(exact_share_with[i]))
           )
+        }
+        location_id <- DBI::dbGetQuery(
+          con,
+          sprintf(
+            "INSERT INTO locations (%s) VALUES (%s) RETURNING location_id;",
+            paste(insert_columns, collapse = ", "),
+            paste0("$", seq_along(insert_columns), collapse = ", ")
+          ),
+          params = insert_params
         )[1, 1]
+
+        if (has_public_geometries) {
+          public_accuracy <- public_accuracy_m[i]
+          if (is.na(public_accuracy)) {
+            public_accuracy <- if (public_geom_type[i] == "exact_point") {
+              0
+            } else {
+              max_offset_m[i]
+            }
+          }
+          public_mask_method <- mask_method[i]
+          if (is.na(public_mask_method) || trimws(public_mask_method) == "") {
+            public_mask_method <- if (public_geom_type[i] == "exact_point") {
+              "exact"
+            } else {
+              "stable_toroid"
+            }
+          }
+          public_mask_seed <- mask_seed[i]
+          if (is.na(public_mask_seed) || trimws(public_mask_seed) == "") {
+            public_mask_seed <- location_code[i]
+          }
+
+          DBI::dbExecute(
+            con,
+            "INSERT INTO public.location_public_geometries (
+               location_id,
+               public_geom_type,
+               public_geom,
+               min_offset_m,
+               max_offset_m,
+               public_accuracy_m,
+               mask_method,
+               active
+             )
+             VALUES (
+               $1,
+               $2,
+               CASE
+                 WHEN $2 = 'exact_point' THEN
+                   ST_SetSRID(
+                     ST_MakePoint($3::double precision, $4::double precision),
+                     4326
+                   )
+                 WHEN $2 = 'masked_point' THEN
+                   public.location_masked_point(
+                     $4::numeric,
+                     $3::numeric,
+                     $5::numeric,
+                     $6::numeric,
+                     $7::text
+                   )
+               END,
+               $5,
+               $6,
+               $8,
+               $9,
+               TRUE
+             );",
+            params = list(
+              location_id,
+              public_geom_type[i],
+              longitude[i],
+              latitude[i],
+              if (is.na(min_offset_m[i])) NA_real_ else min_offset_m[i],
+              if (is.na(max_offset_m[i])) NA_real_ else max_offset_m[i],
+              public_mask_seed,
+              public_accuracy,
+              public_mask_method
+            )
+          )
+        }
 
         # Add the location's datum information to the 'datums' table ############################
         DBI::dbExecute(

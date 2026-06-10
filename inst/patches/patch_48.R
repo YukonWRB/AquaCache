@@ -24,6 +24,9 @@ if (dbTransCheck(con)) {
   )
 }
 
+dry_run <- exists("patch_48_dry_run", inherits = TRUE) &&
+  isTRUE(get("patch_48_dry_run", inherits = TRUE))
+
 message("Starting transaction...")
 active <- dbTransBegin(con)
 DBI::dbExecute(
@@ -1474,23 +1477,30 @@ tryCatch(
       DBI::dbExecute(con, "RESET ROLE")
     }
 
-    DBI::dbExecute(
-      con,
-      "UPDATE information.version_info SET version = '48'
-         WHERE item = 'Last patch number';"
-    )
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE information.version_info SET version = '",
-        as.character(packageVersion('AquaCache')),
-        "' WHERE item = 'AquaCache R package used for last patch';"
+    if (dry_run) {
+      DBI::dbExecute(con, "ROLLBACK;")
+      message(
+        "Patch 48 dry run completed successfully. The transaction was rolled back, so the database was not changed."
       )
-    )
-    DBI::dbExecute(con, "COMMIT;")
-    message(
-      "Patch 48 applied successfully. Public location representations and public-safe discrete views are available."
-    )
+    } else {
+      DBI::dbExecute(
+        con,
+        "UPDATE information.version_info SET version = '48'
+         WHERE item = 'Last patch number';"
+      )
+      DBI::dbExecute(
+        con,
+        paste0(
+          "UPDATE information.version_info SET version = '",
+          as.character(packageVersion('AquaCache')),
+          "' WHERE item = 'AquaCache R package used for last patch';"
+        )
+      )
+      DBI::dbExecute(con, "COMMIT;")
+      message(
+        "Patch 48 applied successfully. Public location representations and public-safe discrete views are available."
+      )
+    }
   },
   error = function(e) {
     message("Error detected. Rolling back transaction...")
