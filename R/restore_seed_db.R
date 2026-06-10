@@ -324,7 +324,8 @@ restore_seed_db <- function(
     layer_name = "sample_layer",
     feature_name_col = "feature_name",
     description_col = "description",
-    ask = FALSE
+    ask = FALSE,
+    overwrite = TRUE
   )
 
   if (nhn) {
