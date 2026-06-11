@@ -34,6 +34,8 @@
 #'   restore or validation fails.
 #' @param nhn If `TRUE`, offer to download and load the National Hydro Network basins dataset after restore, which is used for location code generation in the Shiny application. Defaults to `TRUE`.
 #' @param nhn_ask If `nhn` is `TRUE`, whether to prompt the user before downloading/loading the NHN basins dataset. Defaults to `TRUE`.
+#' @param copy_privileges_from If a database name (case sensitive) is supplied, will attempt to copy privileges from the specified to the restored database. The source database must be on the same server and the connected user must have permissions to read its privileges. If `NULL` (the default), privileges are not copied from any existing database, and only the default grants included in the dump file and those added by this function are applied.
+#' @param create_tester If `TRUE`, creates a `tester` role with password `tester` and permissions on this database only, for testing purposes. Defaults to `TRUE`. The `tester` role is not required for normal use of the database or applications, but can be useful for testing permissions or application behavior for a non-superuser role.
 #'
 #' @return Invisibly returns a list with the restored database name, connection
 #'   host/port, and final patch number.
@@ -52,7 +54,9 @@ restore_seed_db <- function(
   psql = NULL,
   cleanup_on_error = TRUE,
   nhn = TRUE,
-  nhn_ask = TRUE
+  nhn_ask = TRUE,
+  copy_privileges_from = NULL,
+  create_tester = TRUE
 ) {
   # IF 'file' is a URL, download to a temp file and use that for restore, then delete the temp file
   if (aquacache_is_url(file)) {
@@ -452,113 +456,153 @@ restore_seed_db <- function(
     )
   )
 
-  # Create a superuser but JUST with privileges on this database, for application testing purposes.
-  # Remove the 'tester' user and its privileges on other databases if it already exists, then create it with privileges on this database only.
-  dbs <- DBI::dbGetQuery(target_con, "SELECT datname FROM pg_database;")
-  # Check if role exists
-  test_exists <- nrow(DBI::dbGetQuery(
-    target_con,
-    "SELECT 1 FROM pg_roles WHERE rolname = 'tester';"
-  )) >
-    0
-
-  if (test_exists) {
-    # Run inside target database first
-    DBI::dbExecute(target_con, "REASSIGN OWNED BY tester TO postgres;")
-    DBI::dbExecute(target_con, "DROP OWNED BY tester;")
-
-    for (i in seq_len(nrow(dbs))) {
-      DBI::dbExecute(
-        target_con,
-        sprintf(
-          "REVOKE ALL PRIVILEGES ON DATABASE %s FROM tester;",
-          DBI::dbQuoteIdentifier(target_con, dbs$datname[[i]])
+  if (!is.null(copy_privileges_from)) {
+    tryCatch(
+      {
+        message(
+          "Copying privileges from database '",
+          copy_privileges_from,
+          "' to '",
+          name,
+          "'..."
         )
-      )
-    }
-    # Drop the 'tester' role
-    DBI::dbExecute(
-      target_con,
-      "DROP ROLE tester;"
+
+        exclude_privilege_schemas = c("commentary")
+        exclude_privilege_objects = c(
+          "pg_stat_statements",
+          "pg_stat_statements_info"
+        )
+
+        aquacache_copy_privileges(
+          source_db = copy_privileges_from,
+          target_db = name,
+          host = host,
+          port = port,
+          username = username,
+          password = password,
+          target_con = target_con,
+          admin_con = admin_con,
+          excluded_objects = exclude_privilege_objects
+        )
+      },
+      error = function(e) {
+        message("Error copying privileges: ", e$message)
+      }
     )
   }
-  DBI::dbExecute(
-    target_con,
-    paste0(
-      "DO $$
+
+  # Create a  but JUST with privileges on this database, for application testing purposes.
+  # Remove the 'tester' user and its privileges on other databases if it already exists, then create it with privileges on this database only.
+  if (create_tester) {
+    # Check if role exists
+    test_exists <- nrow(DBI::dbGetQuery(
+      target_con,
+      "SELECT 1 FROM pg_roles WHERE rolname = 'tester';"
+    )) >
+      0
+
+    dbs <- DBI::dbGetQuery(target_con, "SELECT datname FROM pg_database;")
+
+    if (test_exists) {
+      # Run inside target database first
+      DBI::dbExecute(target_con, "REASSIGN OWNED BY tester TO postgres;")
+      DBI::dbExecute(target_con, "DROP OWNED BY tester;")
+
+      for (i in seq_len(nrow(dbs))) {
+        DBI::dbExecute(
+          target_con,
+          sprintf(
+            "REVOKE ALL PRIVILEGES ON DATABASE %s FROM tester;",
+            DBI::dbQuoteIdentifier(target_con, dbs$datname[[i]])
+          )
+        )
+      }
+      # Drop the 'tester' role
+      DBI::dbExecute(
+        target_con,
+        "DROP ROLE tester;"
+      )
+    }
+    DBI::dbExecute(
+      target_con,
+      paste0(
+        "DO $$
     BEGIN
-        CREATE ROLE tester WITH LOGIN PASSWORD 'tester' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        CREATE ROLE tester WITH LOGIN PASSWORD 'tester' NOSUPERUSER NOCREATEDB NOCREATEROLE;
         GRANT CONNECT, TEMPORARY ON DATABASE ",
-      name,
-      " TO tester;
+        name,
+        " TO tester;
     END
     $$;"
+      )
     )
-  )
-  # Make sure 'tester' cannot connect or do anything to other databases
-  for (db in dbs$datname) {
-    if (db != name) {
+    # Make sure 'tester' cannot connect or do anything to other databases
+    for (db in dbs$datname) {
+      if (db != name) {
+        DBI::dbExecute(
+          target_con,
+          sprintf(
+            "REVOKE ALL PRIVILEGES ON DATABASE %s FROM tester;",
+            DBI::dbQuoteIdentifier(target_con, db)
+          )
+        )
+        DBI::dbExecute(
+          target_con,
+          sprintf(
+            "REVOKE CONNECT, TEMPORARY ON DATABASE %s FROM tester;",
+            DBI::dbQuoteIdentifier(target_con, db)
+          )
+        )
+      }
+    }
+
+    DBI::dbExecute(target_con, "GRANT public_reader TO tester;")
+
+    for (i in schemas) {
+      schema_sql <- DBI::dbQuoteIdentifier(target_con, i)
       DBI::dbExecute(
         target_con,
         sprintf(
-          "REVOKE ALL PRIVILEGES ON DATABASE %s FROM tester;",
-          DBI::dbQuoteIdentifier(target_con, db)
+          "GRANT USAGE ON SCHEMA %s TO tester;",
+          schema_sql
         )
       )
+
       DBI::dbExecute(
         target_con,
         sprintf(
-          "REVOKE CONNECT, TEMPORARY ON DATABASE %s FROM tester;",
-          DBI::dbQuoteIdentifier(target_con, db)
+          "REVOKE CREATE ON SCHEMA %s FROM tester;",
+          schema_sql
+        )
+      )
+
+      DBI::dbExecute(
+        target_con,
+        sprintf(
+          "GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+     ON ALL TABLES IN SCHEMA %s TO tester;",
+          schema_sql
+        )
+      )
+
+      DBI::dbExecute(
+        target_con,
+        sprintf(
+          "GRANT USAGE, SELECT, UPDATE
+     ON ALL SEQUENCES IN SCHEMA %s TO tester;",
+          schema_sql
+        )
+      )
+
+      DBI::dbExecute(
+        target_con,
+        sprintf(
+          "GRANT EXECUTE
+     ON ALL FUNCTIONS IN SCHEMA %s TO tester;",
+          schema_sql
         )
       )
     }
-  }
-
-  for (i in schemas) {
-    schema_sql <- DBI::dbQuoteIdentifier(target_con, i)
-    DBI::dbExecute(
-      target_con,
-      sprintf(
-        "GRANT USAGE ON SCHEMA %s TO tester;",
-        schema_sql
-      )
-    )
-
-    DBI::dbExecute(
-      target_con,
-      sprintf(
-        "REVOKE CREATE ON SCHEMA %s FROM tester;",
-        schema_sql
-      )
-    )
-
-    DBI::dbExecute(
-      target_con,
-      sprintf(
-        "GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
-     ON ALL TABLES IN SCHEMA %s TO tester;",
-        schema_sql
-      )
-    )
-
-    DBI::dbExecute(
-      target_con,
-      sprintf(
-        "GRANT USAGE, SELECT, UPDATE
-     ON ALL SEQUENCES IN SCHEMA %s TO tester;",
-        schema_sql
-      )
-    )
-
-    DBI::dbExecute(
-      target_con,
-      sprintf(
-        "GRANT EXECUTE
-     ON ALL FUNCTIONS IN SCHEMA %s TO tester;",
-        schema_sql
-      )
-    )
   }
 
   restore_complete <- TRUE
@@ -569,14 +613,19 @@ restore_seed_db <- function(
     patch_number,
     "."
   )
+  tester_notice <- tester_notice <- if (create_tester) {
+    "\n4. The 'tester' role was created with password 'tester' and permissions on this database only, for testing purposes. You can connect with that role to test permissions or application behavior for a non-superuser role, but it is not required for normal use of the database or applications.\n"
+  } else {
+    "\n4. The 'tester' role was not created because create_tester = FALSE."
+  }
 
   message(
     "\nNOTICES:\n
-  1. You can use the Shiny application at YGwater::YGwater() to explore the restored/installed database.\n
-  2. This R package includes a vignette which details the database's schemas, tables, and non-standard functions. You can access it with 'vignette(package = 'AquaCache', topic = 'AquaCache_DB_documentation')' OR via the Shiny application's Help menu, once logged in.\n
-  3. If you want to pre-load some useful hydrological reference data such as that from the National Hydro Network, see function load_nhn(). You will require, at minimum, the 'basins' dataset to use the Shiny application's automatic location code generation, and you can load the other datasets for additional reference data in your database.\n
-  4. The 'tester' role was created with password 'tester' and permissions on this database only, for testing purposes. You can connect with that role to test permissions or application behavior for a non-superuser role, but it is not required for normal use of the database or applications.\n
-   5. The 'public_reader' role was created or updated with password 'aquacache' and granted permissions on all non-excluded tables, schemas, and functions. This role is used in AquaCache row-level security policies and grants, so it must exist with that name and password for the database and Shiny application to function properly. You can also use it to connect read-only applications to the database if desired."
+    1. You can use the Shiny application at YGwater::YGwater() to explore the restored/installed database.\n
+    2. This R package includes a vignette which details the database's schemas, tables, and non-standard functions. You can access it with 'vignette(package = 'AquaCache', topic = 'AquaCache_DB_documentation')' OR via the Shiny application's Help menu, once logged in.\n
+    3. If you want to pre-load some useful hydrological reference data such as that from the National Hydro Network, see function load_nhn(). You will require, at minimum, the 'basins' dataset to use the Shiny application's automatic location code generation, and you can load the other datasets for additional reference data in your database.\n",
+    tester_notice,
+    "\n5. The 'public_reader' role was created or updated with password 'aquacache' and granted permissions on all non-excluded tables, schemas, and functions. This role is used in AquaCache row-level security policies and grants, so it must exist with that name and password for the database and Shiny application to function properly. You can also use it to connect read-only applications to the database if desired."
   )
   return(invisible(list(
     database = name,
@@ -1491,4 +1540,339 @@ aquacache_read_first_text <- function(path, n = 512L) {
   }
 
   rawToChar(bytes, multiple = FALSE)
+}
+
+#' Copy privileges from one database to another
+#' @description
+#' This function copies database-level, schema-level, table-level, and column-level privileges from a source database to a target database. It is used when `copy_privileges_from` is specified in `restore_seed_database()`, to copy privileges from an existing AquaCache database to the newly restored one. It can also be used independently to copy privileges between any two databases on the same PostgreSQL server, as long as the connected user has sufficient permissions to read privileges from the source and apply them to the target.
+#' @keywords internal
+#' @noRd
+aquacache_copy_privileges <- function(
+  source_db,
+  target_db,
+  host,
+  port,
+  username,
+  password,
+  target_con,
+  admin_con,
+  excluded_objects = c("pg_stat_statements", "pg_stat_statements_info")
+) {
+  source_con <- NULL
+
+  on.exit(
+    {
+      if (!is.null(source_con) && DBI::dbIsValid(source_con)) {
+        DBI::dbDisconnect(source_con)
+      }
+    },
+    add = TRUE
+  )
+
+  source_con <- DBI::dbConnect(
+    RPostgres::Postgres(),
+    dbname = source_db,
+    host = host,
+    port = port,
+    user = username,
+    password = password
+  )
+
+  DBI::dbExecute(source_con, "SET timezone = 'UTC'")
+
+  # Database-level privileges: CONNECT, CREATE, TEMPORARY.
+  target_db_sql <- as.character(DBI::dbQuoteIdentifier(admin_con, target_db))
+
+  db_grants <- DBI::dbGetQuery(
+    admin_con,
+    paste0(
+      "
+      SELECT format(
+        'GRANT %s ON DATABASE ",
+      target_db_sql,
+      " TO %s%s;',
+        a.privilege_type,
+        CASE
+          WHEN a.grantee = 0 THEN 'PUBLIC'
+          ELSE quote_ident(r.rolname)
+        END,
+        CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
+      ) AS sql
+      FROM pg_database d
+      CROSS JOIN LATERAL aclexplode(d.datacl) a
+      LEFT JOIN pg_roles r
+        ON r.oid = a.grantee
+      WHERE d.datname = $1::name
+        AND d.datacl IS NOT NULL
+        AND a.grantee <> d.datdba
+        AND (
+          a.grantee = 0
+          OR (
+            r.oid IS NOT NULL
+            AND r.rolname !~ '^pg_'
+          )
+        );
+      "
+    ),
+    params = list(source_db)
+  )
+
+  # Schema privileges: USAGE, CREATE.
+  excluded_schemas <- unique(c("information_schema"))
+  excluded_schemas_sql <- aquacache_sql_text_array(source_con, excluded_schemas)
+  schema_grants <- DBI::dbGetQuery(
+    source_con,
+    paste0(
+      "
+    SELECT format(
+      'GRANT %s ON SCHEMA %I TO %s%s;',
+      a.privilege_type,
+      n.nspname,
+      CASE
+        WHEN a.grantee = 0 THEN 'PUBLIC'
+        ELSE quote_ident(pg_get_userbyid(a.grantee))
+      END,
+      CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
+    ) AS sql
+    FROM pg_namespace n
+    CROSS JOIN LATERAL aclexplode(n.nspacl) a
+    WHERE n.nspname NOT LIKE 'pg\\_%'
+    AND NOT (n.nspname = ANY(",
+      excluded_schemas_sql,
+      "))
+      AND n.nspacl IS NOT NULL
+      AND a.grantee <> n.nspowner
+      AND (
+        a.grantee = 0
+        OR EXISTS (
+          SELECT 1
+          FROM pg_roles r
+          WHERE r.oid = a.grantee
+            AND r.rolname NOT LIKE 'pg\\_%'
+        )
+      );
+    "
+    )
+  )
+
+  excluded_objects <- unique(excluded_objects)
+  excluded_objects_sql <- aquacache_sql_text_array(source_con, excluded_objects)
+
+  # Tables, views, materialized views, partitioned tables, foreign tables.
+  # Tables, views, materialized views, partitioned tables, foreign tables.
+  table_grants <- DBI::dbGetQuery(
+    source_con,
+    paste0(
+      "
+    SELECT format(
+      'GRANT %s ON TABLE %I.%I TO %s%s;',
+      a.privilege_type,
+      n.nspname,
+      c.relname,
+      CASE
+        WHEN a.grantee = 0 THEN 'PUBLIC'
+        ELSE quote_ident(pg_get_userbyid(a.grantee))
+      END,
+      CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
+    ) AS sql
+    FROM pg_class c
+    JOIN pg_namespace n
+      ON n.oid = c.relnamespace
+    CROSS JOIN LATERAL aclexplode(c.relacl) a
+    WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      AND n.nspname NOT LIKE 'pg\\_%'
+      AND NOT (n.nspname = ANY(",
+      excluded_schemas_sql,
+      "))
+      AND NOT (c.relname = ANY(",
+      excluded_objects_sql,
+      "))
+      AND c.relacl IS NOT NULL
+      AND a.grantee <> c.relowner
+      AND (
+        a.grantee = 0
+        OR EXISTS (
+          SELECT 1
+          FROM pg_roles r
+          WHERE r.oid = a.grantee
+            AND r.rolname NOT LIKE 'pg\\_%'
+        )
+      );
+    "
+    )
+  )
+
+  # Column-level privileges, important for objects like application.shiny_app_usage.
+  # Column-level privileges, important for objects like application.shiny_app_usage.
+  column_grants <- DBI::dbGetQuery(
+    source_con,
+    paste0(
+      "
+    SELECT format(
+      'GRANT %s (%I) ON TABLE %I.%I TO %s%s;',
+      a.privilege_type,
+      att.attname,
+      n.nspname,
+      c.relname,
+      CASE
+        WHEN a.grantee = 0 THEN 'PUBLIC'
+        ELSE quote_ident(pg_get_userbyid(a.grantee))
+      END,
+      CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
+    ) AS sql
+    FROM pg_attribute att
+    JOIN pg_class c
+      ON c.oid = att.attrelid
+    JOIN pg_namespace n
+      ON n.oid = c.relnamespace
+    CROSS JOIN LATERAL aclexplode(att.attacl) a
+    WHERE att.attnum > 0
+      AND NOT att.attisdropped
+      AND att.attacl IS NOT NULL
+      AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      AND n.nspname NOT LIKE 'pg\\_%'
+      AND NOT (n.nspname = ANY(",
+      excluded_schemas_sql,
+      "))
+      AND NOT (c.relname = ANY(",
+      excluded_objects_sql,
+      "))
+      AND (
+        a.grantee = 0
+        OR EXISTS (
+          SELECT 1
+          FROM pg_roles r
+          WHERE r.oid = a.grantee
+            AND r.rolname NOT LIKE 'pg\\_%'
+        )
+      );
+    "
+    )
+  )
+
+  # Sequence privileges: USAGE, SELECT, UPDATE.
+  sequence_grants <- DBI::dbGetQuery(
+    source_con,
+    paste0(
+      "
+    SELECT format(
+      'GRANT %s ON SEQUENCE %I.%I TO %s%s;',
+      a.privilege_type,
+      n.nspname,
+      c.relname,
+      CASE
+        WHEN a.grantee = 0 THEN 'PUBLIC'
+        ELSE quote_ident(pg_get_userbyid(a.grantee))
+      END,
+      CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
+    ) AS sql
+    FROM pg_class c
+    JOIN pg_namespace n
+      ON n.oid = c.relnamespace
+    CROSS JOIN LATERAL aclexplode(c.relacl) a
+    WHERE c.relkind = 'S'
+      AND n.nspname NOT LIKE 'pg\\_%'
+      AND NOT (n.nspname = ANY(",
+      excluded_schemas_sql,
+      "))
+      AND NOT (c.relname = ANY(",
+      excluded_objects_sql,
+      "))
+      AND c.relacl IS NOT NULL
+      AND a.grantee <> c.relowner
+      AND (
+        a.grantee = 0
+        OR EXISTS (
+          SELECT 1
+          FROM pg_roles r
+          WHERE r.oid = a.grantee
+            AND r.rolname NOT LIKE 'pg\\_%'
+        )
+      );
+    "
+    )
+  )
+
+  # Function/procedure privileges.
+  routine_grants <- DBI::dbGetQuery(
+    source_con,
+    paste0(
+      "
+    SELECT format(
+      'GRANT %s ON %s %I.%I(%s) TO %s%s;',
+      a.privilege_type,
+      CASE p.prokind
+        WHEN 'p' THEN 'PROCEDURE'
+        ELSE 'FUNCTION'
+      END,
+      n.nspname,
+      p.proname,
+      pg_get_function_identity_arguments(p.oid),
+      CASE
+        WHEN a.grantee = 0 THEN 'PUBLIC'
+        ELSE quote_ident(pg_get_userbyid(a.grantee))
+      END,
+      CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
+    ) AS sql
+    FROM pg_proc p
+    JOIN pg_namespace n
+      ON n.oid = p.pronamespace
+    CROSS JOIN LATERAL aclexplode(p.proacl) a
+    WHERE n.nspname NOT LIKE 'pg\\_%'
+      AND NOT (n.nspname = ANY(",
+      excluded_schemas_sql,
+      "))
+      AND NOT (p.proname = ANY(",
+      excluded_objects_sql,
+      "))
+      AND p.proacl IS NOT NULL
+      AND a.grantee <> p.proowner
+      AND (
+        a.grantee = 0
+        OR EXISTS (
+          SELECT 1
+          FROM pg_roles r
+          WHERE r.oid = a.grantee
+            AND r.rolname NOT LIKE 'pg\\_%'
+        )
+      );
+    "
+    )
+  )
+
+  grant_sql <- unique(stats::na.omit(c(
+    db_grants$sql,
+    schema_grants$sql,
+    table_grants$sql,
+    column_grants$sql,
+    sequence_grants$sql,
+    routine_grants$sql
+  )))
+
+  for (sql in grant_sql) {
+    tryCatch(
+      DBI::dbExecute(target_con, sql),
+      error = function(e) {
+        warning(
+          "Failed to apply privilege SQL:\n",
+          sql,
+          "\nOriginal error: ",
+          e$message,
+          call. = FALSE
+        )
+      }
+    )
+  }
+
+  message(
+    "Copied ",
+    length(grant_sql),
+    " privilege statements from database '",
+    source_db,
+    "' to database '",
+    target_db,
+    "'."
+  )
+
+  invisible(grant_sql)
 }
