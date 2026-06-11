@@ -470,7 +470,8 @@ restore_seed_db <- function(
         exclude_privilege_schemas = c("commentary")
         exclude_privilege_objects = c(
           "pg_stat_statements",
-          "pg_stat_statements_info"
+          "pg_stat_statements_info",
+          "pg_stat_statements_reset"
         )
 
         aquacache_copy_privileges(
@@ -1556,7 +1557,11 @@ aquacache_copy_privileges <- function(
   password,
   target_con,
   admin_con,
-  excluded_objects = c("pg_stat_statements", "pg_stat_statements_info")
+  excluded_objects = c(
+    "pg_stat_statements",
+    "pg_stat_statements_info",
+    "pg_stat_statements_reset"
+  )
 ) {
   source_con <- NULL
 
@@ -1604,7 +1609,6 @@ aquacache_copy_privileges <- function(
         ON r.oid = a.grantee
       WHERE d.datname = $1::name
         AND d.datacl IS NOT NULL
-        AND a.grantee <> d.datdba
         AND (
           a.grantee = 0
           OR (
@@ -1618,7 +1622,7 @@ aquacache_copy_privileges <- function(
   )
 
   # Schema privileges: USAGE, CREATE.
-  excluded_schemas <- unique(c("information_schema"))
+  excluded_schemas <- unique(c("information_schema", "commentary"))
   excluded_schemas_sql <- aquacache_sql_text_array(source_con, excluded_schemas)
   schema_grants <- DBI::dbGetQuery(
     source_con,
@@ -1641,7 +1645,6 @@ aquacache_copy_privileges <- function(
       excluded_schemas_sql,
       "))
       AND n.nspacl IS NOT NULL
-      AND a.grantee <> n.nspowner
       AND (
         a.grantee = 0
         OR EXISTS (
@@ -1688,7 +1691,6 @@ aquacache_copy_privileges <- function(
       excluded_objects_sql,
       "))
       AND c.relacl IS NOT NULL
-      AND a.grantee <> c.relowner
       AND (
         a.grantee = 0
         OR EXISTS (
@@ -1779,7 +1781,6 @@ aquacache_copy_privileges <- function(
       excluded_objects_sql,
       "))
       AND c.relacl IS NOT NULL
-      AND a.grantee <> c.relowner
       AND (
         a.grantee = 0
         OR EXISTS (
@@ -1826,7 +1827,6 @@ aquacache_copy_privileges <- function(
       excluded_objects_sql,
       "))
       AND p.proacl IS NOT NULL
-      AND a.grantee <> p.proowner
       AND (
         a.grantee = 0
         OR EXISTS (
