@@ -29,6 +29,7 @@ Depends:
     R (>= 4.2.0)
 Imports:
     cli,
+    curl,
     data.table,
     dataRetrieval,
     DBI,

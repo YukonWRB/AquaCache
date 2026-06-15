@@ -1311,10 +1311,9 @@ aquacache_download_seed_dump <- function(url) {
   message("Downloading SQL dump from URL...")
 
   status <- tryCatch(
-    utils::download.file(
+    curl::curl_download(
       url = url,
       destfile = path,
-      mode = "wb",
       quiet = TRUE
     ),
     error = function(e) {
@@ -1334,7 +1333,7 @@ aquacache_download_seed_dump <- function(url) {
   if (!identical(status, 0L)) {
     cleanup()
     stop(
-      "Failed to download SQL dump from URL. download.file() returned status ",
+      "Failed to download SQL dump from URL. curl::curl_download() returned status ",
       status,
       ".\nURL: ",
       url,
