@@ -176,10 +176,7 @@ downloadECCCwx <- function(
       data$owner <- organization_id
       data$contributor <- organization_id
 
-      # Now check for wind speed and wind direction parameters and convert to what the database needs.
-      if (parameter == "wind_spd") {
-        data$value <- data$value / 3.6 # Convert from km/h to m/s
-      }
+      # Now check for wind direction and convert to what the database needs.
       if (parameter == "wind_dir") {
         data$value <- data$value * 10 # Convert from tens of degrees to degrees
       }

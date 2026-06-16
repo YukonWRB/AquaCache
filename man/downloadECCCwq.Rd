@@ -11,7 +11,8 @@ downloadECCCwq(
   tz,
   start_datetime,
   end_datetime = Sys.time(),
-  con = NULL
+  con = NULL,
+  warn_unmapped = interactive()
 )
 }
 \arguments{
@@ -28,6 +29,10 @@ downloadECCCwq(
 \item{end_datetime}{End datetime (inclusive) to which to fetch measurements. Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
 
 \item{con}{A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().}
+
+\item{warn_unmapped}{If \code{TRUE}, warn when an ECCC variable/unit does not
+have an import mapping. Set to \code{FALSE} for automated synchronization
+workflows where unmapped source variables are expected.}
 }
 \value{
 A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.

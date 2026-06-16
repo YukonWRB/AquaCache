@@ -40,8 +40,8 @@ downloadAquarius <- function(
   server = Sys.getenv("AQSERVER"),
   con = NULL
 ) {
-  # location = "09AA-M1"
-  # parameter = "Precip Total.Corrected"
+  # location = "09AA-M3"
+  # parameter = "Wind Gust Vel.Corrected"
   # start_datetime = "2025-01-10 00:00"
   # end_datetime = Sys.time()
   # difference = TRUE

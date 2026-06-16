@@ -30,15 +30,6 @@ synchronize_discrete <- function(
   snowCon = NULL,
   EQCon = NULL
 ) {
-  # con = AquaConnect()
-  # sample_series_id = 50
-  # start_datetime = "1900-01-01"
-  # active = 'default'
-  # sync_remote_false = FALSE
-  # delete = FALSE
-  # snowCon = NULL
-  # EQCon = NULL
-
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
   }
@@ -74,12 +65,12 @@ synchronize_discrete <- function(
   }
 
   if (sample_series_id[1] == "all") {
-    all_series <- DBI::dbGetQuery(con, "SELECT * FROM sample_series;")
+    all_series <- DBI::dbGetQuery(con, "SELECT * FROM discrete.sample_series;")
   } else {
     all_series <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT * FROM sample_series WHERE sample_series_id IN (",
+        "SELECT * FROM discrete.sample_series WHERE sample_series_id IN (",
         paste(sample_series_id, collapse = ", "),
         ");"
       )
@@ -283,7 +274,7 @@ synchronize_discrete <- function(
                   DBI::dbExecute(
                     con,
                     paste0(
-                      "DELETE FROM samples WHERE datetime > '",
+                      "DELETE FROM discrete.samples WHERE datetime > '",
                       start_i,
                       "' AND datetime < '",
                       inRemote_datetimes[j],
@@ -316,7 +307,7 @@ synchronize_discrete <- function(
                   DBI::dbExecute(
                     con,
                     paste0(
-                      "DELETE FROM samples WHERE datetime < '",
+                      "DELETE FROM discrete.samples WHERE datetime < '",
                       end_i,
                       "' AND datetime > '",
                       inRemote_datetimes[j],
@@ -349,7 +340,7 @@ synchronize_discrete <- function(
                   DBI::dbExecute(
                     con,
                     paste0(
-                      "DELETE FROM samples WHERE datetime BETWEEN '",
+                      "DELETE FROM discrete.samples WHERE datetime BETWEEN '",
                       inRemote_datetimes[j - 1] + 1,
                       "' AND '",
                       inRemote_datetimes[j] - 1,
@@ -417,7 +408,7 @@ synchronize_discrete <- function(
             inDB_sample <- DBI::dbGetQuery(
               con,
               paste0(
-                "SELECT * FROM samples WHERE datetime = '",
+                "SELECT * FROM discrete.samples WHERE datetime = '",
                 inRemote_sample$datetime,
                 "' AND location_id = ",
                 loc_id,
@@ -466,15 +457,15 @@ synchronize_discrete <- function(
                   conv <- suppressWarnings(as.numeric(inRemote_k))
                   if (!is.na(conv)) inRemote_k <- conv
                 }
-                if (isFALSE(all.equal(inDB_k, inRemote_k))) {
+                if (!isTRUE(all.equal(inDB_k, inRemote_k))) {
                   # If TRUE, update the DB
-                  to_insert <- if (!is.na(inRemote_k)) inRemote_k else NULL
-                  if (is.null(to_insert)) {
+                  sample_col <- as.character(DBI::dbQuoteIdentifier(con, k))
+                  if (is.na(inRemote_k)) {
                     DBI::dbExecute(
                       con,
                       paste0(
                         "UPDATE samples SET ",
-                        k,
+                        sample_col,
                         " = NULL WHERE sample_id = ",
                         inDB_sample$sample_id,
                         ";"
@@ -485,13 +476,10 @@ synchronize_discrete <- function(
                       con,
                       paste0(
                         "UPDATE samples SET ",
-                        k,
-                        " = '",
-                        to_insert,
-                        "' WHERE sample_id = ",
-                        inDB_sample$sample_id,
-                        ";"
-                      )
+                        sample_col,
+                        " = $1 WHERE sample_id = $2;"
+                      ),
+                      params = list(inRemote_k, inDB_sample$sample_id[[1]])
                     )
                   }
                   updated_samples_flag <- TRUE
@@ -505,7 +493,7 @@ synchronize_discrete <- function(
               inDB_results <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT * FROM results WHERE sample_id = ",
+                  "SELECT * FROM discrete.results WHERE sample_id = ",
                   inDB_sample$sample_id,
                   ";"
                 )
@@ -523,8 +511,7 @@ synchronize_discrete <- function(
                   inDB_results$parameter_id == sub$parameter_id
                 idx <- idx &
                   if (!is.na(resolved_sub_matrix_state_id)) {
-                    inDB_results$matrix_state_id ==
-                      resolved_sub_matrix_state_id
+                    inDB_results$matrix_state_id == resolved_sub_matrix_state_id
                   } else {
                     is.na(inDB_results$matrix_state_id)
                   }
@@ -676,7 +663,7 @@ synchronize_discrete <- function(
                   result_speciation <- DBI::dbGetQuery(
                     con,
                     paste0(
-                      "SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id = ",
+                      "SELECT parameter_id, result_speciation AS result_speciation_bool FROM public.parameters WHERE parameter_id = ",
                       sub$parameter_id,
                       ";"
                     )
@@ -684,7 +671,7 @@ synchronize_discrete <- function(
                   sample_fraction <- DBI::dbGetQuery(
                     con,
                     paste0(
-                      "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id = ",
+                      "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM public.parameters WHERE parameter_id = ",
                       sub$parameter_id,
                       ";"
                     )
@@ -765,6 +752,13 @@ synchronize_discrete <- function(
 
                   new_results <- new_results + 1
                 } else if (nrow(inDB_sub) == 1) {
+                  if (isTRUE(inDB_sub$no_update[[1]])) {
+                    inDB_results[
+                      inDB_results$result_id == inDB_sub$result_id,
+                      "checked"
+                    ] <- TRUE
+                    next
+                  }
                   # matching result found, check and adjust if necessary
                   # Check for differences in the results
                   updated_results_flag <- FALSE
@@ -783,29 +777,20 @@ synchronize_discrete <- function(
                           sub_l <- as.numeric(sub_l)
                         }
                       }
-                      if (isFALSE(all.equal(inDB_l, sub_l))) {
-                        to_insert <- if (!is.na(sub_l)) sub_l else "NULL"
-                        message(
-                          "Found discrepancy in ",
-                          l,
-                          " for sample_series_id ",
-                          sid,
-                          " and sample ",
-                          j,
-                          " and sample row ",
-                          k,
-                          ". Updating the database."
+                      if (!isTRUE(all.equal(inDB_l, sub_l))) {
+                        result_col <- as.character(
+                          DBI::dbQuoteIdentifier(con, l)
                         )
                         DBI::dbExecute(
                           con,
                           paste0(
                             "UPDATE results SET ",
-                            l,
-                            " = '",
-                            to_insert,
-                            "' WHERE result_id = ",
-                            inDB_sub$result_id,
-                            ";"
+                            result_col,
+                            " = $1 WHERE result_id = $2;"
+                          ),
+                          params = list(
+                            if (!is.na(sub_l)) sub_l else NA,
+                            inDB_sub$result_id[[1]]
                           )
                         )
 
@@ -846,7 +831,7 @@ synchronize_discrete <- function(
                   DBI::dbExecute(
                     con,
                     paste0(
-                      "DELETE FROM results WHERE result_id IN (",
+                      "DELETE FROM discrete.results WHERE result_id IN (",
                       paste(to_delete, collapse = ", "),
                       ") AND no_update IS FALSE;"
                     )
@@ -1053,7 +1038,7 @@ synchronize_discrete <- function(
               result_speciation <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (",
+                  "SELECT parameter_id, result_speciation AS result_speciation_bool FROM public.parameters WHERE parameter_id IN (",
                   paste(unique(inRemote_results$parameter_id), collapse = ", "),
                   ");"
                 )
@@ -1061,7 +1046,7 @@ synchronize_discrete <- function(
               sample_fraction <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (",
+                  "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM public.parameters WHERE parameter_id IN (",
                   paste(unique(inRemote_results$parameter_id), collapse = ", "),
                   ");"
                 )

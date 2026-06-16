@@ -117,7 +117,7 @@ downloadRWIS <- function(
           location,
           " and parameter ",
           parameter,
-          " after removing NULL and -9999 array values.."
+          " after removing NULL and -9999 array values."
         )
       }
 
