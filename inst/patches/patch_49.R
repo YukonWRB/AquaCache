@@ -601,6 +601,21 @@ tryCatch(
       }
     }
 
+    kmh <- DBI::dbGetQuery(
+      con,
+      "SELECT unit_id FROM public.units WHERE unit_name = 'km/h'"
+    )$unit_id
+    DBI::dbExecute(
+      con,
+      "UPDATE parameters SET units_gas = $1 WHERE param_name = 'velocity, wind'",
+      params = list(kmh)
+    )
+    # Set units_liquid to NULL
+    DBI::dbExecute(
+      con,
+      "UPDATE parameters SET units_liquid = NULL WHERE param_name = 'velocity, wind'"
+    )
+
     # Add the 'downloadECCCeq1.csv' key to the database for starters
     # Find the file first
     mappings <- system.file(
@@ -654,11 +669,17 @@ ts <- DBI::dbGetQuery(
 )$timeseries_id
 
 if (length(ts) > 0) {
+  message(
+    "Adjusting ECCC wind speed data from m/s to km/h for ",
+    length(ts),
+    " timeseries..."
+  )
   # Acquire an advisory lock to prevent concurrent updates to the same timeseries during the conversion
 
   lock_namespace <- "aquacache_timeseries"
-
+  increment <- 1
   for (i in ts) {
+    message("Processing timeseries ", increment, " of ", length(ts))
     lock_acquired <- FALSE
     tryCatch(
       {
@@ -694,5 +715,6 @@ if (length(ts) > 0) {
         }
       }
     )
+    increment <- increment + 1
   }
 }
