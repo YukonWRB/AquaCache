@@ -143,12 +143,6 @@ downloadECCCwxMinute <- function(
     }
   }
 
-  data$value <- dlECCCwxMinute_convert_values(
-    values = data$value,
-    parameter = parameter_swob,
-    unit = unit_value
-  )
-
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con), add = TRUE)
@@ -384,21 +378,6 @@ dlECCCwxMinute_resolve_parameter <- function(parameter) {
 #' @noRd
 dlECCCwxMinute_unit_column <- function(parameter) {
   paste0(parameter, "-uom")
-}
-
-#' downloadECCCwxMinute helper
-#' @keywords internal
-#' @noRd
-dlECCCwxMinute_convert_values <- function(values, parameter, unit) {
-  if (
-    !is.null(unit) &&
-      identical(unit, "km/h") &&
-      grepl("wnd_spd", parameter, fixed = TRUE)
-  ) {
-    return(values / 3.6)
-  }
-
-  values
 }
 
 #' downloadECCCwxMinute helper

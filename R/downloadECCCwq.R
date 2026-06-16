@@ -13,6 +13,9 @@
 #' @param start_datetime Start datetime (inclusive) from which to fetch measurements. Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime End datetime (inclusive) to which to fetch measurements. Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param con A connection to the aquacache database, only used if an offset is calculated for an old_loc. If not provided, a connection will be attempted using AquaConnect().
+#' @param warn_unmapped If `TRUE`, warn when an ECCC variable/unit does not
+#'   have an import mapping. Set to `FALSE` for automated synchronization
+#'   workflows where unmapped source variables are expected.
 #'
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
@@ -24,75 +27,10 @@ downloadECCCwq <- function(
   tz,
   start_datetime,
   end_datetime = Sys.time(),
-  con = NULL
+  con = NULL,
+  warn_unmapped = interactive()
 ) {
-  # Testing/dev parameters
-  # location <- "YT09AB0006"
-  # file <- "https://data-donnees.az.ec.gc.ca/api/file?path=%2Fsubstances%2Fmonitor%2Fnational-long-term-water-quality-monitoring-data%2Fyukon-river-basin-long-term-water-quality-monitoring-data%2FWater-Qual-Eau-Yukon-2000-present.csv"
-  # key <- "downloadECCCeq1.csv"
-  # start_datetime <- "2020-01-01"
-  # end_datetime <- Sys.time()
-  # tz = "MST"
-
-  # Load the file and key
-  keypath <- system.file(
-    "import_keys",
-    key,
-    package = "AquaCache"
-  )
-  if (keypath == "") {
-    stop(
-      "The key you specified cannot be found in this package's inst/import_keys folder. "
-    )
-  }
-  key <- data.table::fread(
-    keypath,
-    stringsAsFactors = FALSE,
-    encoding = "UTF-8"
-  )
-
-  required_columns_key <- c(
-    "input_param",
-    "input_unit",
-    "parameter_id",
-    "conversion",
-    "result_type",
-    "sample_fraction",
-    "result_value_type",
-    "result_speciation_id"
-  )
-
-  missing_columns_key <- setdiff(required_columns_key, colnames(key))
-
-  if (length(missing_columns_key) > 0) {
-    stop(
-      paste0(
-        "The following required columns are missing from the key file: ",
-        paste(missing_columns_key, collapse = ", ")
-      )
-    )
-  }
-
-  if (!("matrix_state" %in% names(key))) {
-    key$matrix_state <- NA_character_
-  }
-  if (!("matrix_state_id" %in% names(key))) {
-    key$matrix_state_id <- NA_integer_
-  }
-
-  key$matrix_state <- trimws(as.character(key$matrix_state))
-  key$matrix_state[!nzchar(key$matrix_state) | key$matrix_state == "NA"] <- NA
-  key$matrix_state_id <- suppressWarnings(as.integer(key$matrix_state_id))
-
-  missing_matrix_state <- is.na(key$matrix_state) & is.na(key$matrix_state_id)
-  if (any(missing_matrix_state)) {
-    warning(
-      "The ECCC key file is missing 'matrix_state' or 'matrix_state_id' for one or more rows. ",
-      "Assuming 'liquid' for those mappings. Update the key file to make matrix state explicit.",
-      call. = FALSE
-    )
-    key$matrix_state[missing_matrix_state] <- "liquid"
-  }
+  warn_unmapped <- isTRUE(as.logical(warn_unmapped))
 
   # ---- Cached download for `file` (URL or local path) ----
   is_url <- grepl("^(https?|ftp)://", file, ignore.case = TRUE)
@@ -124,8 +62,8 @@ downloadECCCwq <- function(
 
       tryCatch(
         {
-          utils::download.file(
-            file,
+          curl::curl_download(
+            url = file,
             destfile = part_path,
             mode = "wb",
             quiet = TRUE
@@ -241,6 +179,15 @@ downloadECCCwq <- function(
   }
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
+  db_key <- import_mapping_load_db(con, key)
+  if (is.null(db_key)) {
+    key <- downloadECCCwq_read_legacy_key(con, key)
+    key_from_db <- FALSE
+  } else {
+    key <- db_key
+    key_from_db <- TRUE
+  }
+
   media_id <- DBI::dbGetQuery(
     con,
     "SELECT media_id FROM media_types WHERE media_type = 'surface water';"
@@ -292,6 +239,29 @@ downloadECCCwq <- function(
 
   all_samples <- unique(all_results$DATE_TIME_HEURE)
 
+  # Helper function to get the mapping row for a given variable and unit. If the key is from the database, it uses the import_mapping_resolve_match function to find the appropriate mapping. If the key is from a legacy file, it performs a direct lookup in the key data frame. This allows for flexibility in how the key mappings are provided while ensuring that the correct mapping is applied for each variable and unit combination.
+  downloadECCCwq_mapping_row <- function(
+    key,
+    key_from_db,
+    input_param,
+    input_unit
+  ) {
+    if (key_from_db) {
+      return(import_mapping_resolve_match(
+        key,
+        list(
+          input_param = input_param,
+          input_unit = input_unit
+        )
+      ))
+    }
+
+    key[
+      key$input_param == input_param &
+        key$input_unit == input_unit,
+    ]
+  }
+
   # Build the list required by getNewDiscrete
   samples <- list()
   for (i in seq_along(all_samples)) {
@@ -315,36 +285,44 @@ downloadECCCwq <- function(
       if (nchar(var) == 0) {
         next
       }
-      param_row <- key[
-        key$input_param == var &
-          key$input_unit == subset[["UNIT_UNIT\u00C9"]][j],
-      ]
-      if (nrow(param_row) == 0) {
-        warning(paste0(
-          "No parameter mapping found for variable '",
-          var,
-          "' with unit '",
-          subset[["UNIT_UNIT\u00C9"]][j],
-          "'. Skipping this result."
-        ))
+      input_unit <- subset[["UNIT_UNIT\u00C9"]][j]
+      param_row <- downloadECCCwq_mapping_row(
+        key = key,
+        key_from_db = key_from_db,
+        input_param = var,
+        input_unit = input_unit
+      )
+      if (is.null(param_row) || nrow(param_row) == 0) {
+        if (warn_unmapped) {
+          warning(paste0(
+            "No parameter mapping found for variable '",
+            var,
+            "' with unit '",
+            input_unit,
+            "'. Skipping this result."
+          ))
+        }
         next
       }
       if (is.na(param_row$parameter_id)) {
         if (var != "RESIDUE NONFILTERABLE") {
-          warning(paste0(
-            "Parameter mapping for variable '",
-            var,
-            "' with unit '",
-            subset[["UNIT_UNIT\u00C9"]][j],
-            "' has no parameter_id assigned. Skipping this result."
-          ))
+          if (warn_unmapped) {
+            warning(paste0(
+              "Parameter mapping for variable '",
+              var,
+              "' with unit '",
+              input_unit,
+              "' has no parameter_id assigned. Skipping this result."
+            ))
+          }
         }
         next
       }
 
       # Isolate the value and apply conversion
       result_value <- as.numeric(subset$VALUE_VALEUR[j]) *
-        as.numeric(param_row$conversion[1])
+        as.numeric(param_row$conversion[1]) +
+        as.numeric(param_row$result_offset[1])
 
       # Look for '<' or '>' in the FLAG_MARQUEUR to set result_condition and result_condition_value
       flag <- subset$FLAG_MARQUEUR[j]
@@ -386,13 +364,17 @@ downloadECCCwq <- function(
       }
 
       matrix_state_id <- param_row$matrix_state_id[1]
-      matrix_state <- param_row$matrix_state[1]
+      matrix_state <- if ("matrix_state" %in% names(param_row)) {
+        param_row$matrix_state[1]
+      } else {
+        NA_character_
+      }
 
       # Build the result row
       result <- data.frame(
         result_type = param_row$result_type[1],
         parameter_id = param_row$parameter_id[1],
-        sample_fraction_id = param_row$sample_fraction[1],
+        sample_fraction_id = param_row$sample_fraction_id[1],
         result = result_value,
         result_condition = result_condition,
         result_condition_value = result_condition_value,
@@ -410,4 +392,83 @@ downloadECCCwq <- function(
   }
 
   return(samples)
+}
+
+#' Read and process the legacy ECCC key file format
+#' @description This function reads the legacy ECCC key file format and processes it to ensure it has the necessary columns and formats for use in the `downloadECCCwq` function. It checks for required columns, handles missing optional columns, and resolves target IDs using the provided database connection. This function is used when the specified key file is not found in the database, allowing users to continue using legacy key files that may be included with the package or provided as a local file path.
+#' @param con A connection to the aquacache database, used for resolving target IDs based on the key file contents.
+#' @param key The path to the legacy key file, which can be a filename included in the package's `inst/import_keys` directory or a local file path provided by the user.
+#' @return A data.table containing the processed key mappings with resolved target IDs, ready for use in the `downloadECCCwq` function.
+#' @keywords internal
+#' @noRd
+downloadECCCwq_read_legacy_key <- function(con, key) {
+  keypath <- system.file(
+    "import_keys",
+    key,
+    package = "AquaCache"
+  )
+  if (keypath == "") {
+    if (file.exists(key)) {
+      keypath <- key
+    } else {
+      stop(
+        "The key you specified cannot be found in this package's inst/import_keys folder. "
+      )
+    }
+  }
+
+  key <- data.table::fread(
+    keypath,
+    stringsAsFactors = FALSE,
+    encoding = "UTF-8"
+  )
+
+  required_columns_key <- c(
+    "input_param",
+    "input_unit",
+    "conversion",
+    "result_type",
+    "sample_fraction",
+    "result_value_type"
+  )
+  missing_columns_key <- setdiff(required_columns_key, names(key))
+  if (length(missing_columns_key) > 0) {
+    stop(
+      paste0(
+        "The following required columns are missing from the key file: ",
+        paste(missing_columns_key, collapse = ", ")
+      )
+    )
+  }
+  if (!("parameter_id" %in% names(key)) && !("parameter" %in% names(key))) {
+    stop("The key file must contain 'parameter_id' or 'parameter'.")
+  }
+  if (
+    !("result_speciation_id" %in% names(key)) &&
+      !("result_speciation" %in% names(key))
+  ) {
+    key$result_speciation_id <- NA_integer_
+  }
+  if (!("matrix_state" %in% names(key))) {
+    key$matrix_state <- NA_character_
+  }
+  if (!("matrix_state_id" %in% names(key))) {
+    key$matrix_state_id <- NA_integer_
+  }
+
+  key$matrix_state <- trimws(as.character(key$matrix_state))
+  key$matrix_state[!nzchar(key$matrix_state) | key$matrix_state == "NA"] <- NA
+  key$matrix_state_id <- suppressWarnings(as.integer(key$matrix_state_id))
+
+  missing_matrix_state <- is.na(key$matrix_state) & is.na(key$matrix_state_id)
+  if (any(missing_matrix_state)) {
+    warning(
+      "The ECCC key file is missing 'matrix_state' or 'matrix_state_id' for one or more rows. ",
+      "Assuming 'liquid' for those mappings. Update the key file to make matrix state explicit.",
+      call. = FALSE
+    )
+    key$matrix_state[missing_matrix_state] <- "liquid"
+  }
+
+  return(import_mapping_resolve_targets(con, data.table::as.data.table(key)))
 }

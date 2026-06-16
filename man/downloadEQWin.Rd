@@ -2,30 +2,59 @@
 % Please edit documentation in R/downloadEQWin.R
 \name{downloadEQWin}
 \alias{downloadEQWin}
-\title{Bring EQWin water quality data into the aquacache database}
+\title{Bring EQWin water quality data into AquaCache}
 \usage{
 downloadEQWin(
   location,
   start_datetime,
   end_datetime = Sys.time(),
   EQpath = NULL,
-  key = NULL
+  key = "EQWin_key_working_copy",
+  con = NULL,
+  EQCon = NULL,
+  tz = "MST",
+  unknown_time_local = "12:00:00",
+  media_id = NULL,
+  collection_method = NULL,
+  sample_type = NULL
 )
 }
 \arguments{
-\item{location}{The location code associated with the EQWin station. Must match an entry in the eqstns table, column StnCode.}
+\item{location}{EQWin station code from \code{eqstns.StnCode}.}
 
-\item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, but if POSIXct the object's tzone attribute will be preserved. If date, time will default to 00:00 to capture whole day.}
+\item{start_datetime}{Start datetime for \code{eqsampls.CollectDateTime}.}
 
-\item{end_datetime}{Same as start_datetime but not quite!}
+\item{end_datetime}{End datetime for \code{eqsampls.CollectDateTime}.}
 
-\item{EQpath}{The file path to the target EQWin database.}
+\item{EQpath}{File path to the target EQWin database. Used only when \code{EQCon}
+is \code{NULL}.}
 
-\item{key}{A path to the .csv file mapping EQWin parameter codes to aquacache parameter codes.}
+\item{key}{Import mapping source code or key path. Defaults to the working
+EQWin source code used by \code{\link[=upsertImportParameterMappings]{upsertImportParameterMappings()}}.}
+
+\item{con}{AquaCache connection.}
+
+\item{EQCon}{Optional existing Access database connection.}
+
+\item{tz}{Time zone used to interpret EQWin collection datetimes.}
+
+\item{unknown_time_local}{Local-time value assigned to collection datetimes
+stored by EQWin as midnight, which commonly indicates an unknown time.}
+
+\item{media_id}{Optional AquaCache media ID override.}
+
+\item{collection_method}{Optional AquaCache collection method ID override.}
+
+\item{sample_type}{Optional AquaCache sample type ID override.}
 }
 \value{
-A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
+A list of samples and associated results. Returns an empty list when
+no mapped data are found.
 }
 \description{
-Brings in water quality data from EQWin databases.
+Brings water quality data from an EQWin Access database into the list format
+expected by \code{\link[=getNewDiscrete]{getNewDiscrete()}} and \code{\link[=synchronize_discrete]{synchronize_discrete()}}. Parameter
+mapping is read from \code{discrete.import_parameter_mappings} when the requested
+key/source code has been loaded with \code{\link[=upsertImportParameterMappings]{upsertImportParameterMappings()}}. EQWin
+\verb{udf_*} fields and \code{eqsampls.LastModified} are intentionally not used.
 }

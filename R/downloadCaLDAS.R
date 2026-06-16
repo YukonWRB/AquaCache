@@ -166,10 +166,9 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
       file <- list()
       download_url <- available$path[i]
       tmp <- tempfile(fileext = ".nc")
-      utils::download.file(
-        download_url,
+      curl::curl_download(
+        url = download_url,
         destfile = tmp,
-        mode = "wb",
         quiet = TRUE
       )
       rast <- terra::rast(tmp)[[1]]

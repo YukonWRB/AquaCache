@@ -128,11 +128,11 @@ load_nhn <- function(
       label,
       ". This is a very large file and will take a long time."
     )
-    download.file(url, destfile = tempfile, mode = "wb")
+    curl::curl_download(url, destfile = tempfile, quiet = TRUE)
     message(
       "Download complete. Extracting data from the downloaded file. This may also take a while."
     )
-    unzip(tempfile, exdir = tempdir())
+    utils::unzip(tempfile, exdir = tempdir())
     unlink(tempfile)
 
     unzipped_file <- list.files(

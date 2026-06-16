@@ -17,7 +17,10 @@ restore_seed_db(
   apply_patches = TRUE,
   psql = NULL,
   cleanup_on_error = TRUE,
-  nhn = TRUE
+  nhn = TRUE,
+  nhn_ask = TRUE,
+  copy_privileges_from = NULL,
+  create_tester = TRUE
 )
 }
 \arguments{
@@ -54,6 +57,12 @@ system PATH and common PostgreSQL installation directories.}
 restore or validation fails.}
 
 \item{nhn}{If \code{TRUE}, offer to download and load the National Hydro Network basins dataset after restore, which is used for location code generation in the Shiny application. Defaults to \code{TRUE}.}
+
+\item{nhn_ask}{If \code{nhn} is \code{TRUE}, whether to prompt the user before downloading/loading the NHN basins dataset. Defaults to \code{TRUE}.}
+
+\item{copy_privileges_from}{If a database name (case sensitive) is supplied, will attempt to copy privileges from the specified to the restored database. The source database must be on the same server and the connected user must have permissions to read its privileges. If \code{NULL} (the default), privileges are not copied from any existing database, and only the default grants included in the dump file and those added by this function are applied.}
+
+\item{create_tester}{If \code{TRUE}, creates a \code{tester} role with password \code{tester} and permissions on this database only, for testing purposes. Defaults to \code{TRUE}. The \code{tester} role is not required for normal use of the database or applications, but can be useful for testing permissions or application behavior for a non-superuser role.}
 }
 \value{
 Invisibly returns a list with the restored database name, connection

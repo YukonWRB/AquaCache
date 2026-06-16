@@ -637,7 +637,9 @@ insertACVector_ogr2ogr <- function(
   load_geom$layer_name <- layer_name
   load_geom$feature_name <- feature_names[success]
   load_geom$description <- descriptions[success]
-  load_geom$attributes <- attr_json[success]
+  load_attr <- attr_json[success]
+  load_attr[is.na(load_attr)] <- ""
+  load_geom$attributes <- load_attr
 
   tmp_gpkg <- tempfile(fileext = ".gpkg")
   on.exit(unlink(tmp_gpkg), add = TRUE)

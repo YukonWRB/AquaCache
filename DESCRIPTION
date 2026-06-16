@@ -1,6 +1,6 @@
 Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
-Version: 2.7.8
+Version: 2.7.9
 Authors@R: c(
     person("Ghislain", "de Laplante", , email = "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -29,6 +29,7 @@ Depends:
     R (>= 4.2.0)
 Imports:
     cli,
+    curl,
     data.table,
     dataRetrieval,
     DBI,
@@ -64,6 +65,7 @@ Suggests:
     R.utils,
     sf,
     testthat (>= 3.0.0),
+    uuid,
     usethis,
     YGwater,
 Remotes:
