@@ -530,7 +530,7 @@ aquacache_postgres_utility_version <- function(path) {
 
   # Use the last version-like token. This avoids reading the "2" in
   # utility names like raster2pgsql as the version.
-  version <- tail(matches, 1L)
+  version <- utils::tail(matches, 1L)
   parts <- suppressWarnings(as.integer(strsplit(version, ".", fixed = TRUE)[[
     1
   ]]))

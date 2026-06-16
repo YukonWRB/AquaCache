@@ -346,7 +346,7 @@ restore_seed_db <- function(
       message("Downloading and loading NHN basins...")
       tryCatch(
         {
-          load_nhn(target = 'basins', con = target_con)
+          load_nhn(targets = 'basins', con = target_con)
         },
         error = function(e) {
           warning(
@@ -1258,7 +1258,7 @@ aquacache_tail_file <- function(file, n = 80L) {
     return("")
   }
 
-  paste(tail(readLines(file, warn = FALSE), n), collapse = "\n")
+  paste(utils::tail(readLines(file, warn = FALSE), n), collapse = "\n")
 }
 
 #' @keywords internal

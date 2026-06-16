@@ -534,6 +534,10 @@ eqwin_collapse_note <- function(x) {
 #' @noRd
 #' @keywords internal
 get_or_create_eqwin_uuid <- function(con) {
+  rlang::check_installed(
+    "uuid",
+    reason = "to generate UUIDs for EQWin source database tracking"
+  )
   if (!DBI::dbExistsTable(con, "aquacache_source_info")) {
     guid <- uuid::UUIDgenerate()
 

@@ -132,7 +132,7 @@ load_nhn <- function(
     message(
       "Download complete. Extracting data from the downloaded file. This may also take a while."
     )
-    unzip(tempfile, exdir = tempdir())
+    utils::unzip(tempfile, exdir = tempdir())
     unlink(tempfile)
 
     unzipped_file <- list.files(
