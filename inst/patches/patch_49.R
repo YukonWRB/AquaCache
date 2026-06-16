@@ -665,7 +665,7 @@ if (length(ts) > 0) {
         DBI::dbExecute(
           con,
           "SELECT pg_advisory_lock(hashtext($1), $2);",
-          params = list(lock_namespace, tsid)
+          params = list(lock_namespace, i)
         )
         lock_acquired <- TRUE
 
@@ -689,7 +689,7 @@ if (length(ts) > 0) {
           DBI::dbGetQuery(
             con,
             "SELECT pg_advisory_unlock(hashtext($1), $2);",
-            params = list(lock_namespace, tsid)
+            params = list(lock_namespace, i)
           )
         }
       }
