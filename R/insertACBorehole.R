@@ -16,6 +16,7 @@
 #' @param surveyed_ground_elev Ground elevation from survey in meters.
 #' @param purpose_of_borehole Purpose of the borehole as integer matching the database's borehole_well_purpose column.
 #' @param purpose_borehole_inferred Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is FALSE.
+#' @param bedrock_reached Logical indicating if bedrock was reached during drilling. Default is NULL (unknown).
 #' @param depth_to_bedrock Depth to bedrock in meters.
 #' @param permafrost_present Logical indicating if permafrost is present. Default is FALSE.
 #' @param permafrost_top Depth to the top of permafrost in meters, if present.
@@ -63,6 +64,7 @@ insertACBorehole <- function(
   surveyed_ground_elev = NULL,
   purpose_of_borehole = NULL,
   purpose_borehole_inferred = FALSE,
+  bedrock_reached = NULL,
   depth_to_bedrock = NULL,
   permafrost_present = FALSE,
   permafrost_top = NULL,
@@ -208,6 +210,40 @@ insertACBorehole <- function(
     )
   }
 
+  # Validate bedrock_reached and depth_to_bedrock
+  if (!is.null(depth_to_bedrock) && !is.numeric(depth_to_bedrock)) {
+    stop("'depth_to_bedrock' must be numeric if provided.")
+  }
+  if (!is.null(bedrock_reached) && !is.logical(bedrock_reached)) {
+    stop("'bedrock_reached' must be logical if provided.")
+  }
+  if (
+    !is.null(bedrock_reached) && bedrock_reached && is.null(depth_to_bedrock)
+  ) {
+    stop(
+      "'depth_to_bedrock' must be provided if 'bedrock_reached' is TRUE."
+    )
+  }
+  if (
+    !is.null(bedrock_reached) && !bedrock_reached && !is.null(depth_to_bedrock)
+  ) {
+    stop(
+      "'depth_to_bedrock' should not be provided if 'bedrock_reached' is FALSE."
+    )
+  }
+  if (
+    !is.null(bedrock_reached) &&
+      is.null(depth_to_bedrock) &&
+      !is.null(depth_to_bedrock)
+  ) {
+    stop(
+      "'depth_to_bedrock' should not be provided if 'bedrock_reached' is NULL."
+    )
+  }
+  if (!is.null(depth_to_bedrock) && depth_to_bedrock < 0) {
+    stop("'depth_to_bedrock' must be a non-negative numeric value.")
+  }
+
   # Validate numeric fields
   numeric_fields <- c(
     "depth_to_bedrock",
@@ -234,10 +270,24 @@ insertACBorehole <- function(
 
   # Construct SQL query for borehole insertion
   query <- paste0(
-    "INSERT INTO boreholes (share_with, location_id, latitude, longitude, borehole_name,",
-    "location_source, ground_elevation_m, depth_m, depth_to_bedrock_m, drilled_by, ",
-    "drill_method, completion_date, notes, borehole_purpose_id, inferred_purpose) VALUES (",
-    "'{",
+    "INSERT INTO boreholes (
+      share_with, 
+      location_id, 
+      latitude, 
+      longitude, 
+      borehole_name,
+      location_source, 
+      ground_elevation_m, 
+      depth_m, 
+      bedrock_reached, 
+      depth_to_bedrock_m, 
+      drilled_by,
+      drill_method, 
+      completion_date, 
+      notes, 
+      borehole_purpose_id, 
+      inferred_purpose) 
+    VALUES ('{",
     paste(share_with_borehole, collapse = ","),
     "}', ",
     ifelse(is.null(location_id), "NULL", location_id),
@@ -253,6 +303,8 @@ insertACBorehole <- function(
     ifelse(is.null(ground_elev_m), "NULL", ground_elev_m),
     ", ",
     ifelse(is.null(well_depth), "NULL", well_depth),
+    ", ",
+    ifelse(is.null(bedrock_reached), "NULL", bedrock_reached),
     ", ",
     ifelse(is.null(depth_to_bedrock), "NULL", depth_to_bedrock),
     ", ",
@@ -279,9 +331,11 @@ insertACBorehole <- function(
   # If permafrost is present, insert permafrost record
   if (permafrost_present) {
     query <- paste0(
-      "INSERT INTO permafrost (borehole_id, depth_from_m, ",
-      "depth_to_m) VALUES (",
-      "'",
+      "INSERT INTO permafrost (
+        borehole_id, 
+        depth_from_m, 
+        depth_to_m) 
+      VALUES ('",
       borehole_id,
       "', ",
       ifelse(is.na(permafrost_top), "NULL", permafrost_top),
@@ -295,10 +349,19 @@ insertACBorehole <- function(
   # If borehole is a well, insert well-specific data
   if (is_well) {
     query <- paste0(
-      "INSERT INTO wells (borehole_id, casing_diameter_mm, ",
-      "screen_top_depth_m, screen_bottom_depth_m, stick_up_height_m, ",
-      "static_water_level_m, estimated_yield_lps, well_purpose_id, inferred_purpose, notes, share_with) VALUES (",
-      "",
+      "INSERT INTO wells (
+        borehole_id, 
+        casing_diameter_mm, 
+        screen_top_depth_m, 
+        screen_bottom_depth_m, 
+        stick_up_height_m, 
+        static_water_level_m, 
+        estimated_yield_lps, 
+        well_purpose_id, 
+        inferred_purpose, 
+        notes, 
+        share_with) 
+      VALUES (",
       borehole_id,
       ", ",
       ifelse(is.null(casing_od), "NULL", casing_od),

@@ -15,6 +15,7 @@ insertACBorehole(
   surveyed_ground_elev = NULL,
   purpose_of_borehole = NULL,
   purpose_borehole_inferred = FALSE,
+  bedrock_reached = NULL,
   depth_to_bedrock = NULL,
   permafrost_present = FALSE,
   permafrost_top = NULL,
@@ -59,6 +60,8 @@ insertACBorehole(
 \item{purpose_of_borehole}{Purpose of the borehole as integer matching the database's borehole_well_purpose column.}
 
 \item{purpose_borehole_inferred}{Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is FALSE.}
+
+\item{bedrock_reached}{Logical indicating if bedrock was reached during drilling. Default is NULL (unknown).}
 
 \item{depth_to_bedrock}{Depth to bedrock in meters.}
 
