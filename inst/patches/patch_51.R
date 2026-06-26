@@ -1,4 +1,4 @@
-# Patch 47: database-driven water-quality guideline engine
+# Patch 51: database-driven environmental guideline engine
 #
 # Adds structured guideline applicability, declarative value derivation rules,
 # sample-specific input resolution, and result-level guideline evaluation
@@ -15,7 +15,7 @@ if (check$session_user != "postgres") {
 }
 
 message(
-  "Working on patch 47: adding database-driven guideline derivation and application. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state."
+  "Working on patch 51: adding database-driven guideline derivation and application. Changes are being made within a transaction, so if something goes wrong, the database will be rolled back to its previous state."
 )
 
 if (dbTransCheck(con)) {
@@ -73,7 +73,7 @@ tryCatch(
     ) {
       stop(
         paste(
-          "Patch 47 requires discrete.results, discrete.samples,",
+          "Patch 51 requires discrete.results, discrete.samples,",
           "discrete.sample_fractions, discrete.result_speciations,",
           "discrete.result_types, public.parameters, public.matrix_states,",
           "public.locations, public.units, and public.media_types to already exist."
@@ -92,13 +92,36 @@ tryCatch(
     )
     DBI::dbExecute(con, "GRANT USAGE ON SCHEMA criteria TO public;")
 
+    # modify the seach path to include the new schema
+    # Fetch the DB name from the connection
+    name <- DBI::dbGetQuery(con, "SELECT current_database()")[1, 1]
+
+    # see if the 'commentary' schema exists, and if so, include it in the search path
+    commentary_exists <- DBI::dbGetQuery(
+      con,
+      "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'commentary')"
+    )[[1]]
+
+    DBI::dbExecute(
+      con,
+      paste0(
+        "ALTER DATABASE ",
+        name,
+        " SET search_path TO public, continuous, discrete, criteria, spatial, files, instruments, boreholes, audit, information, application",
+        if (commentary_exists) ", commentary" else "",
+        ";"
+      )
+    )
+
     for (sql in c(
       "DROP VIEW IF EXISTS discrete.results_guideline_values CASCADE;",
       "DROP VIEW IF EXISTS discrete.results_guideline_rule_values CASCADE;",
       "DROP VIEW IF EXISTS criteria.results_guideline_values CASCADE;",
       "DROP VIEW IF EXISTS criteria.results_guideline_rule_values CASCADE;",
       "DROP FUNCTION IF EXISTS discrete.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN) CASCADE;",
+      "DROP FUNCTION IF EXISTS discrete.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN) CASCADE;",
       "DROP FUNCTION IF EXISTS discrete.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN) CASCADE;",
+      "DROP FUNCTION IF EXISTS discrete.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN) CASCADE;",
       "DROP FUNCTION IF EXISTS discrete.get_guideline_value(INTEGER, INTEGER) CASCADE;",
       "DROP FUNCTION IF EXISTS discrete.evaluate_guideline(INTEGER, INTEGER) CASCADE;",
       "DROP FUNCTION IF EXISTS discrete.evaluate_guideline_rule(INTEGER, INTEGER) CASCADE;",
@@ -113,7 +136,9 @@ tryCatch(
       "DROP FUNCTION IF EXISTS discrete.enforce_guideline_matrix_state() CASCADE;",
       "DROP FUNCTION IF EXISTS discrete.guidelines_validate_trg() CASCADE;",
       "DROP FUNCTION IF EXISTS criteria.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN) CASCADE;",
+      "DROP FUNCTION IF EXISTS criteria.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN) CASCADE;",
       "DROP FUNCTION IF EXISTS criteria.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN) CASCADE;",
+      "DROP FUNCTION IF EXISTS criteria.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN) CASCADE;",
       "DROP FUNCTION IF EXISTS criteria.get_guideline_value(INTEGER, INTEGER) CASCADE;",
       "DROP FUNCTION IF EXISTS criteria.evaluate_guideline(INTEGER, INTEGER) CASCADE;",
       "DROP FUNCTION IF EXISTS criteria.evaluate_guideline_rule(INTEGER, INTEGER) CASCADE;",
@@ -355,18 +380,10 @@ tryCatch(
        VALUES
          ('constant', 'Constant value', 'Valeur constante',
           'Returns a fixed numeric guideline value.'),
-         ('lookup_range', 'Lookup by input range', 'Recherche par plage',
-          'Uses a sample-specific input value to select an output value from non-overlapping numeric ranges.'),
-         ('lookup_grid', 'Lookup by multiple input ranges', 'Recherche par grille',
-          'Uses two or more sample-specific input values to select an output value from a multidimensional range table.'),
          ('linear', 'Linear formula', 'Formule lineaire',
           'Computes intercept + slope * input_value using stored coefficients.'),
          ('log_linear', 'Log-linear formula', 'Formule log-lineaire',
           'Computes exp(intercept + slope * ln(input_value)) using stored coefficients.'),
-         ('power', 'Power formula', 'Formule de puissance',
-         'Computes factor * input_value ^ exponent using stored coefficients.'),
-         ('model_result_cache', 'Stored model result', 'Resultat de modele stocke',
-          'Collects declared sample-specific inputs and retrieves a matching previously calculated model result from the database.'),
          ('narrative', 'Narrative or non-numeric guideline', 'Ligne directrice narrative ou non numerique',
           'Returns a non-numeric guideline status for narrative, operational, or otherwise non-scalar guidelines.'),
          ('sql_scalar', 'Governed SQL scalar', 'Scalaire SQL gouverne',
@@ -379,26 +396,16 @@ tryCatch(
     DBI::dbExecute(
       con,
       "DELETE FROM criteria.guideline_value_algorithms
-       WHERE algorithm_code = 'db_function';"
+       WHERE algorithm_code IN (
+         'db_function',
+         'lookup_range',
+         'lookup_grid',
+         'model_result_cache',
+         'power'
+       );"
     )
 
     # Applicability reference tables #######################################
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_jurisdictions (
-         jurisdiction_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-         jurisdiction_code TEXT NOT NULL UNIQUE,
-         jurisdiction_name TEXT NOT NULL UNIQUE,
-         jurisdiction_name_fr TEXT,
-         active BOOLEAN NOT NULL DEFAULT TRUE,
-         sort_order INTEGER NOT NULL DEFAULT 100,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ
-       );"
-    )
     DBI::dbExecute(
       con,
       "CREATE TABLE IF NOT EXISTS criteria.guideline_jurisdiction_levels (
@@ -415,6 +422,26 @@ tryCatch(
          modified TIMESTAMPTZ
        );"
     )
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE IF NOT EXISTS criteria.guideline_jurisdictions (
+         jurisdiction_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+         jurisdiction_code TEXT NOT NULL UNIQUE,
+         jurisdiction_name TEXT NOT NULL UNIQUE,
+         jurisdiction_name_fr TEXT,
+         jurisdiction_level_id INTEGER
+           REFERENCES criteria.guideline_jurisdiction_levels(jurisdiction_level_id)
+           ON UPDATE CASCADE ON DELETE RESTRICT,
+         active BOOLEAN NOT NULL DEFAULT TRUE,
+         sort_order INTEGER NOT NULL DEFAULT 100,
+         note TEXT,
+         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+         modified_by TEXT,
+         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+         modified TIMESTAMPTZ
+       );"
+    )
+
     DBI::dbExecute(
       con,
       "CREATE TABLE IF NOT EXISTS criteria.guideline_protection_goals (
@@ -474,23 +501,6 @@ tryCatch(
     }
     DBI::dbExecute(
       con,
-      "INSERT INTO criteria.guideline_jurisdictions (
-         jurisdiction_code, jurisdiction_name, sort_order
-       )
-       VALUES
-         ('BC', 'British Columbia', 10),
-         ('YT', 'Yukon', 20),
-         ('CA', 'Canada', 30),
-         ('US', 'United States', 40),
-         ('EU', 'European Union', 50),
-         ('SITE_SPECIFIC', 'Site-specific', 900),
-         ('TEST_FIXTURE', 'Test fixture', 990)
-       ON CONFLICT (jurisdiction_code) DO UPDATE
-       SET jurisdiction_name = EXCLUDED.jurisdiction_name,
-           sort_order = EXCLUDED.sort_order;"
-    )
-    DBI::dbExecute(
-      con,
       "INSERT INTO criteria.guideline_jurisdiction_levels (
          jurisdiction_level_code, jurisdiction_level_name, sort_order
        )
@@ -499,12 +509,39 @@ tryCatch(
          ('PROVINCIAL', 'Provincial', 20),
          ('TERRITORIAL', 'Territorial', 30),
          ('PROV_TERR', 'Provincial/territorial', 40),
-         ('STATE', 'State', 50),
+         ('STATE', 'State', 51),
          ('INTERNATIONAL', 'International', 60),
          ('SITE_SPECIFIC', 'Site-specific', 900),
          ('TEST_FIXTURE', 'Test fixture', 990)
        ON CONFLICT (jurisdiction_level_code) DO UPDATE
        SET jurisdiction_level_name = EXCLUDED.jurisdiction_level_name,
+           sort_order = EXCLUDED.sort_order;"
+    )
+    DBI::dbExecute(
+      con,
+      "INSERT INTO criteria.guideline_jurisdictions (
+         jurisdiction_code, jurisdiction_name, jurisdiction_level_id, sort_order
+       )
+       SELECT
+         src.jurisdiction_code,
+         src.jurisdiction_name,
+         gjl.jurisdiction_level_id,
+         src.sort_order
+       FROM (
+         VALUES
+           ('BC', 'British Columbia', 'PROVINCIAL', 10),
+           ('YT', 'Yukon', 'TERRITORIAL', 20),
+           ('CA', 'Canada', 'FEDERAL', 30),
+           ('US', 'United States', 'FEDERAL', 40),
+           ('EU', 'European Union', 'INTERNATIONAL', 51),
+           ('SITE_SPECIFIC', 'Site-specific', 'SITE_SPECIFIC', 900),
+           ('TEST_FIXTURE', 'Test fixture', 'TEST_FIXTURE', 990)
+       ) src(jurisdiction_code, jurisdiction_name, jurisdiction_level_code, sort_order)
+       JOIN criteria.guideline_jurisdiction_levels gjl
+         ON gjl.jurisdiction_level_code = src.jurisdiction_level_code
+       ON CONFLICT (jurisdiction_code) DO UPDATE
+       SET jurisdiction_name = EXCLUDED.jurisdiction_name,
+           jurisdiction_level_id = EXCLUDED.jurisdiction_level_id,
            sort_order = EXCLUDED.sort_order;"
     )
     DBI::dbExecute(
@@ -517,7 +554,7 @@ tryCatch(
          ('MARINE_AQUATIC_LIFE', 'Marine aquatic life', 20),
          ('DRINKING_WATER', 'Drinking water', 30),
          ('RECREATION', 'Recreation', 40),
-         ('AGRICULTURAL_WATER_USE', 'Agricultural water use', 50),
+         ('AGRICULTURAL_WATER_USE', 'Agricultural water use', 51),
          ('IRRIGATION', 'Irrigation', 60),
          ('LIVESTOCK', 'Livestock', 70),
          ('HUMAN_HEALTH', 'Human health', 80),
@@ -534,11 +571,6 @@ tryCatch(
        VALUES
          ('SHORT_TERM_ACUTE', 'Short-term acute', 10),
          ('LONG_TERM_CHRONIC', 'Long-term chronic', 20),
-         ('ACUTE', 'Acute', 30),
-         ('CHRONIC', 'Chronic', 40),
-         ('INSTANTANEOUS_MAXIMUM', 'Instantaneous maximum', 50),
-         ('INSTANTANEOUS_MINIMUM', 'Instantaneous minimum', 60),
-         ('SAMPLE_SPECIFIC', 'Sample-specific', 70),
          ('NARRATIVE', 'Narrative', 900)
        ON CONFLICT (exposure_duration_code) DO UPDATE
        SET exposure_duration_name = EXCLUDED.exposure_duration_name,
@@ -551,14 +583,12 @@ tryCatch(
        )
        VALUES
          ('SINGLE_SAMPLE', 'Single sample', 10),
-         ('INSTANTANEOUS', 'Instantaneous', 20),
          ('1_HOUR_AVERAGE', '1-hour average', 30),
          ('4_DAY_AVERAGE', '4-day average', 40),
-         ('24_HOUR_AVERAGE', '24-hour average', 50),
+         ('24_HOUR_AVERAGE', '24-hour average', 51),
          ('30_DAY_AVERAGE', '30-day average', 60),
          ('ANNUAL_AVERAGE', 'Annual average', 70),
          ('5_SAMPLES_30_DAYS', '5 samples in 30 days', 80),
-         ('SAMPLE_SPECIFIC', 'Sample-specific', 90),
          ('SOURCE_DOCUMENT', 'See source document', 900)
        ON CONFLICT (averaging_period_code) DO UPDATE
        SET averaging_period_name = EXCLUDED.averaging_period_name,
@@ -566,15 +596,15 @@ tryCatch(
     )
     for (sql in c(
       "COMMENT ON TABLE criteria.guideline_jurisdictions IS
-       'Controlled jurisdictions used by water-quality guidelines.';",
+       'Controlled jurisdictions used by environmental guidelines.';",
       "COMMENT ON TABLE criteria.guideline_jurisdiction_levels IS
-       'Controlled jurisdiction levels used by water-quality guidelines.';",
+       'Controlled jurisdiction levels used by environmental guidelines.';",
       "COMMENT ON TABLE criteria.guideline_protection_goals IS
-       'Controlled protection goals used by water-quality guidelines.';",
+       'Controlled protection goals used by environmental guidelines.';",
       "COMMENT ON TABLE criteria.guideline_exposure_durations IS
-       'Controlled exposure durations used by water-quality guidelines and model outputs.';",
+       'Controlled exposure durations used by environmental guidelines.';",
       "COMMENT ON TABLE criteria.guideline_averaging_periods IS
-       'Controlled averaging periods used by water-quality guidelines and model outputs.';"
+       'Controlled averaging periods used by environmental guidelines.';"
     )) {
       DBI::dbExecute(con, sql)
     }
@@ -632,325 +662,6 @@ tryCatch(
        'Publication series, editions, or guideline collections that contain individual guideline values.';"
     )
 
-    # External model metadata ###############################################
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_models (
-         model_code TEXT PRIMARY KEY,
-         model_name TEXT NOT NULL,
-         publisher_id INTEGER
-           REFERENCES criteria.guideline_publishers(publisher_id)
-           ON UPDATE CASCADE ON DELETE SET NULL,
-         model_version TEXT,
-         model_type TEXT NOT NULL,
-         source_document_title TEXT,
-         source_url TEXT,
-         executable_url TEXT,
-         description TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         CONSTRAINT guideline_models_type_check
-           CHECK (
-             model_type IN (
-               'external_software',
-               'lookup_workbook',
-               'published_table'
-             )
-           )
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_models OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "DELETE FROM criteria.guideline_models
-       WHERE model_type = 'database_function';"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_models
-       DROP CONSTRAINT IF EXISTS guideline_models_type_check;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_models
-       ADD CONSTRAINT guideline_models_type_check
-       CHECK (
-         model_type IN (
-           'external_software',
-           'lookup_workbook',
-           'published_table'
-         )
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_models IS
-       'External guideline calculation models such as BLM software, lookup workbooks, or published tables.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_model_inputs (
-         model_code TEXT NOT NULL
-           REFERENCES criteria.guideline_models(model_code)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         input_code TEXT NOT NULL,
-         input_name TEXT NOT NULL,
-         parameter_id INTEGER
-           REFERENCES public.parameters(parameter_id)
-           ON UPDATE CASCADE ON DELETE RESTRICT,
-         matrix_state_id INTEGER
-           REFERENCES public.matrix_states(matrix_state_id)
-           ON UPDATE CASCADE ON DELETE RESTRICT,
-         sample_fraction_id INTEGER
-           REFERENCES discrete.sample_fractions(sample_fraction_id)
-           ON UPDATE CASCADE ON DELETE SET NULL,
-         result_speciation_id INTEGER
-           REFERENCES discrete.result_speciations(result_speciation_id)
-           ON UPDATE CASCADE ON DELETE SET NULL,
-         input_units INTEGER
-           REFERENCES public.units(unit_id)
-           ON UPDATE CASCADE ON DELETE RESTRICT,
-         lower_calibrated_bound NUMERIC,
-         upper_calibrated_bound NUMERIC,
-         bounds_action TEXT NOT NULL DEFAULT 'flag',
-         required BOOLEAN NOT NULL DEFAULT TRUE,
-         importance TEXT,
-         default_value NUMERIC,
-         default_method TEXT,
-         sort_order INTEGER NOT NULL DEFAULT 100,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         PRIMARY KEY (model_code, input_code),
-         CONSTRAINT guideline_model_inputs_bounds_check
-           CHECK (
-             lower_calibrated_bound IS NULL
-             OR upper_calibrated_bound IS NULL
-             OR lower_calibrated_bound <= upper_calibrated_bound
-           ),
-         CONSTRAINT guideline_model_inputs_bounds_action_check
-           CHECK (bounds_action IN ('flag', 'clamp', 'reject')),
-         CONSTRAINT guideline_model_inputs_importance_check
-           CHECK (importance IS NULL OR importance IN ('low', 'medium', 'high'))
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_model_inputs OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE INDEX IF NOT EXISTS guideline_model_inputs_parameter_idx
-       ON criteria.guideline_model_inputs (
-         parameter_id, matrix_state_id, sample_fraction_id,
-         result_speciation_id
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_model_inputs IS
-       'Declared input chemistry required by guideline models, including BLM input bounds and default behaviour.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_model_outputs (
-         model_code TEXT NOT NULL
-           REFERENCES criteria.guideline_models(model_code)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         output_code TEXT NOT NULL,
-         output_name TEXT NOT NULL,
-         comparison_operator_code TEXT NOT NULL
-           REFERENCES criteria.guideline_comparison_operators(operator_code)
-           ON UPDATE CASCADE ON DELETE RESTRICT,
-         output_units INTEGER
-           REFERENCES public.units(unit_id)
-           ON UPDATE CASCADE ON DELETE RESTRICT,
-         exposure_duration_id INTEGER
-           REFERENCES criteria.guideline_exposure_durations(exposure_duration_id)
-           ON UPDATE CASCADE ON DELETE RESTRICT,
-         averaging_period_id INTEGER
-           REFERENCES criteria.guideline_averaging_periods(averaging_period_id)
-           ON UPDATE CASCADE ON DELETE RESTRICT,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         PRIMARY KEY (model_code, output_code)
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_model_outputs OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_model_outputs
-       ADD COLUMN IF NOT EXISTS exposure_duration_id INTEGER
-         REFERENCES criteria.guideline_exposure_durations(exposure_duration_id)
-         ON UPDATE CASCADE ON DELETE RESTRICT,
-       ADD COLUMN IF NOT EXISTS averaging_period_id INTEGER
-         REFERENCES criteria.guideline_averaging_periods(averaging_period_id)
-         ON UPDATE CASCADE ON DELETE RESTRICT;"
-    )
-    DBI::dbExecute(
-      con,
-      "DO $$
-       BEGIN
-         IF EXISTS (
-           SELECT 1 FROM information_schema.columns
-           WHERE table_schema = 'criteria'
-             AND table_name = 'guideline_model_outputs'
-             AND column_name = 'exposure_duration'
-         ) THEN
-           INSERT INTO criteria.guideline_exposure_durations (
-             exposure_duration_code, exposure_duration_name, sort_order
-           )
-           SELECT DISTINCT
-             'CUSTOM_' || upper(left(md5(exposure_duration), 10)),
-             exposure_duration,
-             800
-           FROM criteria.guideline_model_outputs
-           WHERE exposure_duration IS NOT NULL
-             AND btrim(exposure_duration) <> ''
-             AND NOT EXISTS (
-               SELECT 1
-               FROM criteria.guideline_exposure_durations existing
-               WHERE lower(existing.exposure_duration_name) =
-                 lower(criteria.guideline_model_outputs.exposure_duration)
-             )
-           ON CONFLICT (exposure_duration_name) DO NOTHING;
-
-           UPDATE criteria.guideline_model_outputs gmo
-           SET exposure_duration_id = ged.exposure_duration_id
-           FROM criteria.guideline_exposure_durations ged
-           WHERE gmo.exposure_duration_id IS NULL
-             AND lower(gmo.exposure_duration) = lower(ged.exposure_duration_name);
-
-           ALTER TABLE criteria.guideline_model_outputs
-             DROP COLUMN exposure_duration;
-         END IF;
-
-         IF EXISTS (
-           SELECT 1 FROM information_schema.columns
-           WHERE table_schema = 'criteria'
-             AND table_name = 'guideline_model_outputs'
-             AND column_name = 'averaging_period'
-         ) THEN
-           INSERT INTO criteria.guideline_averaging_periods (
-             averaging_period_code, averaging_period_name, sort_order
-           )
-           SELECT DISTINCT
-             'CUSTOM_' || upper(left(md5(averaging_period), 10)),
-             averaging_period,
-             800
-           FROM criteria.guideline_model_outputs
-           WHERE averaging_period IS NOT NULL
-             AND btrim(averaging_period) <> ''
-             AND NOT EXISTS (
-               SELECT 1
-               FROM criteria.guideline_averaging_periods existing
-               WHERE lower(existing.averaging_period_name) =
-                 lower(criteria.guideline_model_outputs.averaging_period)
-             )
-           ON CONFLICT (averaging_period_name) DO NOTHING;
-
-           UPDATE criteria.guideline_model_outputs gmo
-           SET averaging_period_id = gap.averaging_period_id
-           FROM criteria.guideline_averaging_periods gap
-           WHERE gmo.averaging_period_id IS NULL
-             AND lower(gmo.averaging_period) = lower(gap.averaging_period_name);
-
-           ALTER TABLE criteria.guideline_model_outputs
-             DROP COLUMN averaging_period;
-         END IF;
-       END $$;"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_model_outputs IS
-       'Named outputs produced by a guideline model, such as acute or chronic BLM copper guideline values.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_model_results (
-         model_result_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-         model_code TEXT NOT NULL,
-         model_output_code TEXT NOT NULL,
-         sample_id INTEGER NOT NULL
-           REFERENCES discrete.samples(sample_id)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         guideline_value NUMERIC,
-         output_status TEXT NOT NULL DEFAULT 'value',
-         input_payload JSONB NOT NULL,
-         input_hash TEXT NOT NULL,
-         model_version TEXT,
-         model_run_datetime TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         generated_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         source_artifact TEXT,
-         message TEXT,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         CONSTRAINT guideline_model_results_output_fkey
-           FOREIGN KEY (model_code, model_output_code)
-           REFERENCES criteria.guideline_model_outputs(model_code, output_code)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         CONSTRAINT guideline_model_results_status_check
-           CHECK (
-             output_status IN (
-               'value',
-               'missing_input',
-               'outside_calibrated_range',
-               'model_error',
-               'no_recommended_guideline',
-               'site_specific'
-             )
-           ),
-         CONSTRAINT guideline_model_results_value_required
-           CHECK (
-             (output_status = 'value' AND guideline_value IS NOT NULL)
-             OR (output_status <> 'value')
-           )
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_model_results OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "DROP INDEX IF EXISTS criteria.guideline_model_results_signature_key;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE UNIQUE INDEX guideline_model_results_signature_key
-       ON criteria.guideline_model_results (
-         model_code,
-         model_output_code,
-         sample_id,
-         input_hash,
-         COALESCE(model_version, '')
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_model_results IS
-       'Database cache of externally or database-calculated guideline model outputs keyed to the exact input signature used.';"
-    )
-
     # Extend the existing guideline table ###################################
     DBI::dbExecute(
       con,
@@ -979,9 +690,6 @@ tryCatch(
        ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER
          REFERENCES criteria.guideline_jurisdictions(jurisdiction_id)
          ON UPDATE CASCADE ON DELETE RESTRICT,
-       ADD COLUMN IF NOT EXISTS jurisdiction_level_id INTEGER
-         REFERENCES criteria.guideline_jurisdiction_levels(jurisdiction_level_id)
-         ON UPDATE CASCADE ON DELETE RESTRICT,
        ADD COLUMN IF NOT EXISTS protection_goal_id INTEGER
          REFERENCES criteria.guideline_protection_goals(protection_goal_id)
          ON UPDATE CASCADE ON DELETE RESTRICT,
@@ -1004,6 +712,7 @@ tryCatch(
        ADD COLUMN IF NOT EXISTS valid_from DATE,
        ADD COLUMN IF NOT EXISTS valid_to DATE,
        ADD COLUMN IF NOT EXISTS source_revision TEXT,
+       ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE,
        ADD COLUMN IF NOT EXISTS supersedes_guideline_id INTEGER
          REFERENCES criteria.guidelines(guideline_id)
          ON UPDATE CASCADE ON DELETE SET NULL,
@@ -1046,39 +755,6 @@ tryCatch(
              AND lower(g.jurisdiction) = lower(gj.jurisdiction_name);
 
            ALTER TABLE criteria.guidelines DROP COLUMN jurisdiction;
-         END IF;
-
-         IF EXISTS (
-           SELECT 1 FROM information_schema.columns
-           WHERE table_schema = 'criteria'
-             AND table_name = 'guidelines'
-             AND column_name = 'jurisdiction_level'
-         ) THEN
-           INSERT INTO criteria.guideline_jurisdiction_levels (
-             jurisdiction_level_code, jurisdiction_level_name, sort_order
-           )
-           SELECT DISTINCT
-             'CUSTOM_' || upper(left(md5(jurisdiction_level), 10)),
-             jurisdiction_level,
-             800
-           FROM criteria.guidelines
-           WHERE jurisdiction_level IS NOT NULL
-             AND btrim(jurisdiction_level) <> ''
-             AND NOT EXISTS (
-               SELECT 1
-               FROM criteria.guideline_jurisdiction_levels existing
-               WHERE lower(existing.jurisdiction_level_name) =
-                 lower(criteria.guidelines.jurisdiction_level)
-             )
-           ON CONFLICT (jurisdiction_level_name) DO NOTHING;
-
-           UPDATE criteria.guidelines g
-           SET jurisdiction_level_id = gjl.jurisdiction_level_id
-           FROM criteria.guideline_jurisdiction_levels gjl
-           WHERE g.jurisdiction_level_id IS NULL
-             AND lower(g.jurisdiction_level) = lower(gjl.jurisdiction_level_name);
-
-           ALTER TABLE criteria.guidelines DROP COLUMN jurisdiction_level;
          END IF;
 
          IF EXISTS (
@@ -1223,10 +899,10 @@ tryCatch(
            ) AS keep_id
          FROM criteria.guideline_jurisdiction_levels
        )
-       UPDATE criteria.guidelines g
+       UPDATE criteria.guideline_jurisdictions gj
        SET jurisdiction_level_id = ranked.keep_id
        FROM ranked
-       WHERE g.jurisdiction_level_id = ranked.jurisdiction_level_id
+       WHERE gj.jurisdiction_level_id = ranked.jurisdiction_level_id
          AND ranked.jurisdiction_level_id <> ranked.keep_id;
 
        WITH ranked AS (
@@ -1296,21 +972,6 @@ tryCatch(
            ) AS keep_id
          FROM criteria.guideline_exposure_durations
        )
-       UPDATE criteria.guideline_model_outputs gmo
-       SET exposure_duration_id = ranked.keep_id
-       FROM ranked
-       WHERE gmo.exposure_duration_id = ranked.exposure_duration_id
-         AND ranked.exposure_duration_id <> ranked.keep_id;
-
-       WITH ranked AS (
-         SELECT
-           exposure_duration_id,
-           first_value(exposure_duration_id) OVER (
-             PARTITION BY lower(btrim(exposure_duration_name))
-             ORDER BY sort_order, exposure_duration_id
-           ) AS keep_id
-         FROM criteria.guideline_exposure_durations
-       )
        DELETE FROM criteria.guideline_exposure_durations ged
        USING ranked
        WHERE ged.exposure_duration_id = ranked.exposure_duration_id
@@ -1340,25 +1001,142 @@ tryCatch(
            ) AS keep_id
          FROM criteria.guideline_averaging_periods
        )
-       UPDATE criteria.guideline_model_outputs gmo
-       SET averaging_period_id = ranked.keep_id
-       FROM ranked
-       WHERE gmo.averaging_period_id = ranked.averaging_period_id
-         AND ranked.averaging_period_id <> ranked.keep_id;
-
-       WITH ranked AS (
-         SELECT
-           averaging_period_id,
-           first_value(averaging_period_id) OVER (
-             PARTITION BY lower(btrim(averaging_period_name))
-             ORDER BY sort_order, averaging_period_id
-           ) AS keep_id
-         FROM criteria.guideline_averaging_periods
-       )
        DELETE FROM criteria.guideline_averaging_periods gap
        USING ranked
        WHERE gap.averaging_period_id = ranked.averaging_period_id
          AND ranked.averaging_period_id <> ranked.keep_id;
+       END
+       $do$;"
+    )
+    DBI::dbExecute(
+      con,
+      "DO $do$
+       DECLARE
+         acute_id integer;
+         chronic_id integer;
+         narrative_id integer;
+         single_sample_id integer;
+         source_document_id integer;
+       BEGIN
+         SELECT exposure_duration_id INTO acute_id
+         FROM criteria.guideline_exposure_durations
+         WHERE exposure_duration_code = 'SHORT_TERM_ACUTE';
+
+         SELECT exposure_duration_id INTO chronic_id
+         FROM criteria.guideline_exposure_durations
+         WHERE exposure_duration_code = 'LONG_TERM_CHRONIC';
+
+         SELECT exposure_duration_id INTO narrative_id
+         FROM criteria.guideline_exposure_durations
+         WHERE exposure_duration_code = 'NARRATIVE';
+
+         SELECT averaging_period_id INTO single_sample_id
+         FROM criteria.guideline_averaging_periods
+         WHERE averaging_period_code = 'SINGLE_SAMPLE';
+
+         SELECT averaging_period_id INTO source_document_id
+         FROM criteria.guideline_averaging_periods
+         WHERE averaging_period_code = 'SOURCE_DOCUMENT';
+
+         UPDATE criteria.guidelines g
+         SET exposure_duration_id = acute_id
+         FROM criteria.guideline_exposure_durations ged
+         WHERE g.exposure_duration_id = ged.exposure_duration_id
+           AND acute_id IS NOT NULL
+           AND (
+             ged.exposure_duration_code IN (
+               'ACUTE', 'SAMPLE_SPECIFIC', 'INSTANTANEOUS_MAXIMUM',
+               'INSTANTANEOUS_MINIMUM'
+             )
+             OR lower(btrim(ged.exposure_duration_name)) IN (
+               'acute', 'sample-specific', 'sample specific',
+               'short-term', 'short term', 'short term acute',
+               'instantaneous maximum', 'instantaneous minimum'
+             )
+           );
+
+         UPDATE criteria.guidelines g
+         SET exposure_duration_id = chronic_id
+         FROM criteria.guideline_exposure_durations ged
+         WHERE g.exposure_duration_id = ged.exposure_duration_id
+           AND chronic_id IS NOT NULL
+           AND (
+             ged.exposure_duration_code = 'CHRONIC'
+             OR lower(btrim(ged.exposure_duration_name)) IN (
+               'chronic', 'long-term', 'long term', 'long term chronic'
+             )
+           );
+
+         UPDATE criteria.guidelines g
+         SET exposure_duration_id = narrative_id
+         FROM criteria.guideline_exposure_durations ged
+         WHERE g.exposure_duration_id = ged.exposure_duration_id
+           AND narrative_id IS NOT NULL
+           AND lower(btrim(ged.exposure_duration_name)) IN ('varies', 'narrative');
+
+         UPDATE criteria.guidelines g
+         SET averaging_period_id = single_sample_id
+         FROM criteria.guideline_averaging_periods gap
+         WHERE g.averaging_period_id = gap.averaging_period_id
+           AND single_sample_id IS NOT NULL
+           AND (
+             gap.averaging_period_code IN ('INSTANTANEOUS', 'SAMPLE_SPECIFIC')
+             OR lower(btrim(gap.averaging_period_name)) IN (
+               'instantaneous', 'sample-specific', 'sample specific', 'single sample'
+             )
+           );
+
+         UPDATE criteria.guidelines g
+         SET averaging_period_id = source_document_id
+         FROM criteria.guideline_averaging_periods gap
+         WHERE g.averaging_period_id = gap.averaging_period_id
+           AND source_document_id IS NOT NULL
+           AND lower(btrim(gap.averaging_period_name)) IN (
+             'source document', 'see source document',
+             'duration and background dependent'
+           );
+
+         DELETE FROM criteria.guideline_exposure_durations ged
+         WHERE ged.exposure_duration_id <> acute_id
+           AND (
+             ged.exposure_duration_code IN (
+               'ACUTE', 'SAMPLE_SPECIFIC', 'INSTANTANEOUS_MAXIMUM',
+               'INSTANTANEOUS_MINIMUM'
+             )
+             OR lower(btrim(ged.exposure_duration_name)) IN (
+               'acute', 'sample-specific', 'sample specific',
+               'short-term', 'short term', 'short term acute',
+               'instantaneous maximum', 'instantaneous minimum'
+             )
+           );
+
+         DELETE FROM criteria.guideline_exposure_durations ged
+         WHERE ged.exposure_duration_id <> chronic_id
+           AND (
+             ged.exposure_duration_code = 'CHRONIC'
+             OR lower(btrim(ged.exposure_duration_name)) IN (
+               'chronic', 'long-term', 'long term', 'long term chronic'
+             )
+           );
+
+         DELETE FROM criteria.guideline_exposure_durations ged
+         WHERE ged.exposure_duration_id <> narrative_id
+           AND lower(btrim(ged.exposure_duration_name)) IN ('varies', 'narrative');
+
+         DELETE FROM criteria.guideline_averaging_periods gap
+         WHERE gap.averaging_period_id <> single_sample_id
+           AND (
+             gap.averaging_period_code IN ('INSTANTANEOUS', 'SAMPLE_SPECIFIC')
+             OR lower(btrim(gap.averaging_period_name)) IN (
+               'instantaneous', 'sample-specific', 'sample specific'
+             )
+           );
+
+         DELETE FROM criteria.guideline_averaging_periods gap
+         WHERE gap.averaging_period_id <> source_document_id
+           AND lower(btrim(gap.averaging_period_name)) IN (
+             'source document', 'duration and background dependent'
+           );
        END
        $do$;"
     )
@@ -1455,9 +1233,14 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
+      "CREATE INDEX IF NOT EXISTS guidelines_active_review_idx
+       ON criteria.guidelines (active, review_status);"
+    )
+    DBI::dbExecute(
+      con,
       "CREATE INDEX IF NOT EXISTS guidelines_applicability_idx
        ON criteria.guidelines (
-         jurisdiction_id, jurisdiction_level_id, protection_goal_id,
+         jurisdiction_id, protection_goal_id,
          exposure_duration_id, averaging_period_id
        );"
     )
@@ -1531,8 +1314,6 @@ tryCatch(
          guideline_id INTEGER NOT NULL
            REFERENCES criteria.guidelines(guideline_id)
            ON UPDATE CASCADE ON DELETE CASCADE,
-         model_code TEXT,
-         model_output_code TEXT,
          bound_code TEXT DEFAULT 'upper',
          algorithm_code TEXT NOT NULL
            REFERENCES criteria.guideline_value_algorithms(algorithm_code)
@@ -1578,8 +1359,8 @@ tryCatch(
     DBI::dbExecute(
       con,
       "ALTER TABLE criteria.guideline_value_rules
-       ADD COLUMN IF NOT EXISTS model_code TEXT,
-       ADD COLUMN IF NOT EXISTS model_output_code TEXT,
+       DROP COLUMN IF EXISTS model_code,
+       DROP COLUMN IF EXISTS model_output_code,
        DROP COLUMN IF EXISTS function_schema,
        DROP COLUMN IF EXISTS function_name;"
     )
@@ -1598,7 +1379,7 @@ tryCatch(
              AND algorithm_code <> 'narrative'
          ) THEN
            RAISE EXCEPTION
-             'bound_code = single is no longer supported for numeric guideline rules; migrate those rules to lower or upper before applying patch 47.';
+             'bound_code = single is no longer supported for numeric guideline rules; migrate those rules to lower or upper before applying patch 51.';
          END IF;
 
          ALTER TABLE criteria.guideline_value_rules
@@ -1626,34 +1407,9 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "DO $$
-       BEGIN
-         IF NOT EXISTS (
-           SELECT 1 FROM pg_constraint
-           WHERE conname = 'guideline_value_rules_model_output_fkey'
-             AND conrelid = 'criteria.guideline_value_rules'::regclass
-         ) THEN
-           ALTER TABLE criteria.guideline_value_rules
-             ADD CONSTRAINT guideline_value_rules_model_output_fkey
-             FOREIGN KEY (model_code, model_output_code)
-             REFERENCES criteria.guideline_model_outputs(model_code, output_code)
-             ON UPDATE CASCADE
-             ON DELETE RESTRICT;
-         END IF;
-       END $$;"
-    )
-    DBI::dbExecute(
-      con,
       "CREATE INDEX IF NOT EXISTS guideline_value_rules_guideline_idx
        ON criteria.guideline_value_rules (
          guideline_id, active, rule_priority, bound_code
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE INDEX IF NOT EXISTS guideline_value_rules_model_idx
-       ON criteria.guideline_value_rules (
-         model_code, model_output_code
        );"
     )
     DBI::dbExecute(
@@ -1696,6 +1452,9 @@ tryCatch(
          search_scope TEXT NOT NULL DEFAULT 'same_sample',
          aggregate_method TEXT NOT NULL DEFAULT 'single',
          allow_condition_value BOOLEAN NOT NULL DEFAULT FALSE,
+         lower_calibrated_bound NUMERIC,
+         upper_calibrated_bound NUMERIC,
+         bounds_action TEXT NOT NULL DEFAULT 'flag',
          required BOOLEAN NOT NULL DEFAULT TRUE,
          note TEXT,
          created_by TEXT DEFAULT CURRENT_USER NOT NULL,
@@ -1705,19 +1464,48 @@ tryCatch(
          CONSTRAINT guideline_rule_inputs_code_key
            UNIQUE (rule_id, input_code),
          CONSTRAINT guideline_rule_inputs_source_check
-           CHECK (input_source IN ('sample_result', 'hardness_helper')),
+         CHECK (input_source IN ('sample_result', 'hardness_helper')),
          CONSTRAINT guideline_rule_inputs_scope_check
            CHECK (search_scope IN ('same_sample')),
          CONSTRAINT guideline_rule_inputs_aggregate_check
-           CHECK (aggregate_method IN ('single', 'avg', 'min', 'max'))
+           CHECK (aggregate_method IN ('single', 'avg', 'min', 'max')),
+         CONSTRAINT guideline_rule_inputs_bounds_action_check
+           CHECK (bounds_action IN ('flag', 'clamp', 'reject')),
+         CONSTRAINT guideline_rule_inputs_calibrated_bounds_check
+           CHECK (
+             lower_calibrated_bound IS NULL
+             OR upper_calibrated_bound IS NULL
+             OR lower_calibrated_bound <= upper_calibrated_bound
+           )
        );"
     )
     DBI::dbExecute(
       con,
       "ALTER TABLE criteria.guideline_rule_inputs
        ADD COLUMN IF NOT EXISTS input_source TEXT NOT NULL DEFAULT 'sample_result',
-       ADD COLUMN IF NOT EXISTS result_type_preference INTEGER[];"
+       ADD COLUMN IF NOT EXISTS result_type_preference INTEGER[],
+       ADD COLUMN IF NOT EXISTS lower_calibrated_bound NUMERIC,
+       ADD COLUMN IF NOT EXISTS upper_calibrated_bound NUMERIC,
+       ADD COLUMN IF NOT EXISTS bounds_action TEXT NOT NULL DEFAULT 'flag';"
     )
+    for (constraint_sql in c(
+      "ALTER TABLE criteria.guideline_rule_inputs
+       DROP CONSTRAINT IF EXISTS guideline_rule_inputs_bounds_action_check;",
+      "ALTER TABLE criteria.guideline_rule_inputs
+       ADD CONSTRAINT guideline_rule_inputs_bounds_action_check
+       CHECK (bounds_action IN ('flag', 'clamp', 'reject'));",
+      "ALTER TABLE criteria.guideline_rule_inputs
+       DROP CONSTRAINT IF EXISTS guideline_rule_inputs_calibrated_bounds_check;",
+      "ALTER TABLE criteria.guideline_rule_inputs
+       ADD CONSTRAINT guideline_rule_inputs_calibrated_bounds_check
+       CHECK (
+         lower_calibrated_bound IS NULL
+         OR upper_calibrated_bound IS NULL
+         OR lower_calibrated_bound <= upper_calibrated_bound
+       );"
+    )) {
+      DBI::dbExecute(con, constraint_sql)
+    }
     DBI::dbExecute(
       con,
       "ALTER TABLE criteria.guideline_rule_inputs
@@ -1786,248 +1574,6 @@ tryCatch(
       con,
       "COMMENT ON TABLE criteria.guideline_rule_coefficients IS
        'Named numeric coefficients used by declarative guideline formula algorithms.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_lookup_values (
-         lookup_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-         rule_id INTEGER NOT NULL
-           REFERENCES criteria.guideline_value_rules(rule_id)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         input_code TEXT NOT NULL,
-         lower_bound NUMERIC,
-         upper_bound NUMERIC,
-         lower_inclusive BOOLEAN NOT NULL DEFAULT TRUE,
-         upper_inclusive BOOLEAN NOT NULL DEFAULT TRUE,
-         output_value NUMERIC,
-         output_status TEXT NOT NULL DEFAULT 'value',
-         output_label TEXT,
-         sort_order INTEGER NOT NULL DEFAULT 100,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         CONSTRAINT guideline_lookup_values_status_check
-           CHECK (
-             output_status IN (
-               'value', 'no_recommended_guideline', 'site_specific'
-             )
-           ),
-         CONSTRAINT guideline_lookup_values_value_required
-           CHECK (
-             (output_status = 'value' AND output_value IS NOT NULL)
-             OR (output_status <> 'value' AND output_value IS NULL)
-           ),
-         CONSTRAINT guideline_lookup_values_range_order
-           CHECK (
-             lower_bound IS NULL OR upper_bound IS NULL
-             OR lower_bound < upper_bound
-             OR (
-               lower_bound = upper_bound
-               AND lower_inclusive
-               AND upper_inclusive
-             )
-           ),
-         CONSTRAINT guideline_lookup_values_input_fkey
-           FOREIGN KEY (rule_id, input_code)
-           REFERENCES criteria.guideline_rule_inputs(rule_id, input_code)
-           ON UPDATE CASCADE ON DELETE CASCADE
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_lookup_values OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE INDEX IF NOT EXISTS guideline_lookup_values_rule_input_idx
-       ON criteria.guideline_lookup_values (rule_id, input_code, sort_order);"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_lookup_values IS
-       'Non-overlapping numeric input ranges and corresponding output values for lookup-based guideline derivation.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_lookup_tables (
-         lookup_table_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-         rule_id INTEGER NOT NULL UNIQUE
-           REFERENCES criteria.guideline_value_rules(rule_id)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         table_code TEXT NOT NULL,
-         table_name TEXT,
-         interpolation_method TEXT NOT NULL DEFAULT 'none',
-         no_match_status TEXT NOT NULL DEFAULT 'no_matching_cell',
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         UNIQUE (lookup_table_id, rule_id),
-         CONSTRAINT guideline_lookup_tables_interpolation_check
-           CHECK (interpolation_method IN ('none')),
-         CONSTRAINT guideline_lookup_tables_no_match_status_check
-           CHECK (
-             no_match_status IN (
-               'no_matching_cell', 'no_recommended_guideline', 'site_specific'
-             )
-           )
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_lookup_tables OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE UNIQUE INDEX IF NOT EXISTS guideline_lookup_tables_rule_code_key
-       ON criteria.guideline_lookup_tables (rule_id, table_code);"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_lookup_tables IS
-       'Header rows for multidimensional lookup tables used by guideline lookup_grid rules.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_lookup_dimensions (
-         dimension_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-         lookup_table_id INTEGER NOT NULL,
-         rule_id INTEGER NOT NULL,
-         input_code TEXT NOT NULL,
-         sort_order INTEGER NOT NULL DEFAULT 100,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         UNIQUE (lookup_table_id, input_code),
-         UNIQUE (dimension_id, lookup_table_id),
-         CONSTRAINT guideline_lookup_dimensions_table_fkey
-           FOREIGN KEY (lookup_table_id, rule_id)
-           REFERENCES criteria.guideline_lookup_tables(lookup_table_id, rule_id)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         CONSTRAINT guideline_lookup_dimensions_input_fkey
-           FOREIGN KEY (rule_id, input_code)
-           REFERENCES criteria.guideline_rule_inputs(rule_id, input_code)
-           ON UPDATE CASCADE ON DELETE CASCADE
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_lookup_dimensions OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE INDEX IF NOT EXISTS guideline_lookup_dimensions_table_idx
-       ON criteria.guideline_lookup_dimensions (lookup_table_id, sort_order);"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_lookup_dimensions IS
-       'Input dimensions for multidimensional guideline lookup tables.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_lookup_cells (
-         cell_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-         lookup_table_id INTEGER NOT NULL
-           REFERENCES criteria.guideline_lookup_tables(lookup_table_id)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         output_value NUMERIC,
-         output_status TEXT NOT NULL DEFAULT 'value',
-         output_label TEXT,
-         sort_order INTEGER NOT NULL DEFAULT 100,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         UNIQUE (cell_id, lookup_table_id),
-         CONSTRAINT guideline_lookup_cells_status_check
-           CHECK (
-             output_status IN (
-               'value', 'no_recommended_guideline', 'site_specific'
-             )
-           ),
-         CONSTRAINT guideline_lookup_cells_value_required
-           CHECK (
-             (output_status = 'value' AND output_value IS NOT NULL)
-             OR (output_status <> 'value' AND output_value IS NULL)
-           )
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_lookup_cells OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE INDEX IF NOT EXISTS guideline_lookup_cells_table_idx
-       ON criteria.guideline_lookup_cells (lookup_table_id, sort_order);"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_lookup_cells IS
-       'Output cells for multidimensional guideline lookup tables.';"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE TABLE IF NOT EXISTS criteria.guideline_lookup_cell_ranges (
-         cell_range_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-         cell_id INTEGER NOT NULL,
-         lookup_table_id INTEGER NOT NULL,
-         dimension_id INTEGER NOT NULL,
-         lower_bound NUMERIC,
-         upper_bound NUMERIC,
-         lower_inclusive BOOLEAN NOT NULL DEFAULT TRUE,
-         upper_inclusive BOOLEAN NOT NULL DEFAULT TRUE,
-         note TEXT,
-         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
-         modified_by TEXT,
-         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-         modified TIMESTAMPTZ,
-         UNIQUE (cell_id, dimension_id),
-         CONSTRAINT guideline_lookup_cell_ranges_cell_fkey
-           FOREIGN KEY (cell_id, lookup_table_id)
-           REFERENCES criteria.guideline_lookup_cells(cell_id, lookup_table_id)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         CONSTRAINT guideline_lookup_cell_ranges_dimension_fkey
-           FOREIGN KEY (dimension_id, lookup_table_id)
-           REFERENCES criteria.guideline_lookup_dimensions(dimension_id, lookup_table_id)
-           ON UPDATE CASCADE ON DELETE CASCADE,
-         CONSTRAINT guideline_lookup_cell_ranges_order
-           CHECK (
-             lower_bound IS NULL OR upper_bound IS NULL
-             OR lower_bound < upper_bound
-             OR (
-               lower_bound = upper_bound
-               AND lower_inclusive
-               AND upper_inclusive
-             )
-           )
-       );"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER TABLE criteria.guideline_lookup_cell_ranges OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE INDEX IF NOT EXISTS guideline_lookup_cell_ranges_table_idx
-       ON criteria.guideline_lookup_cell_ranges (lookup_table_id, dimension_id);"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON TABLE criteria.guideline_lookup_cell_ranges IS
-       'Per-dimension numeric ranges that define each multidimensional lookup output cell.';"
     )
 
     DBI::dbExecute(
@@ -2193,16 +1739,6 @@ tryCatch(
              'formula_sql may only be populated when algorithm_code is sql_scalar.';
          END IF;
 
-         IF NEW.algorithm_code = 'model_result_cache' THEN
-           IF NEW.model_code IS NULL OR NEW.model_output_code IS NULL THEN
-             RAISE EXCEPTION
-               'model_code and model_output_code are required for model_result_cache rules.';
-           END IF;
-         ELSIF NEW.model_code IS NOT NULL OR NEW.model_output_code IS NOT NULL THEN
-           RAISE EXCEPTION
-             'model_code and model_output_code may only be populated for model-backed rules.';
-         END IF;
-
          RETURN NEW;
        END;
        $function$;"
@@ -2227,184 +1763,6 @@ tryCatch(
 
     DBI::dbExecute(
       con,
-      "CREATE OR REPLACE FUNCTION criteria.validate_guideline_lookup_value()
-       RETURNS TRIGGER
-       LANGUAGE plpgsql
-       AS $function$
-       DECLARE
-         new_bounds TEXT;
-         existing_record RECORD;
-       BEGIN
-         new_bounds := concat(
-           CASE WHEN NEW.lower_inclusive THEN '[' ELSE '(' END,
-           CASE WHEN NEW.upper_inclusive THEN ']' ELSE ')' END
-         );
-
-         IF isempty(numrange(NEW.lower_bound, NEW.upper_bound, new_bounds)) THEN
-           RAISE EXCEPTION
-             'Lookup range for rule_id %, input_code % is empty.',
-             NEW.rule_id,
-             NEW.input_code;
-         END IF;
-
-         SELECT glv.lookup_id
-         INTO existing_record
-         FROM criteria.guideline_lookup_values glv
-         WHERE glv.rule_id = NEW.rule_id
-           AND glv.input_code = NEW.input_code
-           AND glv.lookup_id IS DISTINCT FROM NEW.lookup_id
-           AND numrange(
-             glv.lower_bound,
-             glv.upper_bound,
-             concat(
-               CASE WHEN glv.lower_inclusive THEN '[' ELSE '(' END,
-               CASE WHEN glv.upper_inclusive THEN ']' ELSE ')' END
-             )
-           ) && numrange(NEW.lower_bound, NEW.upper_bound, new_bounds)
-         LIMIT 1;
-
-         IF FOUND THEN
-           RAISE EXCEPTION
-             'Lookup range overlaps existing lookup_id % for rule_id %, input_code %.',
-             existing_record.lookup_id,
-             NEW.rule_id,
-             NEW.input_code;
-         END IF;
-
-         RETURN NEW;
-       END;
-       $function$;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER FUNCTION criteria.validate_guideline_lookup_value()
-       OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "DROP TRIGGER IF EXISTS validate_guideline_lookup_value
-       ON criteria.guideline_lookup_values;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE TRIGGER validate_guideline_lookup_value
-       BEFORE INSERT OR UPDATE
-       ON criteria.guideline_lookup_values
-       FOR EACH ROW
-       EXECUTE FUNCTION criteria.validate_guideline_lookup_value();"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE OR REPLACE FUNCTION criteria.validate_guideline_lookup_cell_range()
-       RETURNS TRIGGER
-       LANGUAGE plpgsql
-       AS $function$
-       DECLARE
-         new_bounds TEXT;
-         overlap_cell_id INTEGER;
-         dimension_count INTEGER;
-         current_cell_complete BOOLEAN;
-       BEGIN
-         new_bounds := concat(
-           CASE WHEN NEW.lower_inclusive THEN '[' ELSE '(' END,
-           CASE WHEN NEW.upper_inclusive THEN ']' ELSE ')' END
-         );
-
-         IF isempty(numrange(NEW.lower_bound, NEW.upper_bound, new_bounds)) THEN
-           RAISE EXCEPTION
-             'Lookup cell range for cell_id %, dimension_id % is empty.',
-             NEW.cell_id,
-             NEW.dimension_id;
-         END IF;
-
-         SELECT count(*)::INTEGER
-         INTO dimension_count
-         FROM criteria.guideline_lookup_dimensions gld
-         WHERE gld.lookup_table_id = NEW.lookup_table_id;
-
-         SELECT count(*) = dimension_count
-         INTO current_cell_complete
-         FROM criteria.guideline_lookup_cell_ranges glcr
-         WHERE glcr.cell_id = NEW.cell_id;
-
-         IF NOT current_cell_complete THEN
-           RETURN NEW;
-         END IF;
-
-         SELECT other_cell.cell_id
-         INTO overlap_cell_id
-         FROM criteria.guideline_lookup_cells other_cell
-         WHERE other_cell.lookup_table_id = NEW.lookup_table_id
-           AND other_cell.cell_id <> NEW.cell_id
-           AND (
-             SELECT count(*) = dimension_count
-             FROM criteria.guideline_lookup_cell_ranges other_range
-             WHERE other_range.cell_id = other_cell.cell_id
-           )
-           AND NOT EXISTS (
-             SELECT 1
-             FROM criteria.guideline_lookup_dimensions dim
-             JOIN criteria.guideline_lookup_cell_ranges this_range
-               ON this_range.cell_id = NEW.cell_id
-              AND this_range.dimension_id = dim.dimension_id
-             JOIN criteria.guideline_lookup_cell_ranges other_range
-               ON other_range.cell_id = other_cell.cell_id
-              AND other_range.dimension_id = dim.dimension_id
-             WHERE dim.lookup_table_id = NEW.lookup_table_id
-               AND NOT (
-                 numrange(
-                   this_range.lower_bound,
-                   this_range.upper_bound,
-                   concat(
-                     CASE WHEN this_range.lower_inclusive THEN '[' ELSE '(' END,
-                     CASE WHEN this_range.upper_inclusive THEN ']' ELSE ')' END
-                   )
-                 ) && numrange(
-                   other_range.lower_bound,
-                   other_range.upper_bound,
-                   concat(
-                     CASE WHEN other_range.lower_inclusive THEN '[' ELSE '(' END,
-                     CASE WHEN other_range.upper_inclusive THEN ']' ELSE ')' END
-                   )
-                 )
-               )
-           )
-         LIMIT 1;
-
-         IF overlap_cell_id IS NOT NULL THEN
-           RAISE EXCEPTION
-             'Lookup cell % overlaps existing cell % in lookup_table_id %.',
-             NEW.cell_id,
-             overlap_cell_id,
-             NEW.lookup_table_id;
-         END IF;
-
-         RETURN NEW;
-       END;
-       $function$;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER FUNCTION criteria.validate_guideline_lookup_cell_range()
-       OWNER TO admin;"
-    )
-    DBI::dbExecute(
-      con,
-      "DROP TRIGGER IF EXISTS validate_guideline_lookup_cell_range
-       ON criteria.guideline_lookup_cell_ranges;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE TRIGGER validate_guideline_lookup_cell_range
-       AFTER INSERT OR UPDATE
-       ON criteria.guideline_lookup_cell_ranges
-       FOR EACH ROW
-       EXECUTE FUNCTION criteria.validate_guideline_lookup_cell_range();"
-    )
-
-    DBI::dbExecute(
-      con,
       "DROP TRIGGER IF EXISTS check_guideline_rule_input_units
        ON criteria.guideline_rule_inputs;"
     )
@@ -2416,19 +1774,6 @@ tryCatch(
        FOR EACH ROW
        EXECUTE FUNCTION public.enforce_parameter_unit_for_matrix_state();"
     )
-    DBI::dbExecute(
-      con,
-      "DROP TRIGGER IF EXISTS check_guideline_model_input_units
-       ON criteria.guideline_model_inputs;"
-    )
-    DBI::dbExecute(
-      con,
-      "CREATE TRIGGER check_guideline_model_input_units
-       BEFORE INSERT OR UPDATE OF parameter_id, matrix_state_id
-       ON criteria.guideline_model_inputs
-       FOR EACH ROW EXECUTE FUNCTION public.enforce_parameter_unit_for_matrix_state();"
-    )
-
     # Derivation functions ##################################################
     DBI::dbExecute(
       con,
@@ -2831,6 +2176,7 @@ tryCatch(
          selected_value NUMERIC;
          selected_rank INTEGER;
          hardness_value NUMERIC;
+         domain_message TEXT;
        BEGIN
          SELECT gri.*
          INTO input_row
@@ -2879,10 +2225,87 @@ tryCatch(
              RETURN;
            END IF;
 
+           selected_value := hardness_value;
+           selected_result_id := NULL;
+           domain_message := 'Hardness resolved by criteria.get_sample_hardness(sample_id).';
+
+           IF input_row.lower_calibrated_bound IS NOT NULL
+              AND selected_value < input_row.lower_calibrated_bound THEN
+             IF input_row.bounds_action = 'reject' THEN
+               RETURN QUERY
+               SELECT input_row.input_id, input_row.input_code, NULL::NUMERIC,
+                      NULL::INTEGER, 'outside_calibrated_range'::TEXT,
+                      format(
+                        'Input %s value %s is below the calibrated lower bound %s.',
+                        input_row.input_code,
+                        selected_value,
+                        input_row.lower_calibrated_bound
+                      )::TEXT;
+               RETURN;
+             ELSIF input_row.bounds_action = 'clamp' THEN
+               selected_value := input_row.lower_calibrated_bound;
+               domain_message := concat_ws(
+                 ' ',
+                 domain_message,
+                 format(
+                   'Input %s was clamped to lower calibrated bound %s.',
+                   input_row.input_code,
+                   input_row.lower_calibrated_bound
+                 )
+               );
+             ELSE
+               domain_message := concat_ws(
+                 ' ',
+                 domain_message,
+                 format(
+                   'Input %s value is below calibrated lower bound %s.',
+                   input_row.input_code,
+                   input_row.lower_calibrated_bound
+                 )
+               );
+             END IF;
+           END IF;
+
+           IF input_row.upper_calibrated_bound IS NOT NULL
+              AND selected_value > input_row.upper_calibrated_bound THEN
+             IF input_row.bounds_action = 'reject' THEN
+               RETURN QUERY
+               SELECT input_row.input_id, input_row.input_code, NULL::NUMERIC,
+                      NULL::INTEGER, 'outside_calibrated_range'::TEXT,
+                      format(
+                        'Input %s value %s is above the calibrated upper bound %s.',
+                        input_row.input_code,
+                        selected_value,
+                        input_row.upper_calibrated_bound
+                      )::TEXT;
+               RETURN;
+             ELSIF input_row.bounds_action = 'clamp' THEN
+               selected_value := input_row.upper_calibrated_bound;
+               domain_message := concat_ws(
+                 ' ',
+                 domain_message,
+                 format(
+                   'Input %s was clamped to upper calibrated bound %s.',
+                   input_row.input_code,
+                   input_row.upper_calibrated_bound
+                 )
+               );
+             ELSE
+               domain_message := concat_ws(
+                 ' ',
+                 domain_message,
+                 format(
+                   'Input %s value is above calibrated upper bound %s.',
+                   input_row.input_code,
+                   input_row.upper_calibrated_bound
+                 )
+               );
+             END IF;
+           END IF;
+
            RETURN QUERY
-           SELECT input_row.input_id, input_row.input_code, hardness_value,
-                  NULL::INTEGER, 'value'::TEXT,
-                  'Hardness resolved by criteria.get_sample_hardness(sample_id).'::TEXT;
+           SELECT input_row.input_id, input_row.input_code, selected_value,
+                  selected_result_id, 'value'::TEXT, domain_message;
            RETURN;
          END IF;
 
@@ -3082,172 +2505,83 @@ tryCatch(
          INTO selected_value, selected_result_id
          FROM preferred_candidates;
 
+         domain_message := NULL;
+
+         IF input_row.lower_calibrated_bound IS NOT NULL
+            AND selected_value < input_row.lower_calibrated_bound THEN
+           IF input_row.bounds_action = 'reject' THEN
+             RETURN QUERY
+             SELECT input_row.input_id, input_row.input_code, NULL::NUMERIC,
+                    selected_result_id, 'outside_calibrated_range'::TEXT,
+                    format(
+                      'Input %s value %s is below the calibrated lower bound %s.',
+                      input_row.input_code,
+                      selected_value,
+                      input_row.lower_calibrated_bound
+                    )::TEXT;
+             RETURN;
+           ELSIF input_row.bounds_action = 'clamp' THEN
+             selected_value := input_row.lower_calibrated_bound;
+             domain_message := format(
+               'Input %s was clamped to lower calibrated bound %s.',
+               input_row.input_code,
+               input_row.lower_calibrated_bound
+             );
+           ELSE
+             domain_message := format(
+               'Input %s value is below calibrated lower bound %s.',
+               input_row.input_code,
+               input_row.lower_calibrated_bound
+             );
+           END IF;
+         END IF;
+
+         IF input_row.upper_calibrated_bound IS NOT NULL
+            AND selected_value > input_row.upper_calibrated_bound THEN
+           IF input_row.bounds_action = 'reject' THEN
+             RETURN QUERY
+             SELECT input_row.input_id, input_row.input_code, NULL::NUMERIC,
+                    selected_result_id, 'outside_calibrated_range'::TEXT,
+                    format(
+                      'Input %s value %s is above the calibrated upper bound %s.',
+                      input_row.input_code,
+                      selected_value,
+                      input_row.upper_calibrated_bound
+                    )::TEXT;
+             RETURN;
+           ELSIF input_row.bounds_action = 'clamp' THEN
+             selected_value := input_row.upper_calibrated_bound;
+             domain_message := concat_ws(
+               ' ',
+               domain_message,
+               format(
+                 'Input %s was clamped to upper calibrated bound %s.',
+                 input_row.input_code,
+                 input_row.upper_calibrated_bound
+               )
+             );
+           ELSE
+             domain_message := concat_ws(
+               ' ',
+               domain_message,
+               format(
+                 'Input %s value is above calibrated upper bound %s.',
+                 input_row.input_code,
+                 input_row.upper_calibrated_bound
+               )
+             );
+           END IF;
+         END IF;
+
          RETURN QUERY
          SELECT input_row.input_id, input_row.input_code, selected_value,
-                selected_result_id, 'value'::TEXT, NULL::TEXT;
+                selected_result_id, 'value'::TEXT, domain_message;
        END;
        $function$;"
     )
     DBI::dbExecute(
       con,
       "ALTER FUNCTION criteria.guideline_get_input_value(INTEGER, INTEGER)
-       OWNER TO admin;"
-    )
-
-    DBI::dbExecute(
-      con,
-      "CREATE OR REPLACE FUNCTION criteria.guideline_collect_rule_inputs(
-         in_rule_id INTEGER,
-         in_sample_id INTEGER DEFAULT NULL
-       )
-       RETURNS TABLE(
-         rule_id INTEGER,
-         derivation_inputs JSONB,
-         input_hash TEXT,
-         output_status TEXT,
-         message TEXT
-       )
-       LANGUAGE sql
-       STABLE
-       AS $function$
-         WITH collected AS (
-           SELECT
-             gri.input_id,
-             gri.input_code,
-             gri.input_name,
-             gri.input_source,
-             gri.result_type_preference,
-             gri.required,
-             resolved.input_value AS raw_input_value,
-             CASE
-               WHEN resolved.status = 'value'
-                    AND gmi.bounds_action = 'clamp'
-                    AND gmi.lower_calibrated_bound IS NOT NULL
-                    AND resolved.input_value < gmi.lower_calibrated_bound
-                 THEN gmi.lower_calibrated_bound
-               WHEN resolved.status = 'value'
-                    AND gmi.bounds_action = 'clamp'
-                    AND gmi.upper_calibrated_bound IS NOT NULL
-                    AND resolved.input_value > gmi.upper_calibrated_bound
-                 THEN gmi.upper_calibrated_bound
-               ELSE resolved.input_value
-             END AS input_value,
-             resolved.source_result_id,
-             CASE
-               WHEN resolved.status = 'value'
-                    AND gmi.bounds_action = 'reject'
-                    AND (
-                      (
-                        gmi.lower_calibrated_bound IS NOT NULL
-                        AND resolved.input_value < gmi.lower_calibrated_bound
-                      )
-                      OR (
-                        gmi.upper_calibrated_bound IS NOT NULL
-                        AND resolved.input_value > gmi.upper_calibrated_bound
-                      )
-                    )
-                 THEN 'outside_calibrated_range'
-               ELSE resolved.status
-             END AS status,
-             NULLIF(
-               concat_ws(
-                 ' ',
-                 resolved.message,
-                 CASE
-                   WHEN resolved.status = 'value'
-                        AND (
-                          (
-                            gmi.lower_calibrated_bound IS NOT NULL
-                            AND resolved.input_value < gmi.lower_calibrated_bound
-                          )
-                          OR (
-                            gmi.upper_calibrated_bound IS NOT NULL
-                            AND resolved.input_value > gmi.upper_calibrated_bound
-                          )
-                        )
-                     THEN format(
-                       'Input %s value %s is outside the calibrated range%s%s; bounds action is %s.',
-                       gri.input_code,
-                       resolved.input_value,
-                       CASE
-                         WHEN gmi.lower_calibrated_bound IS NULL THEN ''
-                         ELSE format(' lower %s', gmi.lower_calibrated_bound)
-                       END,
-                       CASE
-                         WHEN gmi.upper_calibrated_bound IS NULL THEN ''
-                         ELSE format(' upper %s', gmi.upper_calibrated_bound)
-                       END,
-                       gmi.bounds_action
-                     )
-                   ELSE NULL
-                 END
-               ),
-               ''
-             ) AS message,
-             gmi.lower_calibrated_bound,
-             gmi.upper_calibrated_bound,
-             gmi.bounds_action
-           FROM criteria.guideline_rule_inputs gri
-           JOIN criteria.guideline_value_rules gr
-             ON gr.rule_id = gri.rule_id
-           LEFT JOIN criteria.guideline_model_inputs gmi
-             ON gmi.model_code = gr.model_code
-            AND gmi.input_code = gri.input_code
-           CROSS JOIN LATERAL criteria.guideline_get_input_value(
-             in_sample_id,
-             gri.input_id
-           ) resolved
-           WHERE gri.rule_id = in_rule_id
-         ),
-         payload AS (
-           SELECT
-             COALESCE(
-               jsonb_agg(
-                 jsonb_build_object(
-                   'input_id', input_id,
-                   'input_code', input_code,
-                   'input_name', input_name,
-                   'input_source', input_source,
-                   'result_type_preference', result_type_preference,
-                   'value', input_value,
-                   'raw_value', raw_input_value,
-                   'source_result_id', source_result_id,
-                   'status', status,
-                   'required', required,
-                   'message', message,
-                   'lower_calibrated_bound', lower_calibrated_bound,
-                   'upper_calibrated_bound', upper_calibrated_bound,
-                   'bounds_action', bounds_action
-                 )
-                 ORDER BY input_code
-               ),
-               '[]'::JSONB
-             ) AS derivation_inputs,
-             COALESCE(
-               bool_or(required AND status <> 'value'),
-               FALSE
-             ) AS has_required_failure,
-             string_agg(DISTINCT status, ', ' ORDER BY status)
-               FILTER (WHERE required AND status <> 'value') AS failure_status,
-             string_agg(message, ' ' ORDER BY input_code)
-               FILTER (WHERE message IS NOT NULL) AS failure_message
-           FROM collected
-         )
-         SELECT
-           in_rule_id,
-           derivation_inputs,
-           md5(derivation_inputs::TEXT),
-           CASE
-             WHEN has_required_failure THEN failure_status
-             ELSE 'value'
-           END AS output_status,
-           failure_message AS message
-         FROM payload;
-       $function$;"
-    )
-    DBI::dbExecute(
-      con,
-      "ALTER FUNCTION criteria.guideline_collect_rule_inputs(INTEGER, INTEGER)
        OWNER TO admin;"
     )
 
@@ -3273,20 +2607,13 @@ tryCatch(
          rule_row RECORD;
          input_row RECORD;
          input_result RECORD;
-         lookup_row RECORD;
          input_count INTEGER;
          coefficient_intercept NUMERIC;
          coefficient_slope NUMERIC;
-         coefficient_factor NUMERIC;
-         coefficient_exponent NUMERIC;
-         computed_value NUMERIC;
+        computed_value NUMERIC;
          computed_status TEXT := 'value';
          computed_message TEXT;
          input_payload JSONB := '[]'::JSONB;
-         collected_inputs RECORD;
-         model_result_row RECORD;
-         lookup_table_row RECORD;
-         lookup_cell_row RECORD;
        BEGIN
          SELECT gr.*
          INTO rule_row
@@ -3310,9 +2637,7 @@ tryCatch(
              'This guideline is narrative or non-numeric.'
            );
 
-         ELSIF rule_row.algorithm_code IN (
-           'lookup_range', 'linear', 'log_linear', 'power'
-         ) THEN
+        ELSIF rule_row.algorithm_code IN ('linear', 'log_linear') THEN
            SELECT count(*)::INTEGER
            INTO input_count
            FROM criteria.guideline_rule_inputs gri
@@ -3366,47 +2691,12 @@ tryCatch(
                     input_result.status,
                     input_payload,
                     input_result.message;
-             RETURN;
-           END IF;
+           RETURN;
+         END IF;
 
-           IF rule_row.algorithm_code = 'lookup_range' THEN
-             SELECT glv.*
-             INTO lookup_row
-             FROM criteria.guideline_lookup_values glv
-             WHERE glv.rule_id = rule_row.rule_id
-               AND glv.input_code = input_row.input_code
-               AND numrange(
-                 glv.lower_bound,
-                 glv.upper_bound,
-                 concat(
-                   CASE WHEN glv.lower_inclusive THEN '[' ELSE '(' END,
-                   CASE WHEN glv.upper_inclusive THEN ']' ELSE ')' END
-                 )
-               ) @> input_result.input_value
-             ORDER BY glv.sort_order, glv.lookup_id
-             LIMIT 1;
+         computed_message := input_result.message;
 
-             IF NOT FOUND THEN
-               computed_status := 'no_matching_range';
-               computed_message := format(
-                 'No lookup range matched input %s value %s.',
-                 input_row.input_code,
-                 input_result.input_value
-               );
-             ELSIF lookup_row.output_status <> 'value' THEN
-               computed_status := lookup_row.output_status;
-               computed_message := lookup_row.note;
-             ELSE
-               computed_value := lookup_row.output_value;
-               input_payload := jsonb_set(
-                 input_payload,
-                 '{0,lookup_id}',
-                 to_jsonb(lookup_row.lookup_id),
-                 TRUE
-               );
-             END IF;
-
-           ELSIF rule_row.algorithm_code = 'linear' THEN
+         IF rule_row.algorithm_code = 'linear' THEN
              SELECT
                max(coefficient_value) FILTER (
                  WHERE coefficient_name = 'intercept'
@@ -3416,7 +2706,8 @@ tryCatch(
                )
              INTO coefficient_intercept, coefficient_slope
              FROM criteria.guideline_rule_coefficients
-             WHERE rule_id = rule_row.rule_id;
+             WHERE criteria.guideline_rule_coefficients.rule_id =
+               rule_row.rule_id;
 
              IF coefficient_intercept IS NULL OR coefficient_slope IS NULL THEN
                RAISE EXCEPTION
@@ -3437,7 +2728,8 @@ tryCatch(
                )
              INTO coefficient_intercept, coefficient_slope
              FROM criteria.guideline_rule_coefficients
-             WHERE rule_id = rule_row.rule_id;
+             WHERE criteria.guideline_rule_coefficients.rule_id =
+               rule_row.rule_id;
 
              IF coefficient_intercept IS NULL OR coefficient_slope IS NULL THEN
                RAISE EXCEPTION
@@ -3457,152 +2749,9 @@ tryCatch(
                    coefficient_slope * ln(input_result.input_value)
                );
              END IF;
+          END IF;
 
-           ELSIF rule_row.algorithm_code = 'power' THEN
-             SELECT
-               max(coefficient_value) FILTER (
-                 WHERE coefficient_name = 'factor'
-               ),
-               max(coefficient_value) FILTER (
-                 WHERE coefficient_name = 'exponent'
-               )
-             INTO coefficient_factor, coefficient_exponent
-             FROM criteria.guideline_rule_coefficients
-             WHERE rule_id = rule_row.rule_id;
-
-             IF coefficient_factor IS NULL OR coefficient_exponent IS NULL THEN
-               RAISE EXCEPTION
-                 'Power rule_id % requires factor and exponent coefficients.',
-                 rule_row.rule_id;
-             END IF;
-
-             IF input_result.input_value <= 0 THEN
-               computed_status := 'invalid_input_value';
-               computed_message := format(
-                 'Input %s must be greater than zero for power calculation.',
-                 input_row.input_code
-               );
-             ELSE
-               computed_value := coefficient_factor * exp(
-                 coefficient_exponent * ln(input_result.input_value)
-               );
-             END IF;
-           END IF;
-
-         ELSIF rule_row.algorithm_code = 'lookup_grid' THEN
-           SELECT *
-           INTO collected_inputs
-           FROM criteria.guideline_collect_rule_inputs(
-             rule_row.rule_id,
-             in_sample_id
-           );
-
-           input_payload := jsonb_build_object(
-             'inputs', collected_inputs.derivation_inputs
-           );
-
-           IF collected_inputs.output_status <> 'value' THEN
-             IF rule_row.missing_input_policy = 'error' THEN
-               RAISE EXCEPTION
-                 'Could not derive guideline rule %. Input status: %. %',
-                 rule_row.rule_id,
-                 collected_inputs.output_status,
-                 COALESCE(collected_inputs.message, '');
-             END IF;
-
-             RETURN QUERY
-             SELECT rule_row.rule_id, rule_row.guideline_id,
-                    rule_row.bound_code, NULL::NUMERIC,
-                    collected_inputs.output_status,
-                    input_payload,
-                    collected_inputs.message;
-             RETURN;
-           END IF;
-
-           SELECT glt.*
-           INTO lookup_table_row
-           FROM criteria.guideline_lookup_tables glt
-           WHERE glt.rule_id = rule_row.rule_id;
-
-           IF NOT FOUND THEN
-             computed_status := 'configuration_error';
-             computed_message := format(
-               'No multidimensional lookup table is registered for rule_id %s.',
-               rule_row.rule_id
-             );
-           ELSE
-             SELECT glc.*
-             INTO lookup_cell_row
-             FROM criteria.guideline_lookup_cells glc
-             WHERE glc.lookup_table_id = lookup_table_row.lookup_table_id
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM criteria.guideline_lookup_dimensions gld
-                 LEFT JOIN criteria.guideline_lookup_cell_ranges glcr
-                   ON glcr.cell_id = glc.cell_id
-                  AND glcr.dimension_id = gld.dimension_id
-                 LEFT JOIN LATERAL (
-                   SELECT
-                     (input_item->>'value')::NUMERIC AS input_value,
-                     input_item->>'status' AS input_status
-                   FROM jsonb_array_elements(
-                     collected_inputs.derivation_inputs
-                   ) input_item
-                   WHERE input_item->>'input_code' = gld.input_code
-                   LIMIT 1
-                 ) resolved_input ON TRUE
-                 WHERE gld.lookup_table_id = lookup_table_row.lookup_table_id
-                   AND (
-                     resolved_input.input_status IS DISTINCT FROM 'value'
-                     OR glcr.cell_range_id IS NULL
-                     OR NOT (
-                       numrange(
-                         glcr.lower_bound,
-                         glcr.upper_bound,
-                         concat(
-                           CASE WHEN glcr.lower_inclusive THEN '[' ELSE '(' END,
-                           CASE WHEN glcr.upper_inclusive THEN ']' ELSE ')' END
-                         )
-                       ) @> resolved_input.input_value
-                     )
-                   )
-               )
-             ORDER BY glc.sort_order, glc.cell_id
-             LIMIT 1;
-
-             IF NOT FOUND THEN
-               computed_status := lookup_table_row.no_match_status;
-               computed_message := format(
-                 'No lookup grid cell matched rule_id %s.',
-                 rule_row.rule_id
-               );
-               input_payload := input_payload || jsonb_build_object(
-                 'lookup_table_id',
-                 lookup_table_row.lookup_table_id
-               );
-             ELSIF lookup_cell_row.output_status <> 'value' THEN
-               computed_status := lookup_cell_row.output_status;
-               computed_message := lookup_cell_row.note;
-               input_payload := input_payload || jsonb_build_object(
-                 'lookup_table_id',
-                 lookup_table_row.lookup_table_id,
-                 'lookup_cell_id',
-                 lookup_cell_row.cell_id
-               );
-             ELSE
-               computed_value := lookup_cell_row.output_value;
-               input_payload := input_payload || jsonb_build_object(
-                 'lookup_table_id',
-                 lookup_table_row.lookup_table_id,
-                 'lookup_cell_id',
-                 lookup_cell_row.cell_id,
-                 'lookup_label',
-                 lookup_cell_row.output_label
-               );
-             END IF;
-           END IF;
-
-         ELSIF rule_row.algorithm_code = 'sql_scalar' THEN
+        ELSIF rule_row.algorithm_code = 'sql_scalar' THEN
            IF in_sample_id IS NULL AND rule_row.formula_sql ~ '\\$1' THEN
              IF rule_row.missing_input_policy = 'error' THEN
                RAISE EXCEPTION
@@ -3620,72 +2769,9 @@ tryCatch(
              INTO STRICT computed_value;
            END IF;
 
-         ELSIF rule_row.algorithm_code = 'model_result_cache' THEN
-           SELECT *
-           INTO collected_inputs
-           FROM criteria.guideline_collect_rule_inputs(
-             rule_row.rule_id,
-             in_sample_id
-           );
-
-           input_payload := jsonb_build_object(
-             'inputs', collected_inputs.derivation_inputs,
-             'input_hash', collected_inputs.input_hash,
-             'model_code', rule_row.model_code,
-             'model_output_code', rule_row.model_output_code
-           );
-
-           IF collected_inputs.output_status <> 'value' THEN
-             IF rule_row.missing_input_policy = 'error' THEN
-               RAISE EXCEPTION
-                 'Could not derive guideline rule %. Input status: %. %',
-                 rule_row.rule_id,
-                 collected_inputs.output_status,
-                 COALESCE(collected_inputs.message, '');
-             END IF;
-
-             RETURN QUERY
-             SELECT rule_row.rule_id, rule_row.guideline_id,
-                    rule_row.bound_code, NULL::NUMERIC,
-                    collected_inputs.output_status,
-                    input_payload,
-                    collected_inputs.message;
-             RETURN;
-           END IF;
-
-           SELECT gmr.*
-           INTO model_result_row
-           FROM criteria.guideline_model_results gmr
-           WHERE gmr.model_code = rule_row.model_code
-             AND gmr.model_output_code = rule_row.model_output_code
-             AND gmr.sample_id = in_sample_id
-             AND gmr.input_hash = collected_inputs.input_hash
-           ORDER BY gmr.model_run_datetime DESC, gmr.model_result_id DESC
-           LIMIT 1;
-
-           IF NOT FOUND THEN
-             computed_status := 'missing_model_result';
-             computed_message := format(
-               'No stored model result found for model %s output %s, sample_id %s, input hash %s.',
-               rule_row.model_code,
-               rule_row.model_output_code,
-               in_sample_id,
-               collected_inputs.input_hash
-             );
-           ELSE
-             computed_value := model_result_row.guideline_value;
-             computed_status := model_result_row.output_status;
-             computed_message := concat_ws(
-               ' ',
-               collected_inputs.message,
-               model_result_row.message
-             );
-             input_payload := input_payload || jsonb_build_object(
-               'model_result_id', model_result_row.model_result_id,
-               'model_version', model_result_row.model_version,
-               'model_run_datetime', model_result_row.model_run_datetime,
-               'source_artifact', model_result_row.source_artifact
-             );
+           IF computed_value IS NULL THEN
+             computed_status := 'no_value';
+             computed_message := 'The SQL scalar guideline formula returned NULL.';
            END IF;
 
          ELSE
@@ -3821,7 +2907,8 @@ tryCatch(
       "CREATE OR REPLACE FUNCTION criteria.applicable_guideline_rules_for_result(
          in_result_id INTEGER,
          in_as_of_date DATE DEFAULT CURRENT_DATE,
-         in_include_unresolved BOOLEAN DEFAULT TRUE
+         in_include_unresolved BOOLEAN DEFAULT TRUE,
+         in_include_unapproved BOOLEAN DEFAULT FALSE
        )
        RETURNS TABLE(
          result_id INTEGER,
@@ -3845,6 +2932,7 @@ tryCatch(
          comparison_operator_code TEXT,
          comparison_symbol TEXT,
          result_value NUMERIC,
+         result_value_relation TEXT,
          guideline_value NUMERIC,
          output_status TEXT,
          comparison_status TEXT,
@@ -3876,10 +2964,33 @@ tryCatch(
              ) AS units,
              r.sample_fraction_id,
              r.result_speciation_id,
-             r.result AS result_value
+             COALESCE(
+               r.result,
+               CASE
+                 WHEN r.result_condition IN (1, 2)
+                   THEN r.result_condition_value
+                 WHEN lower(rc.result_condition) LIKE 'below detection%'
+                   THEN r.result_condition_value
+                 WHEN lower(rc.result_condition) LIKE 'above detection%'
+                   THEN r.result_condition_value
+                 ELSE NULL::NUMERIC
+               END
+             ) AS result_value,
+             CASE
+               WHEN r.result IS NOT NULL THEN 'actual'
+               WHEN r.result_condition = 1
+                    OR lower(rc.result_condition) LIKE 'below detection%'
+                 THEN 'less_than'
+               WHEN r.result_condition = 2
+                    OR lower(rc.result_condition) LIKE 'above detection%'
+                 THEN 'greater_than'
+               ELSE 'none'
+             END AS result_value_relation
            FROM discrete.results r
            JOIN discrete.samples s
              ON s.sample_id = r.sample_id
+           LEFT JOIN discrete.result_conditions rc
+             ON rc.result_condition_id = r.result_condition
            LEFT JOIN public.parameters p
              ON p.parameter_id = r.parameter_id
            LEFT JOIN public.matrix_states ms
@@ -3908,11 +3019,23 @@ tryCatch(
            g.comparison_operator_code,
            op.operator_symbol AS comparison_symbol,
            rr.result_value,
+           rr.result_value_relation,
            eg.guideline_value,
            eg.output_status,
            CASE
              WHEN eg.output_status <> 'value' THEN eg.output_status
              WHEN rr.result_value IS NULL THEN 'no_numeric_result'
+             WHEN rr.result_value_relation = 'less_than'
+                  AND eg.bound_code = 'upper'
+                  AND rr.result_value <= eg.guideline_value THEN 'meets'
+             WHEN rr.result_value_relation = 'less_than' THEN 'censored_indeterminate'
+             WHEN rr.result_value_relation = 'greater_than'
+                  AND eg.bound_code = 'upper'
+                  AND rr.result_value > eg.guideline_value THEN 'exceeds'
+             WHEN rr.result_value_relation = 'greater_than'
+                  AND eg.bound_code = 'lower'
+                  AND rr.result_value >= eg.guideline_value THEN 'meets'
+             WHEN rr.result_value_relation = 'greater_than' THEN 'censored_indeterminate'
              WHEN eg.bound_code = 'upper'
                   AND rr.result_value <= eg.guideline_value THEN 'meets'
              WHEN eg.bound_code = 'upper' THEN 'exceeds'
@@ -3952,6 +3075,10 @@ tryCatch(
          ) eg
          WHERE in_as_of_date >= g.valid_from
            AND (g.valid_to IS NULL OR in_as_of_date <= g.valid_to)
+           AND (
+             in_include_unapproved
+             OR (g.active AND g.review_status = 'approved')
+           )
            AND (
              g.result_speciation_id IS NULL
              OR g.result_speciation_id IS NOT DISTINCT FROM
@@ -4009,7 +3136,7 @@ tryCatch(
     DBI::dbExecute(
       con,
       "ALTER FUNCTION criteria.applicable_guideline_rules_for_result(
-         INTEGER, DATE, BOOLEAN
+         INTEGER, DATE, BOOLEAN, BOOLEAN
        ) OWNER TO admin;"
     )
 
@@ -4023,13 +3150,20 @@ tryCatch(
          INTEGER, DATE, BOOLEAN
        );"
     )
+    DBI::dbExecute(
+      con,
+      "DROP FUNCTION IF EXISTS criteria.applicable_guidelines_for_result(
+         INTEGER, DATE, BOOLEAN, BOOLEAN
+       );"
+    )
 
     DBI::dbExecute(
       con,
       "CREATE OR REPLACE FUNCTION criteria.applicable_guidelines_for_result(
          in_result_id INTEGER,
          in_as_of_date DATE DEFAULT CURRENT_DATE,
-         in_include_unresolved BOOLEAN DEFAULT TRUE
+         in_include_unresolved BOOLEAN DEFAULT TRUE,
+         in_include_unapproved BOOLEAN DEFAULT FALSE
        )
        RETURNS TABLE(
          result_id INTEGER,
@@ -4071,7 +3205,8 @@ tryCatch(
            FROM criteria.applicable_guideline_rules_for_result(
              in_result_id,
              in_as_of_date,
-             in_include_unresolved
+             in_include_unresolved,
+             in_include_unapproved
            )
          ),
          grouped AS (
@@ -4095,6 +3230,7 @@ tryCatch(
              comparison_operator_code,
              comparison_symbol,
              result_value,
+             result_value_relation,
              max(guideline_value) FILTER (
              WHERE bound_code = 'lower' AND output_status = 'value'
            ) AS lower_guideline_value,
@@ -4127,7 +3263,8 @@ tryCatch(
              protection_goal, exposure_duration, averaging_period,
              parameter_id, parameter_name, matrix_state_id,
              matrix_state_code, units, comparison_operator_code,
-             comparison_symbol, result_value, source_document_title,
+             comparison_symbol, result_value, result_value_relation,
+             source_document_title,
              source_url, source_page, source_table, source_section
          )
          SELECT
@@ -4159,6 +3296,20 @@ tryCatch(
            CASE
              WHEN NOT all_values_resolved THEN unresolved_statuses
              WHEN result_value IS NULL THEN 'no_numeric_result'
+             WHEN result_value_relation = 'less_than'
+                  AND comparison_operator_code = 'lte'
+                  AND result_value <= upper_guideline_value THEN 'meets'
+             WHEN result_value_relation = 'less_than' THEN 'censored_indeterminate'
+             WHEN result_value_relation = 'greater_than'
+                  AND comparison_operator_code = 'lte'
+                  AND result_value > upper_guideline_value THEN 'exceeds'
+             WHEN result_value_relation = 'greater_than'
+                  AND comparison_operator_code = 'gte'
+                  AND result_value >= lower_guideline_value THEN 'meets'
+             WHEN result_value_relation = 'greater_than'
+                  AND comparison_operator_code = 'range'
+                  AND result_value > upper_guideline_value THEN 'exceeds'
+             WHEN result_value_relation = 'greater_than' THEN 'censored_indeterminate'
              WHEN comparison_operator_code = 'lte'
                   AND result_value <= upper_guideline_value THEN 'meets'
              WHEN comparison_operator_code = 'lte' THEN 'exceeds'
@@ -4198,7 +3349,7 @@ tryCatch(
     DBI::dbExecute(
       con,
       "ALTER FUNCTION criteria.applicable_guidelines_for_result(
-         INTEGER, DATE, BOOLEAN
+         INTEGER, DATE, BOOLEAN, BOOLEAN
        ) OWNER TO admin;"
     )
 
@@ -4212,7 +3363,8 @@ tryCatch(
        CROSS JOIN LATERAL criteria.applicable_guideline_rules_for_result(
          r.result_id,
          CURRENT_DATE,
-         TRUE
+         TRUE,
+         FALSE
        ) ag;"
     )
     DBI::dbExecute(
@@ -4235,7 +3387,8 @@ tryCatch(
        CROSS JOIN LATERAL criteria.applicable_guidelines_for_result(
          r.result_id,
          CURRENT_DATE,
-         TRUE
+         TRUE,
+         FALSE
        ) ag;"
     )
     DBI::dbExecute(
@@ -4262,18 +3415,9 @@ tryCatch(
       "guidelines",
       "guidelines_media_types",
       "guidelines_fractions",
-      "guideline_models",
-      "guideline_model_inputs",
-      "guideline_model_outputs",
-      "guideline_model_results",
       "guideline_value_rules",
       "guideline_rule_inputs",
       "guideline_rule_coefficients",
-      "guideline_lookup_values",
-      "guideline_lookup_tables",
-      "guideline_lookup_dimensions",
-      "guideline_lookup_cells",
-      "guideline_lookup_cell_ranges",
       "guideline_narrative_values"
     )) {
       DBI::dbExecute(
@@ -4339,18 +3483,9 @@ tryCatch(
            'guidelines',
            'guidelines_media_types',
            'guidelines_fractions',
-           'guideline_models',
-           'guideline_model_inputs',
-           'guideline_model_outputs',
-           'guideline_model_results',
            'guideline_value_rules',
            'guideline_rule_inputs',
            'guideline_rule_coefficients',
-           'guideline_lookup_values',
-            'guideline_lookup_tables',
-            'guideline_lookup_dimensions',
-            'guideline_lookup_cells',
-            'guideline_lookup_cell_ranges',
             'guideline_narrative_values'
          ]
          LOOP
@@ -4431,18 +3566,9 @@ tryCatch(
                   criteria.guidelines,
                   criteria.guidelines_media_types,
                   criteria.guidelines_fractions,
-                  criteria.guideline_models,
-                  criteria.guideline_model_inputs,
-                  criteria.guideline_model_outputs,
-                  criteria.guideline_model_results,
                   criteria.guideline_value_rules,
                   criteria.guideline_rule_inputs,
                   criteria.guideline_rule_coefficients,
-                  criteria.guideline_lookup_values,
-                   criteria.guideline_lookup_tables,
-                   criteria.guideline_lookup_dimensions,
-                   criteria.guideline_lookup_cells,
-                   criteria.guideline_lookup_cell_ranges,
                    criteria.guideline_narrative_values,
                    criteria.results_guideline_rule_values,
                   criteria.results_guideline_values
@@ -4469,12 +3595,11 @@ tryCatch(
                    criteria.get_sample_hardness(INTEGER, INTEGER[]),
                    criteria.guideline_apply_rounding(NUMERIC, INTEGER, TEXT),
                   criteria.guideline_get_input_value(INTEGER, INTEGER),
-                  criteria.guideline_collect_rule_inputs(INTEGER, INTEGER),
                   criteria.evaluate_guideline_rule(INTEGER, INTEGER),
                   criteria.evaluate_guideline(INTEGER, INTEGER),
                   criteria.get_guideline_value(INTEGER, INTEGER),
-                  criteria.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN),
-                  criteria.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN)
+                  criteria.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN),
+                  criteria.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN)
                 TO %I;',
                role_name
              );
@@ -4505,18 +3630,9 @@ tryCatch(
                   criteria.guidelines,
                   criteria.guidelines_media_types,
                   criteria.guidelines_fractions,
-                  criteria.guideline_models,
-                  criteria.guideline_model_inputs,
-                  criteria.guideline_model_outputs,
-                  criteria.guideline_model_results,
                   criteria.guideline_value_rules,
                   criteria.guideline_rule_inputs,
                   criteria.guideline_rule_coefficients,
-                  criteria.guideline_lookup_values,
-                   criteria.guideline_lookup_tables,
-                   criteria.guideline_lookup_dimensions,
-                   criteria.guideline_lookup_cells,
-                   criteria.guideline_lookup_cell_ranges,
                    criteria.guideline_narrative_values,
                    criteria.results_guideline_rule_values,
                   criteria.results_guideline_values
@@ -4535,12 +3651,11 @@ tryCatch(
                    criteria.get_sample_hardness(INTEGER, INTEGER[]),
                    criteria.guideline_apply_rounding(NUMERIC, INTEGER, TEXT),
                   criteria.guideline_get_input_value(INTEGER, INTEGER),
-                  criteria.guideline_collect_rule_inputs(INTEGER, INTEGER),
                   criteria.evaluate_guideline_rule(INTEGER, INTEGER),
                   criteria.evaluate_guideline(INTEGER, INTEGER),
                   criteria.get_guideline_value(INTEGER, INTEGER),
-                  criteria.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN),
-                  criteria.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN)
+                  criteria.applicable_guideline_rules_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN),
+                  criteria.applicable_guidelines_for_result(INTEGER, DATE, BOOLEAN, BOOLEAN)
                 TO %I;',
                role_name
              );
@@ -4552,7 +3667,7 @@ tryCatch(
     # If we got here, everything worked and we can commit the transaction.
     DBI::dbExecute(
       con,
-      "UPDATE information.version_info SET version = '47'
+      "UPDATE information.version_info SET version = '51'
        WHERE item = 'Last patch number';"
     )
     DBI::dbExecute(
@@ -4565,14 +3680,14 @@ tryCatch(
     )
     DBI::dbExecute(con, "COMMIT;")
     message(
-      "Patch 47 applied successfully. Database-driven guideline derivation is installed."
+      "Patch 51 applied successfully. Database-driven guideline derivation is installed."
     )
   },
   error = function(e) {
     message("Error detected. Rolling back transaction...")
     try(DBI::dbExecute(con, "ROLLBACK;"), silent = TRUE)
     stop(
-      "Patch 47 failed and the database has been rolled back to its previous state. ",
+      "Patch 51 failed and the database has been rolled back to its previous state. ",
       e$message
     )
   }
