@@ -31,7 +31,6 @@ create_test_db <- function(
   psql = NULL,
   delete = TRUE
 ) {
-
   rlang::check_installed("R.utils", reason = "to gzip the output file")
 
   # Ensure that 'outpath' exists and is a directory
@@ -342,7 +341,18 @@ create_test_db <- function(
     "criteria.guideline_series",
     "criteria.guidelines",
     "criteria.guidelines_fractions",
-    "criteria.guidelines_media_types"
+    "criteria.guidelines_media_types",
+    "criteria.guideline_comparison_operators",
+    "criteria.guideline_value_algorithms",
+    "criteria.jurisdiction_levels",
+    "criteria.jurisdictions",
+    "criteria.guideline_protection_goals",
+    "criteria.guideline_exposure_durations",
+    "criteria.guideline_averaging_periods",
+    "criteria.guideline_value_rules",
+    "criteria.guideline_rule_inputs",
+    "criteria.guideline_rule_coefficients",
+    "criteria.guideline_narrative_values"
   )
 
   # Load the ancillary tables into the test database using DBI
@@ -1566,7 +1576,7 @@ create_test_db <- function(
   ))
 
   # Insert basic application schema data
-message("Inserting placeholder data for application user set text...")
+  message("Inserting placeholder data for application user set text...")
   text <- data.frame(
     id = c("news_head", "news_body", "hr"),
     text_en = c(
