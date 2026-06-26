@@ -20,5 +20,5 @@ inactive profiles.}
 A data.frame of import profiles.
 }
 \description{
-List file import profiles
+List file import profiles from the AquaCache database. This can be filtered by source code and/or active status.
 }

@@ -1310,34 +1310,16 @@ aquacache_download_seed_dump <- function(url) {
 
   message("Downloading SQL dump from URL...")
 
-  status <- tryCatch(
     curl::curl_download(
       url = url,
       destfile = path,
       quiet = TRUE
-    ),
-    error = function(e) {
-      cleanup()
-      stop(
-        "Failed to download SQL dump from URL.\n",
-        "URL: ",
-        url,
-        "\n",
-        "Original error: ",
-        e$message,
-        call. = FALSE
-      )
-    }
-  )
+    )
 
-  if (!identical(status, 0L)) {
+  if (!file.exists(path) || file.info(path)$size == 0) {
     cleanup()
     stop(
-      "Failed to download SQL dump from URL. curl::curl_download() returned status ",
-      status,
-      ".\nURL: ",
-      url,
-      call. = FALSE
+      "Failed to download SQL dump from URL."
     )
   }
 

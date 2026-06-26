@@ -57,9 +57,6 @@ downloadEQWin <- function(
     on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
   }
 
-  # Get or set the EQWin source database UUID, which is used to link imported samples to the specific EQWin database they came from. This is important for tracking data provenance and ensuring that data from different EQWin sources are not conflated.
-  guid <- get_or_create_eqwin_uuid(EQCon)
-
   mapping <- import_mapping_load_db(con, key)
   if (is.null(mapping)) {
     mapping <- eqwin_load_key_from_file(con, key)
@@ -259,7 +256,11 @@ downloadEQWin <- function(
         ),
         collection_method = defaults$collection_method,
         sample_type = sample_type_i,
-        import_source_id = as.character(sample_row$SampleId[[1]]),
+        import_source_id = paste0(
+          as.character(sample_row$SampleId[[1]]),
+          "-",
+          EQpath
+        ),
         note = eqwin_collapse_note(c(
           sample_row$SampleNo[[1]],
           sample_row$SampleComments[[1]]
@@ -524,55 +525,4 @@ eqwin_collapse_note <- function(x) {
     return(NA_character_)
   }
   paste(unique(x), collapse = "; ")
-}
-
-#' Get or create a UUID for the EQWin source database
-#'' This function checks for the existence of a `yg_source_database` table and a
-#' UUID row within it. If the table or row does not exist, it creates them and generates a new UUID. This ensures that each EQWin source database can be uniquely identified in AquaCache, which is important for tracking data provenance and avoiding conflicts when multiple EQWin databases are used as sources.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
-#' @return A character string containing the UUID for the EQWin source database.
-#' @noRd
-#' @keywords internal
-get_or_create_eqwin_uuid <- function(con) {
-  rlang::check_installed(
-    "uuid",
-    reason = "to generate UUIDs for EQWin source database tracking"
-  )
-  if (!DBI::dbExistsTable(con, "aquacache_source_info")) {
-    guid <- uuid::UUIDgenerate()
-
-    DBI::dbExecute(
-      con,
-      "
-      CREATE TABLE aquacache_source_info (
-        id INTEGER,
-        source_database_uuid TEXT(36),
-        created_at DATETIME
-      )
-    "
-    )
-
-    DBI::dbExecute(
-      con,
-      "INSERT INTO aquacache_source_info 
-       (id, source_database_uuid, created_at) 
-       VALUES (?, ?, ?)",
-      params = list(1L, guid, format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
-    )
-
-    return(guid)
-  }
-
-  x <- DBI::dbGetQuery(
-    con,
-    "SELECT source_database_uuid 
-     FROM aquacache_source_info 
-     WHERE id = 1"
-  )
-
-  if (nrow(x) != 1L || is.na(x$source_database_uuid[1])) {
-    stop("Invalid aquacache_source_info table: expected exactly one UUID row.")
-  }
-
-  x$source_database_uuid[1]
 }

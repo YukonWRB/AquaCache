@@ -338,11 +338,11 @@ create_test_db <- function(
     "boreholes.borehole_well_purposes",
     "boreholes.casing_materials",
     "boreholes.drillers",
-    "discrete.guideline_publishers",
-    "discrete.guideline_series",
-    "discrete.guidelines",
-    "discrete.guidelines_fractions",
-    "discrete.guidelines_media_types"
+    "criteria.guideline_publishers",
+    "criteria.guideline_series",
+    "criteria.guidelines",
+    "criteria.guidelines_fractions",
+    "criteria.guidelines_media_types"
   )
 
   # Load the ancillary tables into the test database using DBI

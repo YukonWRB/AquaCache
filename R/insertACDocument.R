@@ -7,7 +7,7 @@
 #' ## Locations, lines, and polygons
 #' Any document can be associated with locations (points), lines, polygons, or any combination thereof. Please reference the table 'vectors' to give the correct geom_id(s) for your desired geoms.
 #'
-#' @param path Valid path including extension to the document to upload. Set to 'choose' to open a file dialog.
+#' @param path Valid path including extension to the document to upload.
 #' @param name A concise but descriptive name to give the document.
 #' @param type Type of document, which must exist in the database already. Currently one of 'thesis', 'report', 'well log', 'conference paper', 'poster', 'journal article', 'map', 'graph', 'protocol', 'metadata', 'audit'.
 #' @param description A text description of what the document is. Please be detailed!
@@ -42,7 +42,7 @@ insertACDocument <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
-  #Checks
+  # Checks
   if (length(path) > 1) {
     stop("You can only specify one path at a time.")
   }
@@ -109,12 +109,7 @@ insertACDocument <- function(
     }
   }
 
-  if (path == "choose") {
-    path <- rstudioapi::selectFile(
-      caption = "Select a document to upload",
-      filter = list("All files" = c("*.*"))
-    )
-  } else if (!file.exists(path)) {
+  if (!file.exists(path)) {
     stop(
       "The file you specified does not exist. Please check the path and try again."
     )

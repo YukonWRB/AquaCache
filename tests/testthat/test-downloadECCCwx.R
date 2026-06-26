@@ -1,4 +1,7 @@
 skip_if_offline()
+# Skip on cran and ci because the weathercan::weather_dl function used requires having an installed stations list, and currently that can't be checked for non-interactively.
+skip_on_cran()
+skip_on_ci()
 
 test_that("downloadECCCwx fetches hourly data", {
   con <- AquaConnect(silent = TRUE)
