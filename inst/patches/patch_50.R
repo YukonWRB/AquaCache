@@ -60,6 +60,14 @@ tryCatch(
        'TRUE if bedrock was reached, FALSE if not, NULL if unknown.';"
     )
 
+    # update so that bedrock_reached is NULL where depth_to_bedrock_m is NULL
+    DBI::dbExecute(
+      con,
+      "UPDATE boreholes.boreholes
+       SET bedrock_reached = NULL
+       WHERE depth_to_bedrock_m IS NULL;"
+    )
+
     bad <- DBI::dbGetQuery(
       con,
       "SELECT borehole_id, bedrock_reached, depth_to_bedrock_m
@@ -71,6 +79,7 @@ tryCatch(
     if (nrow(bad) > 0) {
       stop(
         "Patch 50 cannot add the constraint bedrock_depth_check because at least one borehole has inconsistent bedrock_reached and depth_to_bedrock_m values. Ensure that no boreholes have bedrock_reached = TRUE with depth_to_bedrock_m = NULL, and no boreholes have bedrock_reached != TRUE with depth_to_bedrock_m != NULL. The first 20 inconsistent boreholes are:\n",
+        paste(capture.output(print(bad)), collapse = "\n")
       )
     }
 
