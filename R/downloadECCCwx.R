@@ -96,8 +96,7 @@ downloadECCCwx <- function(
       start = start_datetime - 24 * 60 * 60,
       end = lubridate::ceiling_date(end_datetime, unit = "hour"),
       interval = interval,
-      time_disp = "UTC",
-      quiet = TRUE
+      time_disp = "UTC"
     ))
     # Save the file to the tempdir, from which it will be deleted once the R session ends
     dir.create(dlECCCwx_cache_dir(), showWarnings = FALSE)
