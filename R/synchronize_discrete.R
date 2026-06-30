@@ -14,7 +14,6 @@
 #' @param sync_remote_false Controls whether to synchronize sample_series that have the `sync_remote` column set to FALSE in the `sample_series` table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!
 #' @param delete If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.
 #' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
-#' @param EQCon A connection to the EQWin database, created with [EQConnect()]. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.
 #'
 #' @return Updated entries in the hydro database.
 #' @export
@@ -27,8 +26,7 @@ synchronize_discrete <- function(
   active = 'default',
   sync_remote_false = FALSE,
   delete = FALSE,
-  snowCon = NULL,
-  EQCon = NULL
+  snowCon = NULL
 ) {
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -48,6 +46,8 @@ synchronize_discrete <- function(
   }
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
+  EQWinConCache <- eqwin_connection_cache_new()
+  on.exit(eqwin_connection_cache_disconnect(EQWinConCache), add = TRUE)
 
   start <- Sys.time()
 
@@ -153,12 +153,6 @@ synchronize_discrete <- function(
         }
         end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
 
-        # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
-        if (source_fx == "downloadEQWin" & is.null(EQCon)) {
-          EQCon <- EQConnect(silent = TRUE)
-          on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
-        }
-
         if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
           # Try with the same host and port as the AquaCache connection
           dets <- DBI::dbGetQuery(
@@ -185,7 +179,10 @@ synchronize_discrete <- function(
         }
 
         if (source_fx == "downloadEQWin") {
-          args_list[["EQCon"]] <- EQCon
+          args_list[["EQCon"]] <- eqwin_connection_cache_get(
+            EQWinConCache,
+            args_list[["EQpath"]]
+          )
         }
         if (source_fx == "downloadSnowCourse") {
           args_list[["snowCon"]] <- snowCon

@@ -3,7 +3,6 @@
 export("%>%")
 export(AccessConnect)
 export(AquaConnect)
-export(EQConnect)
 export(RWISConnect)
 export(addACImageSeries)
 export(addACLocation)
