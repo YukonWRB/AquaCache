@@ -1,0 +1,845 @@
+input_param,cas_number,ParamDesc,input_unit,parameter_id,conversion,unit_solid,result_type,matrix_state,sample_fraction,sample_fraction_AC,result_value_type,result_speciation_id,result_speciation_AC,NEW_param_needed,NEW_speciation_needed,NEW_fraction_needed,NEW_protocol_needed,FLAG_AC_params_edit,FLAG_review,FLAG_notes_combined,ignore,result_offset,mapping_status
++.053mm,"",Particles retained .053 mm sieve open. 270 mesh.,%,32,1,"",2,2,,,1,,,"","",,"",,TRUE,maybe change units in ac params? Should be percent; UNIT_REVIEW: EQWin unit '%' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
++.106mm,"","Particle retained by .106 mm open sieve, 140 mesh",%,1269,1,"",2,2,,,1,,,"Particle retained by .106 mm open sieve, 140 mesh","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
++.150mm,"","Particle retained by .150 mm open sieve, 100 mesh.",%,29,1,"",2,2,,,1,,,"","",,"",,TRUE,maybe change units in ac params? Should be percent; UNIT_REVIEW: EQWin unit '%' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
++.250mm,"","Particle retained by .25 mm sieve opening, 60 mesh",%,1270,1,"",2,2,,,1,,,"Particle retained by .25 mm sieve opening, 60 mesh","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
++.425mm,"","Particle retained by .425 mm sieve open, 40 mesh.",%,1271,1,"",2,2,,,1,,,"Particle retained by .425 mm sieve open, 40 mesh.","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
++.841mm,"","Particle retained by .841 mm sieve open, 20 mesh.",%,1272,1,"",2,2,,,1,,,"Particle retained by .841 mm sieve open, 20 mesh.","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
++2.00mm,"","Particle retained by 2.00 mm sieve open, 10 mesh.",%,28,1,"",2,2,,,1,,,"","",,"",,TRUE,maybe change units in ac params? Should be percent; UNIT_REVIEW: EQWin unit '%' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
++200mesh,"",Particles retained by 200 mesh screen.,%,31,1,"",2,2,,,1,,,"","",,"",,TRUE,maybe change units in ac params? Should be percent; UNIT_REVIEW: EQWin unit '%' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+1112TTCA,630-20-6,"1,1,1,2-Tetrachloroethane",µg/L,145,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+111TCA,71-55-6,"1,1,1-Trichloroethane",µg/L,146,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+1122TTCE,"","tetrachloroethylene (tetrachloroethene, 1,1,2,2-)",µg/L,607,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+112TC-122TF,76-13-1,"1,1,2-Trichloro-1,2,2-trifluoroethane",µg/L,363,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+112TCA,"","1,1,2-Trichloroethane",µg/L,148,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+11DCA,"","1,1-Dichloroethane",µg/L,149,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+11DCE,"","1,1-Dichloroethylene",µg/L,150,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+123TCBZ,"","1,2,3-trichlorobenzene",µg/L,156,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+124TCBZ,"","1,2,4-trichlorobenzene",µg/L,158,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+126-Trimethylphenanthrene,30436-55-6,"1,2,6-Trimethylphenanthrene",ng/L,160,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+12DCA,"","1,2-Dichloroethane",µg/L,162,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+12DCBZ,95-50-1,"1,2-Dichlorobenzene",µg/L,532,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+12DCPA,"","1,2-Dichloropropane",µg/L,165,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+12-Dimethylnaphthalene,573-98-8,"1,2-Dimethylnaphthalene",ng/L,166,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+135-Trimethylbenzene,"","Mesitylene or 1,3,5-trimethylbenzene",ng/L,170,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+13-Butadiene,106-99-0,"1,3-Butadiene",µg/L,1273,1,"",2,1,,,1,,,"1,3-Butadiene","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+13DCBZ,"","1,3-Dichlorobenzene",µg/L,171,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+13DCPE,542-75-6,"1,3-Dichloropropene (cis & trans)",mg/L,668,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+13Dichloropropane,"","1,3-Dichloropropane",µg/L,667,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+13HCB,87-68-3,"1,3-hexachlorobutadiene",µg/L,444,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+13Propanediol,504-63-2,"1,3-Propanediol",%,1274,1,"",2,1,,,1,,,"1,3-propanediol","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+1467-Tetramethylnaphthalene,13764-18-6,"1,4,6,7-Tetramethylnaphthalene",ng/L,172,1e-06,"",2,1,,,1,,,"","",,"",TRUE,FALSE,AC_params has wrong CAS number - should be 13764-18-6,FALSE,0,mapped_existing_parameter
+14DCBZ,106-46-7,"1,4-Dichlorobenzene",µg/L,552,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+17A-Est,57-91-0,17alpha-estradiol,ng/L,1275,1,"",2,1,,,1,,,17alpha-estradiol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+17A-Eth,57-63-6,17alpha-ethynylestradiol,ng/L,429,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+17B-Est,50-28-2,17beta-estradiol,ng/L,425,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+17-Dimethylfluorene,442-66-0,"1,7-Dimethylfluorene",ng/L,176,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+17-Dimethylphenanthrene,483-87-4,"1,7-Dimethylphenanthrene",ng/L,177,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+18-Dimethylphenanthrene,7372-87-4,"1,8-Dimethylphenanthrene",ng/L,178,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+1-Methylchrysene,"",1-Methylchrysene,ng/L,182,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+1-Methylnaphthalene,"",1-Methylnaphthalene,ng/L,183,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+1-Methylphenanthrene,"",1-Methylphenanthrene,ng/L,184,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+-200mesh,"",Partciles passing 200 mesh screen.,%,27,1,"",2,2,,,1,,,"","",,"",,TRUE,maybe change units in ac params? Should be percent; SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; UNIT_REVIEW: EQWin unit '%' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+235-Trimethylnaphthalene,2245-38-7,"2,3,5-Trimethylnaphthalene",ng/L,175,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+236-Trimethylnaphthalene,829-26-5,"2,3,6-Trimethylnaphthalene",ng/L,202,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+23-Methyldibenzothiophenes,"",2/3-Methyldibenzothiophenes,ng/L,328,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-4-5-T,93-76-5,"Herbicide, C8H5Cl3O3",µg/L,672,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-4-5-TP,93-72-1,"Herbicide, C9H7Cl3O3",µg/L,976,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-4-D,94-75-7,"Herbicide, C8H6Cl2O3",µg/L,675,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-4-DB,120-36-5,"Herbicide,C9H8Cl2O3",µg/L,788,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+24-Dimethyldibenzothiophene,31317-18-7,"2,4-Dimethyldibenzothiophene",ng/L,210,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-4-DP,120-36-5,"Herbicide, C9H8Cl2O3",µg/L,788,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+26-Dimethylnaphthalene,581-42-0,"2,6-Dimethylnaphthalene",ng/L,216,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+26-Dimethylphenanthrene,17980-16-4,"2,6-Dimethylphenanthrene",ng/L,218,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-Chloronaphthalene,"",2-Chloronaphthalene,µg/L,223,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-Methylanthracene,"",2-Methylanthracene,ng/L,227,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-Methylfluorene,"",2-Methylfluorene,ng/L,229,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-Methylnaphthalene,"",2-Methylnaphthalene,ng/L,230,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+2-Methylphenanthrene,"",2-Methylphenanthrene,ng/L,232,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+36-Dimethylphenanthrene,1576-67-6,"3,6-Dimethylphenanthrene",ng/L,713,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+3-Methylfluoranthene-Benzo-a-fluorene,"",3-Methylfluoranthene/Benzo[a]fluorene,ng/L,570,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+3-Methylphenanthrene,"",3-Methylphenanthrene,ng/L,242,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+56-Methylchrysene,"",5/6-Methylchrysene,ng/L,254,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+59-Dimethylchrysene,"","5,9-Dimethylchrysene",ng/L,253,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+6PPD-quinone,2754428-18-5,Tire Wear Compounds,ng/l,1276,1,"",3,1,,,1,,,6PPD-quinone,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+7-Methylbenzo-a-pyrene,63041-77-0,7-Methylbenzo[a]pyrene,ng/L,257,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+94-Methylphenanthrene,"",9/4-Methylphenanthrene,ng/L,260,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Absorb,"","Absorbance, UV (@ 254nm)",AU/cm,1176,1,"",3,1,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'AU/cm' vs AquaCache unit 'dimensionless',FALSE,0,mapped_existing_parameter
+Acenaphthene,"",Acenaphthene,ng/L,263,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Acenaphthylene,"",Acenaphthylene,ng/L,265,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Acesulfame,"",Acesulfame,ng/L,267,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+acetaminophen,"",Pharmaceuticals,ng/l,269,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Acidity,"",Acidity,mg/L,1277,1,"",2,1,,,1,,,Acidity,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Acidity-pH4.5,"",Acidity to pH 4.5,mg/L,1278,1,"",2,1,,,1,,,Acidity to pH 4.5,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Acidity-pH8.3,"",Acidity to pH 8.3,mg/L,1279,1,"",2,1,,,1,,,Acidity to pH 8.3,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Acridine,"","Acridine, Dibenzo-[b,e]-pyridine",ng/L,270,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Actinium228,14331-83-0,Actinium228,Bq/L,1280,1,"",2,1,,,1,,,Actinium-228,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Ag-D,"","Silver, dissolved",mg/L,1128,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ag-D_CSR_s3_fAL,"","Silver, dissolved, CSR sched 3 freshwater aquatic",mg/L,1128,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Ag-E,"","Silver, extractable",mg/L,1128,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Agroxone,94-74-6,"Herbicide, Acetic acid, 2-methyl-4-chlorophenoxy- [MCPA]",µg/L,876,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ag-T,"","Silver, total",mg/L,1128,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ag-T_CRS_s3_fAL_SW,"","Silver, Total,  CSR sched 3 FAQ, SW",mg/L,1128,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Ag-T_S,"","Silver, Total in Sediments",mg/kg,1128,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Al-D,"","Aluminum, dissolved",mg/L,1046,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Aldrin,"","Insecticide, organochlorine, C12H8Cl6",µg/L,693,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Aldrin-Dieldrin,"",Aldrin + Dieldrin,µg/L,694,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Al-E,"","Aluminum, extractable",mg/L,1046,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Alk-B,"","Alkalinity, Bicarbonate HCO3",mg/L,92,1,"",2,1,26,26,3,11,11,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Alk-C,"","Alkalinity, Carbonate CO3",mg/L,92,1,"",2,1,19,19,3,6,6,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Alk-OH,"","Alkalinity, Hydroxide OH",mg/L,92,1,"",2,1,19,19,3,22,22,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Alk-P,"","Alkalinity, Phenolphthalein.",mg/L,92,1,"",2,1,19,19,1,45,45,"",as CO3 & OH,,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Alk-T,"","Alkalinity, Total",mg/L,92,1,"",2,1,19,19,1,3,3,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Al-T,"","Aluminum, total",mg/L,1046,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Al-T_CCME,"",Al-T_CCME,"",1046,1e-06,"",2,1,19,19,3,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Al-T_CCME_LT,"",Al-T CCME Protection of Aq Life Long term Expos,mg/L,1046,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Al-T_S,"","Aluminum, total in Sediment",mg/kg,1046,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+androstenedione,63-05-8,Steroids,ng/l,1281,1,"",3,1,,,1,,,androstenedione,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+AnionCks,"",RPD of Sum Anions and Sp Conductivity,%,1282,1,"",3,1,,,3,,,RPD of Sum Anions and Sp Conductivity,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Anions_Lab,"",Anion Sum Calculated by Lab,meq/L,1148,1,"",2,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Anthracene,"",Anthracene,ng/L,275,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+As-B,64436-13-1,"Arsenobetaine (AsB, as As)",µg/L,1051,0.001,"",2,1,26,26,1,,,"","",,"",,TRUE,SPEC: as As?,FALSE,0,mapped_existing_parameter
+Asbs-T,1332-21-4,Asbestos Total Concentration,MFL,1283,1,"",3,1,19,,3,,,Asbestos,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+As-D,"","Arsenic, dissolved",mg/L,1049,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+As-DMAs,75-60-5,Dimethylarsinic Acid,µg/L,724,0.001,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+As-E,"","Arsenic, extractable",mg/L,1049,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+As-III,"",Arsenic Species: Arsenite/Arsenice Trivalent,µg/L,1284,0.001,"",2,1,5,5,1,,,As-III,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+As-inorg,"","Arsenic, Inorganic, Calculated by the Lab",µg/L,1049,0.001,"",2,1,12,12,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+As-MMAs,124-58-3,yArsenic Species: Monomethylarsonic Acid [MMAs],µg/L,489,0.001,"",2,1,5,5,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+As-T,"","Arsenic, total",mg/L,1049,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+As-T_S,"","Arsenic, Total in Sediment",mg/kg,1049,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Asulam,"",Herbicide M&B9057,µg/L,700,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+As-V,"",Arsenic Species:  Arsenate/Arsenic Pentavalent,µg/L,1285,0.001,"",2,1,26,26,1,,,As-V,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+A-Temp,"","Air Temperature, field",C,1250,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+atenolol,29122,Beta Blockers,ng/l,1286,1,"",3,1,,,1,,,Atenolol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+atrazine,"",Current Use Pesticides,ng/l,701,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+AVGVOL,"",Average Volume of Leachate recovered in LDRS,L/d,1287,1,"",1,1,,,3,,,Average Volume of Leachate recovered in LDRS,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+B[a]PTE,"",Benzo[a]pyrene potency equivalence factor,µg/L,570,0.001,"",2,1,,,1,,,"","",,"",,TRUE,"check param - 291? Also, might be regulatory toxicity value that is static - assigned, so might need to set ignore to TRUE - ask Taylor/check database",FALSE,0,mapped_existing_parameter
+Ba-D,"","Barium, dissolved",mg/L,1052,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ba-E,"","Barium, extractable",mg/L,1052,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ba-T,"","Barium, total",mg/L,1052,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ba-T_S,"","Barium, Total in Sediment",mg/kg,1052,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+BCMA,"",Bromochloromethane,µg/L,317,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+B-D,"","Boron, dissolved",mg/L,1056,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+BDCMA,75-27-4,Bromodichloromethane,µg/L,403,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+B-E,"","Boron, extractable",mg/L,1056,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Be-D,"","Beryllium, dissolved",mg/L,1053,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Be-E,"","Beryllium, extractable",mg/L,1053,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benz,"",Benzene,µg/L,280,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benz_S,"","Benzene, in sediment",mg/kg,280,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Benz-a-anthracene,56-55-3,Benz[a]anthracene,ng/L,278,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benzo-a-pyrene,50-32-8,Benzo[a]pyrene,ng/L,291,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benzo-b-fluoranthene,205-99-2,Benzo[b]fluoranthene,ng/L,286,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benzo-bj-fluoranthene,"",Benzo{b&j}fluoranthene,ng/L,1288,1e-06,"",2,1,,,1,,,Benzo{b&j}fluoranthene,"",,"",,FALSE,"MAPPED_TO_EXISTING_AC_PARAMETER: benzo[b,j]fluoranthene, ng/L to mg/l; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED",FALSE,0,requires_new_parameter
+Benzo-bjk-fluoranthene,"",Benzo{b/j/k}fluoranthene,ng/L,296,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benzo-e-pyrene,192-97-2,Benzo[e]pyrene,ng/L,298,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benzo-ghi-fluoranthene,203-12-3,Benzo[ghi]fluoranthene,ng/L,1289,1,"",2,1,,,1,,,"benzo[g,h,i]fluoranthene","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Benzo-ghi-perylene,191-24-2,Benzo[ghi]perylene,ng/L,299,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Benzo-jk-fluoranthenes,"","Benzo[j,k]fluoranthenes",ng/L,1290,1e-06,"",2,1,,,1,,,"Benzo[j,k]fluoranthenes","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Benzo-k-fluoranthene,"",Benzo[k]fluoranthene,ng/L,301,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Be-T,"","Beryllium, total",mg/L,1053,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Be-T_S,"","Beryllilum, Total in Sediment",mg/kg,1053,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Bi-D,"","Bismuth, dissolved",mg/L,1055,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Biphenyl,"",Biphenyl,ng/L,305,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Bismuth212,14913-49-6,Bismuth212,Bq/L,1291,1,"",2,1,,,1,,,Bismuth-212,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Bismuth214,14733-03-0,Bismuth214,Bq/L,1292,1,"",2,1,,,1,,,Bismuth-214,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+bisphenol-A,80-05-7,Industrial Estrogens,ng/l,245,1e-06,"",3,1,,,1,,,"","",,"",TRUE,FALSE,Need to fix CAS number in AC_params,FALSE,0,mapped_existing_parameter
+bisphenol-S,"",Industrial Estrogens,ng/l,312,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Bi-T,"","Bismuth, total",mg/L,1055,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Bi-T_S,"","Bismuth, Total in Sediment",mg/kg,1055,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+BMA,74-83-9,Bromomethane,µg/L,889,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+BOD5,"","Biochemical Oxygen Demand, 5-day",mg/L,93,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+BOGUS,"","","",,1,"",2,1,,,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Br,"",Bromine,mg/L,1059,1,"",2,1,26,26,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+BrBenz,"",Bromobenzene,µg/L,315,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Brodifacoum,"","Rodenticide, C31H23BrO3",µg/L,313,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Bromacil,"","Herbicide, C₉H₁₃BrN₂O₂,",µg/L,716,0.001,"",2,1,,,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+Bromide,"",Bromide,mg/L,1058,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Bromoxynil,"","Herbicide, C7H3Br2NO",µg/L,719,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+B-Sito,83-46-5,beta-sitosterol,ng/L,1293,1,"",2,1,,,1,,,beta-sitosterol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+B-T,"","Boron, total",mg/L,1056,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+B-T_S,"","Boron, total in sediments.",mg/kg,1056,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+BTEX,"","benzene, toluene, ethylbenzene and xylene",µg/L,318,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C10H8,"",Naphthalene-d8,%,1294,1,"",2,1,,,1,,,"Naphthalene-d8, %","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C12DCE,"","cis-1,2-Dichloroethylene",µg/L,377,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C12H18O2,"",C12H18O2,ng/L,1295,1e-06,"",2,1,,,1,,,C12H18O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C12H20O2,"",C12H20O2,ng/L,1296,1e-06,"",2,1,,,1,,,C12H20O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C12H22O2,"",C12H22O2,ng/L,1297,1e-06,"",2,1,,,1,,,C12H22O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C12H24O2,"",C12H24O2,ng/L,1298,1e-06,"",2,1,,,1,,,C12H24O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C13DCPE,10061-01-5,"cis-1,3-Dichloropropylene",µg/L,751,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C13H20O2,"",C13H20O2,ng/L,1299,1e-06,"",2,1,,,1,,,C13H20O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C13H22O2,"",C13H22O2,ng/L,1300,1e-06,"",2,1,,,1,,,C13H22O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C13H24O2,"",C13H24O2,ng/L,1301,1e-06,"",2,1,,,1,,,C13H24O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C13H26O2,"",C13H26O2,ng/L,1302,1e-06,"",2,1,,,1,,,C13H26O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C14H10,"",Phenanthrene-d10,%,1303,1,"",2,1,,,1,,,"Phenanthrene-d10, %","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C14H20O2,"",C14H20O2,ng/L,1304,1e-06,"",2,1,,,1,,,C14H20O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C14H22O2,"",C14H22O2,ng/L,1305,1e-06,"",2,1,,,1,,,C14H22O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C14H24O2,"",C14H24O2,ng/L,1306,1e-06,"",2,1,,,1,,,C14H24O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C14H26O2,"",C14H26O2,ng/L,1307,1e-06,"",2,1,,,1,,,C14H26O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C14H28O2,"",C14H28O2,ng/L,1308,1e-06,"",2,1,,,1,,,C14H28O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C15H18O2,"",C15H18O2,ng/L,1309,1e-06,"",2,1,,,1,,,C15H18O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C15H20O2,"",C15H20O2,ng/L,1310,1e-06,"",2,1,,,1,,,C15H20O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C15H22O2,"",C15H22O2,ng/L,1311,1e-06,"",2,1,,,1,,,C15H22O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C15H24O2,"",C15H24O2,ng/L,1312,1e-06,"",2,1,,,1,,,C15H24O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C15H26O2,"",C15H26O2,ng/L,1313,1e-06,"",2,1,,,1,,,C15H26O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C15H28O2,"",C15H28O2,ng/L,1314,1e-06,"",2,1,,,1,,,C15H28O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C15H30O2,"",C15H30O2,ng/L,1315,1e-06,"",2,1,,,1,,,C15H30O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C16H20O2,"",C16H20O2,ng/L,1316,1e-06,"",2,1,,,1,,,C16H20O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C16H22O2,"",C16H22O2,ng/L,1317,1e-06,"",2,1,,,1,,,C16H22O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C16H24O2,"",C16H24O2,ng/L,1318,1e-06,"",2,1,,,1,,,C16H24O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C16H26O2,"",C16H26O2,ng/L,1319,1e-06,"",2,1,,,1,,,C16H26O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C16H28O2,"",C16H28O2,ng/L,1320,1e-06,"",2,1,,,1,,,C16H28O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C16H30O2,"",C16H30O2,ng/L,1321,1e-06,"",2,1,,,1,,,C16H30O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C16H32O2,"",C16H32O2,ng/L,1322,1e-06,"",2,1,,,1,,,C16H32O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C17H22O2,"",C17H22O2,ng/L,1323,1e-06,"",2,1,,,1,,,C17H22O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C17H24O2,"",C17H24O2,ng/L,1324,1e-06,"",2,1,,,1,,,C17H24O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C17H26O2,"",C17H26O2,ng/L,1325,1e-06,"",2,1,,,1,,,C17H26O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C17H28O2,"",C17H28O2,ng/L,1326,1e-06,"",2,1,,,1,,,C17H28O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C17H30O2,"",C17H30O2,ng/L,1327,1e-06,"",2,1,,,1,,,C17H30O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C17H32O2,"",C17H32O2,ng/L,1328,1e-06,"",2,1,,,1,,,C17H32O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C17H34O2,"",C17H34O2,ng/L,1329,1e-06,"",2,1,,,1,,,C17H34O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H12,"",Chrysene-d12,%,1330,1,"",2,1,,,1,,,"Chrysene-d12, %","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H24O2,"",C18H24O2,ng/L,1331,1e-06,"",2,1,,,1,,,C18H24O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H26O2,"",C18H26O2,ng/L,1332,1e-06,"",2,1,,,1,,,C18H26O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H28O2,"",C18H28O2,ng/L,1333,1e-06,"",2,1,,,1,,,C18H28O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H30O2,"",C18H30O2,ng/L,1334,1e-06,"",2,1,,,1,,,C18H30O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H32O2,"",C18H32O2,ng/L,1335,1e-06,"",2,1,,,1,,,C18H32O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H34O2,"",C18H34O2,ng/L,1336,1e-06,"",2,1,,,1,,,C18H34O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C18H36O2,"",C18H36O2,ng/L,1337,1e-06,"",2,1,,,1,,,C18H36O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C19H26O2,"",C19H26O2,ng/L,1338,1e-06,"",2,1,,,1,,,C19H26O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C19H28O2,"",C19H28O2,ng/L,1339,1e-06,"",2,1,,,1,,,C19H28O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C19H30O2,"",C19H30O2,ng/L,1340,1e-06,"",2,1,,,1,,,C19H30O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C19H32O2,"",C19H32O2,ng/L,1341,1e-06,"",2,1,,,1,,,C19H32O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C19H34O2,"",C19H34O2,ng/L,1342,1e-06,"",2,1,,,1,,,C19H34O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C19H36O2,"",C19H36O2,ng/L,1343,1e-06,"",2,1,,,1,,,C19H36O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C19H38O2,"",C19H38O2,ng/L,1344,1e-06,"",2,1,,,1,,,C19H38O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C1-Acenaphthenes,"",C1-Acenaphthenes,ng/L,324,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C1-Benzo-a-anthracenes-Chrysenes,"",C1-Benzo[a]anthracenes/Chrysenes,ng/L,325,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C1-Benzofluoranthenes-Benzopyrenes,"",C1-Benzofluoranthenes/Benzopyrenes,ng/L,326,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C1-Biphenyls,"",C1-Biphenyls,ng/L,327,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C1-Dibenzothiophenes,"",C1-Dibenzothiophenes,ng/L,328,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C1-Fluoranthenes-Pyrenes,"",C1-Fluoranthenes/Pyrenes,ng/L,329,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C1-Fluorenes,"",C1-Fluorenes,ng/L,1345,1,"",2,1,,,1,,,C1-Fluorenes,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C1-Naphthalenes,"",C1-Naphthalenes,ng/L,1346,1,"",2,1,,,1,,,C1-Naphthalenes,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C1-Phenanthrenes-Anthracenes,"",C1 Phenanthrenes/Anthracenes,ng/L,330,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2,74-84-0,"ethane, dissolved in water",mg/L,1347,1,"",2,1,,,1,,,ethane,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C20H28O2,"",C20H28O2,ng/L,1348,1e-06,"",2,1,,,1,,,C20H28O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C20H30O2,"",C20H30O2,ng/L,1349,1e-06,"",2,1,,,1,,,C20H30O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C20H32O2,"",C20H32O2,ng/L,1350,1e-06,"",2,1,,,1,,,C20H32O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C20H34O2,"",C20H34O2,ng/L,1351,1e-06,"",2,1,,,1,,,C20H34O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C20H36O2,"",C20H36O2,ng/L,1352,1e-06,"",2,1,,,1,,,C20H36O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C20H38O2,"",C20H38O2,ng/L,1353,1e-06,"",2,1,,,1,,,C20H38O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C21H30O2,"",C21H30O2,ng/L,1354,1e-06,"",2,1,,,1,,,C21H30O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C21H32O2,"",C21H32O2,ng/L,1355,1e-06,"",2,1,,,1,,,C21H32O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C21H34O2,"",C21H34O2,ng/L,1356,1e-06,"",2,1,,,1,,,C21H34O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C21H36O2,"",C21H36O2,ng/L,1357,1e-06,"",2,1,,,1,,,C21H36O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C21H38O2,"",C21H38O2,ng/L,1358,1e-06,"",2,1,,,1,,,C21H38O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C21H40O2,"",C21H40O2,ng/L,1359,1e-06,"",2,1,,,1,,,C21H40O2,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C2-Benzo-a-anthracenes-Chrysenes,"",C2-Benzo[a]anthracenes/Chrysenes,ng/L,332,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2-Benzofluoranthenes-Benzopyrenes,"",C2-Benzofluoranthenes/Benzopyrenes,ng/L,333,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2-Biphenyls,"",C2-Biphenyls,ng/L,334,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2-Dibenzothiophenes,"",C2-Dibenzothiophenes,ng/L,336,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2-Fluoranthenes-Pyrenes,"",C2-Fluoranthenes/Pyrenes,ng/L,337,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2-Fluorenes,"",C2-Fluorenes,ng/L,338,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2-Naphthalenes,"",C2-Naphthalenes,ng/L,339,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C2-Phenanthrenes-Anthracenes,"",C2 Phenanthrenes/Anthracenes,ng/L,340,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C3,74-98-6,"propane, dissolved in water",mg/L,1360,1,"",2,1,,,1,,,propane,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C3-Benzo-a-anthracenes-Chrysenes,"",C3-Benzo[a]anthracenes/Chrysenes,ng/L,342,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C3-Dibenzothiophenes,"",C3-Dibenzothiophenes,ng/L,344,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C3-Fluoranthenes-Pyrenes,"",C3-Fluoranthenes/Pyrenes,ng/L,345,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C3-Fluorenes,"",C3-Fluorenes,ng/L,346,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C3-Naphthalenes,"",C3-Naphthalenes,ng/L,347,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C3-Phenanthrenes-Anthracenes,"",C3-Phenanthrenes/Anthracenes,ng/L,348,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C4-Benzo-a-anthracenes-Chrysenes,"",C4-Benzo[a]anthracenes/Chrysenes,ng/L,349,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C4-Dibenzothiophenes,"",C4-Dibenzothiophenes,ng/L,351,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C4-Fluoranthenes-Pyrenes,"",C4-Fluoranthenes/Pyrenes,ng/L,352,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C4-Naphthalenes,"",C4-Naphthalenes,ng/L,354,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C4-Phenanthrenes-Anthracenes,"",C4-Phenanthrenes/Anthracenes,ng/L,355,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C6H4BrF,460-00-4,"Bromofluorobenzene, 4-",%,1361,1,"",2,1,,,1,,,"Bromofluorobenzene, 4-, %","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C6H4F2,"","Difluorobenzene, 1,4-",%,1362,1,"",2,1,,,1,,,"Difluorobenzene, 1,4-, %","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C7H4BrF3,392-83-6,"Bromobenzotrifluoride, 2-",%,1363,1,"",2,1,,,1,,,"Bromobenzotrifluoride, 2-, %","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+C7H6Cl2,95-75-0,"Dichlorotoluene, 3,4-",%,1364,1,"",3,1,,,1,,,"Dichlorotoluene, 3,4-, %","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Ca-D,"","Calcium, dissolved",mg/L,1061,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ca-E,"","Calcium, extractable",mg/L,1061,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Caff,"",Caffeine,mg/L,356,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+caffeine,"",Personal Care Products,ng/L,356,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Camp,474-62-4,Campesterol,ng/L,1365,1,"",2,1,,,1,,,Campesterol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+carbamazepine,"",Pharmaceuticals,ng/l,357,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cash,"",Cashmeran,ng/L,360,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ca-T,"","Calcium, total",mg/L,1061,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ca-T_S,"","Calcium, Total in Sediment",mg/kg,1061,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Cations_EQCal,"",Major Cations Calculated Post Import,meq/L,1149,1,"",2,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cations_Lab,"",Cation Sum Calculated by Lab,meq/L,1149,1,"",2,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CationsCks,"",RPD Sum Cations and Sp Conductivity,%,1366,1,"",3,1,,,3,,,RPD Sum Cations and Sp Conductivity,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+CBOD5,"","Carbonaceous Biochemical Oxygen Demand, 5-day",mg/L,1367,1,"",2,1,,,3,,,"Carbonaceous Biochemical Oxygen Demand, 5-day","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+CBZH,"",Chlorobenzene,µg/L,367,0.001,"",2,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CCME_Al-T,"",CCME_Al-T,"",1046,1e-06,"",2,1,19,19,3,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Cd-D,"","Cadmium, dissolved",mg/L,1060,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cd-D_CSR_s3_fAL,"","Cadmium, dissolved, CSR sched 3 freshwater aquatic",mg/L,1060,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cd-D-calc-load,"","Cadmium, dissolved, calculated load",mg/s,1368,1,"",2,1,5,5,3,,,"Cadmium, dissolved, calculated load_mg/s","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Cd-E,"","Cadmium, extractable",mg/L,1060,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C-DIC,"","Carbon, Dissolved Inorganic",mg/L,1096,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C-DOC,"","Carbon, Dissolved Organic",mg/L,1096,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cd-T,"","Cadmium, total",mg/L,1060,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cd-T_CCME,"",Cd-T_CCME,"",1060,1e-06,"",2,1,19,19,3,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Cd-T_CCME_LT,"",Cd-T CCME Protection of Aq Life Long term Expos,mg/L,1060,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cd-T_CRS_s3_fAL_SW,"","Cadmium, Total, CSR sched FAQ, SW",mg/L,1060,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cd-T_CSR_AW,"",Cd-T_CSR_AW,mg/L,1060,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cd-T_S,"","Cadmium, Total in Sediment",mg/kg,1060,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Celest,"",Celestolide,ng/L,361,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ce-T,"",CERIUM TOTAL,µg/L,1066,0.001,"",3,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CH2O,"",Formaldehyde,mg/L,438,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CH4,"","methane, dissolved in water",mg/L,482,1,"",2,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Chlordane-cis-A,"","Chlordane, cis- (alpha)",µg/L,752,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Chlordane-T,57-74-9,"Pesticide, Total Chlordane,",µg/L,737,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Chlordane-trans-G,5103-74-2,"Pesticide, Chlordane, trans- (gamma)",µg/L,1014,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Chlord-C,"","Chloride by colourimetric analysis, also called """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""Low Level Chloride/Sulphate by AC"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""" by BV",mg/L,1069,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Chlord-IC,"",Chloride - Analysis by Ion Chromatography,mg/L,1069,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Chlord-ICPES,"","Chloride - Analysis by Optical Emission Spectroscopy, only NRCAN as of yet",mg/L,1069,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Chlorine-F,"","Chloride , in Fiedl, with Test Strips",mg/L,1070,1,"",1,1,19,19,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+Chlr-a,"",Chlorophyll a,µg/L,1231,1,"",2,1,,,1,,,"","",,"",,TRUE,"HAS_NOTES | could also be 1229, 1230, 1232",FALSE,0,mapped_existing_parameter
+Chol,57-88-5,Cholesterol,ng/L,1369,1,"",2,1,,,1,,,Cholesterol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Chrysene,"",Chrysene,ng/L,373,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+ciprofloxacin,"",Antibiotics,ng/L,376,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+citalopram,59729-33-8,Anti-Depressants,ng/l,1370,1,"",3,1,,,1,,,citalopram,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Cl-FR,"","Chlorine, Free Residual",mg/L,1070,1,"",2,1,11,11,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Clof-Acid,"",Clofibric Acid,ng/L,380,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Clopyralid,"","Herbicide, C6H3Cl2NO2",µg/L,758,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cl-T,"","Chlorine, Total",mg/L,1070,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CMA,"",Chloromethane,µg/L,371,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-CNO,"",Cyanate,mg/L,386,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-CNS,"",Thiocyanate,mg/L,1078,1,"",2,1,26,26,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-Field-CP,"","Free Cyanide, Field, using a Cyanoprobe",mg/L,1077,1,"",1,1,11,11,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-Field-Hatch,"","Field cyanide result, field using a HACH colour comparator",mg/L,1077,1,"",1,1,22,22,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-Field-SP,"","Free Cyanide, Field, using a Spectrophotometer",mg/L,1077,1,"",1,1,11,11,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-Fre,"","Cyanide, free",mg/L,1077,1,"",2,1,11,11,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CNO-as-N-calc,"",Calculated Cyanate as N,mg/L,386,1,"",2,1,,,3,,,"","",,"",,TRUE,SPEC: as N?,FALSE,0,mapped_existing_parameter
+CN-SAD,"","Cyanide, Strong Acid Dissociab",mg/L,1077,1,"",2,1,2,2,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-T,"","Cyanide, Total (Strong Acid Diss)",mg/L,1077,1,"",2,1,2,2,1,,,"","",,"",,TRUE,"description in EQWin is confusing (T or SAD, or maybe SAD is T?)",FALSE,0,mapped_existing_parameter
+CN-TC,"",Cyanide + Thiocynate,mg/L,1078,1,"",2,1,19,19,1,,,"","",,"",,TRUE,double check result type (maybe this is actually field?),FALSE,0,mapped_existing_parameter
+CN-WAD,"","Cyanide, Weak Acid Dissociable.",mg/L,1077,1,"",2,1,1,1,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CN-WAD-as-N-calc,"",Calculated WAD Cyanide as N assuming all Free Cyanide,mg/L,1077,1,"",2,1,1,1,3,,,"","",,"",,TRUE,SPEC: as N? good example of confusing sample fraction (1? 11? - WAD or Free?),FALSE,0,mapped_existing_parameter
+CO2,"","carbon dioxide, dissolved in water",mg/L,1063,1,"",2,1,26,26,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+COD,"",Chemical Oxygen Demand,mg/L,96,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Co-D,"","Cobalt, dissolved",mg/L,1075,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+codeine,"",Opioids,ng/l,382,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Co-E,"","Cobalt, extractable",mg/L,1075,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Coli-E,68583-22-2,"Coliform, Eschericia",cfu/100mL,1210,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Coli-E-MPN,68583-22-2,"Coliforms, Eschericia - MPN technique",MPN/100mL,1210,1,"",2,1,,,1,,,"","",,"",,TRUE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED | EQWin duplicate review: mapped MPN technique row to existing AquaCache parameter 'escherichia coli'; method/unit distinction remains source metadata.,FALSE,0,mapped_existing_parameter
+Coli-F,"","Coliform, Fecal",cfu/100mL,1211,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Coli-F-MPN,"","Coliform Fecal, MPN technique",MPN/100mL,1371,1,"",2,1,,,1,,,"Coliform Fecal, MPN technique, MPN/100mL","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Coli-T,"","Coliforms, Total",cfu/100mL,1219,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Coli-T-MPN,"","Coliform, Total, MPN technique",MPN/100mL,1372,1,"",2,1,,,1,,,"Coliform, Total, MPN technique, MPN/100mL","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Colour,"","Colour, true",TCU,1373,1,"",1,1,,,1,,,"Colour, true","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Colour-A,"",apparent colour,TCU,1182,1,"",3,1,,,1,,,"","",,"",,TRUE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED | EQWin duplicate review: mapped British spelling to existing AquaCache parameter 'apparent color'.,FALSE,0,mapped_existing_parameter
+Cond-F,"",Specific Conductance - Field,µS/cm,1227,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cond-L,"",Specific Conductance - Lab,µS/cm,1227,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Condy-F,"",Conductivity Field (not spedific),µS/cm,1226,1,"",1,1,,,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+Copro,360-68-9,Coprostanol,ng/L,1374,1,"",2,1,,,1,,,Coprostanol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Co-T,"","Cobalt, total",mg/L,1075,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Co-T_S,"","Cobalt, Total in Sediment",mg/kg,1075,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Cr-D,"","Chromium, dissolved",mg/L,1072,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cr-E,"","Chromium, extractable",mg/L,1072,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cr-III-D,16065-83-1,"Chromium, Trivalent (3+), dissolved",mg/L,1073,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cr-III-T,16065-83-1,"Chromium, Trivalent (3+), total",mg/L,1073,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cr-T,"","Chromium, total",mg/L,1072,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cr-T_S,"","Chromium, Total in Sediment",mg/kg,1072,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Cr-VI-D,"","Chromium, Hexavalent (6+), dissolved",mg/L,1089,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cr-VI-T,"","Chromium, Hexavalent (6+), total",mg/L,1089,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Crypt,"",Cryptosporidium,oocysts/L,1375,1,"",2,1,,,1,,,"Cryptosporidium, oocysts/L","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Crypt-SWF,"",Cryptosporidium,/100L,1376,1,"",2,1,,,1,,,"Cryptosporidium-SWF, /100L","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Cs-D,"","Caesium, dissolved",mg/L,1067,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cs-T,"","Caesium, total",mg/L,1067,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+CT,"",Carbon tetrachloride,µg/L,358,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C-TIC,"","Carbon, Total Inorganic",mg/L,1096,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C-TOC,"","Carbon, Total Organic",mg/L,1096,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+C-TOC_S,"","Carbon, Total Organic in sediments",%,1377,1,"",2,2,19,19,1,,,"Carbon, Total Organic in sediments_%","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Cu-D,"","Copper, dissolved",mg/L,1076,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cu-D_CSR_s3_fAL,"","Copper, dissolved, CSR sched 3 freshwater aquatic",mg/L,1076,1,"",2,1,5,5,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cu-E,"","Copper, extractable",mg/L,1076,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cu-T,"","Copper, total",mg/L,1076,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Cu-T_BCMOE_fAL_st,"","Copper-T, BCMOE, FW aquatic life, short term",mg/L,1076,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cu-T_CCME,"",Cu-T_CCME,"",1076,1e-06,"",2,1,19,19,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Cu-T_CCME_LT,"",Cu-T CCME Protection of Aq Life Long term Expos,mg/L,1076,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cu-T_CRS_S3_fAL_SW,"","Copper, Total,  CSR sched 3 freshwater aquatic SW",mg/L,1076,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Cu-T_S,"","Copper, Total in Sediment",mg/kg,1076,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Cyclamate,"",Cyclamate,ng/L,766,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+d13C-DIC,"",Carbon-13 in dissolved inorganic carbon,‰ VSMOW,6,1,"",2,1,,,1,40,40,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; UNIT_REVIEW: EQWin unit '‰ VSMOW' vs AquaCache unit 'vpdb',FALSE,0,mapped_existing_parameter
+d18O-SO4,"",Oxygen-18 in sulphate,‰ VSMOW,4,1,"",2,1,,,1,43,43,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+d18O-water,"",Oxygen-18 in water,‰ VSMOW,4,1,"",2,1,,,1,36,36,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+d2H-water,"",deuterium,‰ VSMOW,5,1,"",2,1,,,1,36,36,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+d34S-SO4,"",Sulphur-34 in sulphate,‰ VSMOW,7,1,"",2,1,,,1,43,43,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; UNIT_REVIEW: EQWin unit '‰ VSMOW' vs AquaCache unit 'v-cdt',FALSE,0,mapped_existing_parameter
+DBCMA,124-48-1,Dibromochloromethane,µg/L,368,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DBMA,"",Dibromomethane,µg/L,399,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DCDFMA,75-71-8,Dichlorodifluoromethane,µg/L,364,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDD-2-4,53-19-0,"Insecticide, Metabolite of DDT, Organochlorine",µg/L,911,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDD-4-4,72-54-8,"Insecticide, Metabolite of DDT, organochlorine",µg/L,923,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDD-T,"","DDD,2,4'- + DDD,4,4'-",µg/L,771,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDE-2-4,3424-82-6,Metabolite of DDT,µg/L,912,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDE-4-4,72-55-9,Metabolite of DDT,µg/L,924,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDE-T,"","DDE, 2,4'- + DDE, 4,4'-",µg/L,772,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDT-2-4,789-02-6,"DDT, 2,4'-,",µg/L,913,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDT-4-4,50-29-3,"DDT, 4,4'-",µg/L,925,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDT-total-meta,"","DDT + metabolites, total",µg/L,774,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DDT-totals,"","DDT, total",µg/L,773,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DEG,"",Diethylene glycol (DEG),mg/L,412,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+desmethyl-venlafaxine,"",Anti-Depressants,ng/l,388,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Desmo,313-04-2,Desmosterol,ng/L,1378,1,"",2,1,,,1,,,Desmosterol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+desprothioconazole,"",Current Use Pesticides,ng/l,963,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Dibenz-ah-anthracene,53-70-3,"Dibenz[a,h]anthracene",ng/L,390,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Dibenzothiophene,"",Dibenzothiophene,ng/L,396,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Dicamba,"","Herbicide, C8H6Cl2O3",µg/L,782,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+di-Cl-meth,75-09-2,Dichloromethane,µg/L,492,0.001,"",2,1,,,1,,,"","",,"",TRUE,FALSE,CAS number in AC_params might need edit (should remove 19 at the beginning?),FALSE,0,mapped_existing_parameter
+Diclof,"",Diclofenac,ng/L,408,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Dieldrin,"","Insecticide, organochlorine, C12H8Cl6O",µg/L,793,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Diflufenican,83164-33-4,"Herbicide, C19H11F5N2O2",µg/L,243,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+DiHyChol,80-97-7,Dihydrocholesterol,ng/L,1379,1,"",2,1,,,1,,,Dihydrocholesterol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Dinoseb,"","Herbicide, C10H12N2O5",µg/L,800,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+diphenyl-guanidine,102-06-7,Tire Wear Compounds,ng/l,1380,1,"",3,1,,,1,,,diphenyl-guanidine,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Disch-RPD,"","",%,1381,1,"",1,1,,,1,,,discharge - relative percent difference,"",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Disch-Time,"",Time at which Discharge was collected,"",,1,"",2,1,,,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+DTW_btoc,"",Depth to Water (meters below top of casing),m,1166,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+E-Benz,"",Ethylbenzene,µg/L,431,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+E-Benz_S,"",Ethylbenzene in sediment,mg/kg,431,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+EHC10-32,"","Hydrocarbons, total extractable C10 to C32",mg/L,433,1,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+Endosulfan-a,"","Endosulfan, alpha-, metabolite of Endosulfan, organochlorine insecticide",µg/L,655,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Endosulfan-b,"","Endosulfan, beta-, metabolite of Endosulfan, organochlorine insecticide",µg/L,657,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Endosulfan-S,"","Endosulfan-sulfate, metabolite of Endosulfan, organochlorine insecticide",µg/L,809,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Endosulfan-T,"","Endosulfan, total, alpha+beta+sulfate",µg/L,808,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Endrin,"","Organochlorine insecticide, C12H8Cl6O",µg/L,810,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Endrin-aldehyde,"","chlorinated aldehyde derivative of Endrin, C12H8Cl6O",µg/L,811,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+EPH10-19,"",Extractable Petroleum Hydrocarbons 10-19 range,µg/L,451,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+EPH10-19_SGT,"",Extractable Petroleum Hydrocarbons 10-19 range Silica Gel Treated,µg/L,451,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+EPH13-32_SGT,"",Extractable Petroleum Hydrocarbons 19-32 range Silica Gel Treated,µg/L,452,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+EPH19-32,"",Extractable Petroleum Hydrocarbons 19-32 range,µg/L,452,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Epicop,516-92-7,Epicoprostanol,ng/L,1382,1,"",2,1,,,1,,,Epicoprostanol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+EQSumAnions,"","Sum of Anions, EQWin calculted wt Alk-T, Chloride, Fluoride, N...",meq/L,1148,1,"",3,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+EQSumCations,"","Sum of Cations, EQWin, calculated wt Ca, Mg, K, and Na)",meq/L,1149,1,"",3,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Equilin,474-86-2,Equilin,ng/L,1383,1,"",2,1,,,1,,,Equilin,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Equol,531-95-3,Equol,ng/L,1384,1,"",2,1,,,1,,,Equol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Estriol,"",Estriol,ng/L,426,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Estrone,"",Estrone,ng/L,427,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+ETC,"",Chloroethane,µg/L,369,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+EthyleneGlycol,"",Ethylene glycol,mg/L,432,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+F,"",Fluorine,mg/L,1083,1,"",2,1,26,26,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+F1_6-10,"",F1 Petroleum Hydrocarbons (C6-C10),µg/L,453,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+F2_10-16,"",F2 Petroleum Hydrocarbons (C10-C16),µg/L,453,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+F3_16-34,"",F3 Petroleum Hydrocarbons (C16-C34),µg/L,453,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+F4_34-50,"",F4 Petroleum Hydrocarbons (C34-C50),µg/L,453,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+Fe-D,"","Iron, dissolved",mg/L,1098,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Fe-E,"","Iron, extractable",mg/L,1098,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Feno,"",Fenoprofen,ng/L,824,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+fentanyl,437-38-7,Opioids,ng/l,1385,1,"",3,1,,,1,,,fentanyl,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Fe-T,"","Iron, total",mg/L,1098,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Fe-T_S,"","Iron, Total in Sediment",mg/kg,1098,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Flow,"","Flow rate, volumetric, discharge",L/s,1150,0.001,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Fluoranthene,"",Fluoranthene,ng/L,434,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Fluord,"",Fluoride,mg/L,1082,1,"",2,1,26,26,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Fluord_BCMOE_st_fAL,"",Fluoride BCMOE short term fw aquatic life,mg/L,1082,1,"",2,1,5,5,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Fluord_CSR_s3_fAL,"","Fluoride, CSR sched 3 freshwater aquatic life GW",mg/L,1082,1,"",2,1,5,5,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Fluord_CSR_s3_fAL_SW,"","Fluoride, CSR sched 3 freshwater aquatic life SW",mg/L,1082,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Fluorene,"",Fluorene,ng/L,436,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+fluoxetine,"",Anti-Depressants,ng/l,437,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+FWQG_Ld,"",Fedral Water Quality Guideline Threshold,mg/L,,1,"",2,1,,,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Ga-D,"","Gallium, Dissolved",mg/L,1085,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Galax,1222-05-5,Galaxolide,ng/L,168,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ga-T,"",GALLIUM TOTAL,mg/L,1085,1,"",3,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Gemf,"",Gemfibrozil,ng/L,440,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+gemfibrozil,"",Pharmaceuticals,ng/l,440,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Giardia,"","Giardia, water sample sent for analysis",cysts/L,1386,1,"",2,1,,,1,,,"Giardia, water sample sent for analysis, cysts/L","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Giardia-SWF,"",Giardia - string wound filter sent for analysis,/100L,1387,1,"",2,1,,,1,,,"Giardia - string wound filter sent for analysis, /100L","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Glyphosate,"","Glyphosate, Herbicide.",ng/L,854,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+H2S,"",Sulphide as H2S,mg/L,1093,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hard-Best,"",Best Hardness According to the WRB Concensus,mg/L,100,1,"",2,1,26,26,3,3,3,"","",,"",,FALSE,CORRECTED_INVALID_HARDNESS_SPECIATION_TO_AS_CACO3,FALSE,0,mapped_existing_parameter
+Hard-D,"",Hardness from dissolved metals,mg/L,100,1,"",2,1,5,5,3,48,48,"",as dissolved metals,,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hard-D_Calc,"","Hardness, Dis., calculated wt dissolved Ca & Mg",mg/L,100,1,"",2,1,5,5,3,46,46,"",as dissolved Ca & Mg,,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hard-D_Calc_Full,"","Hardness, Dis., calcula wt diss Ca, Mg, Fe, Sr, Mn",mg/L,100,1,"",2,1,5,5,3,47,47,"","as dissolved Ca, Mg, Fe, Sr, & Mn",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hard-T,"",Hardness from total metals,mg/L,100,1,"",2,1,19,19,3,51,51,"",as total metals,,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hard-T_Calc,"","Hardness, Tot., calculated from total Ca & Mg",mg/L,100,1,"",2,1,19,19,3,49,49,"",as total Ca & Mg,,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hard-T_Calc_Full,"","Hardness, Tot., calcula wt tot Ca, Mg, Fe, Sr, Mn",mg/L,100,1,"",2,1,19,19,3,50,50,"","as total Ca, Mg, Fe, Sr, & Mn",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+HEPH,"",Heavy Extractable Petroleum Hydrocarbons,µg/L,452,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+HEPH_SGT,"","Heavy Extractable Petroleum Hydrocarbons, Silica Gel Treated",µg/L,452,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+Heptachlor,"","Organochlorine insecticde, C10H5Cl7",µg/L,855,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Heptachlor-epoxide,"","Organochlorine Insecticde, Epoxide of Heptachlor",µg/L,857,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Heptachlor-T,"","Organochlorine insecticde, Heptachlor + Heptachlor epoxide",µg/L,855,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+heroine,561-27-3,Opioids,ng/l,1388,1,"",3,1,,,1,,,heroine,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Hexachlorobenzene,"","Organochlorine Insecticide, C6Cl6",µg/L,858,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hexachlorocyclohexane-a,"",Isomer of Hexachlorocyclohexane (alpha),µg/L,656,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hexachlorocyclohexane-b,"",Isomer of Hexachlorocyclohexane (beta),µg/L,660,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hexachlorocyclohexane-d,"",Isomer of Hexachlorocyclohexane (delta),µg/L,661,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hexachlorocyclohexane-g,"",Isomer of Hexachlorocyclohexane,µg/L,662,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hexachlorocyclohexane-T,"","Hexachlorocyclohexane, total of (a+b+d+g)",µg/L,859,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hexachloroethane,"",Organochlorine,µg/L,446,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hg-D,"","Mercury, dissolved",mg/L,1105,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hg-T,"","Mercury, total",mg/L,1105,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Hg-T_BCMOE_fAL,"",BCMOE Guideline for Protection of AL. For 1 month Av,mg/L,1105,1,"",3,1,19,19,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Hg-T_S,"","Mercury, Total in Sediment",mg/kg,1105,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+HMMM,3089-11-0,Tire Wear Compounds,ng/l,1389,1,"",3,1,,,1,,,HMMM,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+HPC,"",Heterotrophic Plate Count,cfu/1mL,1390,1,"",2,1,,,1,,,"Heterotrophic Plate Count, cfu/1mL","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+I2,20461-54-5,Iodide,mg/L,1391,1,"",2,1,,,1,,,iodide,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+IACR,"",Index of additive cancer risk,%,1392,1,"",3,1,,,3,,,Index of additive cancer risk,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+IB_EQCal,"","Ionic Balanace, Calculated by EQWin, RPD",%,1255,1,"",3,1,,,3,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+IB_Lab,"","Ionic Balance, Calculated by Lab, RPD",%,1255,1,"",2,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ibpfn,15687-27-1,Ibuprofen,ng/L,283,1e-06,"",2,1,,,1,,,"","",,"",,TRUE,"MAPPED_TO_EXISTING_AC_PARAMETER: ibuprofen, ng/L to mg/l; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED | EQWin duplicate review: mapped by CAS/name to existing AquaCache ibuprofen parameter.",FALSE,0,mapped_existing_parameter
+Indeno-123-cd-pyrene,193-39-5,"Indeno[1,2,3-cd]pyrene",ng/L,460,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Indom,"",Indomethacin,ng/L,101,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Isopropylbenzene,"","Cumene, Isopropylbenzen C9H12 or C6H5CH(CH3)2",ng/L,385,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+K-D,"","Potassium, dissolved",mg/L,1113,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+K-E,"","Potassium, extractable",mg/L,1113,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+ketamine,1867-66-9,Opioids,ng/l,1393,1,"",3,1,,,1,,,ketamine,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Keto,"",Ketoprofen,ng/L,470,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+K-T,"","Potassium, total",mg/L,1113,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+K-T_S,"","Potassium, total in sediments.",mg/kg,1113,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+La-D,"","Lanthanium, dissolved",mg/L,1099,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+La-T,"","Lanthanium, total",mg/L,1099,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+LC50.,"","","",,1,"",,,,,,,,"","",,"",,FALSE,MISSING_FROM_KEY; IGNORED_BLANK_EQWIN_HEADER_OR_GROUP_PARAMETER,TRUE,0,ignored
+LC50-CD_Conc,"",LC50 for Ceridubia;  Concentration for 50% Mortality ; result is the concentration needed to kill 50% of organism,%,1394,1,"",2,1,,,1,,,LC50 for Ceridubia;  Concentration for 50% Mortality ; result is the concentration needed to kill 50% of organism,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LC50-CD_Surv,"",LC50 for Ceridubia;  Survival in 100% concentration @ X  hours ; result is a percentage of survival of organism,%,1395,1,"",2,1,,,1,,,LC50 for Ceridubia;  Survival in 100% concentration @ X  hours ; result is a percentage of survival of organism,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LC50-DM_Conc,"",LC50 for Daphnia magma; Concentration for 50% Mortality @ 48 hours; result is the concentration needed to kill 50% of organism,%,1396,1,"",2,1,,,1,,,LC50 for Daphnia magma; Concentration for 50% Mortality @ 48 hours; result is the concentration needed to kill 50% of organism,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LC50-DM_Surv,"",LC50 for Daphnia magma; Survival in 100% concentration @ 48 hours; result is a percentage of survival of organism,%,1397,1,"",2,1,,,1,,,LC50 for Daphnia magma; Survival in 100% concentration @ 48 hours; result is a percentage of survival of organism,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LC50-pH,"","","",,1,"",,,,,,,,"","",,"",,FALSE,MISSING_FROM_KEY; IGNORED_BLANK_EQWIN_HEADER_OR_GROUP_PARAMETER,TRUE,0,ignored
+LC50-PP_Surv,"",LC50 for Pimephales promelas; Survival in 100% concentration @ X  hours ; result is a percentage of survival of organism,%,1398,1,"",2,1,,,1,,,LC50 for Pimephales promelas; Survival in 100% concentration @ X  hours ; result is a percentage of survival of organism,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LC50-RT_Conc,"",LC50 for Rainbow Trout; Concentration for 50% Mortality @ 96 hours; result is the concentration needed to kill 50% of organism,%,1399,1,"",2,1,,,1,,,LC50 for Rainbow Trout; Concentration for 50% Mortality @ 96 hours; result is the concentration needed to kill 50% of organism,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LC50-RT_Surv,"",LC50 for Rainbow Trout; Survival in 100% concentration @ 96 hours; result is a percentage of survival of organism,%,1400,1,"",2,1,,,1,,,LC50 for Rainbow Trout; Survival in 100% concentration @ 96 hours; result is a percentage of survival of organism,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Lead210,"",Lead210,Bq/L,1401,1,"",2,1,,,1,,,"Lead-210, Bq/L","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Lead211,15816-77-0,Lead211,Bq/L,1402,1,"",2,1,,,1,,,Lead-211,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Lead212,15092-94-1,Lead212,Bq/L,1403,1,"",2,1,,,1,,,Lead-212,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Lead214,15067-28-4,Lead214,Bq/L,1404,1,"",2,1,,,1,,,Lead-214,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LEPH,"",Light Extractable Petroleum Hydrocarbons,µg/L,451,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure,FALSE,0,mapped_existing_parameter
+LEPH_SGT,"","Leavy Extractable Petroleum Hydrocarbons, Silica Gel Treated",µg/L,451,0.001,"",2,1,,,1,,,"","",,"",,TRUE,param# - a bit unsure; SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+Li-D,"","Lithium, dissolved",mg/L,1101,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Linuron,"","Herbicide, C9H10Cl2N2O2",µg/L,869,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Li-T,"","Lithium, total",mg/L,1101,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Li-T_S,"","Lithium, total in sediments.",mg/kg,1101,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+LT50,"","","",,1,"",,,,,,,,"","",,"",,FALSE,MISSING_FROM_KEY; IGNORED_BLANK_EQWIN_HEADER_OR_GROUP_PARAMETER,TRUE,0,ignored
+LT50-Daphnia,"","","",,1,"",,,,,,,,"","",,"",,FALSE,MISSING_FROM_KEY; IGNORED_BLANK_EQWIN_HEADER_OR_GROUP_PARAMETER,TRUE,0,ignored
+LT50-DM_Hours,"","LT50 for Daphnia magma, Hours to 50% Mortality ; result is the time required to kill 50% of organism",h,1405,1,"",2,1,,,1,,,daphnia magma time required to kill 50% of organisms,"",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+LT50-pH,"","","",,1,"",,,,,,,,"","",,"",,FALSE,MISSING_FROM_KEY; IGNORED_BLANK_EQWIN_HEADER_OR_GROUP_PARAMETER,TRUE,0,ignored
+LT50-RT_Hours,"","LT50 for Rainbow Trout, Hours to 50% Mortality ; result is the time required  to kill 50% of organism",h,1406,1,"",2,1,,,1,,,rainbow trout time required to kill 50% of organisms,"",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+MCPB,"","Herbicides, C11H13ClO3",µg/L,877,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+MCPP,93-65-2,"Herbicide, C10H11ClO3",µg/L,878,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+mefentrifuconazole,1417782-03-6,Current Use Pesticides,ng/l,1407,1,"",3,1,,,1,,,mefentrifuconazole,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+MeHg,"",Organometallic cation with the formula [CH3Hg]+,ng/L,1106,1e-06,"",3,1,26,26,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+MeHg_Percent,"",Percentage of Methyl Mercury in Total Mercury,%,1408,1,"",3,1,19,19,3,,,Percentage of Methyl Mercury in Total Mercury,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Mestr,72-33-3,Mestranol,ng/L,1409,1,"",2,1,,,1,,,Mestranol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+methadone,76-99-3,Opioids,ng/l,1410,1,"",3,1,,,1,,,methadone,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Methoxychlor,"",Insecticide,µg/L,887,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+metoprolol,51384-51-1,Beta Blockers,ng/l,1411,1,"",3,1,,,1,,,metoprolol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Mg-D,"","Magnesium, dissolved",mg/L,1103,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mg-E,"","Magnesium, extractable",mg/L,1103,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mg-T,"","Magnesium, total",mg/L,1103,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mg-T_S,"","Magnesium, Total in Sediment",mg/kg,1103,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Mirex,"","Organochloride, C10Cl12",µg/L,898,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mn-D,"","Manganese, dissolved",mg/L,1104,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mn-D_CCME_PAL_LT,"",Mn-D CCME Protection of Aq Life Long term Expos,mg/L,1104,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Mn-D_CCME_PAL_ST,"",Mn-D CCME Protection of Aq Life Short Term Expos,mg/L,1104,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Mn-E,"","Manganese, extractable",mg/L,1104,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mn-T,"","Manganese, total",mg/L,1104,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mn-T_S,"","Manganese, Total in Sediment",mg/kg,1104,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Mo-D,"","Molybdenum, dissolved",mg/L,1107,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mo-E,"","Molybdenum, extractable",mg/L,1107,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+morphine,57-27-2,Opioids,ng/l,1412,1,"",3,1,,,1,,,morphine,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Mo-T,"","Molybdenum, total",mg/L,1107,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Mo-T_S,"","Molybdenum, Total in Sediment",mg/kg,1107,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+MTBE,1634-04-4,Methyl-tert-butyl-ether,µg/L,487,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+MTBE_S,1634-04-4,Methyl-tert-butyl-ether in sediment,mg/kg,487,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Musk-A,"",Musk ambrette,ng/L,501,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Musk-K,"",Musk ketone,ng/L,502,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Musk-M,116-66-5,Musk moskene,ng/L,503,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Musk-T,"",Musk tibetene,ng/L,504,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Musk-X,81-15-2,Musk xylene,ng/L,207,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N2,"","nitrogen gas, dissolved in water",mg/L,1044,1,"",2,1,19,19,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Na-D,"","Sodium, dissolved",mg/L,1129,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Na-E,"","Sodium, extractable",mg/L,1129,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Naphthalene,"",Naphthalene,ng/L,507,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Naproxen,"",Naproxen,ng/L,510,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Na-T,"","Sodium, total",mg/L,1129,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Na-T_S,"","Sodium, Total in Sediment",mg/kg,1129,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Nb-D,"","Niobium (Nb), Dissolved",mg/L,1110,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Nb-T,"",Niobium Total,mg/L,1110,1,"",3,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-DKN,"",Dissolved Kjeldahl Nitrogen,mg/L,1035,1,"",3,1,5,5,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-DN,"","Nitrogen, total dissolved",mg/L,1262,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-DON,"",Dissolved Organic Nitrogen is a calculated parameter from the lab,mg/L,1039,1,"",3,1,5,5,3,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+NH3-CNO,"",Total Ammonia + Cyanate_N (maybe a BV intermediate that is not needed),mg/L,,1,"",3,1,,,1,,,Total Ammonia + Cyanate_N (maybe a BV intermediate that is not needed),"",,"",,FALSE,IGNORED_UNCLEAR_INTERMEDIATE_AMMONIA_CYANATE_PARAMETER,TRUE,0,ignored
+Nicarbazin,"","Pesticide, C19H18N6O6",µg/L,513,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ni-D,"","Nickel, dissolved",mg/L,1109,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ni-D_CSR_s3_fAL,"","Nickel, dissolved, CSR sched 3 freshwater aquatic",mg/L,1109,1,"",2,1,5,5,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Ni-E,"","Nickel, extractable",mg/L,1109,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ni-T,"","Nickel, total",mg/L,1109,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ni-T_CCME,"",Ni-T_CCME,"",1109,0.001,"",2,1,19,19,3,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Ni-T_CCME_LT,"",Ni-T CCME Protection of Aq Life Long term Expos,mg/L,1109,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Ni-T_CRS_s3_fAL_SW,"","Nickel, Total,  CSR sched 3 FAQ, SW",mg/L,1109,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Ni-T_S,"","Nickel, Total in Sediment",mg/kg,1109,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+NLD,"",Used when adding VGC field data that did not have a lab sample match,"",,1,"",3,1,,,1,,,"","",,"",,FALSE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; IGNORED_NON_RESULT_EQWIN_HELPER_PARAMETER,TRUE,0,ignored
+N-NH3u@15C,"","Ammonia, un-ionized (as N), calculated by lab @15 degrees C",mg/L,1030,1,"",2,1,5,5,3,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-NH3uEQCal,"","Ammonia,un-ionized (as N) calculated in EQWin wt field temp & field pH",mg/L,1030,1,"",2,1,5,5,3,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-NH3uLabCal,"","Ammonia, un-ionized (as N), calculated by Lab wt field temp and pH",mg/L,1030,1,"",2,1,5,5,3,14,14,"","",,"",,FALSE,"EQWin df labeled this as a field measurement, has been changed to lab here",FALSE,0,mapped_existing_parameter
+N-NH4,"","Total Ammonia (NH3, NH4+), as N",mg/L,1030,1,"",2,1,5,5,1,14,14,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+N-NH4_CCME,"","CCME Standard - Ammonium Nitrogen(NH3, NH4+), as N  PAL LT",mg/L,,1,"",2,1,,,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+N-NH4_CSR_s3_fAL,"","CRR_Ammonium Nitrogen (NH3, NH4+), as N, CSR sched 3",mg/L,1031,1,"",2,1,5,5,3,14,14,"","",,"",,FALSE,"",TRUE,0,ignored
+N-NO2,"","Nitrite Nitrogen, as N",mg/L,1037,1,"",2,1,5,5,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-NO2_CSR_s3_fAL,"","Nitrite Nitrogen, as N, CSR sched 3 freshwater",mg/L,1037,1,"",2,1,5,5,3,14,14,"","",,"",,FALSE,"",TRUE,0,ignored
+N-NO23,"","Nitrite and Nitrate Nitrogen, as N",mg/L,1034,1,"",2,1,5,5,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-NO3,"","Nitrate Nitrogen, as N",mg/L,1036,1,"",2,1,5,5,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+NO23-D,"",Dissolved Nitrite plus Nitrate,mg/L,1034,1,"",3,1,5,5,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+NO2-D,"",Dissolved Nitrite,mg/L,1037,1,"",3,1,5,5,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+NO3-D,"",Dissolved Nitrate,mg/L,1036,1,"",3,1,5,5,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Nonachlor-trans,"","Nonachlor, trans-",µg/L,1015,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+non-Cl-phen,"",non-chlorinated phenols (total),µg/L,1413,1,"",2,1,,,1,,,non-chlorinated phenols (total),"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Noreth,68-22-4,Norethindrone,ng/L,1414,1,"",2,1,,,1,,,Norethindrone,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Norg,6533-00-2,Norgestrel,ng/L,1415,1,"",2,1,,,1,,,Norgestrel,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+N-TKN,"","Total Kjeldahl Nitrogen (organic nitrogen), as N",mg/L,1035,1,"",2,1,19,19,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-TN,"","Nitrogen, Total",mg/L,1262,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+N-TN_S,"","Nitrogen, Total, in sediment",%,1416,1,"",2,2,19,19,1,,,"Nitrogen, Total, in sediment_%","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+O&G,"",Total Oil & Grease,mg/L,534,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+O&G-M,"",Mineral Oil & Grease aka Total Petroleum Hydrocarb,mg/L,535,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+O2,"","oxygen gas, dissolved in water",mg/L,97,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+O-DO-F,"","Oxygen, Dissolved (in field)",mg/L,97,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+O-DO-F-sat,"","Oxygen, Dissolved Percent Saturation (in field)",%,1253,1,"",1,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+O-DO-L,"","Oxygen, Dissolved (in lab)",mg/L,97,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+ORP,"",Oxidation - Reduction Potential,mV,20,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+ORP-L,"",Reduction Potential - Lab,mV,20,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Oryzalin,"","Herbicide, C12H18N4O6S",µg/L,918,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Oxychlordane,"","Metabolite of Chlordan, C10H4Cl8O",µg/L,921,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+oxycodeon,76-42-6,Opioids,ng/l,1417,1,"",3,1,,,1,,,oxycodone,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PAH-HMW,"","Polycyclic Aromatics (PAH), High Molecular Weight",µg/L,989,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PAH-LMW,"","Polycyclic Aromatics (PAH), Low Molecular Weight",µg/L,616,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PAH-T,"","Polycyclic Aromatics (PAH), Total",µg/L,570,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+paroxetine,61869-08-7,Anti-Depressants,ng/l,1418,1,"",3,1,,,1,,,paroxetine,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Pb-D,"","Lead, dissolved",mg/L,1100,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Pb-D_CSR_s3_fAL,"","Lead, dissolved, CSR sched 3 freshwater aquatic",mg/L,1100,1,"",2,1,5,5,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Pb-E,"","Lead, extractable",mg/L,1100,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Pb-T,"","Lead, total",mg/L,1100,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Pb-T_CCME,"",Pb-T_CCME,"",1100,1e-06,"",2,1,19,19,3,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Pb-T_CCME_LT,"",Pb-T CCME Protection of Aq Life Long term Expos,mg/L,1100,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Pb-T_S,"","Lead, Total in Sediment",mg/kg,1100,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+P-D,"","Phosphorus, dissolved, by Metal Scan (ICPMS)",mg/L,1045,1,"",2,1,5,5,1,23,23,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+P-DI,"","Phosphorus, Dissolved Inorganic",mg/L,1111,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+P-DO,"","Phosphorus, Dissolved Organic",mg/L,1040,1,"",2,1,5,5,1,23,23,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Pd-T_CRS_s3_fAL_SW,"","Lead, Total, CSR sched 3 FAQ, SW",mg/L,1100,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+P-E,"","Phosphorus, extractable (not colourmetric)",mg/L,1045,1,"",2,1,6,6,1,23,23,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Pentachloronitrobenzene,"",Fungicide,µg/L,935,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+pent-Cl-phen,"",pentachlorophenol,µg/L,936,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Perylene,"",Perylene,ng/L,555,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFBA,375-22-4,Perfluorobutanoic acid,ng/L,651,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFBsA,"",Perfluorobutanesulfonic acid,ng/L,845,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFDA,335-76-2,Perfluorodecanoic Acid,ng/L,846,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFDoA,307-55-1,Perfluorododecanoic Acid,ng/L,1419,1,"",2,1,,,1,,,Perfluorododecanoic Acid,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PFDS,335-77-3,Perfluorodecanesulfonic acid,ng/L,1420,1,"",2,1,,,1,,,perfluorodecanesulfonic acid,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PFHpA,"",Perfluoroheptanoic Acid,ng/L,847,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFHpsA,375-92-8,Perfluoroheptanesulfonic acid,ng/L,163,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFHxA,"",Perfluorohexanoic Acid,ng/L,849,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFHxsA,"",Perfluorohexanesulfonic acid,ng/L,848,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFNA,"",Perfluorononanoic Acid,ng/L,850,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFNsA,68259-12-1,Perfluorononane sulfonic acid,ng/L,1421,1,"",2,1,,,1,,,perfluorononane sulfonic acid,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PFOA,"",Perfluorooctanoic Acid,ng/L,852,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFOcA,"",Perfluorooctanesulfonic acid,ng/L,851,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFOSA,754-91-6,Perfluorooctane Sulfonamide,ng/L,1422,1,"",2,1,,,1,,,perfluorooctane sulfonamide,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PFPeA,2706-90-3,Perfluoropentanoic Acid,ng/L,853,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PFPsA,2706-91-4,Perfluoropentanesulfonic acid,ng/L,1423,1,"",2,1,,,1,,,perfluoropentanesulfonic acid,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PFTeA,376-06-7,Perfluorotetradecanoic Acid,ng/L,1424,1,"",2,1,,,1,,,perfluorotetradecanoic acid,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PFTrA,72629-94-8,Perfluorotridecanoic Acid,ng/L,1425,1,"",2,1,,,1,,,perfluorotridecanoic acid,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PFUnA,2058-94-8,Perfluoroundecanoic Acid,ng/L,1426,1,"",2,1,,,1,,,Perfluoroundecanoic Acid,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+pH_S,"",pH in sediment,pH units,1190,1,"",2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'pH units' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Phaeop,"",Phaeophytin (brown Algae),µg/L,1427,1,"",2,1,,,1,,,phaeophytin (brown algae),"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Phant,"",Phantolide,ng/L,558,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Phenanthrene,"",Phenanthrene,ng/L,559,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+pH-F,"","pH, Field",pH units,1190,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+pH-L,"","pH, Laboratory",pH units,1190,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+pH-L15,"","pH, Lab at 15 C for unionized NH3",pH units,1190,1,"",2,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Phnl-T,"","Phenols, Total",mg/L,565,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Picloram,"","Herbicide, C6H3Cl3N2O2",µg/L,944,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Potassium40,13966-00-2,Potassium40,Bq/L,1428,1,"",2,1,,,1,,,Potassium-40,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+P-PO4_IC,14265-44-2,"Phosphate as P, as an anion by Ion Chromatography",mg/L,1041,1,"",3,1,5,5,1,23,23,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+P-PO4T,"","Phosphorus, Total Phosphate as P",mg/L,1041,1,"",2,1,19,19,1,23,23,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+P-PO4T_S,"","Phosphorus, Total; for sediment samples. Analyzed by colourimetry.",mg/kg,1045,1,mg/kg,3,2,19,19,1,23,23,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Propanil,"","Herbicide, C9H9Cl2NO",µg/L,956,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+propanolol,525-66-6,Beta Blockers,ng/l,1429,1,"",3,1,,,1,,,propanolol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+PropyleneGlycol,"","Propylene glycol 1,2",mg/L,573,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+prothioconazole,"",Current Use Pesticides,ng/l,779,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+P-T,"","Phosphorus, total (not colourmetric)",mg/L,1045,1,"",2,1,19,19,1,23,23,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,FALSE,0,mapped_existing_parameter
+P-T_S,"","Phosphorus, Total Phosphate in Sediment, as P",mg/kg,1111,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+P-TDP,"","Phosphorus, Total Dissolved Phosphate as P",mg/L,1041,1,"",2,1,5,5,1,23,23,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+P-TI,"","Phosphorus, Total Inorganic",mg/L,1111,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+P-TO,"","Phosphorus, Total Organic",mg/L,1040,1,"",2,1,19,19,1,23,23,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+P-TR_S,"","Phosphorus, Total Reacitve Phosphate in Sediment,",mg/kg,1111,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+P-TRP,"","Phosphorus, Total Reactive (Ortho) Phosphate as P",mg/L,1043,1,"",2,1,19,19,1,23,23,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Pt-T,"",PLATINUM TOTAL,mg/L,1112,1,"",3,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+PurgeVol,"",Volume of water purged from well prior to sampling,L,1430,1,"",1,1,,,1,,,Volume of water purged from well prior to sampling,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Pyrene,"",Pyrene,ng/L,577,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+quin,"",Quinoline,ng/L,578,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Radium223,444811-40-9,Radium223,Bq/L,1431,1,"",2,1,,,1,,,Radium-223,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Radium226,"",Radium226,Bq/L,1432,1,"",2,1,,,1,,,"Radium-226, Bq/L","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Radium228,"",Radium228,Bq/L,1433,1,"",2,1,,,1,,,"Radium-228, Bq/L","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Radon219,14835-02-0,Radon219,Bq/L,1434,1,"",2,1,,,1,,,Radon-219,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Rb-D,"","Rubidium, dissolved",mg/L,1117,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Rb-T,"","Rubidium, total",mg/L,1117,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Re-D,"","Rhenium (re), Dissolved",mg/L,1116,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Retene,"",Retene,ng/L,581,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+S2O3,7772-98-7,Thiosulphate as Total Thiosalt,mg/L,1435,1,"",2,1,,,1,,,thiosulfate,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Saccharin,"",Saccharin,ng/L,582,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sali-Acid,"",Salicylic Acid,ng/L,583,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sb-D,"","Antimony, dissolved",mg/L,1047,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sb-E,"","Antimony, extractable",mg/L,1047,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sb-T,"","Antimony, total",mg/L,1047,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sb-T_S,"","Antimony, Total in Sediment",mg/kg,1047,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+SCN-as-N-calc,"",Calculated Thiocyanate as N,mg/L,1008,1,"",2,1,,,3,,,"","",,"",,TRUE,SPEC: as N?,FALSE,0,mapped_existing_parameter
+S-D,"","Sulphur, Dissolved",mg/L,1133,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+S-E,"","Sulphur, Extractable",mg/L,1133,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Secchi,"",Secchi disc depth,m,1158,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+SeCN,"","Selenocyanate [SeCN], as Se",µg/L,586,0.001,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Se-D,"","Selenium, dissolved",mg/L,1123,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Se-E,"","Selenium, extractable",mg/L,1123,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Se-IV,"7446-08,4","speciation - Selenium, tetravalent [Se IV]",µg/L,1436,0.001,"",3,1,5,5,1,,,Se-IV,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+sertaline,79559-970,Anti-Depressants,ng/l,1437,1,"",3,1,,,1,,,sertraline,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Se-T,"","Selenium, total",mg/L,1123,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Se-T_S,"","Selenium, Total in Sediment",mg/kg,1123,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Se-T-GF,"","Selenium, total by Graphite Furnace method",mg/L,1123,1,"",2,1,19,19,1,,,"","",,Graphite furnace,,FALSE,"",FALSE,0,mapped_existing_parameter
+Se-Unk,"","speciated selenium comprising of unanalysed Selenium peaks observed in the chromatogram. This included SeMet, MeSe, and DMSeO",µg/L,1438,0.001,"",3,1,5,5,1,,,Se-Unk,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Se-VI,"","speciation - Selenium, hexavalent",µg/L,1439,0.001,"",3,1,5,5,1,,,Se-VI,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Si-D,"","Silicon, dissolved",mg/L,1127,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Si-E,"","Silicon, extractable",mg/L,1127,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+SievePan,"",Particle passing last sieve.,%,1440,1,"",2,2,,,1,,,percent of particles passing last sieve.,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+simaz-P,"",simazine,µg/L,977,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Si-T,"","Silicon, total",mg/L,1127,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Si-T_S,"","Silicon, total in sediments.",mg/kg,1127,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+SmplMethd,"",Usually pertains to the metho used to sample a groundwater well,"",,1,"",3,,,,1,,,"","",,"",,FALSE,MISSING_PARAM_ID; SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; IGNORED_NON_RESULT_EQWIN_HELPER_PARAMETER,TRUE,0,ignored
+Sn-D,"","Tin, dissolved",mg/L,1140,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sn-E,"","Tin, extractable",mg/L,1140,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+SNT,"",Sample Not Taken Identifier,m,,1,"",2,,,,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Sn-T,"","Tin, total",mg/L,1140,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sn-T_S,"","Tin, Total in Sediment",mg/kg,1140,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+SO3-D,14265-45-3,"Sulphite, Dissolved",mg/L,1441,1,"",2,1,5,,1,,,sulfite,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+SO4,"",Sulphate,mg/L,1131,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+SO4_BCMOE_fAL_lt,"",SO4 BCMOE FW aquatic life- long term,mg/L,1131,1,"",2,1,,,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+SoilMoist-L,"","Soil Moisture, lab",%,1256,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+sotalol,959-24-0,Beta Blockers,ng/l,1442,1,"",3,1,,,1,,,sotalol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+SPE_S,"",Saturated paste extraction from sediment,%,1443,1,"",2,2,,,1,,,Saturated paste extraction from sediment,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Sr-D,"","Strontium, dissolved",mg/L,1130,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sr-E,"","Strontium, extractable",mg/L,1130,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sr-T,"","Strontium, total",mg/L,1130,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sr-T_S,"","Strontium, Total in Sediment",mg/kg,1130,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+SS,"",settleable solids (Imhoff cone),mL/L,102,1,"",2,1,,,1,,,"","",,"",,TRUE,maybe change units in ac params? Should be mL/L; UNIT_REVIEW: EQWin unit 'mL/L' vs AquaCache unit 'mg/l',FALSE,0,mapped_existing_parameter
+S-T,"","Sulphur, Total",mg/L,1133,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+S-T_S,"","Sulphur, Total in sediment",mg/kg,1133,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Stigm,83-48-7,Stigmasterol,ng/L,1444,1,"",2,1,,,1,,,Stigmasterol,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Styrn,"",Styrene,µg/L,591,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Styrn_S,"","Styrene, in sediment",mg/kg,591,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Sucralose,"",Sucralose,ng/L,592,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+sulfamethoxazole,"",Antibiotics,ng/l,597,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+sulfapyridine,"",Antibiotics,ng/l,598,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sulphd,"",Sulphide as S,mg/L,1132,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Sulpht-F,"",Sulpht-F,mg/L,1133,1,"",1,1,19,19,1,,,"","",,"",,TRUE,not sure what this is - sulphate? Sulphite?,FALSE,0,mapped_existing_parameter
+Surf,"",Surfactants,mg/L,602,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+T12DCE,"","trans-1,2-Dichloroethylene",µg/L,619,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+T13DCPE,10061-02-6,"trans-1,3-Dichloropropylene",µg/L,668,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ta-D,"","Tantalum (Ta), Dissolved",mg/L,1135,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TBMA,75-25-2,Bromoform,µg/L,621,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TC13DCPE,542-75-6,"Dichloropropylene, cis+trans-1,3-",µg/L,668,0.001,"",3,1,,,1,,,"","",,"",,FALSE,old naming convention,FALSE,0,mapped_existing_parameter
+TCA,"",Trichloroethane,µg/L,1445,0.001,"",2,1,,,1,,,Trichloroethane,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+TCEE,"",Trichloroethylene,mg/L,624,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TCFMA,75-69-4,Trichlorofluoromethane,µg/L,362,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TCMA,"",Chloroform,µg/L,370,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TDS_C,"","Total dissolved solids, calculated by lab",mg/L,104,1,"",3,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TDS_G,"",Total dissolved solids by gravimetry,mg/L,104,1,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TDS-F,"",Total Dissolved Solids (in field),mg/L,104,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+tebut-P,"",tebuthiuron,µg/L,989,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TeCA,"","1,1,2,2-tetrachloroethane (TeCA)",µg/L,147,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Te-D,"","Tellurium, dissolved",mg/L,1136,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TEG,112-27-6,"Triethylene glycol, TEG, or triglycol",mg/L,191,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Temp-F,"",Water Temperature (in Field),C,1251,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Temp-L,"",Water Temperature (Lab),C,1251,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Terbacil,"","Herbicide, C9H13ClN2O2",µg/L,992,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Te-T,"","Tellurium, total",mg/L,1136,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Te-T_S,"","Tellurium, Total in sediment",mg/kg,1136,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Thallium208,14913-50-9,Thallium208,Bq/L,1446,1,"",2,1,,,1,,,Thallium-208,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Th-D,"","Thorium, dissolved",mg/L,1139,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Thorium227,15623-47-9,Thorium227,Bq/L,1447,1,"",2,1,,,1,,,Thorium-227,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Thorium228,14274-82-9,Thorium228,Bq/L,1448,1,"",2,1,,,1,,,Thorium-228,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Thorium230,14269-63-7,Thorium230,Bq/L,1449,1,"",2,1,,,1,,,Thorium-230,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Thorium234,15065-10-8,Thorium234,Bq/L,1450,1,"",2,1,,,1,,,Thorium-234,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Th-T,"","Thorium, total",mg/L,1139,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Th-T_S,"","Thorium, Total in sediment",mg/kg,1139,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Ti-D,"","Titanium, dissolved",mg/L,1141,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ti-E,"","Titanium, extractable",mg/L,1141,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ti-T,"","Titanium, total",mg/L,1141,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Ti-T_S,"","Titanium, Total in Sediment",mg/kg,1141,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Tl-D,"","Thallium, dissolved",mg/L,1138,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Tl-E,"","Thallium, extractable",mg/L,1138,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Tl-T,"","Thallium, total",mg/L,1138,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Tl-T_S,"","Thallium, Total in Sediment",mg/kg,1138,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+TOC_Height,"",Top of Casing Height,m,1451,1,"",1,2,,,1,,,top of casing height,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Tolue,"",Toluene,µg/L,612,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Tolue_S,"","Toluene, in sediment",mg/kg,612,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Tonal,21145-77-7,Tonalide,ng/L,1452,1,"",2,1,,,1,,,Tonalide,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+TotSolids,"",Total Solids,mg/L,106,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Traes,68857-95-4,Traeseolide,ng/L,620,1e-06,"",2,1,,,1,,,"","",,"",,TRUE,"SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG; MAPPED_TO_EXISTING_AC_PARAMETER: traseolide, ng/L to mg/l; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED | EQWin duplicate review: mapped to existing AquaCache parameter 'traseolide'.",FALSE,0,mapped_existing_parameter
+transmit,"","Transmittance, UV (@ 254nm)",% T/cm,1453,1,"",3,1,,,1,,,"Transmittance, UV (@ 254nm)","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Triclo,"",Triclosan,ng/L,629,1e-06,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+triclocarban,"",Personal Care Products,ng/l,628,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Triclopyr,"","Herbicide, C7H4Cl3NO3",µg/L,1022,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+triclosan,"",Personal Care Products,ng/l,629,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+trimethoprim,"",Antibiotics,ng/l,632,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TSS,"",Total Suspended Solids,mg/L,107,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TSS-BG,"",TSS-Background,mg/L,107,1,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+TTCA,"",Tetrachloroethane,µg/L,1454,0.001,"",2,1,,,1,,,Tetrachloroethane,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+TTHM,"",Total Trihalomethanes,mg/L,631,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Turb,"","Turbidity (not specified F,L)",NTU,19,1,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Turb-F,"","Turbidity, field",NTU,19,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Turb-F-FNU,"","Turbidity, field (in FNU)",FNU,1455,1,"",1,1,,,1,,,Turbidity - FNU,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+Turb-L,"","Turbidity, lab",NTU,19,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+U-D,"","Uranium, dissolved",mg/L,90,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+U-E,"","Uranium, extractable",mg/L,90,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Uranium235,15117-96-1,Uranium235,Bq/L,1456,1,"",2,1,,,1,,,Uranium-235,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+U-T,"","Uranium, total",mg/L,90,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+U-T_S,"","Uranium, total in sediments.",mg/kg,90,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+V-D,"","Vanadium, dissolved",mg/L,1143,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+V-E,"","Vanadium, extractable",mg/L,1143,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+venlafaxine,"",Anti-Depressants,ng/l,634,1e-06,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+VH,"",Volatile Hydrocarbons (C6-10) + BTEX,mg/L,1457,1,"",2,1,,,1,,,Volatile Hydrocarbons (C6-10) + BTEX,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+VH_S,"",Volatile Hydrocarbons (C6-10) in sediment,mg/kg,454,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+vin-Cl,"",Vinyl Chloride,µg/L,635,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+VPH,"",Volatile Petroleum Hydrocarbons (C6-10) - BTEX,mg/L,1458,1,"",2,1,,,1,,,Volatile Petroleum Hydrocarbons (C6-10) - BTEX,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+VPH_S,"",Volatile Petroleum Hydrocarbons (C6-10) in sedimen,mg/kg,557,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+VSS,"",Volatile Suspended Solids,mg/L,110,1,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+V-T,"","Vanadium, total",mg/L,1143,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+V-T_S,"","Vanadium, Total in Sediment",mg/kg,1143,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+W-D,"","Tungsten, dissolved",mg/L,1142,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Well_Depth,"",Well Depth in Meter below TOC,m,1459,1,"",1,1,,,1,,,well depth,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+WLevel_Elev,"",Well Water Level provided as masl (pre-calculated),masl,1166,1,"",1,1,,,3,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+WLevel_SG,"",Water Level measured on Staff Gauge,m,1165,1,"",1,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+W-T,"","Tungsten, total",mg/L,1142,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+W-T_S,"","Tungsten, Total in sediment",mg/kg,1142,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+WWaterLevel,"",Well Water Level as measured from Below the TOC,mbTOC,1460,1,"",1,1,,,1,,,Well Water Level as measured from Below the TOC,"",,"",,FALSE,MISSING_FROM_KEY; VALID_EQWIN_PARAMETER_REQUIRES_NEW_AC_PARAMETER; TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+XChloride,"","Chloride for historical data only, catch all for all unknown, use Chlord-IC or Chlor-C",mg/L,1069,1,"",3,1,26,26,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+XHard,"",Hardness (historic data T or D not specified),mg/L,100,1,"",3,1,26,26,1,3,3,"","",,"",,FALSE,CORRECTED_INVALID_HARDNESS_SPECIATION_TO_AS_CACO3,FALSE,0,mapped_existing_parameter
+XLC50,"","Unknow Species, Lethal Concentration@ 50% Mortal",%,1461,1,"",2,1,,,3,,,"Unknown Species, Lethal Concentration @ 50% Mortality","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+XLC50-pH,"","Unknown, LC@50% mortal, pH stabalized",%,1462,1,"",2,1,,,1,,,"Unknown, LC@50% mortal, pH stabalized","",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+XLT50,"",Lethal Time for  50% Mortality @ 100% conc.,h,1463,1,"",2,1,,,1,,,Lethal Time for 50% Mortality @ 100% Concentration (XLT50),"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+XLT50-Daphnia,"",Daphnia LT50 48 hour @ 100 % conc.,h,1464,1,"",2,1,,,1,,,Daphnia LT50 48 hour @ 100 % conc.,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+XLT50-pH,"",Lethal Time for  50% Mortality @ 100% conc. pH stabilized,h,1465,1,"",2,1,,,1,,,Lethal Time for  50% Mortality @ 100% conc. pH stabilized,"",,"",,FALSE,TRUE_NEW_PARAMETER_OR_AC_PARAMETER_UNIT_CHANGE_REQUIRED,FALSE,0,requires_new_parameter
+XNH3,"",Catch All for N-NH3,mg/L,1030,1,"",3,1,26,26,1,14,14,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+XNO2,"",Nitrite,mg/L,1037,1,"",3,1,26,26,1,19,19,"","",,"",,FALSE,MAYBE_ROW_CONFIRMED_USEFUL_FROM_EXISTING_MAPPING,FALSE,0,mapped_existing_parameter
+XNO3,"",Nitrate,mg/L,1036,1,"",3,1,26,26,1,20,20,"","",,"",,FALSE,MAYBE_ROW_CONFIRMED_USEFUL_FROM_EXISTING_MAPPING,FALSE,0,mapped_existing_parameter
+XTDS,"","Unknown Lab TDS, before we split into TDS_C and TDS_G",mg/L,104,1,"",3,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+XWLevel,"","Water Level, Gauge reading, Piezometric reading",m,1166,1,"",1,1,,,1,,,"","",,"",,FALSE,MAYBE_ROW_CONFIRMED_USEFUL_FROM_EXISTING_MAPPING,FALSE,0,mapped_existing_parameter
+Xyl-mp,"",Xylenes (meta and para),µg/L,477,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Xyl-o,"",Xylenes (ortho),µg/L,542,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Xyl-T,"","Xylenes, Total (ortho, meta, and para)",µg/L,618,0.001,"",2,1,,,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Xyl-T_S,"","Xylenes, Total (ortho, meta, and para) in sediment",mg/kg,618,1,mg/kg,2,2,,,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Y-D,"","Yttrium (Y), Dissolved",mg/L,1145,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Y-T,"",Yttrium - Total,mg/L,1145,1,"",3,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Zn-D,"","Zinc, dissolved",mg/L,1146,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Zn-D_CCME_PAL,"",Zn-D_CCME_PAL,"",1109,0.001,"",2,1,5,5,1,,,"","",,"",,TRUE,SOURCE_FIELDS_RESTORED_FROM_EQWIN_CATALOG,TRUE,0,ignored
+Zn-D_CCME_PAL_LT,"",Zn-D CCME Protection of Aq Life Long term Expos,mg/L,1146,1,"",2,1,5,5,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Zn-D_CCME_PAL_ST,"",Zn-D CCME Protection of Aq Short Term Expos,mg/L,1146,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Zn-D_CSR_s3_fAL,"","Zinc, dissolved, CSR sched 3 freshwater aquatic",mg/L,1146,1,"",2,1,5,5,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Zn-E,"","Zinc, extractable",mg/L,1146,1,"",2,1,6,6,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Zn-T,"","Zinc, total",mg/L,1146,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Zn-T_BCMOE_fAL_lt,"","Zinc-T, BCMOE, FW aquatic life, long term",mg/L,1146,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Zn-T_BCMOE_st_fAL,"","Zinc-T, BC MOE, freshH2O aquatic life, short term",mg/L,1146,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Zn-T_CRS_s3_fAL_SW,"","Zinc, Total, CSR sched 3 FAQ, SW",mg/L,1146,1,"",2,1,19,19,3,,,"","",,"",,FALSE,"",TRUE,0,ignored
+Zn-T_S,"","Zinc, Total in Sediment",mg/kg,1146,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter
+Zr-D,"","Zirconium, dissolved",mg/L,1147,1,"",2,1,5,5,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Zr-T,"","Zirconium, total",mg/L,1147,1,"",2,1,19,19,1,,,"","",,"",,FALSE,"",FALSE,0,mapped_existing_parameter
+Zr-T_S,"","Zirconium, Total in Sediment",mg/kg,1147,1,mg/kg,2,2,19,19,1,,,"","",,"",,TRUE,UNIT_REVIEW: EQWin unit 'mg/kg' vs AquaCache unit '',FALSE,0,mapped_existing_parameter

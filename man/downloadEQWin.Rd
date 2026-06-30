@@ -9,9 +9,10 @@ downloadEQWin(
   start_datetime,
   end_datetime = Sys.time(),
   EQpath = NULL,
-  key = "EQWin_key_working_copy",
+  key = "EQWin",
   con = NULL,
   EQCon = NULL,
+  EQsource_id = NULL,
   tz = "MST",
   unknown_time_local = "12:00:00",
   media_id = NULL,
@@ -26,15 +27,24 @@ downloadEQWin(
 
 \item{end_datetime}{End datetime for \code{eqsampls.CollectDateTime}.}
 
-\item{EQpath}{File path to the target EQWin database. Used only when \code{EQCon}
-is \code{NULL}.}
+\item{EQpath}{File path to the target EQWin database. Used to open an
+Access connection when \code{EQCon} is \code{NULL} and, unless \code{EQsource_id} is
+provided, to identify the source database in sample import IDs.}
 
-\item{key}{Import mapping source code or key path. Defaults to the working
+\item{key}{Import mapping source code or key path. Defaults to the stable
 EQWin source code used by \code{\link[=upsertImportParameterMappings]{upsertImportParameterMappings()}}.}
 
 \item{con}{AquaCache connection.}
 
-\item{EQCon}{Optional existing Access database connection.}
+\item{EQCon}{Optional existing Access database connection, primarily used by
+\code{\link[=getNewDiscrete]{getNewDiscrete()}} and \code{\link[=synchronize_discrete]{synchronize_discrete()}} to reuse connections for
+sample series that share the same \code{EQpath}.}
+
+\item{EQsource_id}{Stable identifier for the EQWin database being imported.
+This value is combined with EQWin \code{SampleId} in
+\code{discrete.samples.import_source_id} so samples from different EQWin
+databases do not collide. Defaults to the normalized \code{EQpath} when an
+\code{EQpath} is supplied, otherwise \code{"EQWin"} for caller-managed connections.}
 
 \item{tz}{Time zone used to interpret EQWin collection datetimes.}
 
@@ -57,4 +67,10 @@ expected by \code{\link[=getNewDiscrete]{getNewDiscrete()}} and \code{\link[=syn
 mapping is read from \code{discrete.import_parameter_mappings} when the requested
 key/source code has been loaded with \code{\link[=upsertImportParameterMappings]{upsertImportParameterMappings()}}. EQWin
 \verb{udf_*} fields and \code{eqsampls.LastModified} are intentionally not used.
+EQWin \code{SampleClass} values are mapped to AquaCache sample types where
+possible: regular monitoring (\code{M}) to routine samples, QA/QC duplicate or
+split samples (\code{D}) to generic QC samples, incident samples (\code{I}) to
+\code{sample-other}, and unset/default samples (\code{XX}) to \code{unknown}. Blank sample
+wording in the sample number or comments is mapped to field, trip, or lab
+blank sample types when present.
 }
