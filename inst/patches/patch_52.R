@@ -1077,41 +1077,285 @@ tryCatch(
       )
     }
 
-    DBI::dbExecute(
-      con,
-      "
-      GRANT USAGE ON SCHEMA criteria TO PUBLIC;"
+    licence_tables <- c(
+      "criteria.licence_types",
+      "criteria.licence_authorities",
+      "criteria.licences",
+      "criteria.licence_documents",
+      "criteria.location_licences"
     )
-    DBI::dbExecute(
-      con,
-      "
-      GRANT SELECT ON TABLE
-        criteria.licence_types,
-        criteria.licence_authorities,
-        criteria.licences,
-        criteria.licence_documents,
-        criteria.location_licences
-      TO PUBLIC;
-      "
+    guideline_definition_tables <- c(
+      "criteria.guideline_comparison_operators",
+      "criteria.guideline_value_algorithms",
+      "criteria.guideline_jurisdictions",
+      "criteria.guideline_jurisdiction_levels",
+      "criteria.guideline_protection_goals",
+      "criteria.guideline_exposure_durations",
+      "criteria.guideline_averaging_periods",
+      "criteria.guideline_publishers",
+      "criteria.guideline_series",
+      "criteria.guidelines",
+      "criteria.guidelines_media_types",
+      "criteria.guidelines_fractions",
+      "criteria.guideline_value_rules",
+      "criteria.guideline_rule_inputs",
+      "criteria.guideline_rule_coefficients",
+      "criteria.guideline_narrative_values",
+      "criteria.guideline_locations"
+    )
+    add_guidelines_dml_tables <- c(
+      "criteria.guidelines",
+      "criteria.guideline_value_rules",
+      "criteria.guideline_rule_inputs",
+      "criteria.guideline_rule_coefficients",
+      "criteria.guideline_narrative_values",
+      "criteria.guidelines_fractions",
+      "criteria.guidelines_media_types",
+      "criteria.guideline_locations"
+    )
+    add_guidelines_lookup_write_tables <- c(
+      "criteria.guideline_publishers",
+      "criteria.guideline_series",
+      "criteria.guideline_jurisdictions",
+      "criteria.guideline_protection_goals",
+      "criteria.guideline_exposure_durations",
+      "criteria.guideline_averaging_periods"
     )
 
+    q_literal <- function(x) {
+      as.character(DBI::dbQuoteString(con, x))
+    }
+    q_role <- function(x) {
+      as.character(DBI::dbQuoteIdentifier(con, x))
+    }
+    sql_text_array <- function(x) {
+      if (length(x) == 0L) {
+        return("ARRAY[]::text[]")
+      }
+
+      sprintf(
+        "ARRAY[%s]::text[]",
+        paste(vapply(x, q_literal, character(1)), collapse = ", ")
+      )
+    }
+
+    grant_schema_usage <- function(schema_name, roles) {
+      if (length(roles) == 0L) {
+        return(invisible(NULL))
+      }
+
+      for (role_name in roles) {
+        DBI::dbExecute(
+          con,
+          sprintf(
+            "GRANT USAGE ON SCHEMA %s TO %s;",
+            schema_name,
+            q_role(role_name)
+          )
+        )
+      }
+
+      invisible(NULL)
+    }
+
+    grant_table_privileges <- function(table_names, privileges, roles) {
+      if (length(roles) == 0L) {
+        return(invisible(NULL))
+      }
+
+      for (role_name in roles) {
+        DBI::dbExecute(
+          con,
+          sprintf(
+            "GRANT %s ON TABLE %s TO %s;",
+            privileges,
+            paste(table_names, collapse = ", "),
+            q_role(role_name)
+          )
+        )
+      }
+
+      invisible(NULL)
+    }
+
+    grant_sequence_privileges <- function(sequence_names, privileges, roles) {
+      sequence_names <- sequence_names[!is.na(sequence_names)]
+      if (length(sequence_names) == 0L || length(roles) == 0L) {
+        return(invisible(NULL))
+      }
+
+      for (role_name in roles) {
+        DBI::dbExecute(
+          con,
+          sprintf(
+            "GRANT %s ON SEQUENCE %s TO %s;",
+            privileges,
+            paste(sequence_names, collapse = ", "),
+            q_role(role_name)
+          )
+        )
+      }
+
+      invisible(NULL)
+    }
+
+    existing_roles <- DBI::dbGetQuery(
+      con,
+      "SELECT rolname FROM pg_roles"
+    )$rolname
+
+    get_roles_with_reference_privileges <- function(
+      reference_table,
+      privileges,
+      always_include = character()
+    ) {
+      roles <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "
+          SELECT x.role_name
+          FROM (
+            SELECT r.rolname AS role_name
+            FROM pg_roles AS r
+            WHERE r.rolcanlogin = false
+              AND r.rolname NOT IN (
+                'public',
+                'pg_read_all_data',
+                'pg_write_all_data'
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM unnest(%s) AS p(privilege_name)
+                WHERE NOT has_table_privilege(
+                  r.oid,
+                  %s::regclass,
+                  p.privilege_name
+                )
+              )
+
+            UNION
+
+            SELECT r.rolname AS role_name
+            FROM pg_roles AS r
+            WHERE r.rolname = ANY(%s)
+          ) AS x
+          ORDER BY x.role_name;",
+          sql_text_array(privileges),
+          q_literal(reference_table),
+          sql_text_array(always_include)
+        )
+      )$role_name
+
+      intersect(unique(roles), existing_roles)
+    }
+
+    # Guideline definitions and licence metadata are public catalogue data.
+    # Give every DB role read access, then mirror explicit reader grants from
+    # existing criteria tables so deployments with non-PUBLIC reader groups
+    # remain consistent.
+    DBI::dbExecute(con, "GRANT USAGE ON SCHEMA criteria TO PUBLIC;")
     DBI::dbExecute(
       con,
-      "
-      DO $$
-      BEGIN
-        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'public_reader') THEN
-          GRANT USAGE ON SCHEMA criteria TO public_reader;
-          GRANT SELECT ON TABLE
-            criteria.licence_types,
-            criteria.licence_authorities,
-            criteria.licences,
-            criteria.licence_documents,
-            criteria.location_licences
-          TO public_reader;
-        END IF;
-      END $$;
-      "
+      sprintf(
+        "GRANT SELECT ON TABLE %s TO PUBLIC;",
+        paste(c(guideline_definition_tables, licence_tables), collapse = ", ")
+      )
+    )
+
+    criteria_reader_roles <- unique(c(
+      get_roles_with_reference_privileges(
+        "criteria.guidelines",
+        "SELECT",
+        "public_reader"
+      ),
+      get_roles_with_reference_privileges(
+        "criteria.guideline_publishers",
+        "SELECT"
+      )
+    ))
+    grant_schema_usage("criteria", criteria_reader_roles)
+    grant_table_privileges(
+      c(guideline_definition_tables, licence_tables),
+      "SELECT",
+      criteria_reader_roles
+    )
+
+    # Editor roles vary by deployment. Reuse existing edit access on related
+    # location, document, sample, and guideline tables instead of assuming a
+    # fixed set of Yukon or partner group names.
+    criteria_editor_roles <- unique(c(
+      get_roles_with_reference_privileges(
+        "public.locations",
+        c("INSERT", "UPDATE", "DELETE"),
+        "admin"
+      ),
+      get_roles_with_reference_privileges(
+        "files.documents",
+        c("INSERT", "UPDATE", "DELETE")
+      ),
+      get_roles_with_reference_privileges(
+        "discrete.samples",
+        c("INSERT", "UPDATE", "DELETE")
+      ),
+      get_roles_with_reference_privileges(
+        "criteria.guidelines",
+        c("INSERT", "UPDATE", "DELETE")
+      )
+    ))
+    criteria_editor_roles <- setdiff(
+      criteria_editor_roles,
+      c("public", "public_reader")
+    )
+
+    grant_schema_usage("criteria", criteria_editor_roles)
+    grant_table_privileges(
+      add_guidelines_dml_tables,
+      "SELECT, INSERT, UPDATE, DELETE",
+      criteria_editor_roles
+    )
+    grant_table_privileges(
+      add_guidelines_lookup_write_tables,
+      "SELECT, INSERT, UPDATE",
+      criteria_editor_roles
+    )
+    grant_table_privileges(
+      licence_tables,
+      "SELECT, INSERT, UPDATE, DELETE",
+      criteria_editor_roles
+    )
+
+    criteria_write_tables <- c(
+      add_guidelines_dml_tables,
+      add_guidelines_lookup_write_tables,
+      licence_tables
+    )
+    criteria_identity_sequences <- DBI::dbGetQuery(
+      con,
+      sprintf(
+        "
+        SELECT pg_get_serial_sequence(
+                 format('%%I.%%I', table_schema, table_name),
+                 column_name
+               ) AS sequence_name
+        FROM information_schema.columns
+        WHERE table_schema = 'criteria'
+          AND table_name IN (%s)
+          AND is_identity = 'YES'
+        ORDER BY table_name, ordinal_position;",
+        paste(
+          vapply(
+            sub("^criteria\\.", "", criteria_write_tables),
+            q_literal,
+            character(1)
+          ),
+          collapse = ", "
+        )
+      )
+    )$sequence_name
+    grant_sequence_privileges(
+      criteria_identity_sequences,
+      "USAGE, SELECT",
+      criteria_editor_roles
     )
 
     DBI::dbExecute(
