@@ -1249,6 +1249,54 @@ tryCatch(
       intersect(unique(roles), existing_roles)
     }
 
+    # Add criteria tables to the generic audit workflow. Patch 51 installed
+    # audit triggers for guideline tables only when audit.if_modified_func()
+    # already existed; this idempotent block repairs missing guideline triggers
+    # and adds the patch 52 licence tables to the same audit.general_log path.
+    DBI::dbExecute(
+      con,
+      sprintf(
+        "
+        DO $$
+        DECLARE
+          table_name TEXT;
+        BEGIN
+          IF to_regclass('audit.general_log') IS NULL
+              OR to_regprocedure('audit.if_modified_func()') IS NULL THEN
+            RETURN;
+          END IF;
+
+          FOREACH table_name IN ARRAY ARRAY[%s]
+          LOOP
+            IF to_regclass(format('criteria.%%I', table_name)) IS NULL THEN
+              CONTINUE;
+            END IF;
+
+            EXECUTE format(
+              'DROP TRIGGER IF EXISTS audit_%%I_trigger ON criteria.%%I;',
+              table_name,
+              table_name
+            );
+            EXECUTE format(
+              'CREATE TRIGGER audit_%%I_trigger
+               AFTER UPDATE OR DELETE ON criteria.%%I
+               FOR EACH ROW EXECUTE FUNCTION audit.if_modified_func();',
+              table_name,
+              table_name
+            );
+          END LOOP;
+        END $$;",
+        paste(
+          vapply(
+            sub("^criteria\\.", "", c(guideline_definition_tables, licence_tables)),
+            q_literal,
+            character(1)
+          ),
+          collapse = ", "
+        )
+      )
+    )
+
     # Guideline definitions and licence metadata are public catalogue data.
     # Give every DB role read access, then mirror explicit reader grants from
     # existing criteria tables so deployments with non-PUBLIC reader groups
