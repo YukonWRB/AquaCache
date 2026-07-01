@@ -126,7 +126,7 @@ dailyUpdate <- function(
         "SELECT sample_series_id FROM sample_series WHERE source_fx IS NOT NULL"
       )
     } else {
-      all_sample_series <- DBI::dbGetQuery(
+      discrete_ids <- DBI::dbGetQuery(
         con,
         paste0(
           "SELECT sample_series_id FROM sample_series WHERE sample_series_id IN (",
@@ -134,9 +134,9 @@ dailyUpdate <- function(
           ") AND source_fx IS NOT NULL"
         )
       )
-      if (length(sample_series_id) != nrow(all_sample_series)) {
+      if (length(sample_series_id) != nrow(discrete_ids)) {
         fail <- sample_series_id[
-          !(sample_series_id %in% all_sample_series$sample_series_id)
+          !(sample_series_id %in% discrete_ids$sample_series_id)
         ]
         ifelse(
           (length(fail) == 1),

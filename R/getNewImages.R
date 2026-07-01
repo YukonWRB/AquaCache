@@ -57,6 +57,9 @@ getNewImages <- function(
   if (active == 'default') {
     series_ids <- series_ids[series_ids$active, ]
   }
+  if (nrow(series_ids) == 0) {
+    stop("No active image_series_ids could be found matching your criteria.")
+  }
 
   message("Fetching new images with getNewImages...")
 
@@ -79,7 +82,7 @@ getNewImages <- function(
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(series_ids), style = 3)
   }
-  for (i in 1:nrow(series_ids)) {
+  for (i in seq_len(nrow(series_ids))) {
     id <- series_ids[i, "img_series_id"]
     location_id <- series_ids[i, "location_id"]
     next_instant <- series_ids[i, "last_img"] + 1 #one second after the last image
@@ -101,7 +104,10 @@ getNewImages <- function(
 
         # Here, the output should be either of class "list", as results from downloadWSCImages, or data.frame, as results from downloadNupointImages.
         if (inherits(imgs, "list")) {
-          for (j in 1:length(imgs)) {
+          if (length(imgs) == 0) {
+            next
+          }
+          for (j in seq_along(imgs)) {
             img <- imgs[[j]]
             # Get the image_type_id from the image_types table corresponding to 'Auto'
             insertACImage(
@@ -118,7 +124,10 @@ getNewImages <- function(
             image_count <- image_count + 1
           }
         } else if (inherits(imgs, "data.frame")) {
-          for (j in 1:nrow(imgs)) {
+          if (nrow(imgs) == 0) {
+            next
+          }
+          for (j in seq_len(nrow(imgs))) {
             insertACImage(
               object = imgs[j, "file"],
               img_series_id = id,

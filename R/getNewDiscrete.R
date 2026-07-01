@@ -148,6 +148,9 @@ getNewDiscrete <- function(
   if (active == 'default') {
     all_series <- all_series[all_series$active, ]
   }
+  if (nrow(all_series) == 0) {
+    stop("Could not find any active sample series matching your input parameters.")
+  }
 
   count <- 0 #counter for number of successful new pulls (samples - not individual results)
 
@@ -157,7 +160,7 @@ getNewDiscrete <- function(
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
   }
-  for (i in 1:nrow(all_series)) {
+  for (i in seq_len(nrow(all_series))) {
     sid <- all_series$sample_series_id[i]
 
     # Acquire a lock for this sample series to prevent concurrent updates, notably by synchronize_discrete
@@ -220,8 +223,13 @@ getNewDiscrete <- function(
         }
         last_data_point <- DBI::dbGetQuery(con, query)[1, 1]
         if (is.na(last_data_point)) {
-          # Means we're dealing with a location that has no samples in yet - probably just created
-          last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+          # If the series has no existing samples in its configured window,
+          # start at synch_from rather than importing older source history.
+          last_data_point <- if (!is.na(range_start)) {
+            range_start
+          } else {
+            as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+          }
         } else {
           last_data_point <- last_data_point + 1
         }
@@ -283,7 +291,7 @@ getNewDiscrete <- function(
         }
 
         # Work on each list element to populate the 'samples' and 'results' tables
-        for (j in 1:length(data)) {
+        for (j in seq_along(data)) {
           if (
             !("sample" %in% names(data[[j]])) |
               !("results" %in% names(data[[j]]))
@@ -454,7 +462,7 @@ getNewDiscrete <- function(
               check_result_condition <- FALSE # prevents repeatedly checking for the same thing
 
               next_flag <- FALSE
-              for (k in 1:nrow(sub.results)) {
+              for (k in seq_len(nrow(sub.results))) {
                 if (
                   is.na(sub.results$result[k]) &
                     is.na(sub.results$result_condition[k])

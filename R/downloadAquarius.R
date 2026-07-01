@@ -49,17 +49,20 @@ downloadAquarius <- function(
   # server = Sys.getenv("AQSERVER")
   # con = NULL
   # Check that login and server credentials exist
-  if (nchar(server) == 0 | is.null(server)) {
+  missing_scalar_text <- function(x) {
+    is.null(x) || length(x) != 1L || is.na(x) || !nzchar(x)
+  }
+  if (missing_scalar_text(server)) {
     stop(
       "downloadAquarius: It looks like you haven't provided a server, or that it can't be found in your .Renviron file if you left the function defaults."
     )
   }
-  if (nchar(login[1]) == 0 | is.null(login[1])) {
+  if (length(login) < 1L || missing_scalar_text(login[1])) {
     stop(
       "downloadAquarius: It looks like you haven't provided a username, or that it can't be found in your .Renviron file if you left the function defaults."
     )
   }
-  if (nchar(login[2]) == 0 | is.null(login[2])) {
+  if (length(login) < 2L || missing_scalar_text(login[2])) {
     stop(
       "downloadAquarius: It looks like you haven't provided a password, or that it can't be found in your .Renviron file if you left the function defaults."
     )

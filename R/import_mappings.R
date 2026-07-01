@@ -1265,10 +1265,10 @@ import_mapping_load_db <- function(con, key) {
 #' @noRd
 import_mapping_resolve_match <- function(mappings, source_match) {
   source_match <- lapply(source_match, function(x) {
-    if (length(x) == 0 || is.null(x) || is.na(x)) {
+    if (is.null(x) || length(x) == 0 || is.na(x[[1]])) {
       return("")
     }
-    as.character(x)
+    as.character(x[[1]])
   })
 
   hits <- vapply(

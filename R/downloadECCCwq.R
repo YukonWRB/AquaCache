@@ -304,7 +304,7 @@ downloadECCCwq <- function(
         }
         next
       }
-      if (is.na(param_row$parameter_id)) {
+      if (is.na(param_row$parameter_id[[1]])) {
         if (var != "RESIDUE NONFILTERABLE") {
           if (warn_unmapped) {
             warning(paste0(
@@ -328,7 +328,7 @@ downloadECCCwq <- function(
       flag <- subset$FLAG_MARQUEUR[j]
       result_condition_value <- NA
       result_condition <- NA
-      if (flag == "<") {
+      if (!is.na(flag) && flag == "<") {
         result_condition <- result_conditions[
           grep(
             "below detection",
@@ -339,7 +339,7 @@ downloadECCCwq <- function(
         ]
         result_condition_value <- result_value
         result_value <- NA
-      } else if (flag == ">") {
+      } else if (!is.na(flag) && flag == ">") {
         result_condition <- result_conditions[
           grep(
             "above detection",
