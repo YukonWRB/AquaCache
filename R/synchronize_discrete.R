@@ -60,8 +60,13 @@ synchronize_discrete <- function(
         "There is not exactly one element to start_datetime per valid sample_series_id specified by you in the database. Either you're missing elements to start_datetime or you are looking for sample_series_id that doesn't exist."
       )
     }
+    start_datetime_by_series <- stats::setNames(
+      as.list(start_datetime),
+      as.character(sample_series_id)
+    )
   } else {
     sample_series_id <- unique(sample_series_id)
+    start_datetime_by_series <- NULL
   }
 
   if (sample_series_id[1] == "all") {
@@ -101,6 +106,9 @@ synchronize_discrete <- function(
   if (!sync_remote_false) {
     all_series <- all_series[all_series$sync_remote, ]
   }
+  if (nrow(all_series) == 0) {
+    stop("Could not find any sample series matching your input parameters.")
+  }
 
   valid_sample_names <- DBI::dbGetQuery(
     con,
@@ -121,7 +129,7 @@ synchronize_discrete <- function(
   new_results <- 0 # Counter for number of new results
 
   # Start of for loop ########################################################
-  for (i in 1:nrow(all_series)) {
+  for (i in seq_len(nrow(all_series))) {
     sid <- all_series$sample_series_id[i]
 
     # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewDiscrete
@@ -145,11 +153,18 @@ synchronize_discrete <- function(
         default_owner <- all_series$default_owner[i]
         default_contributor <- all_series$default_contributor[i]
 
-        # start/end datetime for the sample series
-        start_i <- if (!is.na(synch_from)) {
-          min(start_datetime, synch_from)
-        } else {
+        # Start from the caller's requested datetime, bounded by the sample
+        # series' configured synchronization window.
+        start_i <- if (is.null(start_datetime_by_series)) {
           start_datetime
+        } else {
+          start_datetime_by_series[[as.character(sid)]]
+        }
+        if (is.null(start_i)) {
+          stop("No start_datetime was mapped for sample_series_id ", sid, ".")
+        }
+        if (!is.na(synch_from)) {
+          start_i <- max(start_i, synch_from)
         }
         end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
 
@@ -243,7 +258,7 @@ synchronize_discrete <- function(
             inRemote_datetimes <- inRemote_datetimes[order_idx]
           }
 
-          for (j in 1:length(inRemote)) {
+          for (j in seq_along(inRemote)) {
             if (
               !("sample" %in% names(inRemote[[j]])) |
                 !("results" %in% names(inRemote[[j]]))
@@ -498,7 +513,7 @@ synchronize_discrete <- function(
 
               inDB_results$checked <- FALSE # This will be used to track which rows have been checked
 
-              for (k in 1:nrow(inRemote_results)) {
+              for (k in seq_len(nrow(inRemote_results))) {
                 sub <- inRemote_results[k, ]
                 names_inRemote_sub <- names(sub)
                 resolved_sub_matrix_state_id <- sub$matrix_state_id
@@ -972,7 +987,7 @@ synchronize_discrete <- function(
                   check_result_condition <- FALSE # prevents repeatedly checking for the same thing
 
                   next_flag <- FALSE
-                  for (l in 1:nrow(sub.results)) {
+                  for (l in seq_len(nrow(sub.results))) {
                     if (
                       is.na(sub.results$result[l]) &
                         is.na(sub.results$result_condition[l])

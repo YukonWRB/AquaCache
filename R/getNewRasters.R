@@ -259,7 +259,7 @@ getNewRasters <- function(
           rasters[["forecast"]] <- NULL # Remove the list element to simplify code below
           rasters[["issued"]] <- NULL
 
-          if (!is.null(rasters)) {
+          if (length(rasters) > 0) {
             series_raster_count <- 0L
             message(
               "Appending rasters for raster_series_id ",
@@ -268,7 +268,7 @@ getNewRasters <- function(
               source_fx,
               "'"
             )
-            for (j in 1:length(rasters)) {
+            for (j in seq_along(rasters)) {
               message(
                 "Appending raster ",
                 j,
