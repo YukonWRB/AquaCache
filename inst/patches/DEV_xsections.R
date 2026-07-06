@@ -1,4 +1,4 @@
-# Patch ??: Adding cross-section, verticals, and points schema to aquacache database
+# Patch 53: Adding cross-section, verticals, and points schema to aquacache database
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 
@@ -10,7 +10,7 @@ if (check$session_user != "postgres") {
 
 # TODO: set official patch number
 message(
-  "Working on patch ??:  adding cross-section, verticals, and points tables to the discrete schema."
+  "Working on patch 53:  adding cross-section, verticals, and points tables to the discrete schema."
 )
 
 if (dbTransCheck(con)) {
@@ -46,7 +46,7 @@ tryCatch(
         !isTRUE(check$no_cross_section_points[[1]])
     ) {
       stop(
-        "Patch 52 requires public.locations and information.version_info to exist, and cross-section tables must not already exist."
+        "Patch 53 requires public.locations and information.version_info to exist, and cross-section tables must not already exist."
       )
     }
 
@@ -332,10 +332,10 @@ tryCatch(
       CREATE VIEW discrete.cross_section_verticals_view AS
       SELECT
         vertical_id,
-        x_section_id,
+        xsection_id,
         measurement_time,
         distance_to_waterline_m,
-        refeence_bank,
+        reference_bank,
         panel_flowing_water_depth_m,
         ice_thickness_m,
         water_surface_to_bottom_ice_m,
@@ -354,8 +354,7 @@ tryCatch(
           ELSE COALESCE(panel_discharge_m3_s, panel_discharge_calculated_m3_s)
           END AS panel_discharge_m3_s,
         use_calculated_values,
-        source_system,
-        source_measurement_id,
+        source_vertical_id,
         note,
         created,
         modified,
@@ -426,22 +425,6 @@ tryCatch(
     for (comment_sql in comments_cross_section_points) {
       DBI::dbExecute(con, comment_sql)
     }
-
-    # DBI::dbExecute(
-    #   con,
-    #   "
-    #   COMMENT ON TABLE discrete.cross_section_points IS 'Tertiary table for storing cross-section data, containing individual point data within a cross section vertical. Links to cross_section_verticals via vertical_id. Each row contains data for a single point within a vertical of the cross section for a certain location and time, including depth of point and velocity.';
-
-    #   COMMENT ON COLUMN discrete.cross_section_points.position_on_water_panel IS 'Denotes the proportion of the panel at which the point was measured as a decimal value from 0 - 1. referenced from ____';
-    #   COMMENT ON COLUMN discrete.cross_section_points.depth_in_moving_water_m IS 'Denotes the depth at which point velocity was measured on the panel. Referenced from  _____';
-    #   COMMENT ON COLUMN discrete.cross_section_points.velocity_m_s IS 'Velocity of water flowing at point location on panel.';
-    #   COMMENT ON COLUMN discrete.cross_section_points.note IS 'Free-text note field for context that does not fit a more structured column.';
-    #   COMMENT ON COLUMN discrete.cross_section_points.created IS 'Timestamp when the row was created.';
-    #   COMMENT ON COLUMN discrete.cross_section_points.modified IS 'Timestamp when the row was last updated.';
-    #   COMMENT ON COLUMN discrete.cross_section_points.created_by IS 'Database role or application actor recorded as the row creator.';
-    #   COMMENT ON COLUMN discrete.cross_section_points.modified_by IS 'Database role or application actor recorded as the last modifier.';
-    #   "
-    # )
 
     #grant select permissions on tables to public role
 
@@ -534,7 +517,7 @@ tryCatch(
     # # TODO: set official patch number
     # DBI::dbExecute(
     #   con,
-    #   "UPDATE information.version_info SET version = '??'
+    #   "UPDATE information.version_info SET version = '53'
     #    WHERE item = 'Last patch number';"
     # )
 
@@ -552,7 +535,7 @@ tryCatch(
 
     # TODO: set official patch number
     message(
-      "Patch ?? applied successfully. Cross-section, verticals, and points tables have been added to the discrete schema."
+      "Patch 53 applied successfully. Cross-section, verticals, and points tables have been added to the discrete schema."
     )
   },
   error = function(e) {
