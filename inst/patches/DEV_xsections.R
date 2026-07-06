@@ -108,7 +108,7 @@ tryCatch(
         CONSTRAINT cross_sections_unique_location_datetime
             UNIQUE (location_id, datetime),
 
-        CONSTRAINT cross_sections_unique_source UNIQUE NULLS NOT DISTINCT (source_system, source_measurement_id)
+        CONSTRAINT cross_sections_unique_source UNIQUE (source_system, source_measurement_id)
 
       );
       "
@@ -152,79 +152,77 @@ tryCatch(
       DBI::dbExecute(con, comment_sql)
     }
 
-    # Create view of cross section table coalescing manual/calculated fields
+    # # Older expression for when manual and calculated fields were both pulled from same table
+    # DBI::dbExecute(
+    #   con,
+    #   "
+    #   CREATE VIEW discrete.cross_sections_view AS
+    #   SELECT
+    #     xsection_id,
+    #     location_id,
+    #     datetime,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(wetted_width_calculated_m, wetted_width_m)
+    #       ELSE COALESCE(wetted_width_m, wetted_width_calculated_m)
+    #       END AS wetted_width_m,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(total_area_calculated_m2, total_area_m2)
+    #       ELSE COALESCE(total_area_m2, total_area_calculated_m2)
+    #       END AS total_area_m2,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(net_area_calculated_m2, net_area_m2)
+    #       ELSE COALESCE(net_area_m2, net_area_calculated_m2)
+    #       END AS net_area_m2,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(avg_total_depth_calculated_m, avg_total_depth_m)
+    #       ELSE COALESCE(avg_total_depth_m, avg_total_depth_calculated_m)
+    #       END AS avg_total_depth_m,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(avg_velocity_calculated_m_s, avg_velocity_m_s)
+    #       ELSE COALESCE(avg_velocity_m_s, avg_velocity_calculated_m_s)
+    #       END AS avg_velocity_m_s,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(discharge_calculated_m3_s, discharge_m3_s)
+    #       ELSE COALESCE(discharge_m3_s, discharge_calculated_m3_s)
+    #       END AS discharge_m3_s,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(ice_avg_thickness_calculated_m, ice_avg_thickness_m)
+    #       ELSE COALESCE(ice_avg_thickness_m, ice_avg_thickness_calculated_m)
+    #       END AS ice_avg_thickness_m,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(ice_area_calculated_m2, ice_area_m2)
+    #       ELSE COALESCE(ice_area_m2, ice_area_calculated_m2)
+    #       END AS ice_area_m2,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(slush_avg_thickness_calculated_m, slush_avg_thickness_m)
+    #       ELSE COALESCE(slush_avg_thickness_m, slush_avg_thickness_calculated_m)
+    #       END AS slush_avg_thickness_m,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(slush_area_calculated_m2, slush_area_m2)
+    #       ELSE COALESCE(slush_area_m2, slush_area_calculated_m2)
+    #       END AS slush_area_m2,
+    #     use_calculated_values,
+    #     source_system,
+    #     source_measurement_id,
+    #     note,
+    #     created,
+    #     modified,
+    #     created_by,
+    #     modified_by
 
-    DBI::dbExecute(
-      con,
-      "
-      CREATE VIEW discrete.cross_sections_view AS
-      SELECT
-        xsection_id,
-        location_id,
-        datetime,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(wetted_width_calculated_m, wetted_width_m)
-          ELSE COALESCE(wetted_width_m, wetted_width_calculated_m)
-          END AS wetted_width_m,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(total_area_calculated_m2, total_area_m2)
-          ELSE COALESCE(total_area_m2, total_area_calculated_m2)
-          END AS total_area_m2,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(net_area_calculated_m2, net_area_m2)
-          ELSE COALESCE(net_area_m2, net_area_calculated_m2)
-          END AS net_area_m2,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(avg_total_depth_calculated_m, avg_total_depth_m)
-          ELSE COALESCE(avg_total_depth_m, avg_total_depth_calculated_m)
-          END AS avg_total_depth_m,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(avg_velocity_calculated_m_s, avg_velocity_m_s)
-          ELSE COALESCE(avg_velocity_m_s, avg_velocity_calculated_m_s)
-          END AS avg_velocity_m_s,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(discharge_calculated_m3_s, discharge_m3_s)
-          ELSE COALESCE(discharge_m3_s, discharge_calculated_m3_s)
-          END AS discharge_m3_s,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(ice_avg_thickness_calculated_m, ice_avg_thickness_m)
-          ELSE COALESCE(ice_avg_thickness_m, ice_avg_thickness_calculated_m)
-          END AS ice_avg_thickness_m,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(ice_area_calculated_m2, ice_area_m2)
-          ELSE COALESCE(ice_area_m2, ice_area_calculated_m2)
-          END AS ice_area_m2,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(slush_avg_thickness_calculated_m, slush_avg_thickness_m)
-          ELSE COALESCE(slush_avg_thickness_m, slush_avg_thickness_calculated_m)
-          END AS slush_avg_thickness_m,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(slush_area_calculated_m2, slush_area_m2)
-          ELSE COALESCE(slush_area_m2, slush_area_calculated_m2)
-          END AS slush_area_m2,
-        use_calculated_values,
-        source_system,
-        source_measurement_id,
-        note,
-        created,
-        modified,
-        created_by,
-        modified_by
-
-
-      FROM discrete.cross_sections
-      "
-    )
+    #   FROM discrete.cross_sections
+    #   "
+    # )
 
     # creating verticals table
     # Table: Vertical
@@ -289,7 +287,7 @@ tryCatch(
             ),
 
         CONSTRAINT cross_section_verticals_unique_source
-            UNIQUE NULLS NOT DISTINCT (xsection_id, source_vertical_id)
+            UNIQUE (xsection_id, source_vertical_id)
 
       );
       "
@@ -325,46 +323,46 @@ tryCatch(
       DBI::dbExecute(con, comment_sql)
     }
 
-    # creating view for verticals table
-    DBI::dbExecute(
-      con,
-      "
-      CREATE VIEW discrete.cross_section_verticals_view AS
-      SELECT
-        vertical_id,
-        xsection_id,
-        measurement_time,
-        distance_to_waterline_m,
-        reference_bank,
-        panel_flowing_water_depth_m,
-        ice_thickness_m,
-        water_surface_to_bottom_ice_m,
-        slush_ice_thickness_m,
-        panel_width_m,
-        panel_area_m2,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(panel_mean_velocity_calculated_m_s, panel_mean_velocity_m_s)
-          ELSE COALESCE(panel_mean_velocity_m_s, panel_mean_velocity_calculated_m_s)
-          END AS panel_mean_velocity_m_s,
-        panel_angle_of_flow_deg,
-        CASE
-          WHEN use_calculated_values
-          THEN COALESCE(panel_discharge_calculated_m3_s, panel_discharge_m3_s)
-          ELSE COALESCE(panel_discharge_m3_s, panel_discharge_calculated_m3_s)
-          END AS panel_discharge_m3_s,
-        use_calculated_values,
-        source_vertical_id,
-        note,
-        created,
-        modified,
-        created_by,
-        modified_by
+    # # Previous version (coalesce based on values from same table)
+    #
+    #  DBI::dbExecute(
+    #   con,
+    #   "
+    #   CREATE VIEW discrete.cross_section_verticals_view AS
+    #   SELECT
+    #     vertical_id,
+    #     xsection_id,
+    #     measurement_time,
+    #     distance_to_waterline_m,
+    #     reference_bank,
+    #     panel_flowing_water_depth_m,
+    #     ice_thickness_m,
+    #     water_surface_to_bottom_ice_m,
+    #     slush_ice_thickness_m,
+    #     panel_width_m,
+    #     panel_area_m2,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(panel_mean_velocity_calculated_m_s, panel_mean_velocity_m_s)
+    #       ELSE COALESCE(panel_mean_velocity_m_s, panel_mean_velocity_calculated_m_s)
+    #       END AS panel_mean_velocity_m_s,
+    #     panel_angle_of_flow_deg,
+    #     CASE
+    #       WHEN use_calculated_values
+    #       THEN COALESCE(panel_discharge_calculated_m3_s, panel_discharge_m3_s)
+    #       ELSE COALESCE(panel_discharge_m3_s, panel_discharge_calculated_m3_s)
+    #       END AS panel_discharge_m3_s,
+    #     use_calculated_values,
+    #     source_vertical_id,
+    #     note,
+    #     created,
+    #     modified,
+    #     created_by,
+    #     modified_by
 
-
-      FROM discrete.cross_section_verticals
-      "
-    )
+    #   FROM discrete.cross_section_verticals
+    #   "
+    # )
 
     # creating points table
     # Table: Points
@@ -425,6 +423,241 @@ tryCatch(
     for (comment_sql in comments_cross_section_points) {
       DBI::dbExecute(con, comment_sql)
     }
+
+    # Creating the following 4 Views
+    # 1 cross_section_verticals_calculated: view of calculated fields for verticals table
+    # 2 cross_section_verticals_view: view coalescing calculated & manual fields for verticals table
+    # 3 cross_sections_calculated: view of calculated fields for cross section table
+    # 4 cross_sections_view: view coalescing calculated & manuel fields for cross section table
+
+    # VIEW 1: Create view of values calculated from verticals table
+    message(
+      "Creating view of calculated fields for cross section verticals table..."
+    )
+
+    DBI::dbExecute(
+      con,
+      "
+      CREATE VIEW discrete.cross_section_verticals_calculated AS
+      SELECT
+          v.vertical_id,
+
+          CASE
+              WHEN v.panel_width_m IS NOT NULL
+              AND v.panel_flowing_water_depth_m IS NOT NULL
+              THEN v.panel_width_m * v.panel_flowing_water_depth_m
+              ELSE NULL
+          END AS panel_area_calculated_m2,
+
+          AVG(p.velocity_m_s) AS panel_mean_velocity_calculated_m_s,
+
+          CASE
+              WHEN v.panel_width_m IS NOT NULL
+              AND v.panel_flowing_water_depth_m IS NOT NULL
+              AND AVG(p.velocity_m_s) IS NOT NULL
+              THEN
+                  (v.panel_width_m * v.panel_flowing_water_depth_m)
+                  * AVG(p.velocity_m_s)
+              ELSE NULL
+          END AS panel_discharge_calculated_m3_s
+
+      FROM discrete.cross_section_verticals v
+      LEFT JOIN discrete.cross_section_points p
+          ON v.vertical_id = p.vertical_id
+      GROUP BY
+          v.vertical_id,
+          v.panel_width_m,
+          v.panel_flowing_water_depth_m;
+      "
+    )
+
+    # View 2: creating view for verticals table coalescing manual/calculated fields
+    message(
+      "Creating view of preferred values for cross section verticals table..."
+    )
+
+    DBI::dbExecute(
+      con,
+      "
+      CREATE VIEW discrete.cross_section_verticals_view AS
+      SELECT
+          v.vertical_id,
+          v.xsection_id,
+          v.measurement_time,
+          v.distance_to_waterline_m,
+          v.reference_bank,
+
+          v.panel_flowing_water_depth_m,
+          v.ice_thickness_m,
+          v.water_surface_to_bottom_ice_m,
+          v.slush_ice_thickness_m,
+          v.panel_width_m,
+          
+          CASE
+              WHEN v.use_calculated_values
+              THEN COALESCE(vc.panel_area_calculated_m2, v.panel_area_m2)
+              ELSE COALESCE(v.panel_area_m2, vc.panel_area_calculated_m2)
+          END AS panel_area_m2,
+
+          CASE
+              WHEN v.use_calculated_values
+              THEN COALESCE(vc.panel_mean_velocity_calculated_m_s, v.panel_mean_velocity_m_s)
+              ELSE COALESCE(v.panel_mean_velocity_m_s, vc.panel_mean_velocity_calculated_m_s)
+          END AS panel_mean_velocity_m_s,
+
+          v.panel_angle_of_flow_deg,
+
+          CASE
+              WHEN v.use_calculated_values
+              THEN COALESCE(vc.panel_discharge_calculated_m3_s, v.panel_discharge_m3_s)
+              ELSE COALESCE(v.panel_discharge_m3_s, vc.panel_discharge_calculated_m3_s)
+          END AS panel_discharge_m3_s,
+
+          v.source_vertical_id,
+          v.note,
+          v.created,
+          v.modified,
+          v.created_by,
+          v.modified_by
+      FROM discrete.cross_section_verticals v
+      LEFT JOIN discrete.cross_section_verticals_calculated vc
+          ON v.vertical_id = vc.vertical_id;
+      "
+    )
+
+    # VIEW 3: Create view of values calculated from verticals table
+    #note, cross section calculated values use vertical preferred-value View rather than cross_section_verticals table, to preserve manual-calculated value preference
+    message("Creating view of calculated fields for cross section table...")
+    DBI::dbExecute(
+      con,
+      "
+      CREATE VIEW discrete.cross_sections_calculated AS
+      SELECT
+        cs.xsection_id,
+
+        SUM(v.panel_width_m) AS wetted_width_calculated_m,
+
+        SUM(v.panel_area_m2) AS net_area_calculated_m2,
+
+        CASE
+          WHEN SUM(v.panel_area_m2) IS NOT NULL
+            OR SUM(v.panel_width_m * v.ice_thickness_m) IS NOT NULL
+            OR SUM(v.panel_width_m * v.slush_ice_thickness_m) IS NOT NULL
+          THEN
+              COALESCE(SUM(v.panel_area_m2), 0)
+            + COALESCE(SUM(v.panel_width_m * v.ice_thickness_m), 0)
+            + COALESCE(SUM(v.panel_width_m * v.slush_ice_thickness_m), 0)
+          ELSE NULL
+        END AS total_area_calculated_m2,
+
+        AVG(v.panel_flowing_water_depth_m) AS avg_total_depth_calculated_m,
+
+        AVG(v.panel_mean_velocity_m_s) AS avg_velocity_calculated_m_s,
+
+        SUM(v.panel_discharge_m3_s) AS discharge_calculated_m3_s,
+
+        AVG(v.ice_thickness_m) AS ice_avg_thickness_calculated_m,
+
+        SUM(v.panel_width_m * v.ice_thickness_m) AS ice_area_calculated_m2,
+
+        AVG(v.slush_ice_thickness_m) AS slush_avg_thickness_calculated_m,
+
+        SUM(v.panel_width_m * v.slush_ice_thickness_m) AS slush_area_calculated_m2
+
+      FROM discrete.cross_sections cs
+      LEFT JOIN discrete.cross_section_verticals_view v
+        ON cs.xsection_id = v.xsection_id
+      
+      GROUP BY cs.xsection_id;
+      "
+    )
+
+    # VIEW 4: Create view of cross section table coalescing manual/calculated fields
+    message("Creating view of preferred values for cross section table...")
+
+    DBI::dbExecute(
+      con,
+      "
+      CREATE VIEW discrete.cross_sections_view AS
+      SELECT
+          cs.xsection_id,
+          cs.location_id,
+          cs.datetime,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.wetted_width_calculated_m, cs.wetted_width_m)
+              ELSE COALESCE(cs.wetted_width_m, calc.wetted_width_calculated_m)
+          END AS wetted_width_m,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.total_area_calculated_m2, cs.total_area_m2)
+              ELSE COALESCE(cs.total_area_m2, calc.total_area_calculated_m2)
+          END AS total_area_m2,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.net_area_calculated_m2, cs.net_area_m2)
+              ELSE COALESCE(cs.net_area_m2, calc.net_area_calculated_m2)
+          END AS net_area_m2,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.avg_total_depth_calculated_m, cs.avg_total_depth_m)
+              ELSE COALESCE(cs.avg_total_depth_m, calc.avg_total_depth_calculated_m)
+          END AS avg_total_depth_m,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.avg_velocity_calculated_m_s, cs.avg_velocity_m_s)
+              ELSE COALESCE(cs.avg_velocity_m_s, calc.avg_velocity_calculated_m_s)
+          END AS avg_velocity_m_s,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.discharge_calculated_m3_s, cs.discharge_m3_s)
+              ELSE COALESCE(cs.discharge_m3_s, calc.discharge_calculated_m3_s)
+          END AS discharge_m3_s,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.ice_avg_thickness_calculated_m, cs.ice_avg_thickness_m)
+              ELSE COALESCE(cs.ice_avg_thickness_m, calc.ice_avg_thickness_calculated_m)
+          END AS ice_avg_thickness_m,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.ice_area_calculated_m2, cs.ice_area_m2)
+              ELSE COALESCE(cs.ice_area_m2, calc.ice_area_calculated_m2)
+          END AS ice_area_m2,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.slush_avg_thickness_calculated_m, cs.slush_avg_thickness_m)
+              ELSE COALESCE(cs.slush_avg_thickness_m, calc.slush_avg_thickness_calculated_m)
+          END AS slush_avg_thickness_m,
+
+          CASE
+              WHEN cs.use_calculated_values
+              THEN COALESCE(calc.slush_area_calculated_m2, cs.slush_area_m2)
+              ELSE COALESCE(cs.slush_area_m2, calc.slush_area_calculated_m2)
+          END AS slush_area_m2,
+
+          cs.use_calculated_values,
+          cs.source_system,
+          cs.source_measurement_id,
+          cs.note,
+          cs.created,
+          cs.modified,
+          cs.created_by,
+          cs.modified_by
+
+      FROM discrete.cross_sections cs
+      LEFT JOIN discrete.cross_sections_calculated calc
+          ON cs.xsection_id = calc.xsection_id;
+      "
+    )
 
     #grant select permissions on tables to public role
 
