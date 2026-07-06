@@ -24,21 +24,14 @@ db_dump <- function(
   port = Sys.getenv("aquacachePort"),
   username = Sys.getenv("aquacacheAdminUser"),
   password = Sys.getenv("aquacacheAdminPass"),
-  outpath = "choose",
+  outpath,
   pg_dump = NULL,
   pg_dumpall = NULL,
   data = FALSE
 ) {
-  # Check or prompt for output path
-  if (outpath == "choose") {
-    if (!interactive()) {
-      stop("You must specify a save path when running in non-interactive mode.")
-    }
-    message("Select the path to the folder where you want this report saved.")
-    outpath <- rstudioapi::selectDirectory(
-      caption = "Select Save Folder",
-      path = file.path(Sys.getenv("USERPROFILE"), "Desktop")
-    )
+  # Check that 'outpath' is provided and is a valid directory
+  if (!dir.exists(outpath)) {
+    stop("Please provide a valid 'outpath' where the dump files will be saved.")
   }
 
   # Validate the `pg_dump` utility

@@ -698,14 +698,6 @@ if (length(ts) > 0) {
         )
       },
       finally = {
-        # Trim the last day of data for the timeseries to remove any potentially affected data points with old units in the database
-        DBI::dbExecute(
-          con,
-          "DELETE FROM measurements_continuous
-               WHERE timeseries_id = $1
-                 AND datetime >= (SELECT MAX(datetime) - INTERVAL '1 day' FROM measurements_continuous WHERE timeseries_id = $1);",
-          params = list(i)
-        )
         if (lock_acquired) {
           DBI::dbGetQuery(
             con,

@@ -6,16 +6,30 @@
 #' mapping is read from `discrete.import_parameter_mappings` when the requested
 #' key/source code has been loaded with [upsertImportParameterMappings()]. EQWin
 #' `udf_*` fields and `eqsampls.LastModified` are intentionally not used.
+#' EQWin `SampleClass` values are mapped to AquaCache sample types where
+#' possible: regular monitoring (`M`) to routine samples, QA/QC duplicate or
+#' split samples (`D`) to generic QC samples, incident samples (`I`) to
+#' `sample-other`, and unset/default samples (`XX`) to `unknown`. Blank sample
+#' wording in the sample number or comments is mapped to field, trip, or lab
+#' blank sample types when present.
 #'
 #' @param location EQWin station code from `eqstns.StnCode`.
 #' @param start_datetime Start datetime for `eqsampls.CollectDateTime`.
 #' @param end_datetime End datetime for `eqsampls.CollectDateTime`.
-#' @param EQpath File path to the target EQWin database. Used only when `EQCon`
-#'   is `NULL`.
-#' @param key Import mapping source code or key path. Defaults to the working
+#' @param EQpath File path to the target EQWin database. Used to open an
+#'   Access connection when `EQCon` is `NULL` and, unless `EQsource_id` is
+#'   provided, to identify the source database in sample import IDs.
+#' @param key Import mapping source code or key path. Defaults to the stable
 #'   EQWin source code used by [upsertImportParameterMappings()].
 #' @param con AquaCache connection.
-#' @param EQCon Optional existing Access database connection.
+#' @param EQCon Optional existing Access database connection, primarily used by
+#'   [getNewDiscrete()] and [synchronize_discrete()] to reuse connections for
+#'   sample series that share the same `EQpath`.
+#' @param EQsource_id Stable identifier for the EQWin database being imported.
+#'   This value is combined with EQWin `SampleId` in
+#'   `discrete.samples.import_source_id` so samples from different EQWin
+#'   databases do not collide. Defaults to the normalized `EQpath` when an
+#'   `EQpath` is supplied, otherwise `"EQWin"` for caller-managed connections.
 #' @param tz Time zone used to interpret EQWin collection datetimes.
 #' @param unknown_time_local Local-time value assigned to collection datetimes
 #'   stored by EQWin as midnight, which commonly indicates an unknown time.
@@ -31,9 +45,10 @@ downloadEQWin <- function(
   start_datetime,
   end_datetime = Sys.time(),
   EQpath = NULL,
-  key = "EQWin_key_working_copy",
+  key = "EQWin",
   con = NULL,
   EQCon = NULL,
+  EQsource_id = NULL,
   tz = "MST",
   unknown_time_local = "12:00:00",
   media_id = NULL,
@@ -56,9 +71,7 @@ downloadEQWin <- function(
     EQCon <- AccessConnect(EQpath, silent = TRUE)
     on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
   }
-
-  # Get or set the EQWin source database UUID, which is used to link imported samples to the specific EQWin database they came from. This is important for tracking data provenance and ensuring that data from different EQWin sources are not conflated.
-  guid <- get_or_create_eqwin_uuid(EQCon)
+  eqwin_import_source <- eqwin_source_identifier(EQpath, EQsource_id)
 
   mapping <- import_mapping_load_db(con, key)
   if (is.null(mapping)) {
@@ -238,15 +251,12 @@ downloadEQWin <- function(
     if (nrow(result_rows) == 0) {
       next
     }
-    sample_class <- as.character(sample_row$SampleClass[[1]])
-    sample_type_i <- if (identical(sample_class, "D")) {
-      defaults$sample_type_replicate
-    } else {
-      defaults$sample_type
-    }
-    if (is.na(sample_type_i)) {
-      sample_type_i <- defaults$sample_type
-    }
+    sample_type_i <- eqwin_sample_type(
+      sample_class = sample_row$SampleClass[[1]],
+      sample_no = sample_row$SampleNo[[1]],
+      sample_comments = sample_row$SampleComments[[1]],
+      defaults = defaults
+    )
 
     out_i <- out_i + 1L
     out[[out_i]] <- list(
@@ -259,9 +269,14 @@ downloadEQWin <- function(
         ),
         collection_method = defaults$collection_method,
         sample_type = sample_type_i,
-        import_source_id = as.character(sample_row$SampleId[[1]]),
+        import_source_id = paste0(
+          eqwin_import_source,
+          "-",
+          as.character(sample_row$SampleId[[1]])
+        ),
         note = eqwin_collapse_note(c(
           sample_row$SampleNo[[1]],
+          paste0("EQWin SampleClass: ", sample_row$SampleClass[[1]]),
           sample_row$SampleComments[[1]]
         )),
         stringsAsFactors = FALSE
@@ -274,6 +289,67 @@ downloadEQWin <- function(
     return(list())
   }
   out[seq_len(out_i)]
+}
+
+eqwin_source_identifier <- function(EQpath, EQsource_id) {
+  if (!is.null(EQsource_id) && !is.na(EQsource_id) && nzchar(EQsource_id)) {
+    return(as.character(EQsource_id))
+  }
+  if (!is.null(EQpath) && !is.na(EQpath) && nzchar(EQpath)) {
+    path <- tryCatch(
+      normalizePath(EQpath, winslash = "/", mustWork = FALSE),
+      error = function(e) as.character(EQpath)
+    )
+    return(path)
+  }
+  "EQWin"
+}
+
+eqwin_connection_cache_new <- function() {
+  cache <- new.env(parent = emptyenv())
+  cache$connections <- list()
+  cache
+}
+
+eqwin_connection_cache_get <- function(cache, EQpath) {
+  if (is.null(EQpath) || length(EQpath) == 0 || is.na(EQpath[[1]]) ||
+      !nzchar(EQpath[[1]])) {
+    return(NULL)
+  }
+
+  path <- tryCatch(
+    normalizePath(EQpath[[1]], winslash = "/", mustWork = FALSE),
+    error = function(e) EQpath[[1]]
+  )
+  con <- cache$connections[[path]]
+  if (!is.null(con)) {
+    if (isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))) {
+      return(con)
+    }
+    cache$connections[[path]] <- NULL
+  }
+
+  con <- AccessConnect(path, silent = TRUE)
+  if (is.null(con) ||
+      !isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))) {
+    stop("Could not connect to EQWin database at '", path, "'.")
+  }
+  cache$connections[[path]] <- con
+  con
+}
+
+eqwin_connection_cache_disconnect <- function(cache) {
+  if (is.null(cache) || is.null(cache$connections)) {
+    return(invisible(NULL))
+  }
+
+  for (con in cache$connections) {
+    if (isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))) {
+      try(DBI::dbDisconnect(con), silent = TRUE)
+    }
+  }
+  cache$connections <- list()
+  invisible(NULL)
 }
 
 eqwin_load_key_from_file <- function(con, key) {
@@ -308,7 +384,43 @@ eqwin_load_key_from_file <- function(con, key) {
     "sample_fraction_id",
     "sample_fraction_AC"
   )
+  target_columns$result_speciation <- c(
+    "result_speciation_id",
+    "result_speciation_AC",
+    "result_speciation"
+  )
   key_data <- import_mapping_read_input(key)
+  if ("ignore" %in% names(key_data)) {
+    ignore <- import_mapping_as_logical(key_data$ignore)
+    key_data <- key_data[is.na(ignore) | !ignore, ]
+  }
+  key_value_missing <- function(x) {
+    if (is.null(x)) {
+      return(TRUE)
+    }
+    out <- is.na(x)
+    if (is.character(x)) {
+      trimmed <- trimws(x)
+      out <- out | !nzchar(trimmed) | toupper(trimmed) %in% c("NA", "NULL")
+    }
+    out
+  }
+  if ("sample_fraction_AC" %in% names(key_data)) {
+    if (!("sample_fraction_id" %in% names(key_data))) {
+      key_data$sample_fraction_id <- NA
+    }
+    use_ac_fraction <- key_value_missing(key_data$sample_fraction_id) &
+      !key_value_missing(key_data$sample_fraction_AC)
+    key_data$sample_fraction_id[use_ac_fraction] <- key_data$sample_fraction_AC[use_ac_fraction]
+  }
+  if ("result_speciation_AC" %in% names(key_data)) {
+    if (!("result_speciation_id" %in% names(key_data))) {
+      key_data$result_speciation_id <- NA
+    }
+    use_ac_speciation <- key_value_missing(key_data$result_speciation_id) &
+      !key_value_missing(key_data$result_speciation_AC)
+    key_data$result_speciation_id[use_ac_speciation] <- key_data$result_speciation_AC[use_ac_speciation]
+  }
   mapping <- import_mapping_resolve_targets(
     con,
     data.table::as.data.table(key_data),
@@ -427,20 +539,123 @@ eqwin_discrete_defaults <- function(
     con,
     "SELECT sample_type_id
      FROM sample_types
-     WHERE sample_type = 'QC-sample-field replicate';"
+     WHERE sample_type = 'QC-sample-other';"
+  )
+  if (nrow(sample_type_replicate) == 0) {
+    sample_type_replicate <- DBI::dbGetQuery(
+      con,
+      "SELECT sample_type_id
+       FROM sample_types
+       WHERE sample_type = 'QC-sample-field replicate';"
+    )
+  }
+  sample_type_field_blank <- DBI::dbGetQuery(
+    con,
+    "SELECT sample_type_id
+     FROM sample_types
+     WHERE sample_type = 'QC-sample-field blank';"
+  )
+  sample_type_trip_blank <- DBI::dbGetQuery(
+    con,
+    "SELECT sample_type_id
+     FROM sample_types
+     WHERE sample_type = 'QC-sample-trip blank';"
+  )
+  sample_type_lab_blank <- DBI::dbGetQuery(
+    con,
+    "SELECT sample_type_id
+     FROM sample_types
+     WHERE sample_type = 'QC-sample-lab blank';"
+  )
+  sample_type_other <- DBI::dbGetQuery(
+    con,
+    "SELECT sample_type_id
+     FROM sample_types
+     WHERE sample_type = 'sample-other';"
+  )
+  sample_type_unknown <- DBI::dbGetQuery(
+    con,
+    "SELECT sample_type_id
+     FROM sample_types
+     WHERE sample_type = 'unknown';"
   )
   if (nrow(sample_type_replicate) == 0) {
     sample_type_replicate <- NA_integer_
   } else {
     sample_type_replicate <- sample_type_replicate$sample_type_id[[1]]
   }
+  if (nrow(sample_type_field_blank) == 0) {
+    sample_type_field_blank <- NA_integer_
+  } else {
+    sample_type_field_blank <- sample_type_field_blank$sample_type_id[[1]]
+  }
+  if (nrow(sample_type_trip_blank) == 0) {
+    sample_type_trip_blank <- NA_integer_
+  } else {
+    sample_type_trip_blank <- sample_type_trip_blank$sample_type_id[[1]]
+  }
+  if (nrow(sample_type_lab_blank) == 0) {
+    sample_type_lab_blank <- NA_integer_
+  } else {
+    sample_type_lab_blank <- sample_type_lab_blank$sample_type_id[[1]]
+  }
+  if (nrow(sample_type_other) == 0) {
+    sample_type_other <- NA_integer_
+  } else {
+    sample_type_other <- sample_type_other$sample_type_id[[1]]
+  }
+  if (nrow(sample_type_unknown) == 0) {
+    sample_type_unknown <- NA_integer_
+  } else {
+    sample_type_unknown <- sample_type_unknown$sample_type_id[[1]]
+  }
 
   list(
     media_id = as.integer(media_id),
     collection_method = as.integer(collection_method),
     sample_type = as.integer(sample_type),
-    sample_type_replicate = as.integer(sample_type_replicate)
+    sample_type_replicate = as.integer(sample_type_replicate),
+    sample_type_field_blank = as.integer(sample_type_field_blank),
+    sample_type_trip_blank = as.integer(sample_type_trip_blank),
+    sample_type_lab_blank = as.integer(sample_type_lab_blank),
+    sample_type_other = as.integer(sample_type_other),
+    sample_type_unknown = as.integer(sample_type_unknown)
   )
+}
+
+eqwin_sample_type <- function(sample_class, sample_no, sample_comments, defaults) {
+  sample_text <- paste(
+    tolower(trimws(as.character(sample_no))),
+    tolower(trimws(as.character(sample_comments)))
+  )
+  sample_class <- toupper(trimws(as.character(sample_class)))
+
+  if (grepl("\\btrip\\s+blank\\b", sample_text)) {
+    return(eqwin_default_sample_type(defaults$sample_type_trip_blank, defaults))
+  }
+  if (grepl("\\blab(oratory)?\\s+blank\\b|\\blabblank\\b", sample_text)) {
+    return(eqwin_default_sample_type(defaults$sample_type_lab_blank, defaults))
+  }
+  if (grepl("\\bfield\\s+blank\\b|\\bblank\\b", sample_text)) {
+    return(eqwin_default_sample_type(defaults$sample_type_field_blank, defaults))
+  }
+  if (identical(sample_class, "D")) {
+    return(eqwin_default_sample_type(defaults$sample_type_replicate, defaults))
+  }
+  if (identical(sample_class, "I")) {
+    return(eqwin_default_sample_type(defaults$sample_type_other, defaults))
+  }
+  if (identical(sample_class, "XX")) {
+    return(eqwin_default_sample_type(defaults$sample_type_unknown, defaults))
+  }
+  defaults$sample_type
+}
+
+eqwin_default_sample_type <- function(value, defaults) {
+  if (!is.na(value)) {
+    return(as.integer(value))
+  }
+  defaults$sample_type
 }
 
 eqwin_parse_result <- function(
@@ -524,55 +739,4 @@ eqwin_collapse_note <- function(x) {
     return(NA_character_)
   }
   paste(unique(x), collapse = "; ")
-}
-
-#' Get or create a UUID for the EQWin source database
-#'' This function checks for the existence of a `yg_source_database` table and a
-#' UUID row within it. If the table or row does not exist, it creates them and generates a new UUID. This ensures that each EQWin source database can be uniquely identified in AquaCache, which is important for tracking data provenance and avoiding conflicts when multiple EQWin databases are used as sources.
-#' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
-#' @return A character string containing the UUID for the EQWin source database.
-#' @noRd
-#' @keywords internal
-get_or_create_eqwin_uuid <- function(con) {
-  rlang::check_installed(
-    "uuid",
-    reason = "to generate UUIDs for EQWin source database tracking"
-  )
-  if (!DBI::dbExistsTable(con, "aquacache_source_info")) {
-    guid <- uuid::UUIDgenerate()
-
-    DBI::dbExecute(
-      con,
-      "
-      CREATE TABLE aquacache_source_info (
-        id INTEGER,
-        source_database_uuid TEXT(36),
-        created_at DATETIME
-      )
-    "
-    )
-
-    DBI::dbExecute(
-      con,
-      "INSERT INTO aquacache_source_info 
-       (id, source_database_uuid, created_at) 
-       VALUES (?, ?, ?)",
-      params = list(1L, guid, format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
-    )
-
-    return(guid)
-  }
-
-  x <- DBI::dbGetQuery(
-    con,
-    "SELECT source_database_uuid 
-     FROM aquacache_source_info 
-     WHERE id = 1"
-  )
-
-  if (nrow(x) != 1L || is.na(x$source_database_uuid[1])) {
-    stop("Invalid aquacache_source_info table: expected exactly one UUID row.")
-  }
-
-  x$source_database_uuid[1]
 }

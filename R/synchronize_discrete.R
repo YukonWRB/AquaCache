@@ -14,7 +14,6 @@
 #' @param sync_remote_false Controls whether to synchronize sample_series that have the `sync_remote` column set to FALSE in the `sample_series` table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!
 #' @param delete If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.
 #' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
-#' @param EQCon A connection to the EQWin database, created with [EQConnect()]. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.
 #'
 #' @return Updated entries in the hydro database.
 #' @export
@@ -27,8 +26,7 @@ synchronize_discrete <- function(
   active = 'default',
   sync_remote_false = FALSE,
   delete = FALSE,
-  snowCon = NULL,
-  EQCon = NULL
+  snowCon = NULL
 ) {
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -48,6 +46,8 @@ synchronize_discrete <- function(
   }
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
+  EQWinConCache <- eqwin_connection_cache_new()
+  on.exit(eqwin_connection_cache_disconnect(EQWinConCache), add = TRUE)
 
   start <- Sys.time()
 
@@ -60,8 +60,13 @@ synchronize_discrete <- function(
         "There is not exactly one element to start_datetime per valid sample_series_id specified by you in the database. Either you're missing elements to start_datetime or you are looking for sample_series_id that doesn't exist."
       )
     }
+    start_datetime_by_series <- stats::setNames(
+      as.list(start_datetime),
+      as.character(sample_series_id)
+    )
   } else {
     sample_series_id <- unique(sample_series_id)
+    start_datetime_by_series <- NULL
   }
 
   if (sample_series_id[1] == "all") {
@@ -101,6 +106,9 @@ synchronize_discrete <- function(
   if (!sync_remote_false) {
     all_series <- all_series[all_series$sync_remote, ]
   }
+  if (nrow(all_series) == 0) {
+    stop("Could not find any sample series matching your input parameters.")
+  }
 
   valid_sample_names <- DBI::dbGetQuery(
     con,
@@ -121,7 +129,7 @@ synchronize_discrete <- function(
   new_results <- 0 # Counter for number of new results
 
   # Start of for loop ########################################################
-  for (i in 1:nrow(all_series)) {
+  for (i in seq_len(nrow(all_series))) {
     sid <- all_series$sample_series_id[i]
 
     # Acquire a lock for this timeseries to prevent concurrent updates, notably by getNewDiscrete
@@ -145,19 +153,20 @@ synchronize_discrete <- function(
         default_owner <- all_series$default_owner[i]
         default_contributor <- all_series$default_contributor[i]
 
-        # start/end datetime for the sample series
-        start_i <- if (!is.na(synch_from)) {
-          min(start_datetime, synch_from)
-        } else {
+        # Start from the caller's requested datetime, bounded by the sample
+        # series' configured synchronization window.
+        start_i <- if (is.null(start_datetime_by_series)) {
           start_datetime
+        } else {
+          start_datetime_by_series[[as.character(sid)]]
+        }
+        if (is.null(start_i)) {
+          stop("No start_datetime was mapped for sample_series_id ", sid, ".")
+        }
+        if (!is.na(synch_from)) {
+          start_i <- max(start_i, synch_from)
         }
         end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
-
-        # both functions downloadEQWin and downloadSnowCourse can establish their own connections, but this is repetitive and inefficient. Instead, we make the connection once and pass the connection to the function.
-        if (source_fx == "downloadEQWin" & is.null(EQCon)) {
-          EQCon <- EQConnect(silent = TRUE)
-          on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
-        }
 
         if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
           # Try with the same host and port as the AquaCache connection
@@ -185,7 +194,10 @@ synchronize_discrete <- function(
         }
 
         if (source_fx == "downloadEQWin") {
-          args_list[["EQCon"]] <- EQCon
+          args_list[["EQCon"]] <- eqwin_connection_cache_get(
+            EQWinConCache,
+            args_list[["EQpath"]]
+          )
         }
         if (source_fx == "downloadSnowCourse") {
           args_list[["snowCon"]] <- snowCon
@@ -246,7 +258,7 @@ synchronize_discrete <- function(
             inRemote_datetimes <- inRemote_datetimes[order_idx]
           }
 
-          for (j in 1:length(inRemote)) {
+          for (j in seq_along(inRemote)) {
             if (
               !("sample" %in% names(inRemote[[j]])) |
                 !("results" %in% names(inRemote[[j]]))
@@ -501,7 +513,7 @@ synchronize_discrete <- function(
 
               inDB_results$checked <- FALSE # This will be used to track which rows have been checked
 
-              for (k in 1:nrow(inRemote_results)) {
+              for (k in seq_len(nrow(inRemote_results))) {
                 sub <- inRemote_results[k, ]
                 names_inRemote_sub <- names(sub)
                 resolved_sub_matrix_state_id <- sub$matrix_state_id
@@ -975,7 +987,7 @@ synchronize_discrete <- function(
                   check_result_condition <- FALSE # prevents repeatedly checking for the same thing
 
                   next_flag <- FALSE
-                  for (l in 1:nrow(sub.results)) {
+                  for (l in seq_len(nrow(sub.results))) {
                     if (
                       is.na(sub.results$result[l]) &
                         is.na(sub.results$result_condition[l])

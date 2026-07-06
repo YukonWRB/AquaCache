@@ -4,7 +4,7 @@
 #'
 #' Reads snow workbooks created with [YGwater::createSnowTemplate()], performs QA/QC checks, and imports the data to the snow database. Designed with significant error catching and logging. As the function works through the workbook it may fail on any single sheet but will continue to the next sheet until all have been processed. Warning messages will be shown alerting the user explaining the issue and the workbook sheet involved. These warning messages are designed primarily for error catching when this function is run programmatically, but are nevertheless useful for manual use.
 #'
-#' @param workbook The path to the workbook (.xlsx) containing the snow data. Default "choose" lets you pick the file interactively.
+#' @param workbook The path to the workbook (.xlsx) containing the snow data.
 #' @param overwrite If `TRUE`, will overwrite existing data in the snow database if there's already an entry for the same survey date, target date, and location (regardless of parameters).
 #' @param con A connection to the snow database. Leave NULL to use function snowConnect() with defaults and close the connection after the function is done.
 #' @return Does not return any object. The function is designed to import data into the snow database.
@@ -13,7 +13,7 @@
 #'
 
 readSnowWorkbook <- function(
-  workbook = "choose",
+  workbook,
   overwrite = FALSE,
   con = NULL
 ) {
@@ -25,24 +25,13 @@ readSnowWorkbook <- function(
   #initial checks
   rlang::check_installed("openxlsx", reason = "necessary to read workbooks")
 
-  if (workbook == "choose") {
-    if (!interactive()) {
-      stop("You must specify a save path when running in non-interactive mode.")
-    }
-    rlang::check_installed(
-      "rstudioapi",
-      reason = "necessary for interactive file selection"
-    )
-    message("Select the path to the folder where you want this report saved.")
-    workbook <- rstudioapi::selectFile(
-      caption = "Select the target workbook",
-      path = file.path(Sys.getenv("USERPROFILE"), "Desktop"),
-      filter = "Excel files  (*.xlsx)"
-    )
-  } else {
-    if (!file.exists(workbook)) {
-      stop("The workbook path points to a non-existent file.")
-    }
+  if (!file.exists(workbook)) {
+    stop("The workbook path points to a non-existent file.")
+  }
+
+  # Ensure that 'workbook' is an xlsx file
+  if (tools::file_ext(workbook) != "xlsx") {
+    stop("The workbook must be an .xlsx file.")
   }
 
   workbook_names <- openxlsx::getSheetNames(workbook)

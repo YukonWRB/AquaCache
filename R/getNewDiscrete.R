@@ -41,7 +41,6 @@
 #' @param sample_series_id The sample_series_ids you wish to have updated, as character or numeric vector. Defaults to NULL, giving precedence to 'location_id'. This can be useful when wanting to synch all time ranges for a location that may have different sample_series_ids.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'sample_series' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
-#' @param EQCon A connection to the EQWin database, created with [EQConnect()]. NULL will create a connection and close it afterwards. Not used if no data is pulled from the EQWin database.
 #'
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
@@ -52,8 +51,7 @@ getNewDiscrete <- function(
   sub_location_id = NULL,
   sample_series_id = NULL,
   active = 'default',
-  snowCon = NULL,
-  EQCon = NULL
+  snowCon = NULL
 ) {
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
@@ -70,6 +68,8 @@ getNewDiscrete <- function(
   }
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
+  EQWinConCache <- eqwin_connection_cache_new()
+  on.exit(eqwin_connection_cache_disconnect(EQWinConCache), add = TRUE)
 
   if (is.null(location_id)) {
     if (is.null(sample_series_id)) {
@@ -148,6 +148,9 @@ getNewDiscrete <- function(
   if (active == 'default') {
     all_series <- all_series[all_series$active, ]
   }
+  if (nrow(all_series) == 0) {
+    stop("Could not find any active sample series matching your input parameters.")
+  }
 
   count <- 0 #counter for number of successful new pulls (samples - not individual results)
 
@@ -157,7 +160,7 @@ getNewDiscrete <- function(
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
   }
-  for (i in 1:nrow(all_series)) {
+  for (i in seq_len(nrow(all_series))) {
     sid <- all_series$sample_series_id[i]
 
     # Acquire a lock for this sample series to prevent concurrent updates, notably by synchronize_discrete
@@ -220,16 +223,17 @@ getNewDiscrete <- function(
         }
         last_data_point <- DBI::dbGetQuery(con, query)[1, 1]
         if (is.na(last_data_point)) {
-          # Means we're dealing with a location that has no samples in yet - probably just created
-          last_data_point <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+          # If the series has no existing samples in its configured window,
+          # start at synch_from rather than importing older source history.
+          last_data_point <- if (!is.na(range_start)) {
+            range_start
+          } else {
+            as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+          }
         } else {
           last_data_point <- last_data_point + 1
         }
 
-        if (source_fx == "downloadEQWin" & is.null(EQCon)) {
-          EQCon <- EQConnect(silent = TRUE)
-          on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
-        }
         if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
           # Try with the same host and port as the AquaCache connection
           dets <- DBI::dbGetQuery(
@@ -249,17 +253,20 @@ getNewDiscrete <- function(
           start_datetime = last_data_point,
           end_datetime = if (is.na(range_end)) Sys.time() else range_end
         )
-        # Connections to snow and eqwin are set before the source_fx_args are made, that way source_fx_args will override the same named param.
-        if (source_fx == "downloadEQWin") {
-          args_list[["EQCon"]] <- EQCon
-        }
-        if (source_fx == "downloadSnowCourse") {
-          args_list[["snowCon"]] <- snowCon
-        }
         if (!is.na(source_fx_args)) {
           # add some arguments if they are specified
           args <- jsonlite::fromJSON(source_fx_args)
           args_list <- c(args_list, lapply(args, as.character))
+        }
+
+        if (source_fx == "downloadEQWin") {
+          args_list[["EQCon"]] <- eqwin_connection_cache_get(
+            EQWinConCache,
+            args_list[["EQpath"]]
+          )
+        }
+        if (source_fx == "downloadSnowCourse") {
+          args_list[["snowCon"]] <- snowCon
         }
 
         ## Get the data ##############
@@ -284,7 +291,7 @@ getNewDiscrete <- function(
         }
 
         # Work on each list element to populate the 'samples' and 'results' tables
-        for (j in 1:length(data)) {
+        for (j in seq_along(data)) {
           if (
             !("sample" %in% names(data[[j]])) |
               !("results" %in% names(data[[j]]))
@@ -455,7 +462,7 @@ getNewDiscrete <- function(
               check_result_condition <- FALSE # prevents repeatedly checking for the same thing
 
               next_flag <- FALSE
-              for (k in 1:nrow(sub.results)) {
+              for (k in seq_len(nrow(sub.results))) {
                 if (
                   is.na(sub.results$result[k]) &
                     is.na(sub.results$result_condition[k])

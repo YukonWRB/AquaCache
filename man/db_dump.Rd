@@ -10,7 +10,7 @@ db_dump(
   port = Sys.getenv("aquacachePort"),
   username = Sys.getenv("aquacacheAdminUser"),
   password = Sys.getenv("aquacacheAdminPass"),
-  outpath = "choose",
+  outpath,
   pg_dump = NULL,
   pg_dumpall = NULL,
   data = FALSE

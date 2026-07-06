@@ -29,5 +29,5 @@ be created.}
 Invisibly returns the uploaded mappings.
 }
 \description{
-Add or update import qualifier mappings
+Add or update keys for use in importing foreign water quality data to AquaCache. Used notably by \code{\link[=downloadECCCwq]{downloadECCCwq()}} and \code{\link[=downloadEQWin]{downloadEQWin()}}.
 }
