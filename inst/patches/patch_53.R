@@ -68,25 +68,15 @@ tryCatch(
         datetime timestamptz NOT NULL,
 
         wetted_width_m numeric NULL,
-        wetted_width_calculated_m numeric NULL,
-        total_area_m2 numeric NULL, --area in icethick db, manual entry not dep on other tables.
-        total_area_calculated_m2 numeric NULL, --populated from other tables on trigger
+        total_area_m2 numeric NULL, 
         net_area_m2 numeric NULL, -- new val, area not including ice thickness nor slush
-        net_area_calculated_m2 numeric,
-        avg_total_depth_m numeric NULL,
-        avg_total_depth_calculated_m numeric NULL,    
+        avg_total_depth_m numeric NULL,    
         avg_velocity_m_s numeric NULL,
-        avg_velocity_calculated_m_s numeric NULL,
         discharge_m3_s numeric NULL,
-        discharge_calculated_m3_s numeric NULL,
         ice_avg_thickness_m numeric NULL,
-        ice_avg_thickness_calculated_m numeric NULL,
         ice_area_m2 numeric NULL, -- new derived col, from verticals 
-        ice_area_calculated_m2 numeric NULL,
         slush_avg_thickness_m numeric NULL,
-        slush_avg_thickness_calculated_m numeric NULL,
         slush_area_m2 numeric NULL,
-        slush_area_calculated_m2 numeric NULL,
         use_calculated_values boolean DEFAULT true NOT NULL,
         source_system text NULL, 
         source_measurement_id text NULL,
@@ -118,111 +108,30 @@ tryCatch(
     message("Adding comments to cross_sections table...")
 
     comments_cross_sections <- c(
-      "COMMENT ON TABLE discrete.cross_sections IS 'Primary table for storing stream cross-section data. Links to locations table, and serves as parent table for cross_section_verticals and cross_section_points tables. each row contains summary information for a single cross section at a set location and date.';",
-      "COMMENT ON COLUMN discrete.cross_sections.wetted_width_m IS 'Numeric value denoting width of stream, using wetted area as reference for start/end of measurement. Field used for manual data entry (if no vertical width data available)';",
-      "COMMENT ON COLUMN discrete.cross_sections.wetted_width_calculated_m IS 'Numeric value denoting width of stream, using wetted area as reference for start/end of measurement. Field automatically filled from available cross_section_verticals fields';",
-      "COMMENT ON COLUMN discrete.cross_sections.total_area_m2 IS 'Value denoting total area of the cross section, including water, slush, and ice area. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.total_area_calculated_m2 IS 'Value denoting total area of the cross section, including water, slush, and ice area. Field automatically populated from available Vertical-level data';",
-      "COMMENT ON COLUMN discrete.cross_sections.net_area_m2 IS 'Value denoting area of cross section containing flowing water (ie not including ice and slush area). Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.net_area_calculated_m2 IS 'Value denoting area of cross section containing flowing water (ie not including ice and slush area). Field automatically populated from available Vertical-level data';",
-      "COMMENT ON COLUMN discrete.cross_sections.avg_total_depth_m IS 'Value denoting the average depth of flowing water in the stream, measured from the bottom of the stream to the waterline. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.avg_total_depth_calculated_m IS 'Value denoting the average depth of flowing water in the stream, measured from the bottom of the stream to the waterline. Field automatically populated from available Vertical-level data';",
-      "COMMENT ON COLUMN discrete.cross_sections.avg_velocity_m_s IS 'Value denoting the average velocity of flowing water in the stream, excluding ice and slush layers. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.avg_velocity_calculated_m_s IS 'Value denoting the average velocity of flowing water in the stream, excluding ice and slush layers. Field automatically populated from available Vertical-level data';",
-      "COMMENT ON COLUMN discrete.cross_sections.discharge_m3_s IS 'Value denoting the average flowrate of flowing water in the stream, excluding ice and slush layers. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.discharge_calculated_m3_s IS 'Value denoting the average flowrate of flowing water in the stream, excluding ice and slush layers. Field automatically populated from available Vertical-level data.';",
-      "COMMENT ON COLUMN discrete.cross_sections.ice_avg_thickness_m IS 'Denotes the average thickness of ice located above the stream, if present. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.ice_avg_thickness_calculated_m IS 'Denotes the average thickness of ice located above the stream, if present. Field automatically populated from available Vertical-level data.';",
-      "COMMENT ON COLUMN discrete.cross_sections.ice_area_m2 IS 'Denotes the overall area of ice present in the stream cross section. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.ice_area_calculated_m2 IS 'Denotes the overall area of ice present in the stream cross section. Field automatically populated from available Vertical-level data.';",
-      "COMMENT ON COLUMN discrete.cross_sections.slush_avg_thickness_m IS 'Denotes the average thickness of slush ice located in the stream cross section, if present. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.slush_avg_thickness_calculated_m IS 'Denotes the average thickness of slush ice located in the stream cross section, if present. Field automatically populated from available Vertical-level data.';",
-      "COMMENT ON COLUMN discrete.cross_sections.slush_area_m2 IS 'Denotes the overall area of slush present in the stream cross section. Field used for manual data input if no Vertical-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_sections.slush_area_calculated_m2 IS 'Denotes the overall area of ice present in the stream cross section. Field automatically populated from available Vertical-level data.';",
-      "COMMENT ON COLUMN discrete.cross_sections.source_system IS 'Field to denote the source of the cross section data, Whether single input or from historical database.';",
-      "COMMENT ON COLUMN discrete.cross_sections.source_measurement_id IS 'Field used to store any previous historical key for cross section measurements imported to Aquacache, in case future traceback to historical records is required';",
-      "COMMENT ON COLUMN discrete.cross_sections.note IS 'Free-text note field for context that does not fit a more structured column.';",
+      "COMMENT ON TABLE discrete.cross_sections IS 'Primary table for storing stream cross-section records. Links to locations and serves as parent table for cross_section_verticals.';",
+      "COMMENT ON COLUMN discrete.cross_sections.wetted_width_m IS 'Manually entered wetted width of the stream cross-section, in metres. Used when vertical-level data are unavailable or should be overridden.';",
+      "COMMENT ON COLUMN discrete.cross_sections.total_area_m2 IS 'Manually entered total cross-sectional area, including water, ice, and slush, in square metres.';",
+      "COMMENT ON COLUMN discrete.cross_sections.net_area_m2 IS 'Manually entered area of the cross-section containing flowing water, excluding ice and slush, in square metres.';",
+      "COMMENT ON COLUMN discrete.cross_sections.avg_total_depth_m IS 'Manually entered average total depth of the cross-section, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_sections.avg_velocity_m_s IS 'Manually entered average velocity of flowing water, in metres per second.';",
+      "COMMENT ON COLUMN discrete.cross_sections.discharge_m3_s IS 'Manually entered discharge of flowing water, in cubic metres per second.';",
+      "COMMENT ON COLUMN discrete.cross_sections.ice_avg_thickness_m IS 'Manually entered average ice thickness, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_sections.ice_area_m2 IS 'Manually entered cross-sectional area of ice, in square metres.';",
+      "COMMENT ON COLUMN discrete.cross_sections.slush_avg_thickness_m IS 'Manually entered average slush ice thickness, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_sections.slush_area_m2 IS 'Manually entered cross-sectional area of slush ice, in square metres.';",
+      "COMMENT ON COLUMN discrete.cross_sections.use_calculated_values IS 'When true, preferred-value views use calculated values where available before falling back to manual values. When false, manual values are preferred.';",
+      "COMMENT ON COLUMN discrete.cross_sections.source_system IS 'Source system or import process that produced the record.';",
+      "COMMENT ON COLUMN discrete.cross_sections.source_measurement_id IS 'Original source-system measurement identifier retained for traceability.';",
+      "COMMENT ON COLUMN discrete.cross_sections.note IS 'Free-text note field for context that does not fit a structured column.';",
       "COMMENT ON COLUMN discrete.cross_sections.created IS 'Timestamp when the row was created.';",
       "COMMENT ON COLUMN discrete.cross_sections.modified IS 'Timestamp when the row was last updated.';",
-      "COMMENT ON COLUMN discrete.cross_sections.created_by IS 'Database role or application actor recorded as the row creator.';",
-      "COMMENT ON COLUMN discrete.cross_sections.modified_by IS 'Database role or application actor recorded as the last modifier.';"
+      "COMMENT ON COLUMN discrete.cross_sections.created_by IS 'Database role recorded as the row creator.';",
+      "COMMENT ON COLUMN discrete.cross_sections.modified_by IS 'Database role recorded as the last modifier.';"
     )
 
     for (comment_sql in comments_cross_sections) {
       DBI::dbExecute(con, comment_sql)
     }
-
-    # # Older expression for when manual and calculated fields were both pulled from same table
-    # DBI::dbExecute(
-    #   con,
-    #   "
-    #   CREATE VIEW discrete.cross_sections_view AS
-    #   SELECT
-    #     xsection_id,
-    #     location_id,
-    #     datetime,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(wetted_width_calculated_m, wetted_width_m)
-    #       ELSE COALESCE(wetted_width_m, wetted_width_calculated_m)
-    #       END AS wetted_width_m,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(total_area_calculated_m2, total_area_m2)
-    #       ELSE COALESCE(total_area_m2, total_area_calculated_m2)
-    #       END AS total_area_m2,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(net_area_calculated_m2, net_area_m2)
-    #       ELSE COALESCE(net_area_m2, net_area_calculated_m2)
-    #       END AS net_area_m2,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(avg_total_depth_calculated_m, avg_total_depth_m)
-    #       ELSE COALESCE(avg_total_depth_m, avg_total_depth_calculated_m)
-    #       END AS avg_total_depth_m,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(avg_velocity_calculated_m_s, avg_velocity_m_s)
-    #       ELSE COALESCE(avg_velocity_m_s, avg_velocity_calculated_m_s)
-    #       END AS avg_velocity_m_s,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(discharge_calculated_m3_s, discharge_m3_s)
-    #       ELSE COALESCE(discharge_m3_s, discharge_calculated_m3_s)
-    #       END AS discharge_m3_s,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(ice_avg_thickness_calculated_m, ice_avg_thickness_m)
-    #       ELSE COALESCE(ice_avg_thickness_m, ice_avg_thickness_calculated_m)
-    #       END AS ice_avg_thickness_m,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(ice_area_calculated_m2, ice_area_m2)
-    #       ELSE COALESCE(ice_area_m2, ice_area_calculated_m2)
-    #       END AS ice_area_m2,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(slush_avg_thickness_calculated_m, slush_avg_thickness_m)
-    #       ELSE COALESCE(slush_avg_thickness_m, slush_avg_thickness_calculated_m)
-    #       END AS slush_avg_thickness_m,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(slush_area_calculated_m2, slush_area_m2)
-    #       ELSE COALESCE(slush_area_m2, slush_area_calculated_m2)
-    #       END AS slush_area_m2,
-    #     use_calculated_values,
-    #     source_system,
-    #     source_measurement_id,
-    #     note,
-    #     created,
-    #     modified,
-    #     created_by,
-    #     modified_by
-
-    #   FROM discrete.cross_sections
-    #   "
-    # )
 
     # creating verticals table
     # Table: Vertical
@@ -239,7 +148,7 @@ tryCatch(
         vertical_id int4 GENERATED BY DEFAULT AS IDENTITY NOT NULL,
 
         xsection_id int4 NOT NULL,
-        measurement_time timestamptz NULL,
+        measurement_time time NULL,
 
         distance_to_reference_m numeric NULL,
         distance_to_waterline_m numeric NOT NULL, 
@@ -299,73 +208,31 @@ tryCatch(
     message("Adding comments to cross_section_verticals table...")
 
     comments_cross_section_verticals <- c(
-      "COMMENT ON TABLE discrete.cross_section_verticals IS 'Secondary Table for cross-section data, containing vertical panel level data. links to cross_sections table via cross_section_id, and serves as parent table for cross_sections_points table. Each row contains data for a single vertical panel of a single cross-section for a certain location and time, including panel dimension data, water/slush/ice profile, and velocity/flowrate parameters.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.distance_to_reference_m IS 'Distance from the survey reference point used during measurement. Preserved primarily for compatibility with legacy Ice Thickness DB records.'",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.distance_to_waterline_m IS 'Denotes the horizontal distance from the center of the panel to the edge of the shoreline, in meters';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.reference_bank IS 'indicator for which bank distances for verticals are measured from. Right bank is default value.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_flowing_water_depth_m IS 'value denoting vertical height of water column at panel location, from bottom of panel to top of flowing water.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.ice_thickness_m IS 'value denoting thickness of ice at panel location, if present';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.water_surface_to_bottom_ice_m IS 'value denoting distance of gap between water surface and bottom of ice layer, if present.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.slush_ice_thickness_m IS 'value denoting thickness of slush ice at panel location, if present';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_width_m IS 'value denoting width of panel, in meters';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_area_m2 IS 'value denoting are of panel containing flowing water, in meters. calculated as the panel width multiplied by panel flowing water depth';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_mean_velocity_m_s IS 'average velocity of water flowing at panel location. Field used for manual data input if no points-level data is present.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_mean_velocity_calculated_m_s IS 'Average velocity of water flowing at panel location. Field automatically populated from available points-level data.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_angle_of_flow_deg IS 'value denoting the angle of the flow, relative to the angle normal from the panel.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_discharge_m3_s IS 'value denoting the flow rate of water through the panel. Field used for manual data input if no points-level velocity data is available';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_discharge_calculated_m3_s IS 'Value denoting the flow rate of water through the panel. field calculated based on the panel_mean_velocity_calculated_m_s field and panel area.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.source_vertical_id IS 'Field to denote the source of the cross section verticals data, Whether single input or from historical database.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.note IS 'Free-text note field for context that does not fit a more structured column.';",
+      "COMMENT ON TABLE discrete.cross_section_verticals IS 'Secondary table for storing vertical panel measurements within a stream cross-section. Links to discrete.cross_sections via xsection_id and serves as the parent table for discrete.cross_section_points. Each row represents one vertical panel and stores panel geometry, water, ice, slush, and manually entered hydraulic measurements.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.distance_to_reference_m IS 'Distance from the survey reference point used during measurement. Preserved primarily for compatibility with legacy Ice Thickness DB records.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.distance_to_waterline_m IS 'Horizontal distance from the centre of the panel to the shoreline reference, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.reference_bank IS 'Bank from which horizontal distances are measured. Defaults to right bank.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_flowing_water_depth_m IS 'Depth of the flowing water column at the panel location, measured from the stream bed to the water surface, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.ice_thickness_m IS 'Thickness of ice at the panel location, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.water_surface_to_bottom_ice_m IS 'Distance between the water surface and the underside of the ice layer, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.slush_ice_thickness_m IS 'Thickness of slush ice at the panel location, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_width_m IS 'Width represented by the vertical panel, in metres.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_area_m2 IS 'Manually entered area of flowing water represented by the panel, in square metres.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_mean_velocity_m_s IS 'Manually entered mean velocity of flowing water through the panel, in metres per second.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_angle_of_flow_deg IS 'Angle of flow relative to the panel normal, in degrees.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.panel_discharge_m3_s IS 'Manually entered discharge through the panel, in cubic metres per second.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.use_calculated_values IS 'When true, preferred-value views use calculated values where available before falling back to manually entered values. When false, manual values are preferred.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.source_vertical_id IS 'Original identifier from the legacy source system. Retained for migration traceability.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.note IS 'Free-text note field for context that does not fit a structured column.';",
       "COMMENT ON COLUMN discrete.cross_section_verticals.created IS 'Timestamp when the row was created.';",
       "COMMENT ON COLUMN discrete.cross_section_verticals.modified IS 'Timestamp when the row was last updated.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.created_by IS 'Database role or application actor recorded as the row creator.';",
-      "COMMENT ON COLUMN discrete.cross_section_verticals.modified_by IS 'Database role or application actor recorded as the last modifier.';"
+      "COMMENT ON COLUMN discrete.cross_section_verticals.created_by IS 'Database role recorded as the row creator.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.modified_by IS 'Database role recorded as the last modifier.';"
     )
 
     for (comment_sql in comments_cross_section_verticals) {
       DBI::dbExecute(con, comment_sql)
     }
-
-    # # Previous version (coalesce based on values from same table)
-    #
-    #  DBI::dbExecute(
-    #   con,
-    #   "
-    #   CREATE VIEW discrete.cross_section_verticals_view AS
-    #   SELECT
-    #     vertical_id,
-    #     xsection_id,
-    #     measurement_time,
-    #     distance_to_waterline_m,
-    #     reference_bank,
-    #     panel_flowing_water_depth_m,
-    #     ice_thickness_m,
-    #     water_surface_to_bottom_ice_m,
-    #     slush_ice_thickness_m,
-    #     panel_width_m,
-    #     panel_area_m2,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(panel_mean_velocity_calculated_m_s, panel_mean_velocity_m_s)
-    #       ELSE COALESCE(panel_mean_velocity_m_s, panel_mean_velocity_calculated_m_s)
-    #       END AS panel_mean_velocity_m_s,
-    #     panel_angle_of_flow_deg,
-    #     CASE
-    #       WHEN use_calculated_values
-    #       THEN COALESCE(panel_discharge_calculated_m3_s, panel_discharge_m3_s)
-    #       ELSE COALESCE(panel_discharge_m3_s, panel_discharge_calculated_m3_s)
-    #       END AS panel_discharge_m3_s,
-    #     use_calculated_values,
-    #     source_vertical_id,
-    #     note,
-    #     created,
-    #     modified,
-    #     created_by,
-    #     modified_by
-
-    #   FROM discrete.cross_section_verticals
-    #   "
-    # )
 
     # creating points table
     # Table: Points
@@ -412,15 +279,15 @@ tryCatch(
     message("Adding comments to cross_section_points table...")
 
     comments_cross_section_points <- c(
-      "COMMENT ON TABLE discrete.cross_section_points IS 'Tertiary table for storing cross-section data, containing individual point data within a cross section vertical. Links to cross_section_verticals via vertical_id. Each row contains data for a single point within a vertical of the cross section for a certain location and time, including depth of point and velocity.';",
-      "COMMENT ON COLUMN discrete.cross_section_points.position_on_water_panel IS 'Denotes the proportion of the panel at which the point was measured as a decimal value from 0 - 1. referenced from ____';",
-      "COMMENT ON COLUMN discrete.cross_section_points.depth_in_moving_water_m IS 'Denotes the depth at which point velocity was measured on the panel. Referenced from  _____';",
-      "COMMENT ON COLUMN discrete.cross_section_points.velocity_m_s IS 'Velocity of water flowing at point location on panel.';",
-      "COMMENT ON COLUMN discrete.cross_section_points.note IS 'Free-text note field for context that does not fit a more structured column.';",
+      "COMMENT ON TABLE discrete.cross_section_points IS 'Tertiary table storing point measurements within a vertical panel. Links to discrete.cross_section_verticals via vertical_id. Each row represents a single velocity measurement collected at a specific location within the panel.';",
+      "COMMENT ON COLUMN discrete.cross_section_points.position_on_water_panel IS 'Relative position of the measurement point within the panel, expressed as a proportion between 0 and 1. Reference point to be confirmed.';",
+      "COMMENT ON COLUMN discrete.cross_section_points.depth_in_moving_water_m IS 'Depth of the velocity measurement within the flowing water column, in metres. Reference point to be confirmed.';",
+      "COMMENT ON COLUMN discrete.cross_section_points.velocity_m_s IS 'Velocity of flowing water measured at the point location, in metres per second.';",
+      "COMMENT ON COLUMN discrete.cross_section_points.note IS 'Free-text note field for context that does not fit a structured column.';",
       "COMMENT ON COLUMN discrete.cross_section_points.created IS 'Timestamp when the row was created.';",
       "COMMENT ON COLUMN discrete.cross_section_points.modified IS 'Timestamp when the row was last updated.';",
-      "COMMENT ON COLUMN discrete.cross_section_points.created_by IS 'Database role or application actor recorded as the row creator.';",
-      "COMMENT ON COLUMN discrete.cross_section_points.modified_by IS 'Database role or application actor recorded as the last modifier.';"
+      "COMMENT ON COLUMN discrete.cross_section_points.created_by IS 'Database role recorded as the row creator.';",
+      "COMMENT ON COLUMN discrete.cross_section_points.modified_by IS 'Database role recorded as the last modifier.';"
     )
 
     for (comment_sql in comments_cross_section_points) {
@@ -473,6 +340,17 @@ tryCatch(
           v.panel_flowing_water_depth_m;
       "
     )
+
+    comments_cross_sections_verticals_calculated <- c(
+      "COMMENT ON VIEW discrete.cross_section_verticals_calculated IS 'View containing hydraulic properties calculated from point-level measurements stored in discrete.cross_section_points. Values are recalculated dynamically and are not stored in the underlying tables.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals_calculated.panel_area_calculated_m2 IS 'Calculated panel area, equal to panel_width_m × panel_flowing_water_depth_m.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals_calculated.panel_mean_velocity_calculated_m_s IS 'Calculated mean panel velocity, computed as the average of all point velocities within the panel.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals_calculated.panel_discharge_calculated_m3_s IS 'Calculated panel discharge, equal to calculated panel area × calculated mean panel velocity.';"
+    )
+
+    for (comment_sql in comments_cross_sections_verticals_calculated) {
+      DBI::dbExecute(con, comment_sql)
+    }
 
     # View 2: creating view for verticals table coalescing manual/calculated fields
     message(
@@ -529,6 +407,17 @@ tryCatch(
       "
     )
 
+    comments_cross_sections_verticals_view <- c(
+      "COMMENT ON VIEW discrete.cross_section_verticals_view IS 'User-facing view of cross-section vertical measurements. Presents manually entered or calculated hydraulic values according to the use_calculated_values flag while exposing all remaining panel information unchanged.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals_view.panel_area_m2 IS 'Preferred panel area. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals_view.panel_mean_velocity_m_s IS 'Preferred mean panel velocity. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals_view.panel_discharge_m3_s IS 'Preferred panel discharge. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';"
+    )
+
+    for (comment_sql in comments_cross_sections_verticals_view) {
+      DBI::dbExecute(con, comment_sql)
+    }
+
     # VIEW 3: Create view of values calculated from verticals table
     #note, cross section calculated values use vertical preferred-value View rather than cross_section_verticals table, to preserve manual-calculated value preference
     message("Creating view of calculated fields for cross section table...")
@@ -575,6 +464,24 @@ tryCatch(
       GROUP BY cs.xsection_id;
       "
     )
+
+    comments_cross_section_calculated <- c(
+      "COMMENT ON VIEW discrete.cross_sections_calculated IS 'View containing cross-section summary statistics calculated dynamically from discrete.cross_section_verticals_view. Values are recalculated from available vertical measurements and are not stored in the underlying tables.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.wetted_width_calculated_m IS 'Calculated wetted width of the cross section.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.net_area_calculated_m2 IS 'Calculated flowing-water area of the cross section.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.total_area_calculated_m2 IS 'Calculated total cross-sectional area, including flowing water, ice, and slush.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.avg_total_depth_calculated_m IS 'Calculated mean flowing-water depth across all verticals.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.avg_velocity_calculated_m_s IS 'Calculated mean flowing-water velocity across all verticals.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.discharge_calculated_m3_s IS 'Calculated total discharge of the cross section.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.ice_avg_thickness_calculated_m IS 'Calculated mean ice thickness across all verticals.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.ice_area_calculated_m2 IS 'Calculated cross-sectional area occupied by ice.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.slush_avg_thickness_calculated_m IS 'Calculated mean slush thickness across all verticals.';",
+      "COMMENT ON COLUMN discrete.cross_sections_calculated.slush_area_calculated_m2 IS 'Calculated cross-sectional area occupied by slush.';"
+    )
+
+    for (comment_sql in comments_cross_section_calculated) {
+      DBI::dbExecute(con, comment_sql)
+    }
 
     # VIEW 4: Create view of cross section table coalescing manual/calculated fields
     message("Creating view of preferred values for cross section table...")
@@ -662,6 +569,24 @@ tryCatch(
           ON cs.xsection_id = calc.xsection_id;
       "
     )
+
+    comments_cross_section_view <- c(
+      "COMMENT ON VIEW discrete.cross_sections_view IS 'User-facing view of cross-section measurements. Presents manually entered or calculated summary values according to the use_calculated_values flag while exposing all remaining cross-section information unchanged.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.wetted_width_m IS 'Preferred wetted width. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.total_area_m2 IS 'Preferred total cross-sectional area. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.net_area_m2 IS 'Preferred flowing-water area. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.avg_total_depth_m IS 'Preferred average flowing-water depth. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.avg_velocity_m_s IS 'Preferred average flowing-water velocity. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.discharge_m3_s IS 'Preferred discharge. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.ice_avg_thickness_m IS 'Preferred average ice thickness. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.ice_area_m2 IS 'Preferred ice area. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.slush_avg_thickness_m IS 'Preferred average slush thickness. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';",
+      "COMMENT ON COLUMN discrete.cross_sections_view.slush_area_m2 IS 'Preferred slush area. Returns the calculated value when use_calculated_values is TRUE and available; otherwise returns the manually entered value.';"
+    )
+
+    for (comment_sql in comments_cross_section_view) {
+      DBI::dbExecute(con, comment_sql)
+    }
 
     #grant select permissions on tables to public role
 
@@ -751,26 +676,25 @@ tryCatch(
       "
     )
 
-    # # TODO: set official patch number
-    # DBI::dbExecute(
-    #   con,
-    #   "UPDATE information.version_info SET version = '53'
-    #    WHERE item = 'Last patch number';"
-    # )
+    # update version to reflect patch number
+    DBI::dbExecute(
+      con,
+      "UPDATE information.version_info SET version = '53'
+       WHERE item = 'Last patch number';"
+    )
 
-    # DBI::dbExecute(
-    #   con,
-    #   paste0(
-    #     "UPDATE information.version_info SET version = '",
-    #     as.character(packageVersion('AquaCache')),
-    #     "' WHERE item = 'AquaCache R package used for last patch';"
-    #   )
-    # )
+    DBI::dbExecute(
+      con,
+      paste0(
+        "UPDATE information.version_info SET version = '",
+        as.character(packageVersion('AquaCache')),
+        "' WHERE item = 'AquaCache R package used for last patch';"
+      )
+    )
 
     DBI::dbExecute(con, "COMMIT;")
     active <- FALSE
 
-    # TODO: set official patch number
     message(
       "Patch 53 applied successfully. Cross-section, verticals, and points tables have been added to the discrete schema."
     )
