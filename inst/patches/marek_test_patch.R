@@ -105,8 +105,8 @@ tryCatch(
             ON DELETE CASCADE
             ON UPDATE CASCADE,
 
-        CONSTRAINT cross_sections_unique_location_datetime
-            UNIQUE (location_id, datetime),
+        -- CONSTRAINT cross_sections_unique_location_datetime
+        --    UNIQUE (location_id, datetime),
 
         CONSTRAINT cross_sections_unique_source UNIQUE (source_system, source_measurement_id)
 
@@ -241,6 +241,7 @@ tryCatch(
         xsection_id int4 NOT NULL,
         measurement_time timestamptz NULL,
 
+        distance_to_reference_m numeric NULL,
         distance_to_waterline_m numeric NOT NULL, 
         reference_bank text DEFAULT 'right' NOT NULL, 
 
@@ -283,6 +284,7 @@ tryCatch(
             CONSTRAINT cross_section_verticals_unique_distance_bank_orientation
             UNIQUE NULLS NOT DISTINCT (
                 xsection_id,
+                distance_to_reference_m,
                 distance_to_waterline_m
             ),
 
@@ -298,6 +300,7 @@ tryCatch(
 
     comments_cross_section_verticals <- c(
       "COMMENT ON TABLE discrete.cross_section_verticals IS 'Secondary Table for cross-section data, containing vertical panel level data. links to cross_sections table via cross_section_id, and serves as parent table for cross_sections_points table. Each row contains data for a single vertical panel of a single cross-section for a certain location and time, including panel dimension data, water/slush/ice profile, and velocity/flowrate parameters.';",
+      "COMMENT ON COLUMN discrete.cross_section_verticals.distance_to_reference_m IS 'Distance from the survey reference point used during measurement. Preserved primarily for compatibility with legacy Ice Thickness DB records.'",
       "COMMENT ON COLUMN discrete.cross_section_verticals.distance_to_waterline_m IS 'Denotes the horizontal distance from the center of the panel to the edge of the shoreline, in meters';",
       "COMMENT ON COLUMN discrete.cross_section_verticals.reference_bank IS 'indicator for which bank distances for verticals are measured from. Right bank is default value.';",
       "COMMENT ON COLUMN discrete.cross_section_verticals.panel_flowing_water_depth_m IS 'value denoting vertical height of water column at panel location, from bottom of panel to top of flowing water.';",
@@ -484,6 +487,7 @@ tryCatch(
           v.vertical_id,
           v.xsection_id,
           v.measurement_time,
+          v.distance_to_reference_m,
           v.distance_to_waterline_m,
           v.reference_bank,
 
