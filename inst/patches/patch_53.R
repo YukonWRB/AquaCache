@@ -568,6 +568,149 @@ tryCatch(
        'When alignment_tolerance is set, TRUE allows the same member measurement to align with multiple anchor timestamps. FALSE keeps only mutual nearest matches so a member point is used at most once per compound resolution.'"
     )
 
+    message("Recreating compound datetime bounds refresh with alignment tolerance...")
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.refresh_compound_timeseries_datetime_bounds(
+         p_timeseries_id INTEGER
+       )
+       RETURNS void
+       LANGUAGE plpgsql
+       AS $function$
+       DECLARE
+         v_expression TEXT;
+         v_start TIMESTAMP WITH TIME ZONE;
+         v_end TIMESTAMP WITH TIME ZONE;
+       BEGIN
+         IF p_timeseries_id IS NULL THEN
+           RETURN;
+         END IF;
+
+         SELECT c.expression_sql
+         INTO v_expression
+         FROM continuous.timeseries t
+         LEFT JOIN continuous.timeseries_compounds c
+           ON c.timeseries_id = t.timeseries_id
+         WHERE t.timeseries_id = p_timeseries_id
+           AND t.timeseries_type = 'compound';
+
+         IF NOT FOUND THEN
+           RETURN;
+         END IF;
+
+         IF v_expression IS NULL THEN
+           WITH member_bounds AS (
+             SELECT
+               CASE
+                 WHEN member_ts.start_datetime IS NULL THEN NULL::timestamptz
+                 WHEN m.use_from IS NULL THEN member_ts.start_datetime
+                 ELSE GREATEST(member_ts.start_datetime, m.use_from)
+               END AS effective_start,
+               CASE
+                 WHEN member_ts.end_datetime IS NULL THEN NULL::timestamptz
+                 WHEN m.use_to IS NULL THEN member_ts.end_datetime
+                 ELSE LEAST(member_ts.end_datetime, m.use_to)
+               END AS effective_end
+             FROM continuous.timeseries_compound_members m
+             JOIN continuous.timeseries member_ts
+               ON member_ts.timeseries_id = m.member_timeseries_id
+             WHERE m.timeseries_id = p_timeseries_id
+           )
+           SELECT
+             MIN(effective_start),
+             MAX(effective_end)
+           INTO v_start, v_end
+           FROM member_bounds
+           WHERE effective_start IS NOT NULL
+             AND effective_end IS NOT NULL
+             AND effective_end >= effective_start;
+         ELSE
+           WITH member_bounds AS (
+             SELECT
+               row_number() OVER (
+                 ORDER BY m.member_priority, m.member_alias
+               ) AS member_order,
+               m.alignment_tolerance,
+               CASE
+                 WHEN member_ts.start_datetime IS NULL THEN NULL::timestamptz
+                 WHEN m.use_from IS NULL THEN member_ts.start_datetime
+                 ELSE GREATEST(member_ts.start_datetime, m.use_from)
+               END AS effective_start,
+               CASE
+                 WHEN member_ts.end_datetime IS NULL THEN NULL::timestamptz
+                 WHEN m.use_to IS NULL THEN member_ts.end_datetime
+                 ELSE LEAST(member_ts.end_datetime, m.use_to)
+               END AS effective_end
+             FROM continuous.timeseries_compound_members m
+             JOIN continuous.timeseries member_ts
+               ON member_ts.timeseries_id = m.member_timeseries_id
+             WHERE m.timeseries_id = p_timeseries_id
+           ),
+           valid_member_bounds AS (
+             SELECT
+               member_order,
+               CASE
+                 WHEN member_order = 1 THEN effective_start
+                 WHEN alignment_tolerance IS NULL THEN effective_start
+                 ELSE effective_start - alignment_tolerance
+               END AS anchor_start,
+               CASE
+                 WHEN member_order = 1 THEN effective_end
+                 WHEN alignment_tolerance IS NULL THEN effective_end
+                 ELSE effective_end + alignment_tolerance
+               END AS anchor_end
+             FROM member_bounds
+             WHERE effective_start IS NOT NULL
+               AND effective_end IS NOT NULL
+               AND effective_end >= effective_start
+           ),
+           stats AS (
+             SELECT
+               (SELECT COUNT(*) FROM member_bounds) AS member_count,
+               COUNT(*) AS valid_count,
+               MAX(anchor_start) AS intersect_start,
+               MIN(anchor_end) AS intersect_end
+             FROM valid_member_bounds
+           )
+           SELECT
+             CASE
+               WHEN
+                 member_count > 0 AND
+                 valid_count = member_count AND
+                 intersect_start <= intersect_end
+               THEN intersect_start
+               ELSE NULL::timestamptz
+             END,
+             CASE
+               WHEN
+                 member_count > 0 AND
+                 valid_count = member_count AND
+                 intersect_start <= intersect_end
+               THEN intersect_end
+               ELSE NULL::timestamptz
+             END
+           INTO v_start, v_end
+           FROM stats;
+         END IF;
+
+         UPDATE continuous.timeseries t
+         SET
+           start_datetime = v_start,
+           end_datetime = v_end
+         WHERE t.timeseries_id = p_timeseries_id
+           AND (
+             t.start_datetime IS DISTINCT FROM v_start OR
+             t.end_datetime IS DISTINCT FROM v_end
+           );
+       END;
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON FUNCTION continuous.refresh_compound_timeseries_datetime_bounds(INTEGER) IS
+       'Refreshes one compound timeseries start_datetime and end_datetime from current member timeseries metadata and compound member windows. Expression compounds widen non-anchor member bounds by alignment_tolerance to match tolerated timestamp alignment.'"
+    )
+
     message("Recreating historical compound member snapshot function...")
     DBI::dbExecute(con, paste0("DROP FUNCTION ", members_as_of_signature))
     DBI::dbExecute(
@@ -1884,11 +2027,11 @@ tryCatch(
                v_window_from + make_interval(
                  secs => (
                    floor(
-                     extract(epoch FROM (src.datetime - v_window_from)) /
-                       resample_seconds
-                   ) * resample_seconds
-                 )::double precision
-               ) AS datetime,
+                      extract(epoch FROM (mc.datetime - v_window_from)) /
+                        resample_seconds
+                    ) * resample_seconds
+                  )::double precision
+                ) AS datetime,
                mc.value AS value_raw,
                mc.value AS value_corrected,
                mc.imputed
@@ -2396,6 +2539,13 @@ tryCatch(
          to_regprocedure('continuous.measurements_continuous_corrected_basic_simple(integer, timestamp with time zone, timestamp with time zone)') IS NOT NULL AS has_basic_simple,
          to_regprocedure('continuous.fastest_compound_member_record_rate(integer)') IS NOT NULL AS has_fastest_record_rate,
          to_regprocedure('continuous.refresh_compound_timeseries_record_rate(integer)') IS NOT NULL AS has_record_rate_refresh,
+         to_regprocedure('continuous.refresh_compound_timeseries_datetime_bounds(integer)') IS NOT NULL AS has_datetime_bounds_refresh,
+         strpos(
+           pg_get_functiondef(
+             'continuous.refresh_compound_timeseries_datetime_bounds(integer)'::regprocedure
+           ),
+           'effective_start - alignment_tolerance'
+         ) > 0 AS datetime_bounds_use_alignment_tolerance,
          to_regprocedure('continuous.normalize_nonbasic_timeseries_metadata()') IS NOT NULL AS has_nonbasic_normalizer,
          EXISTS (
            SELECT 1
@@ -2580,6 +2730,8 @@ tryCatch(
         !isTRUE(result_check$has_basic_simple[[1]]) ||
         !isTRUE(result_check$has_fastest_record_rate[[1]]) ||
         !isTRUE(result_check$has_record_rate_refresh[[1]]) ||
+        !isTRUE(result_check$has_datetime_bounds_refresh[[1]]) ||
+        !isTRUE(result_check$datetime_bounds_use_alignment_tolerance[[1]]) ||
         !isTRUE(result_check$has_nonbasic_normalizer[[1]]) ||
         !isTRUE(result_check$default_owner_nullable[[1]]) ||
         !isTRUE(result_check$has_nonbasic_remote_sync_check[[1]]) ||
