@@ -303,7 +303,7 @@ tryCatch(
     # 1 cross_section_verticals_calculated: view of calculated fields for verticals table
     # 2 cross_section_verticals_view: view coalescing calculated & manual fields for verticals table
     # 3 cross_sections_calculated: view of calculated fields for cross section table
-    # 4 cross_sections_view: view coalescing calculated & manuel fields for cross section table
+    # 4 cross_sections_view: view coalescing calculated & manual fields for cross section table
 
     # VIEW 1: Create view of values calculated from verticals table
     message(
@@ -313,7 +313,9 @@ tryCatch(
     DBI::dbExecute(
       con,
       "
-      CREATE VIEW discrete.cross_section_verticals_calculated AS
+      CREATE VIEW discrete.cross_section_verticals_calculated 
+      WITH(security_invoker=true,security_barrier=true)
+      AS
       SELECT
           v.vertical_id,
 
@@ -365,7 +367,9 @@ tryCatch(
     DBI::dbExecute(
       con,
       "
-      CREATE VIEW discrete.cross_section_verticals_view AS
+      CREATE VIEW discrete.cross_section_verticals_view 
+      WITH(security_invoker=true,security_barrier=true)
+      AS
       SELECT
           v.vertical_id,
           v.xsection_id,
@@ -429,7 +433,9 @@ tryCatch(
     DBI::dbExecute(
       con,
       "
-      CREATE VIEW discrete.cross_sections_calculated AS
+      CREATE VIEW discrete.cross_sections_calculated 
+      WITH(security_invoker=true,security_barrier=true)
+      AS
       SELECT
         cs.xsection_id,
 
@@ -494,7 +500,9 @@ tryCatch(
     DBI::dbExecute(
       con,
       "
-      CREATE VIEW discrete.cross_sections_view AS
+      CREATE VIEW discrete.cross_sections_view 
+      WITH(security_invoker=true,security_barrier=true)
+      AS
       SELECT
           cs.xsection_id,
           cs.location_id,
