@@ -12,6 +12,12 @@
 # carry meaning for basic timeseries. Non-basic timeseries also do not own or
 # share raw data directly; compound record_rate is maintained from the fastest
 # member timeseries.
+#
+# The patch also corrects February 29 daily percent-historic-range statistics.
+# Leap-day distribution statistics are still interpolated from February 28 and
+# March 1, but the percent values are now recalculated from the February 29
+# value against that interpolated range instead of averaging neighboring
+# percent values.
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 
@@ -56,6 +62,7 @@ tryCatch(
          VALUES
            ('application.api_requests'),
            ('audit.general_log'),
+           ('continuous.measurements_calculated_daily'),
            ('continuous.measurements_continuous'),
            ('continuous.timeseries'),
            ('continuous.timeseries_compounds'),
@@ -79,6 +86,7 @@ tryCatch(
          to_regprocedure('continuous.measurements_continuous_corrected_internal_at(timestamp with time zone, integer, timestamp with time zone, timestamp with time zone, integer[])') IS NOT NULL AS has_at_internal,
          to_regprocedure('continuous.resolve_compound_timeseries_raw_window(integer, timestamp with time zone, timestamp with time zone, integer[])') IS NOT NULL AS has_current_resolver,
          to_regprocedure('continuous.resolve_compound_timeseries_raw_window_at(timestamp with time zone, integer, timestamp with time zone, timestamp with time zone, integer[])') IS NOT NULL AS has_at_resolver,
+         to_regprocedure('continuous.refresh_calculated_daily(integer, date, date)') IS NOT NULL AS has_refresh_calculated_daily,
          to_regprocedure('continuous.apply_corrections(integer, timestamp with time zone, numeric)') IS NOT NULL AS has_apply_corrections,
          to_regprocedure('audit.timeseries_compound_members_as_of(timestamp with time zone, integer[])') IS NOT NULL AS has_members_as_of"
     )
@@ -88,11 +96,12 @@ tryCatch(
         !isTRUE(required_functions$has_at_internal[[1]]) ||
         !isTRUE(required_functions$has_current_resolver[[1]]) ||
         !isTRUE(required_functions$has_at_resolver[[1]]) ||
+        !isTRUE(required_functions$has_refresh_calculated_daily[[1]]) ||
         !isTRUE(required_functions$has_apply_corrections[[1]]) ||
         !isTRUE(required_functions$has_members_as_of[[1]])
     ) {
       stop(
-        "This patch requires compound resolution and current correction functions from earlier patches to already exist."
+        "This patch requires compound resolution, current correction, and calculated-daily refresh functions from earlier patches to already exist."
       )
     }
 
@@ -2246,6 +2255,122 @@ tryCatch(
        $$"
     )
 
+    message("Correcting February 29 calculated-daily percent historic range...")
+    refresh_daily_signature <- "continuous.refresh_calculated_daily(integer, date, date)"
+    refresh_daily_def <- DBI::dbGetQuery(
+      con,
+      "SELECT pg_get_functiondef($1::regprocedure) AS def",
+      params = list(refresh_daily_signature)
+    )$def[[1]]
+
+    feb29_percent_marker <- "((feb.value - ((b.min + a.min) / 2)) / NULLIF(((b.max + a.max) / 2) - ((b.min + a.min) / 2), 0)) * 100"
+    feb29_percent_30yr_marker <- "((feb.value - ((b.min_30yr + a.min_30yr) / 2)) / NULLIF(((b.max_30yr + a.max_30yr) / 2) - ((b.min_30yr + a.min_30yr) / 2), 0)) * 100"
+
+    if (
+      !grepl(feb29_percent_marker, refresh_daily_def, fixed = TRUE) ||
+        !grepl(feb29_percent_30yr_marker, refresh_daily_def, fixed = TRUE)
+    ) {
+      old_feb29_percent <- "CASE WHEN b.percent_historic_range IS NOT NULL AND a.percent_historic_range IS NOT NULL THEN (b.percent_historic_range + a.percent_historic_range) / 2 ELSE NULL::numeric END AS percent_historic_range,"
+      old_feb29_percent_30yr <- "CASE WHEN b.percent_historic_range_30yr IS NOT NULL AND a.percent_historic_range_30yr IS NOT NULL THEN (b.percent_historic_range_30yr + a.percent_historic_range_30yr) / 2 ELSE NULL::numeric END AS percent_historic_range_30yr,"
+
+      if (
+        !grepl(old_feb29_percent, refresh_daily_def, fixed = TRUE) ||
+          !grepl(old_feb29_percent_30yr, refresh_daily_def, fixed = TRUE)
+      ) {
+        stop(
+          "Could not find the expected February 29 percent-historic-range expressions in continuous.refresh_calculated_daily()."
+        )
+      }
+
+      new_feb29_percent <- "CASE
+                 WHEN feb.value IS NOT NULL
+                   AND b.min IS NOT NULL
+                   AND a.min IS NOT NULL
+                   AND b.max IS NOT NULL
+                   AND a.max IS NOT NULL THEN
+                   ((feb.value - ((b.min + a.min) / 2)) / NULLIF(((b.max + a.max) / 2) - ((b.min + a.min) / 2), 0)) * 100
+                 ELSE NULL::numeric
+               END AS percent_historic_range,"
+      new_feb29_percent_30yr <- "CASE
+                 WHEN feb.value IS NOT NULL
+                   AND b.min_30yr IS NOT NULL
+                   AND a.min_30yr IS NOT NULL
+                   AND b.max_30yr IS NOT NULL
+                   AND a.max_30yr IS NOT NULL THEN
+                   ((feb.value - ((b.min_30yr + a.min_30yr) / 2)) / NULLIF(((b.max_30yr + a.max_30yr) / 2) - ((b.min_30yr + a.min_30yr) / 2), 0)) * 100
+                 ELSE NULL::numeric
+               END AS percent_historic_range_30yr,"
+
+      refresh_daily_def <- sub(
+        old_feb29_percent,
+        new_feb29_percent,
+        refresh_daily_def,
+        fixed = TRUE
+      )
+      refresh_daily_def <- sub(
+        old_feb29_percent_30yr,
+        new_feb29_percent_30yr,
+        refresh_daily_def,
+        fixed = TRUE
+      )
+
+      DBI::dbExecute(con, refresh_daily_def)
+    }
+
+    DBI::dbExecute(
+      con,
+      "WITH bounds AS (
+         SELECT min(date) AS min_date, max(date) AS max_date
+         FROM continuous.measurements_calculated_daily
+       ),
+       leap_days AS (
+         SELECT make_date(years.y, 2, 29) AS date
+         FROM bounds
+         CROSS JOIN LATERAL generate_series(
+           extract(year FROM bounds.min_date)::integer,
+           extract(year FROM bounds.max_date)::integer
+         ) AS years(y)
+         WHERE bounds.min_date IS NOT NULL
+           AND years.y % 4 = 0
+           AND (years.y % 100 <> 0 OR years.y % 400 = 0)
+       ),
+       corrected AS (
+         SELECT
+           mcd.timeseries_id,
+           mcd.date,
+           CASE
+             WHEN mcd.value IS NOT NULL
+               AND mcd.min IS NOT NULL
+               AND mcd.max IS NOT NULL THEN
+               ((mcd.value - mcd.min) / NULLIF(mcd.max - mcd.min, 0)) * 100
+             ELSE NULL::numeric
+           END AS percent_historic_range,
+           CASE
+             WHEN mcd.value IS NOT NULL
+               AND mcd.min_30yr IS NOT NULL
+               AND mcd.max_30yr IS NOT NULL THEN
+               ((mcd.value - mcd.min_30yr) / NULLIF(mcd.max_30yr - mcd.min_30yr, 0)) * 100
+             ELSE NULL::numeric
+           END AS percent_historic_range_30yr
+         FROM continuous.measurements_calculated_daily mcd
+         JOIN leap_days ld
+           ON ld.date = mcd.date
+       )
+       UPDATE continuous.measurements_calculated_daily mcd
+       SET
+         percent_historic_range = corrected.percent_historic_range,
+         percent_historic_range_30yr = corrected.percent_historic_range_30yr,
+         modified = CURRENT_TIMESTAMP,
+         modified_by = CURRENT_USER
+       FROM corrected
+       WHERE mcd.timeseries_id = corrected.timeseries_id
+         AND mcd.date = corrected.date
+         AND (
+           mcd.percent_historic_range IS DISTINCT FROM corrected.percent_historic_range OR
+           mcd.percent_historic_range_30yr IS DISTINCT FROM corrected.percent_historic_range_30yr
+         )"
+    )
+
     message("Checking compound alignment patch objects...")
     result_check <- DBI::dbGetQuery(
       con,
@@ -2394,7 +2519,56 @@ tryCatch(
            )::regclass
              AND acl.grantee = 0
              AND acl.privilege_type = 'USAGE'
-         ) AS public_can_use_api_request_id_sequence"
+         ) AS public_can_use_api_request_id_sequence,
+         strpos(
+           pg_get_functiondef(
+             'continuous.refresh_calculated_daily(integer, date, date)'::regprocedure
+           ),
+           '((feb.value - ((b.min + a.min) / 2)) / NULLIF(((b.max + a.max) / 2) - ((b.min + a.min) / 2), 0)) * 100'
+         ) > 0 AS refresh_feb29_percent_from_range,
+         strpos(
+           pg_get_functiondef(
+             'continuous.refresh_calculated_daily(integer, date, date)'::regprocedure
+           ),
+           '((feb.value - ((b.min_30yr + a.min_30yr) / 2)) / NULLIF(((b.max_30yr + a.max_30yr) / 2) - ((b.min_30yr + a.min_30yr) / 2), 0)) * 100'
+         ) > 0 AS refresh_feb29_percent_30yr_from_range,
+         NOT EXISTS (
+           WITH bounds AS (
+             SELECT min(date) AS min_date, max(date) AS max_date
+             FROM continuous.measurements_calculated_daily
+           ),
+           leap_days AS (
+             SELECT make_date(years.y, 2, 29) AS date
+             FROM bounds
+             CROSS JOIN LATERAL generate_series(
+               extract(year FROM bounds.min_date)::integer,
+               extract(year FROM bounds.max_date)::integer
+             ) AS years(y)
+             WHERE bounds.min_date IS NOT NULL
+               AND years.y % 4 = 0
+               AND (years.y % 100 <> 0 OR years.y % 400 = 0)
+           )
+           SELECT 1
+           FROM continuous.measurements_calculated_daily mcd
+           JOIN leap_days ld
+             ON ld.date = mcd.date
+           WHERE mcd.percent_historic_range IS DISTINCT FROM
+             CASE
+               WHEN mcd.value IS NOT NULL
+                 AND mcd.min IS NOT NULL
+                 AND mcd.max IS NOT NULL THEN
+                 ((mcd.value - mcd.min) / NULLIF(mcd.max - mcd.min, 0)) * 100
+               ELSE NULL::numeric
+             END
+              OR mcd.percent_historic_range_30yr IS DISTINCT FROM
+             CASE
+               WHEN mcd.value IS NOT NULL
+                 AND mcd.min_30yr IS NOT NULL
+                 AND mcd.max_30yr IS NOT NULL THEN
+                 ((mcd.value - mcd.min_30yr) / NULLIF(mcd.max_30yr - mcd.min_30yr, 0)) * 100
+               ELSE NULL::numeric
+             END
+         ) AS feb29_cached_percent_rows_recalculated"
     )
 
     if (
@@ -2423,10 +2597,13 @@ tryCatch(
         !isTRUE(result_check$public_can_insert_api_requests[[1]]) ||
         !isTRUE(result_check$public_can_select_api_request_id[[1]]) ||
         !isTRUE(result_check$public_can_update_api_request_completion[[1]]) ||
-        !isTRUE(result_check$public_can_use_api_request_id_sequence[[1]])
+        !isTRUE(result_check$public_can_use_api_request_id_sequence[[1]]) ||
+        !isTRUE(result_check$refresh_feb29_percent_from_range[[1]]) ||
+        !isTRUE(result_check$refresh_feb29_percent_30yr_from_range[[1]]) ||
+        !isTRUE(result_check$feb29_cached_percent_rows_recalculated[[1]])
     ) {
       stop(
-        "Patch 53 verification failed: compound alignment objects, non-basic metadata constraints, or API request logging support were not created as expected."
+        "Patch 53 verification failed: compound alignment objects, non-basic metadata constraints, API request logging support, or February 29 daily-statistics corrections were not created as expected."
       )
     }
 
