@@ -621,14 +621,14 @@ tryCatch(
     DBI::dbExecute(
       con,
       "
-          GRANT SELECT ON VIEW discrete.cross_section_verticals_view TO public;
+          GRANT SELECT ON discrete.cross_section_verticals_view TO public;
           "
     )
 
     DBI::dbExecute(
       con,
       "
-      GRANT SELECT ON VIEW discrete.cross_section_view TO public;
+      GRANT SELECT ON discrete.cross_sections_view TO public;
       "
     )
 
@@ -666,11 +666,8 @@ tryCatch(
 
         sprintf(
           "
-
           SELECT x.role_name
-
           FROM (
-
             SELECT r.rolname AS role_name
 
             FROM pg_roles AS r
@@ -730,9 +727,7 @@ tryCatch(
 
     criteria_editor_roles <- get_roles_with_reference_privileges(
       "public.locations",
-
       c("INSERT", "UPDATE", "DELETE"),
-
       "admin"
     )
 
@@ -762,15 +757,65 @@ tryCatch(
 
     grant_table_privileges(
       "cross_sections, cross_section_verticals, cross_section_points",
-
       "SELECT, INSERT, UPDATE, DELETE",
-
       criteria_editor_roles
     )
 
+    q_ident <- function(identifier) {
+      as.character(DBI::dbQuoteIdentifier(con, identifier))
+    }
+
+    q_relation <- function(relation_name) {
+      parts <- strsplit(relation_name, ".", fixed = TRUE)[[1]]
+      paste(vapply(parts, q_ident, character(1)), collapse = ".")
+    }
+
+    grant_sequence_privileges <- function(relation_name, column_name, roles) {
+      if (!length(roles)) {
+        return(invisible(NULL))
+      }
+
+      sequence_name <- DBI::dbGetQuery(
+        con,
+        "SELECT pg_get_serial_sequence($1, $2) AS sequence_name",
+        params = list(relation_name, column_name)
+      )$sequence_name[[1]]
+
+      if (is.na(sequence_name) || !nzchar(sequence_name)) {
+        return(invisible(NULL))
+      }
+
+      for (role_name in roles) {
+        DBI::dbExecute(
+          con,
+          sprintf(
+            "GRANT USAGE, SELECT ON SEQUENCE %s TO %s",
+            q_relation(sequence_name),
+            q_role(role_name)
+          )
+        )
+      }
+
+      invisible(NULL)
+    }
+
+    tbls <- c(
+      "cross_sections",
+      "cross_section_verticals",
+      "cross_section_points"
+    )
+    cols <- c("xsection_id", "vertical_id", "point_id")
+    for (i in seq_along(tbls)) {
+      grant_sequence_privileges(
+        paste0("discrete.", tbls[i]),
+        cols[i],
+        criteria_editor_roles
+      )
+    }
+
     # Add triggers to update modified_by and modified values for each table whenever a row is updated
     # Cross sections
-    message("adding Modified and modified_by triggers...")
+    message("adding modified and modified_by triggers...")
 
     DBI::dbExecute(
       con,
