@@ -5,6 +5,13 @@
 # non-anchor expression member, compound resolution matches the nearest member
 # point within that tolerance. reuse_member_values controls whether a single
 # member point may be matched to more than one anchor timestamp.
+#
+# Compound and other non-basic timeseries are derived from local AquaCache data,
+# not fetched directly from remote source systems. This patch also normalizes and
+# enforces the remote-sync metadata columns so active/sync_remote/source_fx only
+# carry meaning for basic timeseries. Non-basic timeseries also do not own or
+# share raw data directly; compound record_rate is maintained from the fastest
+# member timeseries.
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 
@@ -47,6 +54,7 @@ tryCatch(
       "SELECT missing_relation
        FROM (
          VALUES
+           ('application.api_requests'),
            ('audit.general_log'),
            ('continuous.measurements_continuous'),
            ('continuous.timeseries'),
@@ -152,6 +160,332 @@ tryCatch(
     members_as_of_grants <- get_function_execute_grants(members_as_of_signature)
     current_resolver_grants <- get_function_execute_grants(current_resolver_signature)
     at_resolver_grants <- get_function_execute_grants(at_resolver_signature)
+
+    message("Restricting basic-only metadata on non-basic timeseries...")
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE continuous.timeseries
+       ALTER COLUMN default_owner DROP NOT NULL"
+    )
+    DBI::dbExecute(
+      con,
+      "DO $$
+       BEGIN
+         IF EXISTS (
+           SELECT 1
+           FROM continuous.timeseries
+           WHERE timeseries_type <> 'basic'
+             AND (
+               active IS DISTINCT FROM TRUE OR
+               sync_remote IS DISTINCT FROM FALSE OR
+               source_fx IS NOT NULL OR
+               source_fx_args IS NOT NULL OR
+               default_owner IS NOT NULL OR
+               default_data_sharing_agreement_id IS NOT NULL
+             )
+         ) THEN
+           ALTER TABLE continuous.timeseries DISABLE TRIGGER USER;
+
+           UPDATE continuous.timeseries
+           SET active = TRUE,
+               sync_remote = FALSE,
+               source_fx = NULL,
+               source_fx_args = NULL,
+               default_owner = NULL,
+               default_data_sharing_agreement_id = NULL
+           WHERE timeseries_type <> 'basic'
+             AND (
+               active IS DISTINCT FROM TRUE OR
+               sync_remote IS DISTINCT FROM FALSE OR
+               source_fx IS NOT NULL OR
+               source_fx_args IS NOT NULL OR
+               default_owner IS NOT NULL OR
+               default_data_sharing_agreement_id IS NOT NULL
+             );
+
+           ALTER TABLE continuous.timeseries ENABLE TRIGGER USER;
+         END IF;
+       END
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_constraint
+           WHERE conrelid = 'continuous.timeseries'::regclass
+             AND conname = 'timeseries_nonbasic_no_remote_sync_ck'
+         ) THEN
+           ALTER TABLE continuous.timeseries
+             ADD CONSTRAINT timeseries_nonbasic_no_remote_sync_ck
+             CHECK (
+               timeseries_type = 'basic' OR (
+                 active IS TRUE AND
+                 sync_remote IS FALSE AND
+                 source_fx IS NULL AND
+                 source_fx_args IS NULL
+               )
+             );
+         END IF;
+       END
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_constraint
+           WHERE conrelid = 'continuous.timeseries'::regclass
+             AND conname = 'timeseries_basic_default_owner_nn_ck'
+         ) THEN
+           ALTER TABLE continuous.timeseries
+             ADD CONSTRAINT timeseries_basic_default_owner_nn_ck
+             CHECK (timeseries_type <> 'basic' OR default_owner IS NOT NULL);
+         END IF;
+
+         IF NOT EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_constraint
+           WHERE conrelid = 'continuous.timeseries'::regclass
+             AND conname = 'timeseries_nonbasic_no_data_defaults_ck'
+         ) THEN
+           ALTER TABLE continuous.timeseries
+             ADD CONSTRAINT timeseries_nonbasic_no_data_defaults_ck
+             CHECK (
+               timeseries_type = 'basic' OR (
+                 default_owner IS NULL AND
+                 default_data_sharing_agreement_id IS NULL
+               )
+             );
+         END IF;
+       END
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN continuous.timeseries.active IS
+       'For basic continuous timeseries, controls whether remote-data synchronization checks this series by default. Non-basic derived/compound timeseries must remain TRUE and are not fetched directly.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN continuous.timeseries.sync_remote IS
+       'For basic continuous timeseries with source_fx, controls whether synchronization may overwrite local data from the remote store. Non-basic derived/compound timeseries must remain FALSE.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN continuous.timeseries.record_rate IS
+       'Approximate source recording interval for basic timeseries. For compound timeseries this is maintained from the fastest member record_rate.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN continuous.timeseries.default_owner IS
+       'Default owner assigned to newly inserted raw measurements for basic timeseries. Non-basic derived/compound timeseries do not own raw data and must leave this NULL.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN continuous.timeseries.default_data_sharing_agreement_id IS
+       'Default data sharing agreement assigned to newly inserted raw measurements for basic timeseries. Non-basic derived/compound timeseries do not share raw data directly and must leave this NULL.'"
+    )
+
+    message("Maintaining compound record_rate from member timeseries...")
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.fastest_compound_member_record_rate(
+         p_timeseries_id INTEGER
+       )
+       RETURNS INTERVAL
+       LANGUAGE sql
+       STABLE
+       AS $function$
+         SELECT MIN(member_ts.record_rate)
+         FROM continuous.timeseries_compound_members m
+         JOIN continuous.timeseries member_ts
+           ON member_ts.timeseries_id = m.member_timeseries_id
+         WHERE m.timeseries_id = p_timeseries_id;
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.normalize_nonbasic_timeseries_metadata()
+       RETURNS trigger
+       LANGUAGE plpgsql
+       AS $function$
+       BEGIN
+         IF NEW.timeseries_type <> 'basic' THEN
+           NEW.active := TRUE;
+           NEW.sync_remote := FALSE;
+           NEW.source_fx := NULL;
+           NEW.source_fx_args := NULL;
+           NEW.default_owner := NULL;
+           NEW.default_data_sharing_agreement_id := NULL;
+
+           IF NEW.timeseries_type = 'compound' THEN
+             NEW.record_rate :=
+               continuous.fastest_compound_member_record_rate(NEW.timeseries_id);
+           ELSE
+             NEW.record_rate := NULL;
+           END IF;
+         END IF;
+
+         RETURN NEW;
+       END;
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.refresh_compound_timeseries_record_rate(
+         p_timeseries_id INTEGER
+       )
+       RETURNS void
+       LANGUAGE plpgsql
+       AS $function$
+       DECLARE
+         v_record_rate INTERVAL;
+       BEGIN
+         IF p_timeseries_id IS NULL THEN
+           RETURN;
+         END IF;
+
+         SELECT continuous.fastest_compound_member_record_rate(p_timeseries_id)
+         INTO v_record_rate;
+
+         UPDATE continuous.timeseries t
+         SET record_rate = v_record_rate
+         WHERE t.timeseries_id = p_timeseries_id
+           AND t.timeseries_type = 'compound'
+           AND t.record_rate IS DISTINCT FROM v_record_rate;
+       END;
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.refresh_direct_compound_timeseries_record_rates(
+         p_timeseries_ids INTEGER[]
+       )
+       RETURNS void
+       LANGUAGE plpgsql
+       AS $function$
+       DECLARE
+         v_timeseries_id INTEGER;
+       BEGIN
+         IF array_length(p_timeseries_ids, 1) IS NULL THEN
+           RETURN;
+         END IF;
+
+         FOR v_timeseries_id IN
+           SELECT DISTINCT m.timeseries_id
+           FROM unnest(p_timeseries_ids) AS src(timeseries_id)
+           JOIN continuous.timeseries_compound_members m
+             ON m.member_timeseries_id = src.timeseries_id
+           WHERE src.timeseries_id IS NOT NULL
+           ORDER BY m.timeseries_id
+         LOOP
+           PERFORM continuous.refresh_compound_timeseries_record_rate(
+             v_timeseries_id
+           );
+         END LOOP;
+       END;
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.refresh_compound_record_rate_on_member_change()
+       RETURNS trigger
+       LANGUAGE plpgsql
+       AS $function$
+       DECLARE
+         v_timeseries_id INTEGER;
+       BEGIN
+         FOR v_timeseries_id IN
+           SELECT DISTINCT ids.timeseries_id
+           FROM (
+             SELECT NEW.timeseries_id AS timeseries_id
+             WHERE TG_OP <> 'DELETE'
+             UNION
+             SELECT OLD.timeseries_id AS timeseries_id
+             WHERE TG_OP <> 'INSERT'
+           ) ids
+           WHERE ids.timeseries_id IS NOT NULL
+         LOOP
+           PERFORM continuous.refresh_compound_timeseries_record_rate(
+             v_timeseries_id
+           );
+         END LOOP;
+
+         RETURN COALESCE(NEW, OLD);
+       END;
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.refresh_compound_record_rate_on_timeseries_change()
+       RETURNS trigger
+       LANGUAGE plpgsql
+       AS $function$
+       BEGIN
+         IF
+           NEW.record_rate IS DISTINCT FROM OLD.record_rate OR
+           NEW.timeseries_type IS DISTINCT FROM OLD.timeseries_type
+         THEN
+           PERFORM continuous.refresh_direct_compound_timeseries_record_rates(
+             ARRAY[NEW.timeseries_id]
+           );
+         END IF;
+
+         RETURN NEW;
+       END;
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "DO $$
+       BEGIN
+         DROP TRIGGER IF EXISTS normalize_nonbasic_timeseries_metadata_tr
+           ON continuous.timeseries;
+         CREATE TRIGGER normalize_nonbasic_timeseries_metadata_tr
+           BEFORE INSERT OR UPDATE OF
+             timeseries_type,
+             record_rate,
+             default_owner,
+             default_data_sharing_agreement_id,
+             active,
+             sync_remote,
+             source_fx,
+             source_fx_args
+           ON continuous.timeseries
+           FOR EACH ROW
+           EXECUTE FUNCTION continuous.normalize_nonbasic_timeseries_metadata();
+
+         DROP TRIGGER IF EXISTS refresh_compound_record_rate_on_member_change_tr
+           ON continuous.timeseries_compound_members;
+         CREATE TRIGGER refresh_compound_record_rate_on_member_change_tr
+           AFTER INSERT OR DELETE OR UPDATE
+           ON continuous.timeseries_compound_members
+           FOR EACH ROW
+           EXECUTE FUNCTION continuous.refresh_compound_record_rate_on_member_change();
+
+         DROP TRIGGER IF EXISTS refresh_compound_record_rate_on_timeseries_change_tr
+           ON continuous.timeseries;
+         CREATE TRIGGER refresh_compound_record_rate_on_timeseries_change_tr
+           AFTER UPDATE OF record_rate, timeseries_type
+           ON continuous.timeseries
+           FOR EACH ROW
+           EXECUTE FUNCTION continuous.refresh_compound_record_rate_on_timeseries_change();
+       END
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "SELECT continuous.refresh_compound_timeseries_record_rate(
+         t.timeseries_id
+       )
+       FROM continuous.timeseries t
+       WHERE t.timeseries_type = 'compound'"
+    )
 
     message("Adding compound member alignment columns...")
     DBI::dbExecute(
@@ -1819,6 +2153,99 @@ tryCatch(
     apply_function_execute_grants(current_resolver_signature, current_resolver_grants)
     apply_function_execute_grants(at_resolver_signature, at_resolver_grants)
 
+    message("Preparing API request logging table...")
+    DBI::dbExecute(
+      con,
+      "DO $$
+       DECLARE
+         id_is_identity boolean;
+         id_sequence text;
+       BEGIN
+         SELECT is_identity = 'YES'
+         INTO id_is_identity
+         FROM information_schema.columns
+         WHERE table_schema = 'application'
+           AND table_name = 'api_requests'
+           AND column_name = 'id';
+
+         id_sequence := pg_get_serial_sequence('application.api_requests', 'id');
+
+         IF id_sequence IS NULL THEN
+           IF NOT EXISTS (
+             SELECT 1
+             FROM pg_class c
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'application'
+               AND c.relname = 'api_requests_id_seq'
+               AND c.relkind = 'S'
+           ) THEN
+             CREATE SEQUENCE application.api_requests_id_seq;
+           END IF;
+
+           ALTER SEQUENCE application.api_requests_id_seq
+             OWNED BY application.api_requests.id;
+
+           ALTER TABLE application.api_requests
+             ALTER COLUMN id SET DEFAULT nextval('application.api_requests_id_seq'::regclass);
+
+           id_sequence := 'application.api_requests_id_seq';
+         ELSIF NOT id_is_identity THEN
+           ALTER TABLE application.api_requests
+             ALTER COLUMN id SET DEFAULT nextval(id_sequence::regclass);
+         END IF;
+
+         PERFORM setval(
+           id_sequence::regclass,
+           GREATEST((SELECT COALESCE(MAX(id), 0) FROM application.api_requests), 1),
+           (SELECT COALESCE(MAX(id), 0) > 0 FROM application.api_requests)
+         );
+       END
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX IF NOT EXISTS api_requests_session_start_idx
+       ON application.api_requests (session_start DESC)"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX IF NOT EXISTS api_requests_incomplete_idx
+       ON application.api_requests (session_start DESC)
+       WHERE session_end IS NULL"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX IF NOT EXISTS api_requests_endpoint_idx
+       ON application.api_requests (endpoint)"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT USAGE ON SCHEMA application TO PUBLIC"
+    )
+    DBI::dbExecute(
+      con,
+      "GRANT INSERT,
+              SELECT (id),
+              UPDATE (session_end, status_code, success, response_time_ms)
+       ON application.api_requests TO PUBLIC"
+    )
+    DBI::dbExecute(
+      con,
+      "DO $$
+       DECLARE
+         id_sequence text;
+       BEGIN
+         id_sequence := pg_get_serial_sequence('application.api_requests', 'id');
+         IF id_sequence IS NOT NULL THEN
+           EXECUTE format(
+             'GRANT USAGE, SELECT ON SEQUENCE %s TO PUBLIC',
+             id_sequence::regclass
+           );
+         END IF;
+       END
+       $$"
+    )
+
     message("Checking compound alignment patch objects...")
     result_check <- DBI::dbGetQuery(
       con,
@@ -1841,7 +2268,133 @@ tryCatch(
          to_regprocedure('audit.timeseries_compound_members_as_of(timestamp with time zone, integer[])') IS NOT NULL AS has_members_as_of,
          to_regprocedure('continuous.resolve_compound_timeseries_raw_window(integer, timestamp with time zone, timestamp with time zone, integer[])') IS NOT NULL AS has_current_resolver,
          to_regprocedure('continuous.resolve_compound_timeseries_raw_window_at(timestamp with time zone, integer, timestamp with time zone, timestamp with time zone, integer[])') IS NOT NULL AS has_at_resolver,
-         to_regprocedure('continuous.measurements_continuous_corrected_basic_simple(integer, timestamp with time zone, timestamp with time zone)') IS NOT NULL AS has_basic_simple"
+         to_regprocedure('continuous.measurements_continuous_corrected_basic_simple(integer, timestamp with time zone, timestamp with time zone)') IS NOT NULL AS has_basic_simple,
+         to_regprocedure('continuous.fastest_compound_member_record_rate(integer)') IS NOT NULL AS has_fastest_record_rate,
+         to_regprocedure('continuous.refresh_compound_timeseries_record_rate(integer)') IS NOT NULL AS has_record_rate_refresh,
+         to_regprocedure('continuous.normalize_nonbasic_timeseries_metadata()') IS NOT NULL AS has_nonbasic_normalizer,
+         EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'continuous'
+             AND table_name = 'timeseries'
+             AND column_name = 'default_owner'
+             AND is_nullable = 'YES'
+         ) AS default_owner_nullable,
+         EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_constraint
+           WHERE conrelid = 'continuous.timeseries'::regclass
+             AND conname = 'timeseries_nonbasic_no_remote_sync_ck'
+         ) AS has_nonbasic_remote_sync_check,
+         EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_constraint
+           WHERE conrelid = 'continuous.timeseries'::regclass
+             AND conname = 'timeseries_basic_default_owner_nn_ck'
+         ) AS has_basic_owner_check,
+         EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_constraint
+           WHERE conrelid = 'continuous.timeseries'::regclass
+             AND conname = 'timeseries_nonbasic_no_data_defaults_ck'
+         ) AS has_nonbasic_data_defaults_check,
+         EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_trigger
+           WHERE tgrelid = 'continuous.timeseries'::regclass
+             AND tgname = 'normalize_nonbasic_timeseries_metadata_tr'
+             AND tgenabled = 'O'
+         ) AS has_nonbasic_normalizer_trigger,
+         EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_trigger
+           WHERE tgrelid = 'continuous.timeseries_compound_members'::regclass
+             AND tgname = 'refresh_compound_record_rate_on_member_change_tr'
+             AND tgenabled = 'O'
+         ) AS has_member_record_rate_trigger,
+         NOT EXISTS (
+           SELECT 1
+           FROM continuous.timeseries
+           WHERE timeseries_type <> 'basic'
+             AND (
+               active IS DISTINCT FROM TRUE OR
+               sync_remote IS DISTINCT FROM FALSE OR
+               source_fx IS NOT NULL OR
+               source_fx_args IS NOT NULL OR
+               default_owner IS NOT NULL OR
+               default_data_sharing_agreement_id IS NOT NULL
+             )
+         ) AS nonbasic_remote_sync_normalized,
+         NOT EXISTS (
+           SELECT 1
+           FROM continuous.timeseries t
+           WHERE t.timeseries_type = 'compound'
+             AND t.record_rate IS DISTINCT FROM
+               continuous.fastest_compound_member_record_rate(t.timeseries_id)
+         ) AS compound_record_rates_normalized,
+         pg_get_serial_sequence('application.api_requests', 'id') IS NOT NULL AS has_api_request_id_sequence,
+         to_regclass('application.api_requests_session_start_idx') IS NOT NULL AS has_api_request_start_index,
+         to_regclass('application.api_requests_incomplete_idx') IS NOT NULL AS has_api_request_incomplete_index,
+         to_regclass('application.api_requests_endpoint_idx') IS NOT NULL AS has_api_request_endpoint_index,
+         EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_namespace n
+           CROSS JOIN LATERAL pg_catalog.aclexplode(
+             COALESCE(n.nspacl, pg_catalog.acldefault('n', n.nspowner))
+           ) acl
+           WHERE n.nspname = 'application'
+             AND acl.grantee = 0
+             AND acl.privilege_type = 'USAGE'
+         ) AS public_can_use_application_schema,
+         EXISTS (
+           SELECT 1
+           FROM information_schema.table_privileges
+           WHERE table_schema = 'application'
+             AND table_name = 'api_requests'
+             AND grantee = 'PUBLIC'
+             AND privilege_type = 'INSERT'
+         ) AS public_can_insert_api_requests,
+         EXISTS (
+           SELECT 1
+           FROM information_schema.column_privileges
+           WHERE table_schema = 'application'
+             AND table_name = 'api_requests'
+             AND column_name = 'id'
+             AND grantee = 'PUBLIC'
+             AND privilege_type = 'SELECT'
+         ) AS public_can_select_api_request_id,
+         NOT EXISTS (
+           SELECT required.column_name
+           FROM (
+             VALUES
+               ('session_end'),
+               ('status_code'),
+               ('success'),
+               ('response_time_ms')
+           ) required(column_name)
+           WHERE NOT EXISTS (
+             SELECT 1
+             FROM information_schema.column_privileges cp
+             WHERE cp.table_schema = 'application'
+               AND cp.table_name = 'api_requests'
+               AND cp.column_name = required.column_name
+               AND cp.grantee = 'PUBLIC'
+               AND cp.privilege_type = 'UPDATE'
+           )
+         ) AS public_can_update_api_request_completion,
+         EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_class c
+           CROSS JOIN LATERAL pg_catalog.aclexplode(
+             COALESCE(c.relacl, pg_catalog.acldefault('S', c.relowner))
+           ) acl
+           WHERE c.oid = pg_get_serial_sequence(
+             'application.api_requests',
+             'id'
+           )::regclass
+             AND acl.grantee = 0
+             AND acl.privilege_type = 'USAGE'
+         ) AS public_can_use_api_request_id_sequence"
     )
 
     if (
@@ -1850,10 +2403,30 @@ tryCatch(
         !isTRUE(result_check$has_members_as_of[[1]]) ||
         !isTRUE(result_check$has_current_resolver[[1]]) ||
         !isTRUE(result_check$has_at_resolver[[1]]) ||
-        !isTRUE(result_check$has_basic_simple[[1]])
+        !isTRUE(result_check$has_basic_simple[[1]]) ||
+        !isTRUE(result_check$has_fastest_record_rate[[1]]) ||
+        !isTRUE(result_check$has_record_rate_refresh[[1]]) ||
+        !isTRUE(result_check$has_nonbasic_normalizer[[1]]) ||
+        !isTRUE(result_check$default_owner_nullable[[1]]) ||
+        !isTRUE(result_check$has_nonbasic_remote_sync_check[[1]]) ||
+        !isTRUE(result_check$has_basic_owner_check[[1]]) ||
+        !isTRUE(result_check$has_nonbasic_data_defaults_check[[1]]) ||
+        !isTRUE(result_check$has_nonbasic_normalizer_trigger[[1]]) ||
+        !isTRUE(result_check$has_member_record_rate_trigger[[1]]) ||
+        !isTRUE(result_check$nonbasic_remote_sync_normalized[[1]]) ||
+        !isTRUE(result_check$compound_record_rates_normalized[[1]]) ||
+        !isTRUE(result_check$has_api_request_id_sequence[[1]]) ||
+        !isTRUE(result_check$has_api_request_start_index[[1]]) ||
+        !isTRUE(result_check$has_api_request_incomplete_index[[1]]) ||
+        !isTRUE(result_check$has_api_request_endpoint_index[[1]]) ||
+        !isTRUE(result_check$public_can_use_application_schema[[1]]) ||
+        !isTRUE(result_check$public_can_insert_api_requests[[1]]) ||
+        !isTRUE(result_check$public_can_select_api_request_id[[1]]) ||
+        !isTRUE(result_check$public_can_update_api_request_completion[[1]]) ||
+        !isTRUE(result_check$public_can_use_api_request_id_sequence[[1]])
     ) {
       stop(
-        "Patch 53 verification failed: compound alignment columns or resolver functions were not created as expected."
+        "Patch 53 verification failed: compound alignment objects, non-basic metadata constraints, or API request logging support were not created as expected."
       )
     }
 
