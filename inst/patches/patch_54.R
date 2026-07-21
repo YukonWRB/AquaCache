@@ -1,4 +1,4 @@
-# Patch 53: Adding cross-section, verticals, and points schema to aquacache database
+# Patch 54: Adding cross-section, verticals, and points schema to aquacache database
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 
@@ -10,7 +10,7 @@ if (check$session_user != "postgres") {
 
 # TODO: set official patch number
 message(
-  "Working on patch 53:  adding cross-section, verticals, and points tables to the discrete schema."
+  "Working on patch 54:  adding cross-section, verticals, and points tables to the discrete schema."
 )
 
 if (dbTransCheck(con)) {
@@ -46,7 +46,7 @@ tryCatch(
         !isTRUE(check$no_cross_section_points[[1]])
     ) {
       stop(
-        "Patch 53 requires public.locations and information.version_info to exist, and cross-section tables must not already exist."
+        "Patch 54 requires public.locations and information.version_info to exist, and cross-section tables must not already exist."
       )
     }
 
@@ -69,7 +69,7 @@ tryCatch(
 
         wetted_width_m numeric NULL,
         total_area_m2 numeric NULL, 
-        net_area_m2 numeric NULL, -- new val, area not including ice thickness nor slush
+        net_area_m2 numeric NULL, 
         avg_total_depth_m numeric NULL,    
         avg_velocity_m_s numeric NULL,
         discharge_m3_s numeric NULL,
@@ -95,8 +95,8 @@ tryCatch(
             ON DELETE CASCADE
             ON UPDATE CASCADE,
 
-        -- CONSTRAINT cross_sections_unique_location_datetime
-        --    UNIQUE (location_id, datetime),
+        CONSTRAINT cross_sections_unique_location_datetime
+           UNIQUE (location_id, datetime),
 
         CONSTRAINT cross_sections_unique_source UNIQUE (source_system, source_measurement_id)
 
@@ -190,13 +190,18 @@ tryCatch(
         CONSTRAINT cross_section_verticals_reference_bank_check
             CHECK (reference_bank IN ('left', 'right')), 
 
-            CONSTRAINT cross_section_verticals_unique_distance_bank_orientation
+            CONSTRAINT cross_section_verticals_unique_distance_reference
+            UNIQUE (
+                xsection_id,
+                distance_to_reference_m
+            ),
+            
+            CONSTRAINT cross_section_verticals_unique_distance_waterline
             UNIQUE NULLS NOT DISTINCT (
                 xsection_id,
-                distance_to_reference_m,
                 distance_to_waterline_m
             ),
-
+                            
         CONSTRAINT cross_section_verticals_unique_source
             UNIQUE (xsection_id, source_vertical_id)
 
@@ -250,7 +255,7 @@ tryCatch(
 
         vertical_id int4 NOT NULL,
 
-        position_on_water_panel numeric NOT NULL,
+        rel_position_on_water_panel numeric NOT NULL CHECK (rel_position_on_water_panel > 0 AND rel_position_on_water_panel < 1),
         depth_in_moving_water_m numeric NULL,
 
         velocity_m_s numeric NOT NULL,
@@ -280,8 +285,8 @@ tryCatch(
 
     comments_cross_section_points <- c(
       "COMMENT ON TABLE discrete.cross_section_points IS 'Tertiary table storing point measurements within a vertical panel. Links to discrete.cross_section_verticals via vertical_id. Each row represents a single velocity measurement collected at a specific location within the panel.';",
-      "COMMENT ON COLUMN discrete.cross_section_points.position_on_water_panel IS 'Relative position of the measurement point within the panel, expressed as a proportion between 0 and 1. Reference point to be confirmed.';",
-      "COMMENT ON COLUMN discrete.cross_section_points.depth_in_moving_water_m IS 'Depth of the velocity measurement within the flowing water column, in metres. Reference point to be confirmed.';",
+      "COMMENT ON COLUMN discrete.cross_section_points.rel_position_on_water_panel IS 'Relative position of the measurement point within the panel, expressed as a proportion between 0 and 1, with 0 being the surface of the water.';",
+      "COMMENT ON COLUMN discrete.cross_section_points.depth_in_moving_water_m IS 'Depth of the velocity measurement within the flowing water column, in metres with 0 being the surface of the water.';",
       "COMMENT ON COLUMN discrete.cross_section_points.velocity_m_s IS 'Velocity of flowing water measured at the point location, in metres per second.';",
       "COMMENT ON COLUMN discrete.cross_section_points.note IS 'Free-text note field for context that does not fit a structured column.';",
       "COMMENT ON COLUMN discrete.cross_section_points.created IS 'Timestamp when the row was created.';",
@@ -613,6 +618,156 @@ tryCatch(
       "
     )
 
+    DBI::dbExecute(
+      con,
+      "
+          GRANT SELECT ON VIEW discrete.cross_section_verticals_view TO public;
+          "
+    )
+
+    DBI::dbExecute(
+      con,
+      "
+      GRANT SELECT ON VIEW discrete.cross_section_view TO public;
+      "
+    )
+
+    q_literal <- function(x) {
+      as.character(DBI::dbQuoteString(con, x))
+    }
+    q_role <- function(x) {
+      as.character(DBI::dbQuoteIdentifier(con, x))
+    }
+    sql_text_array <- function(x) {
+      if (length(x) == 0L) {
+        return("ARRAY[]::text[]")
+      }
+
+      sprintf(
+        "ARRAY[%s]::text[]",
+        paste(vapply(x, q_literal, character(1)), collapse = ", ")
+      )
+    }
+
+    existing_roles <- DBI::dbGetQuery(
+      con,
+      "SELECT rolname FROM pg_roles"
+    )$rolname
+
+    get_roles_with_reference_privileges <- function(
+      reference_table,
+
+      privileges,
+
+      always_include = character()
+    ) {
+      roles <- DBI::dbGetQuery(
+        con,
+
+        sprintf(
+          "
+
+          SELECT x.role_name
+
+          FROM (
+
+            SELECT r.rolname AS role_name
+
+            FROM pg_roles AS r
+
+            WHERE r.rolcanlogin = false
+
+              AND r.rolname NOT IN (
+
+                'public',
+
+                'pg_read_all_data',
+
+                'pg_write_all_data'
+
+              )
+
+              AND NOT EXISTS (
+
+                SELECT 1
+
+                FROM unnest(%s) AS p(privilege_name)
+
+                WHERE NOT has_table_privilege(
+
+                  r.oid,
+
+                  %s::regclass,
+
+                  p.privilege_name
+
+                )
+
+              )
+ 
+            UNION
+ 
+            SELECT r.rolname AS role_name
+
+            FROM pg_roles AS r
+
+            WHERE r.rolname = ANY(%s)
+
+          ) AS x
+
+          ORDER BY x.role_name;",
+
+          sql_text_array(privileges),
+
+          q_literal(reference_table),
+
+          sql_text_array(always_include)
+        )
+      )$role_name
+
+      intersect(unique(roles), existing_roles)
+    }
+
+    criteria_editor_roles <- get_roles_with_reference_privileges(
+      "public.locations",
+
+      c("INSERT", "UPDATE", "DELETE"),
+
+      "admin"
+    )
+
+    grant_table_privileges <- function(table_names, privileges, roles) {
+      if (length(roles) == 0L) {
+        return(invisible(NULL))
+      }
+
+      for (role_name in roles) {
+        DBI::dbExecute(
+          con,
+
+          sprintf(
+            "GRANT %s ON TABLE %s TO %s;",
+
+            privileges,
+
+            paste(table_names, collapse = ", "),
+
+            q_role(role_name)
+          )
+        )
+      }
+
+      invisible(NULL)
+    }
+
+    grant_table_privileges(
+      "cross_sections, cross_section_verticals, cross_section_points",
+
+      "SELECT, INSERT, UPDATE, DELETE",
+
+      criteria_editor_roles
+    )
+
     # Add triggers to update modified_by and modified values for each table whenever a row is updated
     # Cross sections
     message("adding Modified and modified_by triggers...")
@@ -676,10 +831,174 @@ tryCatch(
       "
     )
 
+    apply_parent_visibility_policy <- function(
+      schema_name,
+      table_name,
+      using_sql
+    ) {
+      q_table <- function(schema_name, table_name) {
+        paste(
+          as.character(DBI::dbQuoteIdentifier(con, schema_name)),
+          as.character(DBI::dbQuoteIdentifier(con, table_name)),
+          sep = "."
+        )
+      }
+
+      qual <- q_table(schema_name, table_name)
+
+      DBI::dbExecute(
+        con,
+        sprintf("ALTER TABLE %s ENABLE ROW LEVEL SECURITY", qual)
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_restrict ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_restrict ON %s AS RESTRICTIVE FOR SELECT USING (%s)",
+          qual,
+          using_sql
+        )
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_restrict_insert ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_restrict_insert ON %s AS RESTRICTIVE FOR INSERT WITH CHECK (%s)",
+          qual,
+          using_sql
+        )
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_restrict_update ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_restrict_update ON %s AS RESTRICTIVE FOR UPDATE USING (%s) WITH CHECK (%s)",
+          qual,
+          using_sql,
+          using_sql
+        )
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_restrict_delete ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_restrict_delete ON %s AS RESTRICTIVE FOR DELETE USING (%s)",
+          qual,
+          using_sql
+        )
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_allow_select ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_allow_select ON %s FOR SELECT USING (true)",
+          qual
+        )
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_allow_insert ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_allow_insert ON %s FOR INSERT WITH CHECK (true)",
+          qual
+        )
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_allow_update ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_allow_update ON %s FOR UPDATE USING (true) WITH CHECK (true)",
+          qual
+        )
+      )
+
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP POLICY IF EXISTS parent_visibility_allow_delete ON %s",
+          qual
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE POLICY parent_visibility_allow_delete ON %s FOR DELETE USING (true)",
+          qual
+        )
+      )
+    }
+
+    visible_timeseries_sql <- function(child_table, child_column) {
+      sprintf(
+        "%1$s IS NULL OR EXISTS (
+           SELECT 1
+           FROM public.locations l
+           WHERE l.location_id = %2$s.%1$s
+         )",
+        child_column,
+        child_table
+      )
+    }
+
+    apply_parent_visibility_policy(
+      "discrete",
+      "cross_sections",
+      visible_timeseries_sql("cross_sections", "location_id")
+    )
+
     # update version to reflect patch number
     DBI::dbExecute(
       con,
-      "UPDATE information.version_info SET version = '53'
+      "UPDATE information.version_info SET version = '54'
        WHERE item = 'Last patch number';"
     )
 
@@ -696,7 +1015,7 @@ tryCatch(
     active <- FALSE
 
     message(
-      "Patch 53 applied successfully. Cross-section, verticals, and points tables have been added to the discrete schema."
+      "Patch 54 applied successfully. Cross-section, verticals, and points tables have been added to the discrete schema."
     )
   },
   error = function(e) {
