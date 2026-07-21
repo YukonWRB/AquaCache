@@ -337,6 +337,8 @@ create_test_db <- function(
     "boreholes.borehole_well_purposes",
     "boreholes.casing_materials",
     "boreholes.drillers",
+    "criteria.licence_types",
+    "criteria.licence_authorities",
     "criteria.guideline_publishers",
     "criteria.guideline_series",
     "criteria.guidelines",
