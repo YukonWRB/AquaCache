@@ -76,7 +76,8 @@ insertACDocument <- function(
   #Check that the name doesn't already exist
   name_check <- DBI::dbGetQuery(
     con,
-    paste0("SELECT name FROM files.documents WHERE name = '", name, "';")
+    "SELECT name FROM files.documents WHERE name = $1",
+    params = list(name)
   )
   if (nrow(name_check) != 0) {
     stop("There is already a document with this name in the database.")
@@ -86,11 +87,12 @@ insertACDocument <- function(
     #Check to make sure the geom_ids exist, report back to the user what actually got associated.
     exist_geoms <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT geom_id, geom_type, layer_name, feature_name, description FROM spatial.vectors WHERE geom_id IN (",
-        paste(geoms, collapse = ", "),
-        ")"
-      )
+      "SELECT geom_id, geom_type, layer_name, feature_name, description
+       FROM spatial.vectors
+       WHERE geom_id IN (
+         SELECT jsonb_array_elements_text($1::jsonb)::integer
+       )",
+      params = list(jsonlite::toJSON(as.integer(geoms), auto_unbox = FALSE))
     )
     if (nrow(exist_geoms) == 0) {
       stop(
@@ -118,86 +120,57 @@ insertACDocument <- function(
   file <- readBin(path, what = "raw", n = file.info(path)$size)
 
   assigned_type <- db_types$document_type_id[db_types$document_type_en == type]
-  DBI::dbExecute(
-    con,
-    paste0(
-      "INSERT INTO files.documents (name, type, description, format, document, share_with) VALUES ('",
-      name,
-      "', '",
-      assigned_type,
-      "', '",
-      description,
-      "', '",
-      extension,
-      "', '\\x",
-      paste0(file, collapse = ""),
-      "', ARRAY[",
-      paste(sprintf("'%s'", share_with), collapse = ","),
-      "]) ON CONFLICT (file_hash) DO NOTHING "
-    )
-  )
-
-  # Get the document_id of the newly added (or existing) document
+  file_hex <- paste0(file, collapse = "")
+  url_db <- if (is.null(url)) NA_character_ else url
+  publish_date_db <- if (is.null(publish_date)) as.Date(NA) else publish_date
   id <- DBI::dbGetQuery(
     con,
-    "SELECT MAX(document_id) FROM files.documents WHERE name = $1",
-    params = list(name)
+    "WITH inserted AS (
+       INSERT INTO files.documents (
+         name, type, description, format, document, share_with,
+         authors, url, publish_date, tags
+       )
+       VALUES (
+         $1, $2, $3, $4, decode($5, 'hex'),
+         ARRAY(SELECT jsonb_array_elements_text($6::jsonb)),
+         CASE WHEN $7::jsonb = 'null'::jsonb THEN NULL
+              ELSE ARRAY(SELECT jsonb_array_elements_text($7::jsonb)) END,
+         $8, $9,
+         CASE WHEN $10::jsonb = 'null'::jsonb THEN NULL
+              ELSE ARRAY(SELECT jsonb_array_elements_text($10::jsonb)) END
+       )
+       ON CONFLICT (file_hash) DO NOTHING
+       RETURNING document_id
+     )
+     SELECT document_id FROM inserted
+     UNION ALL
+     SELECT document_id
+     FROM files.documents
+     WHERE file_hash = md5($5)
+     LIMIT 1",
+    params = list(
+      name,
+      assigned_type,
+      description,
+      extension,
+      file_hex,
+      jsonlite::toJSON(as.character(share_with), auto_unbox = FALSE),
+      jsonlite::toJSON(authors, auto_unbox = FALSE, null = "null"),
+      url_db,
+      publish_date_db,
+      jsonlite::toJSON(tags, auto_unbox = FALSE, null = "null")
+    )
   )[1, 1]
-
-  if (!is.null(authors)) {
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE files.documents SET authors = '{",
-        paste(authors, collapse = ", "),
-        "}' WHERE document_id = ",
-        id,
-        ";"
-      )
-    )
-  }
-  if (!is.null(url)) {
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE files.documents SET url = '",
-        url,
-        "' WHERE document_id = ",
-        id,
-        ";"
-      )
-    )
-  }
-  if (!is.null(publish_date)) {
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE files.documents SET publish_date = '",
-        publish_date,
-        "' WHERE document_id = ",
-        id,
-        ";"
-      )
-    )
-  }
-  if (!is.null(tags)) {
-    DBI::dbExecute(
-      con,
-      paste0(
-        "UPDATE files.documents SET tags = '{",
-        paste(tags, collapse = ", "),
-        "}' WHERE document_id = ",
-        id,
-        ";"
-      )
-    )
-  }
 
   if (!is.null(geoms)) {
     DBI::dbExecute(
       con,
-      "INSERT INTO files.documents_spatial (document_id, geom_id) VALUES ($1, $2);",
-      params = list(id, exist_geoms$geom_id)
+      "INSERT INTO files.documents_spatial (document_id, geom_id)
+       SELECT $1, jsonb_array_elements_text($2::jsonb)::integer",
+      params = list(
+        id,
+        jsonlite::toJSON(exist_geoms$geom_id, auto_unbox = FALSE)
+      )
     )
 
     return(list(
