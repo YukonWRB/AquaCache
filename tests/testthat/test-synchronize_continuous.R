@@ -33,7 +33,7 @@ mock_sync_db_get_query <- function(
 ) {
   function(con, statement, ...) {
     if (
-      grepl("FROM timeseries t JOIN aggregation_types", statement, fixed = TRUE)
+      grepl("FROM continuous.timeseries t JOIN continuous.aggregation_types", statement, fixed = TRUE)
     ) {
       return(mock_sync_timeseries_table(
         timeseries_ids = timeseries_ids,
@@ -41,13 +41,13 @@ mock_sync_db_get_query <- function(
         source_fx_args = source_fx_args
       ))
     }
-    if (grepl("FROM grade_types", statement, fixed = TRUE)) {
+    if (grepl("FROM public.grade_types", statement, fixed = TRUE)) {
       return(data.frame(grade_type_id = 1L))
     }
-    if (grepl("FROM approval_types", statement, fixed = TRUE)) {
+    if (grepl("FROM public.approval_types", statement, fixed = TRUE)) {
       return(data.frame(approval_type_id = 1L))
     }
-    if (grepl("FROM qualifier_types", statement, fixed = TRUE)) {
+    if (grepl("FROM public.qualifier_types", statement, fixed = TRUE)) {
       return(data.frame(qualifier_type_id = 1L))
     }
 

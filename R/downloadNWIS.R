@@ -145,7 +145,7 @@ downloadNWIS <- function(
         }
 
         # Extract first capital letter, which is the approval
-        approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
+        approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.approval_types")
         data$approval <- gsub("^([APR]).*", "\\1", data$combined)
         approval_mapping <- c(
           "A" = approvals_DB[
@@ -171,7 +171,7 @@ downloadNWIS <- function(
         )
 
         # After that it's the qualifier, maybe. Anything that's not clearly a qualifier gets Z, unknown
-        qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+        qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.qualifier_types")
         data$qualifier <- trimws(gsub("^[APR](.*)", "\\1", data$combined))
         data$qualifier[data$qualifier == ""] <- "U"
         qualifier_mapping <- c(

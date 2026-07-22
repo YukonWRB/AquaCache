@@ -209,7 +209,7 @@ synchronize_discrete <- function(
           # There was no data in remote for the date range specified
           DBI::dbExecute(
             con,
-            "UPDATE sample_series SET last_synchronize = NOW() WHERE sample_series_id = $1",
+            "UPDATE discrete.sample_series SET last_synchronize = NOW() WHERE sample_series_id = $1",
             params = list(sid)
           )
 
@@ -476,7 +476,7 @@ synchronize_discrete <- function(
                     DBI::dbExecute(
                       con,
                       paste0(
-                        "UPDATE samples SET ",
+                        "UPDATE discrete.samples SET ",
                         sample_col,
                         " = NULL WHERE sample_id = ",
                         inDB_sample$sample_id,
@@ -487,7 +487,7 @@ synchronize_discrete <- function(
                     DBI::dbExecute(
                       con,
                       paste0(
-                        "UPDATE samples SET ",
+                        "UPDATE discrete.samples SET ",
                         sample_col,
                         " = $1 WHERE sample_id = $2;"
                       ),
@@ -760,7 +760,7 @@ synchronize_discrete <- function(
                   # Append new values
                   sub$sample_id <- inDB_sample$sample_id
                   sub$matrix_state_id <- resolved_sub_matrix_state_id
-                  dbAppendTableRLS(con, "results", sub)
+                  dbAppendTableRLS(con, "discrete.results", sub)
 
                   new_results <- new_results + 1
                 } else if (nrow(inDB_sub) == 1) {
@@ -796,7 +796,7 @@ synchronize_discrete <- function(
                         DBI::dbExecute(
                           con,
                           paste0(
-                            "UPDATE results SET ",
+                            "UPDATE discrete.results SET ",
                             result_col,
                             " = $1 WHERE result_id = $2;"
                           ),
@@ -1208,7 +1208,7 @@ synchronize_discrete <- function(
     {
       DBI::dbExecute(
         con,
-        "UPDATE internal_status SET value = NOW() WHERE event = 'last_synchronize_discrete';"
+        "UPDATE information.internal_status SET value = NOW() WHERE event = 'last_synchronize_discrete';"
       )
     },
     silent = TRUE

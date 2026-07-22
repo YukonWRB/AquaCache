@@ -225,14 +225,14 @@ addACTimeseries <- function(
     new_locs <- NULL
     loc_tbl <- NULL
     if (inherits(location, "numeric")) {
-      exist_locs <- DBI::dbGetQuery(con, "SELECT location_id FROM locations")[,
+      exist_locs <- DBI::dbGetQuery(con, "SELECT location_id FROM public.locations")[,
         1
       ]
       new_locs <- location[!(location %in% exist_locs)]
     } else if (inherits(location, "character")) {
       loc_tbl <- DBI::dbGetQuery(
         con,
-        "SELECT location_id, location_code, alias, name FROM locations"
+        "SELECT location_id, location_code, alias, name FROM public.locations"
       )
       exist_locs <- tolower(unique(c(
         loc_tbl$location_code,
@@ -263,7 +263,7 @@ addACTimeseries <- function(
     }
     db_sub_loc <- DBI::dbGetQuery(
       con,
-      "SELECT sub_location_id FROM sub_locations;"
+      "SELECT sub_location_id FROM public.sub_locations;"
     )[, 1]
     if (!all(sub_location %in% db_sub_loc)) {
       stop(
@@ -293,7 +293,7 @@ addACTimeseries <- function(
     db_param <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT parameter_id FROM parameters WHERE parameter_id IN (",
+        "SELECT parameter_id FROM public.parameters WHERE parameter_id IN (",
         paste(unique(parameter), collapse = ", "),
         ");"
       )
@@ -318,7 +318,7 @@ addACTimeseries <- function(
     db_media <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT media_id FROM media_types WHERE media_id IN (",
+        "SELECT media_id FROM public.media_types WHERE media_id IN (",
         paste(unique(media), collapse = ", "),
         ");"
       )
@@ -422,7 +422,7 @@ addACTimeseries <- function(
   db_owner <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT organization_id FROM organizations WHERE organization_id IN (",
+      "SELECT organization_id FROM public.organizations WHERE organization_id IN (",
       paste(unique(owner), collapse = ", "),
       ");"
     )
@@ -478,7 +478,7 @@ addACTimeseries <- function(
       if (is.null(loc_tbl)) {
         loc_tbl <- DBI::dbGetQuery(
           con,
-          "SELECT location_id, location_code, alias, name FROM locations"
+          "SELECT location_id, location_code, alias, name FROM public.locations"
         )
       }
       loc_match <- loc_tbl[
@@ -501,7 +501,7 @@ addACTimeseries <- function(
     } else if (inherits(loc_id, "numeric")) {
       loc_info <- DBI::dbGetQuery(
         con,
-        "SELECT location_code, name FROM locations WHERE location_id = $1;",
+        "SELECT location_code, name FROM public.locations WHERE location_id = $1;",
         params = list(loc_id)
       )
       if (nrow(loc_info) == 1) {
@@ -528,7 +528,7 @@ addACTimeseries <- function(
         aggregation_type_id <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT aggregation_type_id FROM aggregation_types WHERE aggregation_type = '",
+            "SELECT aggregation_type_id FROM continuous.aggregation_types WHERE aggregation_type = '",
             aggregation_type[i],
             "';"
           )
@@ -559,14 +559,14 @@ addACTimeseries <- function(
             # This may fail if the z value already exists for this location/sub_location combo
             DBI::dbExecute(
               con,
-              "INSERT INTO locations_z (location_id, z_meters, sub_location_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+              "INSERT INTO public.locations_z (location_id, z_meters, sub_location_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
               params = list(loc_id, zi, sub_location[i])
             )
           })
           zi <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT z_id FROM locations_z WHERE location_id = ",
+              "SELECT z_id FROM public.locations_z WHERE location_id = ",
               loc_id,
               " AND z_meters = ",
               zi,
@@ -603,7 +603,7 @@ addACTimeseries <- function(
           {
             new_tsid <- DBI::dbGetQuery(
               con,
-              "INSERT INTO timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14) RETURNING timeseries_id;",
+              "INSERT INTO continuous.timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14) RETURNING timeseries_id;",
               params = list(
                 add$location_id,
                 add$sub_location_id,
@@ -650,7 +650,7 @@ addACTimeseries <- function(
               con,
               paste(
                 "SELECT timeseries_id",
-                "FROM timeseries",
+                "FROM continuous.timeseries",
                 "WHERE location_id = $1",
                 "  AND parameter_id = $2",
                 "  AND aggregation_type_id = $3",
@@ -715,7 +715,7 @@ addACTimeseries <- function(
           param_name <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT param_name FROM parameters WHERE parameter_id = ",
+              "SELECT param_name FROM public.parameters WHERE parameter_id = ",
               add$parameter_id,
               ";"
             )
@@ -729,7 +729,7 @@ addACTimeseries <- function(
               DBI::dbExecute(
                 con,
                 paste0(
-                  "DELETE FROM measurements_continuous WHERE timeseries_id = ",
+                  "DELETE FROM continuous.measurements_continuous WHERE timeseries_id = ",
                   new_tsid,
                   " AND datetime >= '",
                   add$end_datetime,
@@ -760,7 +760,7 @@ addACTimeseries <- function(
                 DBI::dbExecute(
                   con,
                   paste0(
-                    "DELETE FROM timeseries WHERE timeseries_id = ",
+                    "DELETE FROM continuous.timeseries WHERE timeseries_id = ",
                     new_tsid,
                     ";"
                   )
@@ -792,7 +792,7 @@ addACTimeseries <- function(
               exist <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT timeseries_id FROM measurements_calculated_daily WHERE timeseries_id = ",
+                  "SELECT timeseries_id FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
                   new_tsid,
                   ";"
                 )
@@ -801,7 +801,7 @@ addACTimeseries <- function(
                 DBI::dbExecute(
                   con,
                   paste0(
-                    "DELETE FROM timeseries WHERE timeseries_id = ",
+                    "DELETE FROM continuous.timeseries WHERE timeseries_id = ",
                     new_tsid,
                     ";"
                   )

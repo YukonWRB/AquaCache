@@ -198,7 +198,7 @@ restore_seed_db <- function(
 
   existing <- DBI::dbGetQuery(
     admin_con,
-    "SELECT datname FROM pg_database WHERE datname = $1;",
+    "SELECT datname FROM pg_catalog.pg_database WHERE datname = $1;",
     params = list(name)
   )
 
@@ -498,11 +498,11 @@ restore_seed_db <- function(
     # Check if role exists
     test_exists <- nrow(DBI::dbGetQuery(
       target_con,
-      "SELECT 1 FROM pg_roles WHERE rolname = 'tester';"
+      "SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'tester';"
     )) >
       0
 
-    dbs <- DBI::dbGetQuery(target_con, "SELECT datname FROM pg_database;")
+    dbs <- DBI::dbGetQuery(target_con, "SELECT datname FROM pg_catalog.pg_database;")
 
     if (test_exists) {
       # Run inside target database first
@@ -1584,9 +1584,9 @@ aquacache_copy_privileges <- function(
         END,
         CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
       ) AS sql
-      FROM pg_database d
+      FROM pg_catalog.pg_database d
       CROSS JOIN LATERAL aclexplode(d.datacl) a
-      LEFT JOIN pg_roles r
+      LEFT JOIN pg_catalog.pg_roles r
         ON r.oid = a.grantee
       WHERE d.datname = $1::name
         AND d.datacl IS NOT NULL
@@ -1619,7 +1619,7 @@ aquacache_copy_privileges <- function(
       END,
       CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
     ) AS sql
-    FROM pg_namespace n
+    FROM pg_catalog.pg_namespace n
     CROSS JOIN LATERAL aclexplode(n.nspacl) a
     WHERE n.nspname NOT LIKE 'pg\\_%'
     AND NOT (n.nspname = ANY(",
@@ -1630,7 +1630,7 @@ aquacache_copy_privileges <- function(
         a.grantee = 0
         OR EXISTS (
           SELECT 1
-          FROM pg_roles r
+          FROM pg_catalog.pg_roles r
           WHERE r.oid = a.grantee
             AND r.rolname NOT LIKE 'pg\\_%'
         )
@@ -1659,8 +1659,8 @@ aquacache_copy_privileges <- function(
       END,
       CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
     ) AS sql
-    FROM pg_class c
-    JOIN pg_namespace n
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n
       ON n.oid = c.relnamespace
     CROSS JOIN LATERAL aclexplode(c.relacl) a
     WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
@@ -1676,7 +1676,7 @@ aquacache_copy_privileges <- function(
         a.grantee = 0
         OR EXISTS (
           SELECT 1
-          FROM pg_roles r
+          FROM pg_catalog.pg_roles r
           WHERE r.oid = a.grantee
             AND r.rolname NOT LIKE 'pg\\_%'
         )
@@ -1703,10 +1703,10 @@ aquacache_copy_privileges <- function(
       END,
       CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
     ) AS sql
-    FROM pg_attribute att
-    JOIN pg_class c
+    FROM pg_catalog.pg_attribute att
+    JOIN pg_catalog.pg_class c
       ON c.oid = att.attrelid
-    JOIN pg_namespace n
+    JOIN pg_catalog.pg_namespace n
       ON n.oid = c.relnamespace
     CROSS JOIN LATERAL aclexplode(att.attacl) a
     WHERE att.attnum > 0
@@ -1724,7 +1724,7 @@ aquacache_copy_privileges <- function(
         a.grantee = 0
         OR EXISTS (
           SELECT 1
-          FROM pg_roles r
+          FROM pg_catalog.pg_roles r
           WHERE r.oid = a.grantee
             AND r.rolname NOT LIKE 'pg\\_%'
         )
@@ -1749,8 +1749,8 @@ aquacache_copy_privileges <- function(
       END,
       CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
     ) AS sql
-    FROM pg_class c
-    JOIN pg_namespace n
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n
       ON n.oid = c.relnamespace
     CROSS JOIN LATERAL aclexplode(c.relacl) a
     WHERE c.relkind = 'S'
@@ -1766,7 +1766,7 @@ aquacache_copy_privileges <- function(
         a.grantee = 0
         OR EXISTS (
           SELECT 1
-          FROM pg_roles r
+          FROM pg_catalog.pg_roles r
           WHERE r.oid = a.grantee
             AND r.rolname NOT LIKE 'pg\\_%'
         )
@@ -1796,8 +1796,8 @@ aquacache_copy_privileges <- function(
       END,
       CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END
     ) AS sql
-    FROM pg_proc p
-    JOIN pg_namespace n
+    FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n
       ON n.oid = p.pronamespace
     CROSS JOIN LATERAL aclexplode(p.proacl) a
     WHERE n.nspname NOT LIKE 'pg\\_%'
@@ -1812,7 +1812,7 @@ aquacache_copy_privileges <- function(
         a.grantee = 0
         OR EXISTS (
           SELECT 1
-          FROM pg_roles r
+          FROM pg_catalog.pg_roles r
           WHERE r.oid = a.grantee
             AND r.rolname NOT LIKE 'pg\\_%'
         )

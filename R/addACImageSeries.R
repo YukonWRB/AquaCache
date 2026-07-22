@@ -35,7 +35,7 @@ addACImageSeries <- function(
   loc_check <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT name FROM locations WHERE location_id = ",
+      "SELECT name FROM public.locations WHERE location_id = ",
       location_id,
       ";"
     )
@@ -59,7 +59,7 @@ addACImageSeries <- function(
   exists <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT img_series_id FROM image_series WHERE location_id = ",
+      "SELECT img_series_id FROM files.image_series WHERE location_id = ",
       location_id,
       ";"
     )
@@ -87,7 +87,7 @@ addACImageSeries <- function(
   # Insert the new entry into the image_series table
   res <- DBI::dbGetQuery(
     con,
-    "INSERT INTO image_series (location_id, first_img, last_img, source_fx, source_fx_args, share_with, active, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING img_series_id;",
+    "INSERT INTO files.image_series (location_id, first_img, last_img, source_fx, source_fx_args, share_with, active, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING img_series_id;",
     params = list(
       location_id,
       start_datetime,
@@ -106,13 +106,13 @@ addACImageSeries <- function(
     )
     DBI::dbExecute(
       con,
-      paste0("DELETE FROM image_series WHERE img_series_id = ", res, ";")
+      paste0("DELETE FROM files.image_series WHERE img_series_id = ", res, ";")
     )
   } else {
     first_new <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT MIN(datetime) FROM images WHERE img_series_id = ",
+        "SELECT MIN(datetime) FROM files.images WHERE img_series_id = ",
         res,
         ";"
       )
@@ -120,7 +120,7 @@ addACImageSeries <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE image_series SET first_img = '",
+        "UPDATE files.image_series SET first_img = '",
         first_new,
         "' WHERE img_series_id = ",
         res,

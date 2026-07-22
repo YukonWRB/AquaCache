@@ -3,7 +3,7 @@ insert_test_org <- function(con, prefix) {
   inserted <- DBI::dbGetQuery(
     con,
     sprintf(
-      "INSERT INTO organizations (name) VALUES ('%s') RETURNING organization_id;",
+      "INSERT INTO public.organizations (name) VALUES ('%s') RETURNING organization_id;",
       org_name
     )
   )
@@ -18,7 +18,7 @@ test_that("adjust_owner maps organization names and updates owner segments", {
 
   ts_id <- DBI::dbGetQuery(
     con,
-    "SELECT timeseries_id FROM timeseries ORDER BY timeseries_id LIMIT 1;"
+    "SELECT timeseries_id FROM continuous.timeseries ORDER BY timeseries_id LIMIT 1;"
   )[1, 1]
 
   org_a <- insert_test_org(con, "owner_test_a")
@@ -28,7 +28,7 @@ test_that("adjust_owner maps organization names and updates owner segments", {
     con,
     sprintf(
       paste0(
-        "INSERT INTO owners (timeseries_id, organization_id, start_dt, end_dt) VALUES ",
+        "INSERT INTO continuous.owners (timeseries_id, organization_id, start_dt, end_dt) VALUES ",
         "(%d, %d, '2099-01-01 00:00:00+00', '2099-01-04 00:00:00+00'),",
         "(%d, %d, '2099-01-04 00:00:00+00', '2099-01-10 00:00:00+00');"
       ),
@@ -60,7 +60,7 @@ test_that("adjust_owner maps organization names and updates owner segments", {
     sprintf(
       paste0(
         "SELECT organization_id, start_dt::text AS start_dt, end_dt::text AS end_dt ",
-        "FROM owners WHERE timeseries_id = %d ",
+        "FROM continuous.owners WHERE timeseries_id = %d ",
         "AND start_dt >= '2099-01-01 00:00:00+00' ",
         "AND end_dt <= '2099-01-10 00:00:00+00' ORDER BY start_dt;"
       ),
@@ -88,7 +88,7 @@ test_that("adjust_contributor accepts date column and delete removes later segme
 
   ts_id <- DBI::dbGetQuery(
     con,
-    "SELECT timeseries_id FROM timeseries ORDER BY timeseries_id LIMIT 1;"
+    "SELECT timeseries_id FROM continuous.timeseries ORDER BY timeseries_id LIMIT 1;"
   )[1, 1]
 
   org_a <- insert_test_org(con, "contrib_test_a")
@@ -98,7 +98,7 @@ test_that("adjust_contributor accepts date column and delete removes later segme
     con,
     sprintf(
       paste0(
-        "INSERT INTO contributors (timeseries_id, organization_id, start_dt, end_dt) VALUES ",
+        "INSERT INTO continuous.contributors (timeseries_id, organization_id, start_dt, end_dt) VALUES ",
         "(%d, %d, '2099-02-01 00:00:00+00', '2099-02-03 00:00:00+00'),",
         "(%d, %d, '2099-02-03 00:00:00+00', '2099-02-10 00:00:00+00');"
       ),
@@ -122,7 +122,7 @@ test_that("adjust_contributor accepts date column and delete removes later segme
     sprintf(
       paste0(
         "SELECT organization_id, start_dt::text AS start_dt, end_dt::text AS end_dt ",
-        "FROM contributors WHERE timeseries_id = %d ",
+        "FROM continuous.contributors WHERE timeseries_id = %d ",
         "AND start_dt >= '2099-02-01 00:00:00+00' ",
         "AND end_dt <= '2099-02-10 00:00:00+00' ORDER BY start_dt;"
       ),
@@ -150,12 +150,12 @@ test_that("adjust_grade splits an existing contiguous period when inserting a mi
 
   ts_id <- DBI::dbGetQuery(
     con,
-    "SELECT timeseries_id FROM timeseries ORDER BY timeseries_id LIMIT 1;"
+    "SELECT timeseries_id FROM continuous.timeseries ORDER BY timeseries_id LIMIT 1;"
   )[1, 1]
 
   grade_types <- DBI::dbGetQuery(
     con,
-    "SELECT grade_type_id FROM grade_types ORDER BY grade_type_id LIMIT 2;"
+    "SELECT grade_type_id FROM public.grade_types ORDER BY grade_type_id LIMIT 2;"
   )
 
   expect_gte(nrow(grade_types), 2)
@@ -167,7 +167,7 @@ test_that("adjust_grade splits an existing contiguous period when inserting a mi
     con,
     sprintf(
       paste0(
-        "INSERT INTO grades (timeseries_id, grade_type_id, start_dt, end_dt) VALUES ",
+        "INSERT INTO continuous.grades (timeseries_id, grade_type_id, start_dt, end_dt) VALUES ",
         "(%d, %d, '2099-01-01 00:00:00+00', '2099-04-01 00:00:00+00');"
       ),
       ts_id,
@@ -190,7 +190,7 @@ test_that("adjust_grade splits an existing contiguous period when inserting a mi
     sprintf(
       paste0(
         "SELECT grade_type_id, start_dt::text AS start_dt, end_dt::text AS end_dt ",
-        "FROM grades WHERE timeseries_id = %d ",
+        "FROM continuous.grades WHERE timeseries_id = %d ",
         "AND start_dt >= '2099-01-01 00:00:00+00' ",
         "AND end_dt <= '2099-04-01 00:00:00+00' ORDER BY start_dt;"
       ),

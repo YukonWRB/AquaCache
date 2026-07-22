@@ -65,7 +65,7 @@ insertACImage <- function(
     owner <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT organization_id FROM organizations WHERE organization_id = ",
+        "SELECT organization_id FROM public.organizations WHERE organization_id = ",
         owner
       )
     )[1, 1]
@@ -79,7 +79,7 @@ insertACImage <- function(
     contributor <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT organization_id FROM organizations WHERE organization_id = ",
+        "SELECT organization_id FROM public.organizations WHERE organization_id = ",
         contributor
       )
     )[1, 1]
@@ -105,7 +105,7 @@ insertACImage <- function(
   image_type <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT image_type_id FROM image_types WHERE image_type_id = ",
+      "SELECT image_type_id FROM files.image_types WHERE image_type_id = ",
       image_type
     )
   )[1, 1]
@@ -169,7 +169,7 @@ insertACImage <- function(
     img_series_id <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT img_series_id FROM image_series WHERE img_series_id = ",
+        "SELECT img_series_id FROM files.image_series WHERE img_series_id = ",
         img_series_id
       )
     )[1, 1]
@@ -181,22 +181,22 @@ insertACImage <- function(
       location <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT location_id FROM image_series WHERE img_series_id = ",
+          "SELECT location_id FROM files.image_series WHERE img_series_id = ",
           img_series_id
         )
       )[1, 1]
       latitude <- DBI::dbGetQuery(
         con,
-        paste0("SELECT latitude FROM locations WHERE location_id = ", location)
+        paste0("SELECT latitude FROM public.locations WHERE location_id = ", location)
       )[1, 1]
       longitude <- DBI::dbGetQuery(
         con,
-        paste0("SELECT longitude FROM locations WHERE location_id = ", location)
+        paste0("SELECT longitude FROM public.locations WHERE location_id = ", location)
       )[1, 1]
       elevation_msl <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT conversion_m FROM datum_conversions WHERE location_id = ",
+          "SELECT conversion_m FROM public.datum_conversions WHERE location_id = ",
           location,
           " AND current IS TRUE"
         )
@@ -228,7 +228,7 @@ insertACImage <- function(
       location_id <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT location_id FROM locations WHERE location_id = ",
+          "SELECT location_id FROM public.locations WHERE location_id = ",
           location
         )
       )[1, 1]
@@ -238,14 +238,14 @@ insertACImage <- function(
         latitude <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT latitude FROM locations WHERE location_id = ",
+            "SELECT latitude FROM public.locations WHERE location_id = ",
             location
           )
         )[1, 1]
         longitude <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT longitude FROM locations WHERE location_id = ",
+            "SELECT longitude FROM public.locations WHERE location_id = ",
             location
           )
         )[1, 1]
@@ -253,7 +253,7 @@ insertACImage <- function(
           elevation_msl <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT conversion_m FROM datum_conversions WHERE location_id = ",
+              "SELECT conversion_m FROM public.datum_conversions WHERE location_id = ",
               location,
               " AND current IS TRUE"
             )
@@ -288,7 +288,7 @@ insertACImage <- function(
         exist_img <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT datetime FROM images WHERE datetime = '",
+            "SELECT datetime FROM files.images WHERE datetime = '",
             datetime,
             "' AND img_series_id = ",
             img_series_id,
@@ -308,7 +308,7 @@ insertACImage <- function(
           new_id <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT image_id FROM images WHERE datetime = '",
+              "SELECT image_id FROM files.images WHERE datetime = '",
               datetime,
               "' AND img_series_id = ",
               img_series_id,
@@ -318,7 +318,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET ",
+              "UPDATE files.images SET ",
               if (!is.null(fetch_datetime)) {
                 paste0("fetch_datetime = '", fetch_datetime, "', ")
               },
@@ -344,7 +344,7 @@ insertACImage <- function(
           new_id <- DBI::dbGetQuery(
             con,
             paste0(
-              "INSERT INTO images (img_series_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file, image_type) VALUES (",
+              "INSERT INTO files.images (img_series_id, datetime, fetch_datetime, description, share_with, location_id, latitude, longitude, format, file, image_type) VALUES (",
               img_series_id,
               ", '",
               datetime,
@@ -393,7 +393,7 @@ insertACImage <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "UPDATE images SET owner = ",
+                "UPDATE files.images SET owner = ",
                 owner,
                 " WHERE image_id = ",
                 new_id,
@@ -405,7 +405,7 @@ insertACImage <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "UPDATE images SET contributor = ",
+                "UPDATE files.images SET contributor = ",
                 contributor,
                 " WHERE image_id = ",
                 new_id,
@@ -417,7 +417,7 @@ insertACImage <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "UPDATE images SET fetch_datetime = '",
+                "UPDATE files.images SET fetch_datetime = '",
                 fetch_datetime,
                 "' WHERE image_id = ",
                 new_id,
@@ -430,7 +430,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET tags = '{",
+              "UPDATE files.images SET tags = '{",
               paste(tags, collapse = ","),
               "}' WHERE image_id = ",
               new_id,
@@ -443,7 +443,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET azimuth_true = ",
+              "UPDATE files.images SET azimuth_true = ",
               azimuth_true,
               " WHERE image_id = ",
               new_id,
@@ -455,7 +455,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET elevation_agl_m = ",
+              "UPDATE files.images SET elevation_agl_m = ",
               elevation_agl,
               " WHERE image_id = ",
               new_id,
@@ -467,7 +467,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET elevation_msl_m = ",
+              "UPDATE files.images SET elevation_msl_m = ",
               elevation_msl,
               " WHERE image_id = ",
               new_id,
@@ -479,7 +479,7 @@ insertACImage <- function(
         img_times <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT first_img, last_img FROM image_series WHERE img_series_id = ",
+            "SELECT first_img, last_img FROM files.image_series WHERE img_series_id = ",
             img_series_id,
             ";"
           )
@@ -489,7 +489,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE image_series SET first_img = '",
+              "UPDATE files.image_series SET first_img = '",
               datetime,
               "' WHERE img_series_id = ",
               img_series_id,
@@ -501,7 +501,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE image_series SET last_img = '",
+              "UPDATE files.image_series SET last_img = '",
               datetime,
               "' WHERE img_series_id = ",
               img_series_id,
@@ -511,7 +511,7 @@ insertACImage <- function(
         }
         DBI::dbExecute(
           con,
-          "UPDATE image_series SET last_new_img = NOW() WHERE img_series_id = $1",
+          "UPDATE files.image_series SET last_new_img = NOW() WHERE img_series_id = $1",
           params = list(img_series_id)
         )
       } else {
@@ -520,7 +520,7 @@ insertACImage <- function(
         new_id <- DBI::dbGetQuery(
           con,
           paste0(
-            "INSERT INTO images (datetime, share_with, latitude, longitude, format, file, image_type) VALUES ('",
+            "INSERT INTO files.images (datetime, share_with, latitude, longitude, format, file, image_type) VALUES ('",
             datetime,
             "', '{",
             paste(share_with, collapse = ","),
@@ -548,7 +548,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET description = '",
+              "UPDATE files.images SET description = '",
               description,
               "' WHERE image_id = ",
               new_id,
@@ -560,7 +560,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET owner = ",
+              "UPDATE files.images SET owner = ",
               owner,
               " WHERE image_id = ",
               new_id,
@@ -572,7 +572,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET contributor = ",
+              "UPDATE files.images SET contributor = ",
               contributor,
               " WHERE image_id = ",
               new_id,
@@ -584,7 +584,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET fetch_datetime = '",
+              "UPDATE files.images SET fetch_datetime = '",
               fetch_datetime,
               "' WHERE image_id = ",
               new_id,
@@ -596,7 +596,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET tags = '{",
+              "UPDATE files.images SET tags = '{",
               paste(tags, collapse = ","),
               "}' WHERE image_id = ",
               new_id,
@@ -609,7 +609,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET azimuth_true = ",
+              "UPDATE files.images SET azimuth_true = ",
               azimuth_true,
               " WHERE image_id = ",
               new_id,
@@ -621,7 +621,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET elevation_agl_m = ",
+              "UPDATE files.images SET elevation_agl_m = ",
               elevation_agl,
               " WHERE image_id = ",
               new_id,
@@ -633,7 +633,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET elevation_msl_m = ",
+              "UPDATE files.images SET elevation_msl_m = ",
               elevation_msl,
               " WHERE image_id = ",
               new_id,
@@ -645,7 +645,7 @@ insertACImage <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "UPDATE images SET location_id = ",
+              "UPDATE files.images SET location_id = ",
               location,
               " WHERE image_id = ",
               new_id,

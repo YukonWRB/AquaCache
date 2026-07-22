@@ -17,7 +17,7 @@
 #' @examples
 #' \dontrun{
 #' con <- AquaConnect()
-#' dbAppendTableRLS(con, "organizations", data.frame(name = "Example Org"))
+#' dbAppendTableRLS(con, "public.organizations", data.frame(name = "Example Org"))
 #' DBI::dbDisconnect(con)
 #' }
 

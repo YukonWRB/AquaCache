@@ -87,48 +87,48 @@ downloadSnowCourse <- function(
 
   swe_paramid <- DBI::dbGetQuery(
     con,
-    "SELECT parameter_id FROM parameters WHERE param_name = 'snow water equivalent';"
+    "SELECT parameter_id FROM public.parameters WHERE param_name = 'snow water equivalent';"
   )[1, 1]
   depth_paramid <- DBI::dbGetQuery(
     con,
-    "SELECT parameter_id FROM parameters WHERE param_name = 'snow depth';"
+    "SELECT parameter_id FROM public.parameters WHERE param_name = 'snow depth';"
   )[1, 1]
   media_id <- DBI::dbGetQuery(
     con,
-    "SELECT media_id FROM media_types WHERE media_type = 'snow'"
+    "SELECT media_id FROM public.media_types WHERE media_type = 'snow'"
   )[1, 1]
   sample_type <- DBI::dbGetQuery(
     con,
-    "SELECT sample_type_id FROM sample_types WHERE LOWER(sample_type) = 'sample-field msr/obs - no lab results expected'"
+    "SELECT sample_type_id FROM discrete.sample_types WHERE LOWER(sample_type) = 'sample-field msr/obs - no lab results expected'"
   )[1, 1]
   sample_owner <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship';"
+    "SELECT organization_id FROM public.organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship';"
   )[1, 1]
   sample_contributor <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship%';"
+    "SELECT organization_id FROM public.organizations WHERE LOWER(name) LIKE 'yukon government department of environment, water science and stewardship%';"
   )[1, 1]
   sample_collect_method <- DBI::dbGetQuery(
     con,
-    "SELECT collection_method_id FROM collection_methods WHERE LOWER(collection_method) = 'observation'"
+    "SELECT collection_method_id FROM discrete.collection_methods WHERE LOWER(collection_method) = 'observation'"
   )[1, 1]
   estimated_result <- DBI::dbGetQuery(
     con,
-    "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'estimated'"
+    "SELECT result_value_type_id FROM discrete.result_value_types WHERE LOWER(result_value_type) = 'estimated'"
   )[1, 1]
   actual_result <- DBI::dbGetQuery(
     con,
-    "SELECT result_value_type_id FROM result_value_types WHERE LOWER(result_value_type) = 'actual'"
+    "SELECT result_value_type_id FROM discrete.result_value_types WHERE LOWER(result_value_type) = 'actual'"
   )[1, 1]
   protocol_method <- DBI::dbGetQuery(
     con,
-    "SELECT protocol_id FROM protocols_methods WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'"
+    "SELECT protocol_id FROM discrete.protocols_methods WHERE LOWER(protocol_name) = 'bc snow survey sampling guide'"
   )[1, 1]
 
   location_id <- DBI::dbGetQuery(
     con,
-    "SELECT location_id FROM locations WHERE LOWER(location_code) = $1 OR LOWER(alias) = $1;",
+    "SELECT location_id FROM public.locations WHERE LOWER(location_code) = $1 OR LOWER(alias) = $1;",
     params = list(tolower(location))
   )[1, 1]
 
@@ -139,7 +139,7 @@ downloadSnowCourse <- function(
     old_surveys <- DBI::dbGetQuery(
       snowCon,
       paste0(
-        "SELECT survey_id FROM surveys WHERE location = '",
+        "SELECT survey_id FROM public.surveys WHERE location = '",
         old_loc,
         "' AND survey_date < '",
         end_date,
@@ -155,7 +155,7 @@ downloadSnowCourse <- function(
       old_surveys <- DBI::dbGetQuery(
         snowCon,
         paste0(
-          "SELECT survey_id, survey_date, target_date, notes FROM surveys WHERE location = '",
+          "SELECT survey_id, survey_date, target_date, notes FROM public.surveys WHERE location = '",
           old_loc,
           "' AND survey_date < '",
           end_date,
@@ -181,7 +181,7 @@ downloadSnowCourse <- function(
         meas <- DBI::dbGetQuery(
           snowCon,
           paste0(
-            "SELECT swe, depth FROM measurements WHERE survey_id = ",
+            "SELECT swe, depth FROM public.measurements WHERE survey_id = ",
             old_surveys$survey_id[i],
             " AND exclude_flag IS FALSE AND (swe IS NOT NULL OR depth IS NOT NULL);"
           )
@@ -211,7 +211,7 @@ downloadSnowCourse <- function(
   if (adjust) {
     # Get all overlapping surveys from the new location
     query <- paste0(
-      "SELECT survey_id, survey_date, target_date FROM surveys WHERE location = '",
+      "SELECT survey_id, survey_date, target_date FROM public.surveys WHERE location = '",
       location,
       "' AND survey_date IN ('",
       paste(old_surveys$survey_date, collapse = "', '"),
@@ -246,7 +246,7 @@ downloadSnowCourse <- function(
         meas <- DBI::dbGetQuery(
           snowCon,
           paste0(
-            "SELECT swe, depth FROM measurements WHERE survey_id = ",
+            "SELECT swe, depth FROM public.measurements WHERE survey_id = ",
             adj_surveys$survey_id[i],
             " AND exclude_flag IS FALSE AND (swe IS NOT NULL OR depth IS NOT NULL);"
           )
@@ -336,7 +336,7 @@ downloadSnowCourse <- function(
         adj_sample_id <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT sample_id FROM samples WHERE location_id = '",
+            "SELECT sample_id FROM discrete.samples WHERE location_id = '",
             location_id,
             "' AND datetime = '",
             j,
@@ -361,13 +361,13 @@ downloadSnowCourse <- function(
             import_source = "downloadSnowCourse",
             share_with = paste0("{", paste(share_with, collapse = ","), "}")
           )
-          dbAppendTableRLS(con, "samples", df)
+          dbAppendTableRLS(con, "discrete.samples", df)
 
           # Fetch the new id
           adj_sample_id <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT sample_id FROM samples WHERE location_id = '",
+              "SELECT sample_id FROM discrete.samples WHERE location_id = '",
               location_id,
               "' AND datetime = '",
               j,
@@ -493,7 +493,7 @@ downloadSnowCourse <- function(
       DBI::dbExecute(
         con,
         paste0(
-          "UPDATE sample_series SET note = 'Compound sample series incorporating measurements from ",
+          "UPDATE discrete.sample_series SET note = 'Compound sample series incorporating measurements from ",
           old_loc,
           ". SWE measurements at the old location adjusted using a multiplier of ",
           round(offset_swe, 4),
@@ -515,7 +515,7 @@ downloadSnowCourse <- function(
         adj_sample_id <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT sample_id FROM samples WHERE location_id = '",
+            "SELECT sample_id FROM discrete.samples WHERE location_id = '",
             location_id,
             "' AND datetime = '",
             j,
@@ -539,13 +539,13 @@ downloadSnowCourse <- function(
             media_id = media_id,
             import_source = "downloadSnowCourse"
           )
-          dbAppendTableRLS(con, "samples", df)
+          dbAppendTableRLS(con, "discrete.samples", df)
 
           # Fetch the new id
           adj_sample_id <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT sample_id FROM samples WHERE location_id = '",
+              "SELECT sample_id FROM discrete.samples WHERE location_id = '",
               location_id,
               "' AND datetime = '",
               j,
@@ -669,7 +669,7 @@ downloadSnowCourse <- function(
   new_surveys <- DBI::dbGetQuery(
     snowCon,
     paste0(
-      "SELECT survey_id AS import_source_id, location, target_date AS target_datetime, survey_date AS datetime, notes AS note FROM surveys WHERE location = '",
+      "SELECT survey_id AS import_source_id, location, target_date AS target_datetime, survey_date AS datetime, notes AS note FROM public.surveys WHERE location = '",
       location,
       "' AND survey_date > '",
       start_date,
@@ -699,7 +699,7 @@ downloadSnowCourse <- function(
     meas <- DBI::dbGetQuery(
       snowCon,
       paste0(
-        "SELECT survey_id, estimate_flag, swe, depth FROM measurements WHERE survey_id = ",
+        "SELECT survey_id, estimate_flag, swe, depth FROM public.measurements WHERE survey_id = ",
         new_surveys$import_source_id[i],
         " AND exclude_flag IS FALSE AND (swe IS NOT NULL OR depth IS NOT NULL);"
       )

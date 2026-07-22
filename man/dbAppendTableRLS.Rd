@@ -41,7 +41,7 @@ Appends rows to a database table while remaining compatible with PostgreSQL Row-
 \examples{
 \dontrun{
 con <- AquaConnect()
-dbAppendTableRLS(con, "organizations", data.frame(name = "Example Org"))
+dbAppendTableRLS(con, "public.organizations", data.frame(name = "Example Org"))
 DBI::dbDisconnect(con)
 }
 }

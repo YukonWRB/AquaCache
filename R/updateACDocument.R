@@ -41,7 +41,7 @@ updateHydrometDocument <- function(
   id_exists <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT d.name, t.document_type_en AS type, d.authors, d.url, d.publish_date, d.description FROM documents AS d LEFT JOIN document_types as t ON d.type = t.document_type_id WHERE document_id = ",
+      "SELECT d.name, t.document_type_en AS type, d.authors, d.url, d.publish_date, d.description FROM files.documents AS d LEFT JOIN files.document_types as t ON d.type = t.document_type_id WHERE document_id = ",
       id
     )
   )
@@ -108,7 +108,7 @@ updateHydrometDocument <- function(
     new_type <- tolower(new_type)
     db_types <- DBI::dbGetQuery(
       con,
-      "SELECT document_type_id, document_type_en FROM document_types;"
+      "SELECT document_type_id, document_type_en FROM files.document_types;"
     )
     if (!(new_type %in% db_types$document_type_en)) {
       stop(
@@ -122,7 +122,7 @@ updateHydrometDocument <- function(
     #Check that the name doesn't already exist
     name_check <- DBI::dbGetQuery(
       con,
-      paste0("SELECT name FROM documents WHERE name = '", new_name, "';")
+      paste0("SELECT name FROM files.documents WHERE name = '", new_name, "';")
     )
     if (nrow(name_check) != 0) {
       stop("There is already a document with this name in the database.")
@@ -134,7 +134,7 @@ updateHydrometDocument <- function(
     exist_geoms <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT geom_id, geom_type, layer_name, feature_name, description FROM vectors WHERE geom_id IN (",
+        "SELECT geom_id, geom_type, layer_name, feature_name, description FROM spatial.vectors WHERE geom_id IN (",
         paste(new_geoms, collapse = ", "),
         ")"
       )
@@ -163,7 +163,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET document = '\\x",
+        "UPDATE files.documents SET document = '\\x",
         paste0(file, collapse = ""),
         "' WHERE document_id = ",
         id,
@@ -176,7 +176,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET name = '",
+        "UPDATE files.documents SET name = '",
         new_name,
         "' WHERE document_id = ",
         id,
@@ -192,7 +192,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET type = ",
+        "UPDATE files.documents SET type = ",
         assigned_type,
         " WHERE document_id = ",
         id,
@@ -205,7 +205,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET authors = '{",
+        "UPDATE files.documents SET authors = '{",
         paste(new_authors, collapse = ", "),
         "}' WHERE document_id = ",
         id,
@@ -217,7 +217,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET url = '",
+        "UPDATE files.documents SET url = '",
         new_url,
         "' WHERE document_id = ",
         id,
@@ -229,7 +229,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET publish_date = '",
+        "UPDATE files.documents SET publish_date = '",
         new_publish_date,
         "' WHERE document_id = ",
         id,
@@ -242,7 +242,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE documents SET user_groups = '{",
+        "UPDATE files.documents SET user_groups = '{",
         paste(new_user_groups, collapse = ", "),
         "}' WHERE document_id = ",
         id,
@@ -255,13 +255,13 @@ updateHydrometDocument <- function(
     docs_spat <- data.frame("document_id" = id, "geom_id" = exist_geoms$geom_id)
     DBI::dbExecute(
       con,
-      "DELETE FROM documents_spatial WHERE document_id = ",
+      "DELETE FROM files.documents_spatial WHERE document_id = ",
       id,
       ";"
     )
     DBI::dbExecute(
       con,
-      "INSERT INTO documents_spatial (document_id, geom_id) VALUES ($1, $2);",
+      "INSERT INTO files.documents_spatial (document_id, geom_id) VALUES ($1, $2);",
       params = list(docs_spat$document_id, docs_spat$geom_id)
     )
   }

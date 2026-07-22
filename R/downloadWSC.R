@@ -117,7 +117,7 @@ downloadWSC <- function(
   )
 
   if (nrow(data) > 0) {
-    qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+    qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.qualifier_types")
     qualifier_mapping <- c(
       `-1` = qualifiers_DB[
         qualifiers_DB$qualifier_type_code == "UNS",
@@ -161,7 +161,7 @@ downloadWSC <- function(
       ]
     )
 
-    approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
+    approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.approval_types")
     approval_mapping <- c(
       "Final/Finales" = approvals_DB[
         approvals_DB$approval_type_code == "A",
@@ -202,19 +202,19 @@ downloadWSC <- function(
 
     grade_DB <- DBI::dbGetQuery(
       con,
-      "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'"
+      "SELECT grade_type_id FROM public.grade_types WHERE grade_type_code = 'UNS'"
     )[1, 1]
     data$grade <- grade_DB
 
     # Get organization_id for 'Water Survey of Canada'
     organization_id <- DBI::dbGetQuery(
       con,
-      "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'"
+      "SELECT organization_id FROM public.organizations WHERE name = 'Water Survey of Canada'"
     )[1, 1]
     if (is.na(organization_id)) {
       organization_id <- DBI::dbGetQuery(
         con,
-        "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
+        "INSERT INTO public.organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
         params = list(
           'Water Survey of Canada',
           'Relev\u00E9 hydrom\u00E9trique du Canada'

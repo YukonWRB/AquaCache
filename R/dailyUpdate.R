@@ -17,7 +17,7 @@
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries', 'image_series', or 'raster_series_index' tables to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #' @param continuous If TRUE, will update continuous data. Default is TRUE.
 #' @param discrete If TRUE, will update discrete data. Default is TRUE.
-#' @param hydat If TRUE, will check for new HYDAT data and update timeseries in the database if needed. Default is TRUE.
+#' @param hydat If TRUE, will check for new HYDAT data and update continuous.timeseries in the database if needed. Default is TRUE.
 #' @param images If TRUE, will fetch new images. Default is TRUE.
 #' @param rasters If TRUE, will fetch new rasters. Default is TRUE.
 #'
@@ -53,13 +53,13 @@ dailyUpdate <- function(
   if (timeseries_id[1] == "all") {
     continuous_ts <- DBI::dbGetQuery(
       con,
-      "SELECT timeseries_id, last_daily_calculation, active FROM timeseries WHERE source_fx IS NOT NULL"
+      "SELECT timeseries_id, last_daily_calculation, active FROM continuous.timeseries WHERE source_fx IS NOT NULL"
     )
   } else {
     continuous_ts <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT timeseries_id, last_daily_calculation, active FROM timeseries WHERE timeseries_id IN (",
+        "SELECT timeseries_id, last_daily_calculation, active FROM continuous.timeseries WHERE timeseries_id IN (",
         paste(timeseries_id, collapse = ", "),
         ") AND source_fx IS NOT NULL"
       )
@@ -123,13 +123,13 @@ dailyUpdate <- function(
     if (sample_series_id[1] == "all") {
       discrete_ids <- DBI::dbGetQuery(
         con,
-        "SELECT sample_series_id FROM sample_series WHERE source_fx IS NOT NULL"
+        "SELECT sample_series_id FROM discrete.sample_series WHERE source_fx IS NOT NULL"
       )
     } else {
       discrete_ids <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT sample_series_id FROM sample_series WHERE sample_series_id IN (",
+          "SELECT sample_series_id FROM discrete.sample_series WHERE sample_series_id IN (",
           paste(sample_series_id, collapse = ", "),
           ") AND source_fx IS NOT NULL"
         )
@@ -231,7 +231,7 @@ dailyUpdate <- function(
     )
   }
 
-  ### Check for a new version of HYDAT, update timeseries in the database if needed. #####
+  ### Check for a new version of HYDAT, update continuous.timeseries in the database if needed. #####
   if (hydat) {
     message(
       "Checking for new HYDAT database on this computer and determining the version last used for updating timeseries with update_hydat..."
@@ -272,7 +272,7 @@ dailyUpdate <- function(
     {
       DBI::dbExecute(
         con,
-        "UPDATE internal_status SET value = NOW() WHERE event = 'last_update_daily'"
+        "UPDATE information.internal_status SET value = NOW() WHERE event = 'last_update_daily'"
       )
     },
     silent = TRUE

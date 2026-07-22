@@ -239,7 +239,7 @@ addACLocation <- function(
   for (i in location_code) {
     exists <- DBI::dbGetQuery(
       con,
-      "SELECT location_id FROM locations WHERE LOWER(location_code) = $1;",
+      "SELECT location_id FROM public.locations WHERE LOWER(location_code) = $1;",
       params = list(tolower(i))
     )[1, 1]
     if (!is.na(exists)) {
@@ -251,7 +251,7 @@ addACLocation <- function(
   for (i in name) {
     exists <- DBI::dbGetQuery(
       con,
-      "SELECT location_id FROM locations WHERE LOWER(name) = $1;",
+      "SELECT location_id FROM public.locations WHERE LOWER(name) = $1;",
       params = list(tolower(i))
     )[1, 1]
     if (!is.na(exists)) {
@@ -261,7 +261,7 @@ addACLocation <- function(
   for (i in name_fr) {
     exists <- DBI::dbGetQuery(
       con,
-      "SELECT location_id FROM locations WHERE LOWER(name_fr) = $1;",
+      "SELECT location_id FROM public.locations WHERE LOWER(name_fr) = $1;",
       params = list(tolower(i))
     )[1, 1]
     if (!is.na(exists)) {
@@ -273,7 +273,7 @@ addACLocation <- function(
   for (i in 1:length(latitude)) {
     exists <- DBI::dbGetQuery(
       con,
-      "SELECT location_id FROM locations WHERE latitude = $1 AND longitude = $2;",
+      "SELECT location_id FROM public.locations WHERE latitude = $1 AND longitude = $2;",
       params = list(latitude[i], longitude[i])
     )[1, 1]
     if (!is.na(exists)) {
@@ -293,7 +293,7 @@ addACLocation <- function(
     exists <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT network_id FROM networks WHERE network_id IN (",
+        "SELECT network_id FROM public.networks WHERE network_id IN (",
         paste(network_sub, collapse = ", "),
         ");"
       )
@@ -307,7 +307,7 @@ addACLocation <- function(
     exists <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT project_id FROM projects WHERE project_id IN (",
+        "SELECT project_id FROM public.projects WHERE project_id IN (",
         paste(project_sub, collapse = ", "),
         ");"
       )
@@ -323,7 +323,7 @@ addACLocation <- function(
     exists <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT datum_id FROM datum_list WHERE datum_id IN (",
+        "SELECT datum_id FROM public.datum_list WHERE datum_id IN (",
         paste(unique_datums, collapse = ", "),
         ");"
       )
@@ -331,7 +331,7 @@ addACLocation <- function(
   } else {
     exists <- DBI::dbGetQuery(
       con,
-      "SELECT datum_id FROM datum_list WHERE datum_id = $1;",
+      "SELECT datum_id FROM public.datum_list WHERE datum_id = $1;",
       params = list(unique_datums)
     )
   }
@@ -345,7 +345,7 @@ addACLocation <- function(
     exists <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT type_id FROM location_types WHERE type_id IN (",
+        "SELECT type_id FROM public.location_types WHERE type_id IN (",
         paste(unique_location_types, collapse = ", "),
         ");"
       )
@@ -353,7 +353,7 @@ addACLocation <- function(
   } else {
     exists <- DBI::dbGetQuery(
       con,
-      "SELECT type_id FROM location_types WHERE type_id = $1;",
+      "SELECT type_id FROM public.location_types WHERE type_id = $1;",
       params = list(unique_location_types)
     )
   }
@@ -369,7 +369,7 @@ addACLocation <- function(
         # Add the location to the 'locations' table ############################
         location_id <- DBI::dbGetQuery(
           con,
-          "INSERT INTO locations (location_code, name, name_fr, alias, latitude, longitude, share_with, location_type, note, contact) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING location_id;",
+          "INSERT INTO public.locations (location_code, name, name_fr, alias, latitude, longitude, share_with, location_type, note, contact) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING location_id;",
           params = list(
             location_code[i],
             name[i],
@@ -387,7 +387,7 @@ addACLocation <- function(
         # Add the location's datum information to the 'datums' table ############################
         DBI::dbExecute(
           con,
-          "INSERT INTO datum_conversions (location_id, datum_id_from, datum_id_to, conversion_m, current) VALUES ($1, $2, $3, $4, $5);",
+          "INSERT INTO public.datum_conversions (location_id, datum_id_from, datum_id_to, conversion_m, current) VALUES ($1, $2, $3, $4, $5);",
           params = list(
             location_id,
             datum_id_from[i],
@@ -401,7 +401,7 @@ addACLocation <- function(
         if (!is.na(network[i])) {
           DBI::dbExecute(
             con,
-            "INSERT INTO locations_networks (location_id, network_id) VALUES ($1, $2);",
+            "INSERT INTO public.locations_networks (location_id, network_id) VALUES ($1, $2);",
             params = list(
               location_id,
               network[i]
@@ -412,7 +412,7 @@ addACLocation <- function(
         if (!is.na(project[i])) {
           DBI::dbExecute(
             con,
-            "INSERT INTO locations_projects (location_id, project_id) VALUES ($1, $2);",
+            "INSERT INTO public.locations_projects (location_id, project_id) VALUES ($1, $2);",
             params = list(
               location_id,
               project[i]

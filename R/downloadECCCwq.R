@@ -190,38 +190,38 @@ downloadECCCwq <- function(
 
   media_id <- DBI::dbGetQuery(
     con,
-    "SELECT media_id FROM media_types WHERE media_type = 'surface water';"
+    "SELECT media_id FROM public.media_types WHERE media_type = 'surface water';"
   )[1, 1]
   owner_contributor <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE name = 'Environment and Climate Change Canada';"
+    "SELECT organization_id FROM public.organizations WHERE name = 'Environment and Climate Change Canada';"
   )[1, 1]
   if (is.na(owner_contributor)) {
     DBI::dbExecute(
       con,
-      "INSERT INTO organizations (name) VALUES ('Environment and Climate Change Canada');"
+      "INSERT INTO public.organizations (name) VALUES ('Environment and Climate Change Canada');"
     )
   }
   sample_type <- DBI::dbGetQuery(
     con,
-    "SELECT sample_type_id FROM sample_types WHERE sample_type = 'sample-routine';"
+    "SELECT sample_type_id FROM discrete.sample_types WHERE sample_type = 'sample-routine';"
   )[1, 1]
   collect_method <- DBI::dbGetQuery(
     con,
-    "SELECT collection_method_id FROM collection_methods WHERE collection_method LIKE ('Water Bottle%');"
+    "SELECT collection_method_id FROM discrete.collection_methods WHERE collection_method LIKE ('Water Bottle%');"
   )[1, 1]
   result_conditions <- DBI::dbGetQuery(
     con,
-    "SELECT result_condition_id, result_condition FROM result_conditions;"
+    "SELECT result_condition_id, result_condition FROM discrete.result_conditions;"
   )
   eccc_lab <- DBI::dbGetQuery(
     con,
-    "SELECT lab_id FROM laboratories WHERE lab_name = 'Environment and Climate Change Canada';"
+    "SELECT lab_id FROM discrete.laboratories WHERE lab_name = 'Environment and Climate Change Canada';"
   )[1, 1]
   if (is.na(eccc_lab)) {
     eccc_lab <- DBI::dbGetQuery(
       con,
-      "INSERT INTO laboratories (lab_name) VALUES ('Environment and Climate Change Canada') RETURNING lab_id;"
+      "INSERT INTO discrete.laboratories (lab_name) VALUES ('Environment and Climate Change Canada') RETURNING lab_id;"
     )[1, 1]
   }
 

@@ -75,13 +75,13 @@ getNewDiscrete <- function(
     if (is.null(sample_series_id)) {
       all_series <- DBI::dbGetQuery(
         con,
-        "SELECT * FROM sample_series WHERE (synch_to IS NULL OR synch_to >= now())"
+        "SELECT * FROM discrete.sample_series WHERE (synch_to IS NULL OR synch_to >= now())"
       )
     } else {
       all_series <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT * FROM sample_series WHERE sample_series_id IN (",
+          "SELECT * FROM discrete.sample_series WHERE sample_series_id IN (",
           paste(sample_series_id, collapse = ", "),
           ") AND (synch_to IS NULL OR synch_to >= now())"
         )
@@ -110,7 +110,7 @@ getNewDiscrete <- function(
       all_series <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT * FROM sample_series WHERE location_id IN (",
+          "SELECT * FROM discrete.sample_series WHERE location_id IN (",
           paste(location_id, collapse = ", "),
           ") AND (synch_to IS NULL OR synch_to >= now())"
         )
@@ -119,7 +119,7 @@ getNewDiscrete <- function(
       all_series <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT * FROM sample_series WHERE location_id IN (",
+          "SELECT * FROM discrete.sample_series WHERE location_id IN (",
           paste(location_id, collapse = ", "),
           ") AND sub_location_id IN (",
           paste(sub_location_id, collapse = ", "),
@@ -194,7 +194,7 @@ getNewDiscrete <- function(
 
         # Find the last data point for this series
         query <- paste0(
-          "SELECT MAX(datetime) FROM samples WHERE location_id = ",
+          "SELECT MAX(datetime) FROM discrete.samples WHERE location_id = ",
           loc_id,
           " AND import_source = '",
           source_fx,
@@ -522,7 +522,7 @@ getNewDiscrete <- function(
           result_speciation <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT parameter_id, result_speciation AS result_speciation_bool FROM parameters WHERE parameter_id IN (",
+              "SELECT parameter_id, result_speciation AS result_speciation_bool FROM public.parameters WHERE parameter_id IN (",
               paste(unique(results$parameter_id), collapse = ", "),
               ");"
             )
@@ -530,7 +530,7 @@ getNewDiscrete <- function(
           sample_fraction <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM parameters WHERE parameter_id IN (",
+              "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM public.parameters WHERE parameter_id IN (",
               paste(unique(results$parameter_id), collapse = ", "),
               ");"
             )
@@ -631,7 +631,7 @@ getNewDiscrete <- function(
         } # End of looping over each list element (sample) for a sample_series_id
         DBI::dbExecute(
           con,
-          "UPDATE sample_series SET last_new_data = now() WHERE sample_series_id = $1",
+          "UPDATE discrete.sample_series SET last_new_data = now() WHERE sample_series_id = $1",
           params = list(sid)
         ) # Update the last new data column
       },
@@ -669,7 +669,7 @@ getNewDiscrete <- function(
     {
       DBI::dbExecute(
         con,
-        "UPDATE internal_status SET value = NOW() WHERE event = 'last_new_discrete'"
+        "UPDATE information.internal_status SET value = NOW() WHERE event = 'last_new_discrete'"
       )
     },
     silent = TRUE

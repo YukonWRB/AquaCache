@@ -29,7 +29,7 @@ dailyUpdate(
 
 \item{discrete}{If TRUE, will update discrete data. Default is TRUE.}
 
-\item{hydat}{If TRUE, will check for new HYDAT data and update timeseries in the database if needed. Default is TRUE.}
+\item{hydat}{If TRUE, will check for new HYDAT data and update continuous.timeseries in the database if needed. Default is TRUE.}
 
 \item{images}{If TRUE, will fetch new images. Default is TRUE.}
 

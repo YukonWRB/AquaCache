@@ -16,7 +16,7 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
     dbGetQuery = function(con, statement, ...) {
       if (
         grepl(
-          "SELECT timeseries_id, last_daily_calculation, active FROM timeseries WHERE source_fx IS NOT NULL",
+          "SELECT timeseries_id, last_daily_calculation, active FROM continuous.timeseries WHERE source_fx IS NOT NULL",
           statement,
           fixed = TRUE
         )

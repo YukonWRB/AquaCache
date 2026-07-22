@@ -142,13 +142,13 @@ downloadECCCwx <- function(
       # Get organization_id for 'Environment and Climate Change Canada'
       organization_id <- DBI::dbGetQuery(
         con,
-        "SELECT organization_id FROM organizations WHERE name = 'Environment and Climate Change Canada'"
+        "SELECT organization_id FROM public.organizations WHERE name = 'Environment and Climate Change Canada'"
       )[1, 1]
       if (is.na(organization_id)) {
         # Create a new organization entry for ECCC if it doesn't already exist, and get the new organization_id
         organization_id <- DBI::dbGetQuery(
           con,
-          "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
+          "INSERT INTO public.organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
           params = list(
             'Environment and Climate Change Canada',
             'Environnement et Changement Climatique Canada'
@@ -158,15 +158,15 @@ downloadECCCwx <- function(
 
       grade_unspecified <- DBI::dbGetQuery(
         con,
-        "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'"
+        "SELECT grade_type_id FROM public.grade_types WHERE grade_type_code = 'UNS'"
       )[1, 1]
       approval_unspecified <- DBI::dbGetQuery(
         con,
-        "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNS'"
+        "SELECT approval_type_id FROM public.approval_types WHERE approval_type_code = 'UNS'"
       )[1, 1]
       qualifier_unspecified <- DBI::dbGetQuery(
         con,
-        "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNS'"
+        "SELECT qualifier_type_id FROM public.qualifier_types WHERE qualifier_type_code = 'UNS'"
       )[1, 1]
 
       data$grade <- grade_unspecified

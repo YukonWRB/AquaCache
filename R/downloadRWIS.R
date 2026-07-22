@@ -84,18 +84,18 @@ downloadRWIS <- function(
       # abbreviation is unique in stations_station table
       stn_id <- DBI::dbGetQuery(
         rwis,
-        "SELECT id FROM stations_station WHERE abbreviation = $1",
+        "SELECT id FROM public.stations_station WHERE abbreviation = $1",
         params = list(location)
       )[1, 1]
 
-      # Get the data from measurements_measurement table for the specified location id, parameter, and datetime range
+      # Get the data from public.measurements_measurement table for the specified location id, parameter, and datetime range
       # USE UNNEST to extract the array column corresponding to the parameter
       # Filter out NULLs and -9999 (missing data code)
       data <- DBI::dbGetQuery(
         rwis,
         paste0(
           "SELECT measurement_time AS datetime, value ",
-          "FROM measurements_measurement, ",
+          "FROM public.measurements_measurement, ",
           "UNNEST(",
           parameter,
           ") AS value ",

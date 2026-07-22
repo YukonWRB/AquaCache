@@ -42,7 +42,7 @@ test_that("generateACLocationCode returns NHN-based codes", {
 
   location_type <- DBI::dbGetQuery(
     con,
-    "SELECT type_id, type_suffix FROM location_types WHERE type_suffix IS NOT NULL LIMIT 1;"
+    "SELECT type_id, type_suffix FROM public.location_types WHERE type_suffix IS NOT NULL LIMIT 1;"
   )
   if (nrow(location_type) == 0) {
     skip("No location type suffix available in the test database.")
@@ -80,7 +80,7 @@ test_that("generateACLocationCode returns NHN-based codes", {
 
   location_type2 <- DBI::dbGetQuery(
     con,
-    "SELECT type_id, type_suffix FROM location_types WHERE type_suffix IS NOT NULL AND type_suffix != $1 LIMIT 1;",
+    "SELECT type_id, type_suffix FROM public.location_types WHERE type_suffix IS NOT NULL AND type_suffix != $1 LIMIT 1;",
     params = list(location_type$type_suffix)
   )
 

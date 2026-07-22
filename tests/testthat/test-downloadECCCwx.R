@@ -70,16 +70,16 @@ test_that("downloadECCCwx reuses a cached superset date range", {
   )
   testthat::local_mocked_bindings(
     dbGetQuery = function(con, statement, ...) {
-      if (grepl("FROM organizations", statement, fixed = TRUE)) {
+      if (grepl("FROM public.organizations", statement, fixed = TRUE)) {
         return(data.frame(organization_id = 1L))
       }
-      if (grepl("FROM grade_types", statement, fixed = TRUE)) {
+      if (grepl("FROM public.grade_types", statement, fixed = TRUE)) {
         return(data.frame(grade_type_id = 2L))
       }
-      if (grepl("FROM approval_types", statement, fixed = TRUE)) {
+      if (grepl("FROM public.approval_types", statement, fixed = TRUE)) {
         return(data.frame(approval_type_id = 3L))
       }
-      if (grepl("FROM qualifier_types", statement, fixed = TRUE)) {
+      if (grepl("FROM public.qualifier_types", statement, fixed = TRUE)) {
         return(data.frame(qualifier_type_id = 4L))
       }
 
