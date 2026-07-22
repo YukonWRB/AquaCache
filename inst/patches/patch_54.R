@@ -1063,6 +1063,9 @@ tryCatch(
         "' WHERE item = 'AquaCache R package used for last patch';"
       )
     )
+    
+    # Delete the now unecessary table 'public.locations_metadata_xsections'
+    DBI::dbExecute(con, "DROP TABLE IF EXISTS public.locations_metadata_xsections;")
 
     DBI::dbExecute(con, "COMMIT;")
     active <- FALSE

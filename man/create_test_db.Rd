@@ -2,7 +2,7 @@
 % Please edit documentation in R/create_test_DB.R
 \name{create_test_db}
 \alias{create_test_db}
-\title{Create a small test database}
+\title{Create a small test or seed database}
 \usage{
 create_test_db(
   name = "aquacache",
@@ -42,7 +42,7 @@ create_test_db(
 Path to a gzipped SQL dump containing schema and deterministic fixture data.
 }
 \description{
-This function uses the \code{pg_dump} utility to create a dump of the schema and deterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the \code{public_reader} login role using password \code{"aquacache"}, and a command to set the database \code{search_path} on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
+This function uses the \code{pg_dump} utility to create a dump of the schema and reference table data, and addsdeterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path and can be restored with \code{\link[=restore_seed_db]{restore_seed_db()}}. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the \code{public_reader} login role using password \code{aquacache}, and a command to set the database \code{search_path} on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
 }
 \seealso{
 \code{\link[=db_dump]{db_dump()}}

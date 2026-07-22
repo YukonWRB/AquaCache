@@ -1,6 +1,6 @@
-#' Create a small test database
+#' Create a small test or seed database
 #'
-#' This function uses the `pg_dump` utility to create a dump of the schema and deterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `"aquacache"`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump utility installed.
+#' This function uses the `pg_dump` utility to create a dump of the schema and reference table data, and addsdeterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path and can be restored with [restore_seed_db()]. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `aquacache`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
 #'
 #' @param name Target database name (i.e. the one to be dumped). By default, it is set to "aquacache". If you want to dump a different database, specify its name here.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost="hostname".
@@ -337,13 +337,8 @@ create_test_db <- function(
     "boreholes.borehole_well_purposes",
     "boreholes.casing_materials",
     "boreholes.drillers",
-    "criteria.licence_types",
-    "criteria.licence_authorities",
     "criteria.guideline_publishers",
     "criteria.guideline_series",
-    "criteria.guidelines",
-    "criteria.guidelines_fractions",
-    "criteria.guidelines_media_types",
     "criteria.guideline_comparison_operators",
     "criteria.guideline_value_algorithms",
     "criteria.guideline_jurisdiction_levels",
@@ -351,10 +346,15 @@ create_test_db <- function(
     "criteria.guideline_protection_goals",
     "criteria.guideline_exposure_durations",
     "criteria.guideline_averaging_periods",
+    "criteria.guidelines",
     "criteria.guideline_value_rules",
     "criteria.guideline_rule_inputs",
     "criteria.guideline_rule_coefficients",
-    "criteria.guideline_narrative_values"
+    "criteria.guideline_narrative_values",
+    "criteria.licence_types",
+    "criteria.licence_authorities",
+    "criteria.guidelines_fractions",
+    "criteria.guidelines_media_types"
   )
 
   # Load the ancillary tables into the test database using DBI
