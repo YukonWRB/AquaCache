@@ -60,7 +60,7 @@ addACOrg <- function(
   exists <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT organization_id FROM organizations WHERE LOWER(name) = '",
+      "SELECT organization_id FROM public.organizations WHERE LOWER(name) = '",
       tolower(name),
       "';"
     )
@@ -72,7 +72,7 @@ addACOrg <- function(
   # Insert the new owner/contributor group
   new_id <- DBI::dbGetQuery(
     con,
-    "INSERT INTO organizations (name, name_fr, contact_name, phone, email, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING organization_id;",
+    "INSERT INTO public.organizations (name, name_fr, contact_name, phone, email, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING organization_id;",
     params = list(name, name_fr, contact_name, phone, email, note)
   )[1, 1]
 

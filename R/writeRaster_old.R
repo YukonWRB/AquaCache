@@ -36,7 +36,7 @@
 writeRaster_old <- function(
   con,
   raster,
-  rast_table = "rasters",
+  rast_table = c("spatial", "rasters"),
   bit.depth = NULL,
   blocks = NULL,
   constraints = TRUE

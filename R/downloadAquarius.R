@@ -180,7 +180,7 @@ downloadAquarius <- function(
     }
 
     # format approvals, grade, qualifiers times
-    approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM approval_types")
+    approvals_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.approval_types")
     if (is.null(nrow(RawDL$Approvals)) || nrow(RawDL$Approvals) == 0) {
       # Then it's probably an empty list or data.frame because there are no approvals
       approvals <- data.frame(
@@ -262,7 +262,7 @@ downloadAquarius <- function(
       )
     }
 
-    grades_DB <- DBI::dbGetQuery(con, "SELECT * FROM grade_types")
+    grades_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.grade_types")
     if (is.null(nrow(RawDL$Grades)) || nrow(RawDL$Grades) == 0) {
       # Then it's probably an empty list or data.frame because there are no grades
       grades <- data.frame(
@@ -330,7 +330,7 @@ downloadAquarius <- function(
       )
     }
 
-    qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+    qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.qualifier_types")
     if (is.null(nrow(RawDL$Qualifiers)) || nrow(RawDL$Qualifiers) == 0) {
       # Then it's probably an empty list or data.frame because there are no qualifiers
       qualifiers <- data.frame(

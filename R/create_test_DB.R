@@ -61,7 +61,7 @@ create_test_db <- function(
   ) {
     installed <- DBI::dbGetQuery(
       con,
-      "SELECT extname FROM pg_extension"
+      "SELECT extname FROM pg_catalog.pg_extension"
     )$extname
 
     missing <- setdiff(required, installed)
@@ -92,7 +92,7 @@ create_test_db <- function(
   tryCatch(
     {
       # Check if the testdb database exists already
-      existing_dbs <- DBI::dbGetQuery(con, "SELECT datname FROM pg_database;")
+      existing_dbs <- DBI::dbGetQuery(con, "SELECT datname FROM pg_catalog.pg_database;")
       if ("testdb" %in% existing_dbs$datname) {
         # Ask the user if they want to delete and replace the existing testdb database
         message(
@@ -1607,13 +1607,13 @@ create_test_db <- function(
 
   content <- DBI::dbGetQuery(
     con,
-    "SELECT page, position, content_type, content_id FROM page_content WHERE content_id IN ('news_head', 'news_body', 'hr')"
+    "SELECT page, position, content_type, content_id FROM application.page_content WHERE content_id IN ('news_head', 'news_body', 'hr')"
   )
   for (i in seq_len(nrow(content))) {
     DBI::dbExecute(
       test_con,
       sprintf(
-        "INSERT INTO page_content (page, position, content_type, content_id)
+        "INSERT INTO application.page_content (page, position, content_type, content_id)
          VALUES (%s, %d, %s, %s)",
         DBI::dbQuoteString(test_con, content$page[i]),
         content$position[i],
@@ -1632,16 +1632,16 @@ create_test_db <- function(
       tbl_ns.nspname AS table_schema,
       tbl.relname AS table_name,
       col.attname AS column_name
-    FROM pg_class seq
-    JOIN pg_namespace seq_ns
+    FROM pg_catalog.pg_class seq
+    JOIN pg_catalog.pg_namespace seq_ns
       ON seq_ns.oid = seq.relnamespace
-    JOIN pg_depend dep
+    JOIN pg_catalog.pg_depend dep
       ON dep.objid = seq.oid
-    JOIN pg_class tbl
+    JOIN pg_catalog.pg_class tbl
       ON tbl.oid = dep.refobjid
-    JOIN pg_namespace tbl_ns
+    JOIN pg_catalog.pg_namespace tbl_ns
       ON tbl_ns.oid = tbl.relnamespace
-    JOIN pg_attribute col
+    JOIN pg_catalog.pg_attribute col
       ON col.attrelid = tbl.oid
      AND col.attnum = dep.refobjsubid
     WHERE seq.relkind = 'S'

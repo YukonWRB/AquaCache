@@ -106,7 +106,7 @@ insertACRaster <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE rasters SET reference_id = ",
+        "UPDATE spatial.rasters SET reference_id = ",
         new_id,
         " WHERE rid IN (",
         paste(res$appended_rids, collapse = ","),

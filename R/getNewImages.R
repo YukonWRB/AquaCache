@@ -33,13 +33,13 @@ getNewImages <- function(
   if (image_series_ids[1] == "all") {
     series_ids <- DBI::dbGetQuery(
       con,
-      "SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL;"
+      "SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM files.image_series i WHERE i.source_fx IS NOT NULL;"
     )
   } else {
     series_ids <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM image_series i WHERE i.source_fx IS NOT NULL AND img_series_id IN ('",
+        "SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM files.image_series i WHERE i.source_fx IS NOT NULL AND img_series_id IN ('",
         paste(image_series_ids, collapse = "', '"),
         "');"
       )
@@ -66,7 +66,7 @@ getNewImages <- function(
   image_type <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT image_type_id FROM image_types WHERE image_type = 'Automated camera';"
+      "SELECT image_type_id FROM files.image_types WHERE image_type = 'Automated camera';"
     )
   )[1, 1]
 
@@ -173,7 +173,7 @@ getNewImages <- function(
     {
       DBI::dbExecute(
         con,
-        "UPDATE internal_status SET value = NOW() WHERE event = 'lastet_new_images';"
+        "UPDATE information.internal_status SET value = NOW() WHERE event = 'lastet_new_images';"
       )
     },
     silent = TRUE

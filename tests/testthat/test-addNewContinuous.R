@@ -5,8 +5,8 @@ test_that("addNewContinuous inserts a new measurement", {
   tsid <- DBI::dbGetQuery(
     con,
     "SELECT t.timeseries_id
-     FROM timeseries t
-     JOIN measurements_continuous mc
+     FROM continuous.timeseries t
+     JOIN continuous.measurements_continuous mc
        ON mc.timeseries_id = t.timeseries_id
      WHERE t.timeseries_type = 'basic'
      GROUP BY t.timeseries_id
@@ -18,7 +18,7 @@ test_that("addNewContinuous inserts a new measurement", {
 
   last_row <- DBI::dbGetQuery(
     con,
-    "SELECT datetime, value, period FROM measurements_continuous WHERE timeseries_id = $1 ORDER BY datetime DESC LIMIT 1",
+    "SELECT datetime, value, period FROM continuous.measurements_continuous WHERE timeseries_id = $1 ORDER BY datetime DESC LIMIT 1",
     params = list(tsid)
   )
   if (nrow(last_row) == 0) {
@@ -43,7 +43,7 @@ test_that("addNewContinuous inserts a new measurement", {
 
   inserted <- DBI::dbGetQuery(
     con,
-    "SELECT COUNT(*) FROM measurements_continuous WHERE timeseries_id = $1 AND datetime = $2",
+    "SELECT COUNT(*) FROM continuous.measurements_continuous WHERE timeseries_id = $1 AND datetime = $2",
     params = list(tsid, new_datetime)
   )[[1]]
   expect_equal(inserted, 1)
@@ -58,7 +58,7 @@ test_that("addNewContinuous errors when datetime is missing", {
   tsid <- DBI::dbGetQuery(
     con,
     "SELECT timeseries_id
-     FROM timeseries
+     FROM continuous.timeseries
      WHERE timeseries_type = 'basic'
      LIMIT 1"
   )[[1]]

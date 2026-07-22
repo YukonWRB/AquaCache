@@ -120,13 +120,13 @@ synchronize_continuous <- function(
   if (timeseries_id[1] == "all") {
     all_timeseries <- DBI::dbGetQuery(
       con,
-      "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL"
+      "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM continuous.timeseries t JOIN continuous.aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM timeseries t JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN (",
+        "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM continuous.timeseries t JOIN continuous.aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN (",
         paste(timeseries_id, collapse = ", "),
         ") AND source_fx IS NOT NULL;"
       )
@@ -161,21 +161,21 @@ synchronize_continuous <- function(
 
   grade_unknown <- DBI::dbGetQuery(
     con,
-    "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';"
+    "SELECT grade_type_id FROM public.grade_types WHERE grade_type_code = 'UNK';"
   )[1, 1]
   if (is.na(grade_unknown)) {
     stop("synchronize: Could not find grade type 'Unknown' in the database.")
   }
   approval_unknown <- DBI::dbGetQuery(
     con,
-    "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';"
+    "SELECT approval_type_id FROM public.approval_types WHERE approval_type_code = 'UNK';"
   )[1, 1]
   if (is.na(approval_unknown)) {
     stop("synchronize: Could not find approval type 'Unknown' in the database.")
   }
   qualifier_unknown <- DBI::dbGetQuery(
     con,
-    "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';"
+    "SELECT qualifier_type_id FROM public.qualifier_types WHERE qualifier_type_code = 'UNK';"
   )[1, 1]
   if (is.na(qualifier_unknown)) {
     stop(
@@ -492,7 +492,7 @@ synchronize_continuous <- function(
         DBI::dbExecute(
           con,
           paste0(
-            "UPDATE timeseries SET last_synchronize = '",
+            "UPDATE continuous.timeseries SET last_synchronize = '",
             .POSIXct(Sys.time(), "UTC"),
             "' WHERE timeseries_id = ",
             tsid,
@@ -511,7 +511,7 @@ synchronize_continuous <- function(
     inDB <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT no_update, datetime, value, period, imputed FROM measurements_continuous WHERE timeseries_id = ",
+        "SELECT no_update, datetime, value, period, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
         tsid,
         " AND datetime >= '",
         min(inRemote$datetime),
@@ -716,7 +716,7 @@ synchronize_continuous <- function(
           DBI::dbExecute(
             con,
             paste0(
-              "DELETE FROM measurements_continuous WHERE timeseries_id = ",
+              "DELETE FROM continuous.measurements_continuous WHERE timeseries_id = ",
               tsid,
               " AND datetime IN ('",
               paste(fmt(delete_datetimes), collapse = "', '"),
@@ -729,7 +729,7 @@ synchronize_continuous <- function(
           append_rows$timeseries_id <- tsid
           dbAppendTableRLS(
             con,
-            "measurements_continuous",
+            "continuous.measurements_continuous",
             append_rows[, c(
               "datetime",
               "value",
@@ -742,7 +742,7 @@ synchronize_continuous <- function(
         DBI::dbExecute(
           con,
           paste0(
-            "UPDATE timeseries SET last_synchronize = '",
+            "UPDATE continuous.timeseries SET last_synchronize = '",
             .POSIXct(Sys.time(), "UTC"),
             "' WHERE timeseries_id = ",
             tsid,
@@ -795,7 +795,7 @@ synchronize_continuous <- function(
         DBI::dbExecute(
           con,
           paste0(
-            "UPDATE timeseries SET last_synchronize = '",
+            "UPDATE continuous.timeseries SET last_synchronize = '",
             .POSIXct(Sys.time(), "UTC"),
             "' WHERE timeseries_id = ",
             tsid,
@@ -1067,7 +1067,7 @@ synchronize_continuous <- function(
   DBI::dbExecute(
     con,
     paste0(
-      "UPDATE internal_status SET value = '",
+      "UPDATE information.internal_status SET value = '",
       .POSIXct(Sys.time(), "UTC"),
       "' WHERE event = 'last_sync_continuous';"
     )

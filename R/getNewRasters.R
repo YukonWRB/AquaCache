@@ -72,7 +72,7 @@ getNewRasters <- function(
         COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name, 
         rs.active 
       FROM spatial.raster_series_index rs
-      JOIN raster_types rt ON rt.raster_type_id = rs.raster_type_id
+      JOIN spatial.raster_types rt ON rt.raster_type_id = rs.raster_type_id
       LEFT JOIN public.parameters p ON p.parameter_id = rs.parameter_id
       WHERE rs.source_fx IS NOT NULL;"
     )
@@ -90,7 +90,7 @@ getNewRasters <- function(
           COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name, 
           rs.active 
         FROM spatial.raster_series_index rs
-        JOIN raster_types rt ON rt.raster_type_id = rs.raster_type_id
+        JOIN spatial.raster_types rt ON rt.raster_type_id = rs.raster_type_id
         LEFT JOIN public.parameters p ON p.parameter_id = rs.parameter_id
         WHERE rs.raster_series_id IN ('",
         paste(raster_series_ids, collapse = "', '"),
@@ -158,7 +158,7 @@ getNewRasters <- function(
       prelim <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT min(valid_from) FROM rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '",
+          "SELECT min(valid_from) FROM spatial.rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '",
           meta_ids[i, "end_datetime"] - 60 * 60 * 24 * 30,
           "' AND raster_series_id = ",
           id,
@@ -183,7 +183,7 @@ getNewRasters <- function(
           next_instant <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT MAX(valid_to) FROM rasters_reference WHERE raster_series_id = ",
+              "SELECT MAX(valid_to) FROM spatial.rasters_reference WHERE raster_series_id = ",
               id
             )
           )[1, 1] +
@@ -303,7 +303,7 @@ getNewRasters <- function(
                   exists <- DBI::dbGetQuery(
                     con,
                     paste0(
-                      "SELECT reference_id FROM rasters_reference WHERE valid_from = '",
+                      "SELECT reference_id FROM spatial.rasters_reference WHERE valid_from = '",
                       valid_from,
                       "' AND raster_series_id = ",
                       id,
@@ -315,7 +315,7 @@ getNewRasters <- function(
                     DBI::dbExecute(
                       con,
                       paste0(
-                        "DELETE FROM rasters_reference WHERE reference_id = ",
+                        "DELETE FROM spatial.rasters_reference WHERE reference_id = ",
                         exists,
                         ";"
                       )
@@ -328,7 +328,7 @@ getNewRasters <- function(
                     exists <- DBI::dbGetQuery(
                       con,
                       paste0(
-                        "SELECT reference_id FROM rasters_reference WHERE valid_from = '",
+                        "SELECT reference_id FROM spatial.rasters_reference WHERE valid_from = '",
                         valid_from,
                         "' AND raster_series_id = ",
                         id,
@@ -340,7 +340,7 @@ getNewRasters <- function(
                       DBI::dbExecute(
                         con,
                         paste0(
-                          "DELETE FROM rasters_reference WHERE reference_id = ",
+                          "DELETE FROM spatial.rasters_reference WHERE reference_id = ",
                           exists,
                           ";"
                         )
@@ -361,12 +361,12 @@ getNewRasters <- function(
                   ))
                   DBI::dbExecute(
                     con,
-                    "UPDATE raster_series_index SET last_new_raster = NOW() WHERE raster_series_id = $1",
+                    "UPDATE spatial.raster_series_index SET last_new_raster = NOW() WHERE raster_series_id = $1",
                     params = list(id)
                   )
                   DBI::dbExecute(
                     con,
-                    "UPDATE raster_series_index SET end_datetime = $1 WHERE raster_series_id = $2",
+                    "UPDATE spatial.raster_series_index SET end_datetime = $1 WHERE raster_series_id = $2",
                     params = list(valid_to, id)
                   )
                   raster_count <- raster_count + 1
@@ -412,7 +412,7 @@ getNewRasters <- function(
                 DBI::dbExecute(
                   con,
                   paste0(
-                    "DELETE FROM rasters_reference WHERE raster_series_id = ",
+                    "DELETE FROM spatial.rasters_reference WHERE raster_series_id = ",
                     id,
                     " AND valid_from IN ('",
                     paste(valid_from, collapse = "', '"),
@@ -435,7 +435,7 @@ getNewRasters <- function(
                 DBI::dbExecute(
                   con,
                   paste0(
-                    "DELETE FROM rasters_reference WHERE raster_series_id = ",
+                    "DELETE FROM spatial.rasters_reference WHERE raster_series_id = ",
                     id,
                     " AND issued NOT BETWEEN '",
                     issued - 5,
@@ -449,7 +449,7 @@ getNewRasters <- function(
               earliest <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT MIN(valid_from) FROM rasters_reference WHERE raster_series_id = ",
+                  "SELECT MIN(valid_from) FROM spatial.rasters_reference WHERE raster_series_id = ",
                   id,
                   ";"
                 )
@@ -458,7 +458,7 @@ getNewRasters <- function(
               DBI::dbExecute(
                 con,
                 paste0(
-                  "UPDATE raster_series_index SET last_issue = '",
+                  "UPDATE spatial.raster_series_index SET last_issue = '",
                   issued_datetime,
                   "', start_datetime = '",
                   earliest,
@@ -532,7 +532,7 @@ getNewRasters <- function(
     {
       DBI::dbExecute(
         con,
-        "UPDATE internal_status SET value = NOW() WHERE event = 'last_new_rasters';"
+        "UPDATE information.internal_status SET value = NOW() WHERE event = 'last_new_rasters';"
       )
     },
     silent = TRUE

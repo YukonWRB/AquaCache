@@ -112,8 +112,8 @@ generateACDatabaseReference <- function(
       "
       WITH relation_schemas AS (
         SELECT DISTINCT n.nspname AS schema_name
-        FROM pg_class c
-        JOIN pg_namespace n
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n
           ON n.oid = c.relnamespace
         WHERE c.relkind IN ('r', 'p', 'v', 'm')
           AND n.nspname !~ '^pg_'
@@ -121,8 +121,8 @@ generateACDatabaseReference <- function(
           AND c.relname !~ '^pg_'
           AND NOT EXISTS (
             SELECT 1
-            FROM pg_depend dep
-            JOIN pg_extension ext
+            FROM pg_catalog.pg_depend dep
+            JOIN pg_catalog.pg_extension ext
               ON ext.oid = dep.refobjid
             WHERE dep.classid = 'pg_class'::regclass
               AND dep.objid = c.oid
@@ -132,8 +132,8 @@ generateACDatabaseReference <- function(
       ),
       routine_schemas AS (
         SELECT DISTINCT n.nspname AS schema_name
-        FROM pg_proc p
-        JOIN pg_namespace n
+        FROM pg_catalog.pg_proc p
+        JOIN pg_catalog.pg_namespace n
           ON n.oid = p.pronamespace
         WHERE p.prokind IN ('f', 'p')
           AND n.nspname !~ '^pg_'
@@ -141,8 +141,8 @@ generateACDatabaseReference <- function(
           AND p.proname !~ '^pg_'
           AND NOT EXISTS (
             SELECT 1
-            FROM pg_depend dep
-            JOIN pg_extension ext
+            FROM pg_catalog.pg_depend dep
+            JOIN pg_catalog.pg_extension ext
               ON ext.oid = dep.refobjid
             WHERE dep.classid = 'pg_proc'::regclass
               AND dep.objid = p.oid
@@ -154,7 +154,7 @@ generateACDatabaseReference <- function(
         n.oid AS schema_oid,
         n.nspname AS schema_name,
         obj_description(n.oid, 'pg_namespace') AS comment
-      FROM pg_namespace n
+      FROM pg_catalog.pg_namespace n
       WHERE n.nspname IN (
         SELECT schema_name FROM relation_schemas
         UNION
@@ -190,7 +190,7 @@ generateACDatabaseReference <- function(
           n.oid AS schema_oid,
           n.nspname AS schema_name,
           obj_description(n.oid, 'pg_namespace') AS comment
-        FROM pg_namespace n
+        FROM pg_catalog.pg_namespace n
         JOIN target_schemas ts
           ON ts.schema_name = n.nspname
         ORDER BY n.nspname;
@@ -208,8 +208,8 @@ generateACDatabaseReference <- function(
           n.nspname AS schema_name,
           c.relname AS object_name,
           obj_description(c.oid, 'pg_class') AS comment
-      FROM pg_class c
-      JOIN pg_namespace n
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n
         ON n.oid = c.relnamespace
       JOIN target_schemas ts
         ON ts.schema_name = n.nspname
@@ -217,8 +217,8 @@ generateACDatabaseReference <- function(
         AND c.relname !~ '^pg_'
         AND NOT EXISTS (
           SELECT 1
-          FROM pg_depend dep
-          JOIN pg_extension ext
+          FROM pg_catalog.pg_depend dep
+          JOIN pg_catalog.pg_extension ext
             ON ext.oid = dep.refobjid
           WHERE dep.classid = 'pg_class'::regclass
             AND dep.objid = c.oid
@@ -244,8 +244,8 @@ generateACDatabaseReference <- function(
           c.relkind,
           obj_description(c.oid, 'pg_class') AS comment,
           pg_get_viewdef(c.oid, true) AS definition
-      FROM pg_class c
-      JOIN pg_namespace n
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n
         ON n.oid = c.relnamespace
       JOIN target_schemas ts
         ON ts.schema_name = n.nspname
@@ -253,8 +253,8 @@ generateACDatabaseReference <- function(
         AND c.relname !~ '^pg_'
         AND NOT EXISTS (
           SELECT 1
-          FROM pg_depend dep
-          JOIN pg_extension ext
+          FROM pg_catalog.pg_depend dep
+          JOIN pg_catalog.pg_extension ext
             ON ext.oid = dep.refobjid
           WHERE dep.classid = 'pg_class'::regclass
             AND dep.objid = c.oid
@@ -283,12 +283,12 @@ generateACDatabaseReference <- function(
           format_type(a.atttypid, a.atttypmod) AS data_type,
           NOT a.attnotnull AS nullable,
           col_description(c.oid, a.attnum) AS comment
-        FROM pg_class c
-        JOIN pg_namespace n
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n
           ON n.oid = c.relnamespace
       JOIN target_schemas ts
         ON ts.schema_name = n.nspname
-      JOIN pg_attribute a
+      JOIN pg_catalog.pg_attribute a
         ON a.attrelid = c.oid
          AND a.attnum > 0
          AND NOT a.attisdropped
@@ -296,8 +296,8 @@ generateACDatabaseReference <- function(
         AND c.relname !~ '^pg_'
         AND NOT EXISTS (
           SELECT 1
-          FROM pg_depend dep
-          JOIN pg_extension ext
+          FROM pg_catalog.pg_depend dep
+          JOIN pg_catalog.pg_extension ext
             ON ext.oid = dep.refobjid
           WHERE dep.classid = 'pg_class'::regclass
             AND dep.objid = c.oid
@@ -320,24 +320,24 @@ generateACDatabaseReference <- function(
           c.oid AS object_oid,
           a.attnum AS ordinal_position,
           pg_get_expr(ad.adbin, ad.adrelid) AS column_default
-        FROM pg_class c
-        JOIN pg_namespace n
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n
           ON n.oid = c.relnamespace
         JOIN target_schemas ts
           ON ts.schema_name = n.nspname
-        JOIN pg_attribute a
+        JOIN pg_catalog.pg_attribute a
           ON a.attrelid = c.oid
          AND a.attnum > 0
          AND NOT a.attisdropped
-        JOIN pg_attrdef ad
+        JOIN pg_catalog.pg_attrdef ad
           ON ad.adrelid = c.oid
          AND ad.adnum = a.attnum
         WHERE c.relkind IN ('r', 'p')
           AND c.relname !~ '^pg_'
           AND NOT EXISTS (
             SELECT 1
-            FROM pg_depend dep
-            JOIN pg_extension ext
+            FROM pg_catalog.pg_depend dep
+            JOIN pg_catalog.pg_extension ext
               ON ext.oid = dep.refobjid
             WHERE dep.classid = 'pg_class'::regclass
               AND dep.objid = c.oid
@@ -373,27 +373,27 @@ generateACDatabaseReference <- function(
           ref_cls.relname AS referenced_table,
           string_agg(ref_att.attname, ', ' ORDER BY ref_key.ord) AS referenced_columns,
           pg_get_constraintdef(con.oid, true) AS definition
-        FROM pg_constraint con
-        JOIN pg_class src
+        FROM pg_catalog.pg_constraint con
+        JOIN pg_catalog.pg_class src
           ON src.oid = con.conrelid
-        JOIN pg_namespace src_ns
+        JOIN pg_catalog.pg_namespace src_ns
           ON src_ns.oid = src.relnamespace
         JOIN target_schemas ts
           ON ts.schema_name = src_ns.nspname
         LEFT JOIN LATERAL unnest(COALESCE(con.conkey, ARRAY[]::smallint[]))
           WITH ORDINALITY AS src_key(attnum, ord)
           ON true
-        LEFT JOIN pg_attribute src_att
+        LEFT JOIN pg_catalog.pg_attribute src_att
           ON src_att.attrelid = src.oid
          AND src_att.attnum = src_key.attnum
-        LEFT JOIN pg_class ref_cls
+        LEFT JOIN pg_catalog.pg_class ref_cls
           ON ref_cls.oid = con.confrelid
-        LEFT JOIN pg_namespace ref_ns
+        LEFT JOIN pg_catalog.pg_namespace ref_ns
           ON ref_ns.oid = ref_cls.relnamespace
         LEFT JOIN LATERAL unnest(COALESCE(con.confkey, ARRAY[]::smallint[]))
           WITH ORDINALITY AS ref_key(attnum, ord)
           ON ref_key.ord = src_key.ord
-        LEFT JOIN pg_attribute ref_att
+        LEFT JOIN pg_catalog.pg_attribute ref_att
           ON ref_att.attrelid = ref_cls.oid
          AND ref_att.attnum = ref_key.attnum
         WHERE con.contype IN ('p', 'u', 'f', 'c', 'x')
@@ -428,16 +428,16 @@ generateACDatabaseReference <- function(
           idx.indisprimary AS is_primary,
           con.conname AS backing_constraint,
           pg_get_indexdef(idx.indexrelid, 0, true) AS definition
-        FROM pg_index idx
-        JOIN pg_class tbl
+        FROM pg_catalog.pg_index idx
+        JOIN pg_catalog.pg_class tbl
           ON tbl.oid = idx.indrelid
-        JOIN pg_namespace ns
+        JOIN pg_catalog.pg_namespace ns
           ON ns.oid = tbl.relnamespace
         JOIN target_schemas ts
           ON ts.schema_name = ns.nspname
-        JOIN pg_class idx_cls
+        JOIN pg_catalog.pg_class idx_cls
           ON idx_cls.oid = idx.indexrelid
-        LEFT JOIN pg_constraint con
+        LEFT JOIN pg_catalog.pg_constraint con
           ON con.conindid = idx.indexrelid
          AND con.conrelid = tbl.oid
          AND con.contype IN ('p', 'u', 'x')
@@ -466,16 +466,16 @@ generateACDatabaseReference <- function(
           pg_get_function_identity_arguments(fn.oid) AS function_identity_args,
           obj_description(fn.oid, 'pg_proc') AS function_comment,
           pg_get_triggerdef(trg.oid, true) AS definition
-        FROM pg_trigger trg
-        JOIN pg_class tbl
+        FROM pg_catalog.pg_trigger trg
+        JOIN pg_catalog.pg_class tbl
           ON tbl.oid = trg.tgrelid
-        JOIN pg_namespace ns
+        JOIN pg_catalog.pg_namespace ns
           ON ns.oid = tbl.relnamespace
         JOIN target_schemas ts
           ON ts.schema_name = ns.nspname
-        JOIN pg_proc fn
+        JOIN pg_catalog.pg_proc fn
           ON fn.oid = trg.tgfoid
-        JOIN pg_namespace fn_ns
+        JOIN pg_catalog.pg_namespace fn_ns
           ON fn_ns.oid = fn.pronamespace
         WHERE tbl.relkind IN ('r', 'p')
           AND NOT trg.tgisinternal
@@ -497,18 +497,18 @@ generateACDatabaseReference <- function(
           dep_ns.nspname AS dependency_schema,
           dep_cls.relname AS dependency_name,
           dep_cls.relkind AS dependency_kind
-        FROM pg_rewrite rw
-        JOIN pg_class src_cls
+        FROM pg_catalog.pg_rewrite rw
+        JOIN pg_catalog.pg_class src_cls
           ON src_cls.oid = rw.ev_class
-        JOIN pg_namespace src_ns
+        JOIN pg_catalog.pg_namespace src_ns
           ON src_ns.oid = src_cls.relnamespace
         JOIN target_schemas ts
           ON ts.schema_name = src_ns.nspname
-        JOIN pg_depend dep
+        JOIN pg_catalog.pg_depend dep
           ON dep.objid = rw.oid
-        JOIN pg_class dep_cls
+        JOIN pg_catalog.pg_class dep_cls
           ON dep_cls.oid = dep.refobjid
-        JOIN pg_namespace dep_ns
+        JOIN pg_catalog.pg_namespace dep_ns
           ON dep_ns.oid = dep_cls.relnamespace
         WHERE src_cls.relkind IN ('v', 'm')
           AND dep_cls.relkind IN ('r', 'p', 'v', 'm')
@@ -545,19 +545,19 @@ generateACDatabaseReference <- function(
           p.prosecdef AS security_definer,
           obj_description(p.oid, 'pg_proc') AS comment,
           pg_get_functiondef(p.oid) AS definition
-        FROM pg_proc p
-        JOIN pg_namespace n
+        FROM pg_catalog.pg_proc p
+        JOIN pg_catalog.pg_namespace n
           ON n.oid = p.pronamespace
         JOIN target_schemas ts
           ON ts.schema_name = n.nspname
-        JOIN pg_language l
+        JOIN pg_catalog.pg_language l
           ON l.oid = p.prolang
         WHERE p.prokind IN ('f', 'p')
           AND p.proname !~ '^pg_'
           AND NOT EXISTS (
             SELECT 1
-            FROM pg_depend dep
-            JOIN pg_extension ext
+            FROM pg_catalog.pg_depend dep
+            JOIN pg_catalog.pg_extension ext
               ON ext.oid = dep.refobjid
             WHERE dep.classid = 'pg_proc'::regclass
               AND dep.objid = p.oid
@@ -1092,8 +1092,8 @@ generateACDatabaseReference <- function(
             n.nspname AS schema_name,
             count(*) FILTER (WHERE c.relkind IN ('r', 'p')) AS tables,
             count(*) FILTER (WHERE c.relkind IN ('v', 'm')) AS views
-          FROM pg_class c
-          JOIN pg_namespace n
+          FROM pg_catalog.pg_class c
+          JOIN pg_catalog.pg_namespace n
             ON n.oid = c.relnamespace
           JOIN target_schemas ts
             ON ts.schema_name = n.nspname
@@ -1101,8 +1101,8 @@ generateACDatabaseReference <- function(
             AND c.relname !~ '^pg_'
             AND NOT EXISTS (
               SELECT 1
-              FROM pg_depend dep
-              JOIN pg_extension ext
+              FROM pg_catalog.pg_depend dep
+              JOIN pg_catalog.pg_extension ext
                 ON ext.oid = dep.refobjid
               WHERE dep.classid = 'pg_class'::regclass
                 AND dep.objid = c.oid
@@ -1115,8 +1115,8 @@ generateACDatabaseReference <- function(
           SELECT
             n.nspname AS schema_name,
             count(*) AS routines
-          FROM pg_proc p
-          JOIN pg_namespace n
+          FROM pg_catalog.pg_proc p
+          JOIN pg_catalog.pg_namespace n
             ON n.oid = p.pronamespace
           JOIN target_schemas ts
             ON ts.schema_name = n.nspname
@@ -1124,8 +1124,8 @@ generateACDatabaseReference <- function(
             AND p.proname !~ '^pg_'
             AND NOT EXISTS (
               SELECT 1
-              FROM pg_depend dep
-              JOIN pg_extension ext
+              FROM pg_catalog.pg_depend dep
+              JOIN pg_catalog.pg_extension ext
                 ON ext.oid = dep.refobjid
               WHERE dep.classid = 'pg_proc'::regclass
                 AND dep.objid = p.oid

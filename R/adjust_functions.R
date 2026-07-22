@@ -204,7 +204,7 @@ segments_identical <- function(current, proposed, id_col, value_col) {
 #' @title Get IDs for synchronization deletion
 #' @description Retrieve the IDs of segments that should be deleted to synchronize with a remote data store, based on the timeseries_id and a minimum datetime threshold.
 #' @param con A connection to the database.
-#' @param table_name The name of the table to query for segments (e.g., "grades", "qualifiers", "approvals").
+#' @param table_name The schema-qualified name of the table to query for segments (e.g., "continuous.grades", "continuous.qualifiers", "continuous.approvals").
 #' @param id_col The name of the column containing the unique identifier for segments in the specified table.
 #' @param timeseries_id The timeseries_id for which to retrieve segment IDs.
 #' @param min_datetime The minimum datetime threshold; segments with a start_dt greater than or equal to this value will be considered for deletion.
@@ -238,7 +238,7 @@ get_sync_delete_ids <- function(
 #' @title Reconcile segment changes
 #' @description Reconcile the changes between the existing state and proposed state of segments by performing the necessary deletions, updates, and insertions in the database to align with the proposed state.
 #' @param con A connection to the database.
-#' @param table_name The name of the table to update segments in (e.g., "grades", "qualifiers", "approvals").
+#' @param table_name The schema-qualified name of the table to update segments in (e.g., "continuous.grades", "continuous.qualifiers", "continuous.approvals").
 #' @param id_col The name of the column containing the unique identifier for segments in the specified table.
 #' @param value_col The name of the column containing the value to compare for segment state in the input data.frames.
 #' @param db_value_col The name of the column containing the value to update in the database table.
@@ -385,7 +385,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
 
       grade_table <- DBI::dbGetQuery(
         con,
-        "SELECT grade_type_id, grade_type_code FROM grade_types;"
+        "SELECT grade_type_id, grade_type_code FROM public.grade_types;"
       )
 
       unspecified_grade <- grade_table[
@@ -422,7 +422,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
       if (delete) {
         sync_delete_ids <- get_sync_delete_ids(
           con,
-          "grades",
+          "continuous.grades",
           "grade_id",
           timeseries_id,
           min(data$datetime)
@@ -439,7 +439,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         sprintf(
           "WITH matched AS (
           SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
-            FROM grades
+            FROM continuous.grades
           WHERE timeseries_id = %s
             AND (
               (end_dt   BETWEEN '%s' AND '%s')
@@ -448,7 +448,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
             )
           ), fallback AS (
               SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
-                FROM grades
+                FROM continuous.grades
               WHERE timeseries_id = %s
               ORDER BY end_dt DESC
               LIMIT 1
@@ -506,7 +506,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
       commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
         reconcile_segment_changes(
           con = con,
-          table_name = "grades",
+          table_name = "continuous.grades",
           id_col = "grade_id",
           value_col = "grade_type_id",
           db_value_col = "grade_type_id",
@@ -562,7 +562,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
 
       qualifier_table <- DBI::dbGetQuery(
         con,
-        "SELECT qualifier_type_id, qualifier_type_code FROM qualifier_types;"
+        "SELECT qualifier_type_id, qualifier_type_code FROM public.qualifier_types;"
       )
 
       unspecified_qualifier <- qualifier_table[
@@ -615,7 +615,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
       if (delete) {
         sync_delete_ids <- get_sync_delete_ids(
           con,
-          "qualifiers",
+          "continuous.qualifiers",
           "qualifier_id",
           timeseries_id,
           min(data$datetime)
@@ -649,7 +649,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           sprintf(
             "WITH matched AS (
     SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt
-      FROM qualifiers
+      FROM continuous.qualifiers
      WHERE timeseries_id = %s
        AND (
          (end_dt   BETWEEN '%s' AND '%s')
@@ -659,7 +659,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
        AND qualifier_type_id = %s
     ), fallback AS (
         SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt
-          FROM qualifiers
+          FROM continuous.qualifiers
          WHERE timeseries_id = %s
            AND qualifier_type_id = %s
          ORDER BY end_dt DESC
@@ -750,7 +750,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
 
       reconcile_segment_changes(
         con = con,
-        table_name = "qualifiers",
+        table_name = "continuous.qualifiers",
         id_col = "qualifier_id",
         value_col = "qualifier_type_id",
         db_value_col = "qualifier_type_id",
@@ -803,7 +803,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
 
       approval_table <- DBI::dbGetQuery(
         con,
-        "SELECT approval_type_id, approval_type_code FROM approval_types;"
+        "SELECT approval_type_id, approval_type_code FROM public.approval_types;"
       )
 
       unspecified_approval <- approval_table[
@@ -840,7 +840,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
       if (delete) {
         sync_delete_ids <- get_sync_delete_ids(
           con,
-          "approvals",
+          "continuous.approvals",
           "approval_id",
           timeseries_id,
           min(data$datetime)
@@ -857,7 +857,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         sprintf(
           "WITH matched AS (
     SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt
-      FROM approvals
+      FROM continuous.approvals
      WHERE timeseries_id = %s
        AND (
          (end_dt   BETWEEN '%s' AND '%s')
@@ -866,7 +866,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
        )
     ), fallback AS (
         SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt
-          FROM approvals
+          FROM continuous.approvals
          WHERE timeseries_id = %s
          ORDER BY end_dt DESC
          LIMIT 1
@@ -925,7 +925,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
       commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
         reconcile_segment_changes(
           con = con,
-          table_name = "approvals",
+          table_name = "continuous.approvals",
           id_col = "approval_id",
           value_col = "approval_type_id",
           db_value_col = "approval_type_id",
@@ -992,7 +992,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       if (inherits(data$owner[1], "character")) {
         owner_table <- DBI::dbGetQuery(
           con,
-          "SELECT organization_id, name FROM organizations;"
+          "SELECT organization_id, name FROM public.organizations;"
         )
         data$owner <- owner_table$organization_id[match(
           data$owner,
@@ -1008,7 +1008,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       if (delete) {
         sync_delete_ids <- get_sync_delete_ids(
           con,
-          "owners",
+          "continuous.owners",
           "owner_id",
           timeseries_id,
           min(data$datetime)
@@ -1025,7 +1025,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
         sprintf(
           "WITH matched AS (
     SELECT owner_id, timeseries_id, organization_id, start_dt, end_dt
-      FROM owners
+      FROM continuous.owners
      WHERE timeseries_id = %s
        AND (
          (end_dt   BETWEEN '%s' AND '%s')
@@ -1034,7 +1034,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
        )
     ), fallback AS (
         SELECT owner_id, timeseries_id, organization_id, start_dt, end_dt
-          FROM owners
+          FROM continuous.owners
          WHERE timeseries_id = %s
          ORDER BY end_dt DESC
          LIMIT 1
@@ -1092,7 +1092,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
       commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
         reconcile_segment_changes(
           con = con,
-          table_name = "owners",
+          table_name = "continuous.owners",
           id_col = "owner_id",
           value_col = "organization_id",
           db_value_col = "organization_id",
@@ -1159,7 +1159,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
       if (inherits(data$contributor[1], "character")) {
         contributor_table <- DBI::dbGetQuery(
           con,
-          "SELECT organization_id, name FROM organizations;"
+          "SELECT organization_id, name FROM public.organizations;"
         )
         data$contributor <- contributor_table$organization_id[match(
           data$contributor,
@@ -1175,7 +1175,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
       if (delete) {
         sync_delete_ids <- get_sync_delete_ids(
           con,
-          "contributors",
+          "continuous.contributors",
           "contributor_id",
           timeseries_id,
           min(data$datetime)
@@ -1192,7 +1192,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
         sprintf(
           "WITH matched AS (
     SELECT contributor_id, timeseries_id, organization_id, start_dt, end_dt
-      FROM contributors
+      FROM continuous.contributors
      WHERE timeseries_id = %s
        AND (
          (end_dt   BETWEEN '%s' AND '%s')
@@ -1201,7 +1201,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
        )
     ), fallback AS (
         SELECT contributor_id, timeseries_id, organization_id, start_dt, end_dt
-          FROM contributors
+          FROM continuous.contributors
          WHERE timeseries_id = %s
          ORDER BY end_dt DESC
          LIMIT 1
@@ -1259,7 +1259,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
       commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
         reconcile_segment_changes(
           con = con,
-          table_name = "contributors",
+          table_name = "continuous.contributors",
           id_col = "contributor_id",
           value_col = "organization_id",
           db_value_col = "organization_id",
@@ -1350,7 +1350,7 @@ adjust_data_sharing_agreement <- function(
       if (delete) {
         sync_delete_ids <- get_sync_delete_ids(
           con,
-          "timeseries_data_sharing_agreements",
+          "continuous.timeseries_data_sharing_agreements",
           "timeseries_data_sharing_agreement_id",
           timeseries_id,
           min(data$datetime)
@@ -1371,7 +1371,7 @@ adjust_data_sharing_agreement <- function(
            data_sharing_agreement_id,
            start_dt,
            end_dt
-      FROM timeseries_data_sharing_agreements
+      FROM continuous.timeseries_data_sharing_agreements
      WHERE timeseries_id = %s
        AND (
          (end_dt   BETWEEN '%s' AND '%s')
@@ -1384,7 +1384,7 @@ adjust_data_sharing_agreement <- function(
                data_sharing_agreement_id,
                start_dt,
                end_dt
-          FROM timeseries_data_sharing_agreements
+          FROM continuous.timeseries_data_sharing_agreements
          WHERE timeseries_id = %s
          ORDER BY end_dt DESC
          LIMIT 1
@@ -1441,7 +1441,7 @@ adjust_data_sharing_agreement <- function(
       commit_fx <- function(con, exist, existing_state, sync_delete_ids) {
         reconcile_segment_changes(
           con = con,
-          table_name = "timeseries_data_sharing_agreements",
+          table_name = "continuous.timeseries_data_sharing_agreements",
           id_col = "timeseries_data_sharing_agreement_id",
           value_col = "data_sharing_agreement_id",
           db_value_col = "data_sharing_agreement_id",

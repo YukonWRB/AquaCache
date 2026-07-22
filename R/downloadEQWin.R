@@ -158,7 +158,7 @@ downloadEQWin <- function(
   results <- data.table::as.data.table(results)
   result_conditions <- DBI::dbGetQuery(
     con,
-    "SELECT result_condition_id, result_condition FROM result_conditions;"
+    "SELECT result_condition_id, result_condition FROM discrete.result_conditions;"
   )
   below_detection <- result_conditions[
     grep(
@@ -509,7 +509,7 @@ eqwin_discrete_defaults <- function(
   if (is.null(media_id)) {
     media_id <- DBI::dbGetQuery(
       con,
-      "SELECT media_id FROM media_types WHERE media_type = $1;",
+      "SELECT media_id FROM public.media_types WHERE media_type = $1;",
       params = list(media_label)
     )$media_id[[1]]
   }
@@ -522,7 +522,7 @@ eqwin_discrete_defaults <- function(
     collection_method <- DBI::dbGetQuery(
       con,
       "SELECT collection_method_id
-       FROM collection_methods
+       FROM discrete.collection_methods
        WHERE collection_method = $1;",
       params = list(method_label)
     )$collection_method_id[[1]]
@@ -531,52 +531,52 @@ eqwin_discrete_defaults <- function(
     sample_type <- DBI::dbGetQuery(
       con,
       "SELECT sample_type_id
-       FROM sample_types
+       FROM discrete.sample_types
        WHERE sample_type = 'sample-routine';"
     )$sample_type_id[[1]]
   }
   sample_type_replicate <- DBI::dbGetQuery(
     con,
     "SELECT sample_type_id
-     FROM sample_types
+     FROM discrete.sample_types
      WHERE sample_type = 'QC-sample-other';"
   )
   if (nrow(sample_type_replicate) == 0) {
     sample_type_replicate <- DBI::dbGetQuery(
       con,
       "SELECT sample_type_id
-       FROM sample_types
+       FROM discrete.sample_types
        WHERE sample_type = 'QC-sample-field replicate';"
     )
   }
   sample_type_field_blank <- DBI::dbGetQuery(
     con,
     "SELECT sample_type_id
-     FROM sample_types
+     FROM discrete.sample_types
      WHERE sample_type = 'QC-sample-field blank';"
   )
   sample_type_trip_blank <- DBI::dbGetQuery(
     con,
     "SELECT sample_type_id
-     FROM sample_types
+     FROM discrete.sample_types
      WHERE sample_type = 'QC-sample-trip blank';"
   )
   sample_type_lab_blank <- DBI::dbGetQuery(
     con,
     "SELECT sample_type_id
-     FROM sample_types
+     FROM discrete.sample_types
      WHERE sample_type = 'QC-sample-lab blank';"
   )
   sample_type_other <- DBI::dbGetQuery(
     con,
     "SELECT sample_type_id
-     FROM sample_types
+     FROM discrete.sample_types
      WHERE sample_type = 'sample-other';"
   )
   sample_type_unknown <- DBI::dbGetQuery(
     con,
     "SELECT sample_type_id
-     FROM sample_types
+     FROM discrete.sample_types
      WHERE sample_type = 'unknown';"
   )
   if (nrow(sample_type_replicate) == 0) {
@@ -713,7 +713,7 @@ eqwin_drop_incomplete_required_targets <- function(con, results) {
     con,
     paste0(
       "SELECT parameter_id, sample_fraction, result_speciation
-       FROM parameters
+       FROM public.parameters
        WHERE parameter_id IN (",
       paste(unique(results$parameter_id), collapse = ","),
       ");"

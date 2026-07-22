@@ -989,7 +989,7 @@ find_discrete_sample_id <- function(con, sample) {
     con,
     paste(
       "SELECT sample_id",
-      "FROM samples",
+      "FROM discrete.samples",
       "WHERE location_id = $1",
       "  AND sub_location_id IS NOT DISTINCT FROM $2",
       "  AND media_id = $3",

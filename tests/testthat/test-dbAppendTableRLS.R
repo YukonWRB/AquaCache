@@ -270,21 +270,21 @@ test_that("dbAppendTableRLS works for RLS tables when role cannot use COPY FROM"
     add = TRUE
   )
 
-  DBI::dbExecute(con, "DROP TABLE IF EXISTS ac_append_rls")
+  DBI::dbExecute(con, "DROP TABLE IF EXISTS public.ac_append_rls")
   DBI::dbExecute(
     con,
-    "CREATE TABLE ac_append_rls (id integer PRIMARY KEY, txt text)"
+    "CREATE TABLE public.ac_append_rls (id integer PRIMARY KEY, txt text)"
   )
-  DBI::dbExecute(con, "ALTER TABLE ac_append_rls ENABLE ROW LEVEL SECURITY")
+  DBI::dbExecute(con, "ALTER TABLE public.ac_append_rls ENABLE ROW LEVEL SECURITY")
   DBI::dbExecute(
     con,
-    "CREATE POLICY ac_append_rls_policy ON ac_append_rls FOR ALL USING (TRUE) WITH CHECK (TRUE)"
+    "CREATE POLICY ac_append_rls_policy ON public.ac_append_rls FOR ALL USING (TRUE) WITH CHECK (TRUE)"
   )
 
   DBI::dbExecute(
     con,
     paste0(
-      "GRANT SELECT, INSERT, UPDATE ON ac_append_rls TO ",
+      "GRANT SELECT, INSERT, UPDATE ON public.ac_append_rls TO ",
       DBI::dbQuoteIdentifier(con, role)
     )
   )
@@ -305,20 +305,20 @@ test_that("dbAppendTableRLS works for RLS tables when role cannot use COPY FROM"
   }
 
   expect_error(
-    DBI::dbAppendTable(con, "ac_append_rls", data.frame(id = 1L, txt = "x")),
+    DBI::dbAppendTable(con, DBI::Id(schema = "public", table = "ac_append_rls"), data.frame(id = 1L, txt = "x")),
     "COPY FROM not supported with row-level security"
   )
 
   expect_no_error(
     dbAppendTableRLS(
       con,
-      "ac_append_rls",
+      "public.ac_append_rls",
       data.frame(id = 1L, txt = "x"),
       method = "staging"
     )
   )
 
-  out <- DBI::dbGetQuery(con, "SELECT id, txt FROM ac_append_rls")
+  out <- DBI::dbGetQuery(con, "SELECT id, txt FROM public.ac_append_rls")
   expect_equal(nrow(out), 1)
   expect_equal(out$id, 1L)
   expect_equal(out$txt, "x")

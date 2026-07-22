@@ -145,7 +145,7 @@ readSnowWorkbook <- function(
         loc_id <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT location FROM locations WHERE name = '",
+            "SELECT location FROM public.locations WHERE name = '",
             survey[1, 2],
             "'"
           )
@@ -337,7 +337,7 @@ readSnowWorkbook <- function(
       ice_notes
     )
 
-    ## Insert into surveys table
+    ## Insert into public.surveys table
     next_flag <- FALSE #Will be used to skip to next sheet if there is an error
     tryCatch(
       {
@@ -345,7 +345,7 @@ readSnowWorkbook <- function(
         exists <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT survey_id FROM surveys WHERE location = '",
+            "SELECT survey_id FROM public.surveys WHERE location = '",
             location,
             "' ",
             "AND target_date = '",
@@ -361,7 +361,7 @@ readSnowWorkbook <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method) VALUES ('",
+                "INSERT INTO public.surveys (location, target_date, survey_date, notes, sampler_name, method) VALUES ('",
                 paste(surveys, collapse = "', '"),
                 "')"
               )
@@ -370,7 +370,7 @@ readSnowWorkbook <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "INSERT INTO surveys (location, target_date, survey_date, notes, sampler_name, method, ice_notes) VALUES ('",
+                "INSERT INTO public.surveys (location, target_date, survey_date, notes, sampler_name, method, ice_notes) VALUES ('",
                 paste(surveys, collapse = "', '"),
                 "')"
               )
@@ -402,7 +402,7 @@ readSnowWorkbook <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "UPDATE surveys SET notes = '",
+                "UPDATE public.surveys SET notes = '",
                 notes,
                 "', sampler_name = '",
                 sampler_name,
@@ -421,7 +421,7 @@ readSnowWorkbook <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "UPDATE surveys SET notes = '",
+                "UPDATE public.surveys SET notes = '",
                 notes,
                 "', sampler_name = '",
                 sampler_name,
@@ -482,7 +482,7 @@ readSnowWorkbook <- function(
     surv_id <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT survey_id FROM surveys WHERE location = '",
+        "SELECT survey_id FROM public.surveys WHERE location = '",
         location,
         "' ",
         "AND target_date = '",
@@ -602,7 +602,7 @@ readSnowWorkbook <- function(
       check <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT SWE, depth FROM measurements WHERE survey_id = ",
+          "SELECT SWE, depth FROM public.measurements WHERE survey_id = ",
           surv_id,
           ";"
         )
@@ -610,7 +610,7 @@ readSnowWorkbook <- function(
       if (nrow(check) == 0) {
         DBI::dbExecute(
           con,
-          paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";")
+          paste0("DELETE FROM public.surveys WHERE survey_id = ", surv_id, ";")
         )
       }
       warning(
@@ -721,7 +721,7 @@ readSnowWorkbook <- function(
           check <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT SWE, depth FROM measurements WHERE survey_id = ",
+              "SELECT SWE, depth FROM public.measurements WHERE survey_id = ",
               surv_id,
               ";"
             )
@@ -729,7 +729,7 @@ readSnowWorkbook <- function(
           if (nrow(check) == 0) {
             DBI::dbExecute(
               con,
-              paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";")
+              paste0("DELETE FROM public.surveys WHERE survey_id = ", surv_id, ";")
             )
           }
           next
@@ -745,7 +745,7 @@ readSnowWorkbook <- function(
           check <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT SWE, depth FROM measurements WHERE survey_id = ",
+              "SELECT SWE, depth FROM public.measurements WHERE survey_id = ",
               surv_id,
               ";"
             )
@@ -753,7 +753,7 @@ readSnowWorkbook <- function(
           if (nrow(check) == 0) {
             DBI::dbExecute(
               con,
-              paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";")
+              paste0("DELETE FROM public.surveys WHERE survey_id = ", surv_id, ";")
             )
           }
           next
@@ -770,7 +770,7 @@ readSnowWorkbook <- function(
           check <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT SWE, depth FROM measurements WHERE survey_id = ",
+              "SELECT SWE, depth FROM public.measurements WHERE survey_id = ",
               surv_id,
               ";"
             )
@@ -778,7 +778,7 @@ readSnowWorkbook <- function(
           if (nrow(check) == 0) {
             DBI::dbExecute(
               con,
-              paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";")
+              paste0("DELETE FROM public.surveys WHERE survey_id = ", surv_id, ";")
             )
           }
           next
@@ -794,7 +794,7 @@ readSnowWorkbook <- function(
           check <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT SWE, depth FROM measurements WHERE survey_id = ",
+              "SELECT SWE, depth FROM public.measurements WHERE survey_id = ",
               surv_id,
               ";"
             )
@@ -802,7 +802,7 @@ readSnowWorkbook <- function(
           if (nrow(check) == 0) {
             DBI::dbExecute(
               con,
-              paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";")
+              paste0("DELETE FROM public.surveys WHERE survey_id = ", surv_id, ";")
             )
           }
           next
@@ -843,7 +843,7 @@ readSnowWorkbook <- function(
     maint_db <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT * FROM maintenance WHERE location = '",
+        "SELECT * FROM public.maintenance WHERE location = '",
         loc_id,
         "' and completed = FALSE"
       )
@@ -856,7 +856,7 @@ readSnowWorkbook <- function(
 
     tryCatch(
       {
-        ## Insert into measurements table
+        ## Insert into public.measurements table
         if (method == "standard") {
           survey_id <- rep(surv_id, times = length(sample_datetime))
         } else if (method %in% c("average", "bulk", "no sample")) {
@@ -865,14 +865,14 @@ readSnowWorkbook <- function(
         if (overwrite) {
           DBI::dbExecute(
             con,
-            paste0("DELETE FROM measurements WHERE survey_id = ", surv_id, ";")
+            paste0("DELETE FROM public.measurements WHERE survey_id = ", surv_id, ";")
           )
           exist_meas <- data.frame()
         } else {
           exist_meas <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT * FROM measurements WHERE survey_id = ",
+              "SELECT * FROM public.measurements WHERE survey_id = ",
               surv_id,
               ";"
             )
@@ -880,7 +880,7 @@ readSnowWorkbook <- function(
         }
         if (nrow(measurement) > 0 & nrow(exist_meas) == 0) {
           meas_statement <- sprintf(
-            "INSERT INTO measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;",
+            "INSERT INTO public.measurements (survey_id, sample_datetime, estimate_flag, exclude_flag, swe, depth, notes) VALUES %s;",
             paste(
               sprintf(
                 "(%s, '%s', '%s', '%s', %d, %d, '%s')",
@@ -936,7 +936,7 @@ readSnowWorkbook <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "UPDATE maintenance SET completed = TRUE, date_completed = '",
+                "UPDATE public.maintenance SET completed = TRUE, date_completed = '",
                 date,
                 "' WHERE location = '",
                 loc_id,
@@ -960,7 +960,7 @@ readSnowWorkbook <- function(
             DBI::dbExecute(
               con,
               paste0(
-                "INSERT INTO maintenance (location, date, maintenance, completed) VALUES ('",
+                "INSERT INTO public.maintenance (location, date, maintenance, completed) VALUES ('",
                 paste(mrow, collapse = "', '"),
                 "')"
               )
@@ -986,11 +986,11 @@ readSnowWorkbook <- function(
           DBI::dbExecute(con, "ROLLBACK;")
         }
 
-        # Check if there are measurements for that survey_id. If not, delete the survey_id from surveys table.
+        # Check if there are measurements for that survey_id. If not, delete the survey_id from public.surveys table.
         check <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT SWE, depth FROM measurements WHERE survey_id = ",
+            "SELECT SWE, depth FROM public.measurements WHERE survey_id = ",
             surv_id,
             ";"
           )
@@ -998,7 +998,7 @@ readSnowWorkbook <- function(
         if (nrow(check) == 0) {
           DBI::dbExecute(
             con,
-            paste0("DELETE FROM surveys WHERE survey_id = ", surv_id, ";")
+            paste0("DELETE FROM public.surveys WHERE survey_id = ", surv_id, ";")
           )
         }
         warning(

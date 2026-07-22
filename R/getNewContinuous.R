@@ -127,11 +127,11 @@ getNewContinuous <- function(
         t.default_data_sharing_agreement_id,
         t.active,
         mc.last_data_point
-      FROM timeseries t
-      JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
+      FROM continuous.timeseries t
+      JOIN continuous.aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
       LEFT JOIN (
         SELECT timeseries_id, MAX(datetime) AS last_data_point
-        FROM measurements_continuous
+        FROM continuous.measurements_continuous
         GROUP BY timeseries_id
       ) mc ON mc.timeseries_id = t.timeseries_id
       WHERE t.timeseries_type = 'basic'
@@ -161,11 +161,11 @@ getNewContinuous <- function(
           t.default_data_sharing_agreement_id,
           t.active,
           mc.last_data_point
-        FROM timeseries t
-        JOIN aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
+        FROM continuous.timeseries t
+        JOIN continuous.aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
         LEFT JOIN (
           SELECT timeseries_id, MAX(datetime) AS last_data_point
-          FROM measurements_continuous
+          FROM continuous.measurements_continuous
           GROUP BY timeseries_id
         ) mc ON mc.timeseries_id = t.timeseries_id
         WHERE t.timeseries_id IN (",
@@ -390,7 +390,7 @@ getNewContinuous <- function(
 
   grade_unknown <- DBI::dbGetQuery(
     con,
-    "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNK';"
+    "SELECT grade_type_id FROM public.grade_types WHERE grade_type_code = 'UNK';"
   )[1, 1]
   if (is.na(grade_unknown)) {
     stop(
@@ -399,7 +399,7 @@ getNewContinuous <- function(
   }
   approval_unknown <- DBI::dbGetQuery(
     con,
-    "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'UNK';"
+    "SELECT approval_type_id FROM public.approval_types WHERE approval_type_code = 'UNK';"
   )[1, 1]
   if (is.na(approval_unknown)) {
     stop(
@@ -408,7 +408,7 @@ getNewContinuous <- function(
   }
   qualifier_unknown <- DBI::dbGetQuery(
     con,
-    "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_code = 'UNK';"
+    "SELECT qualifier_type_id FROM public.qualifier_types WHERE qualifier_type_code = 'UNK';"
   )[1, 1]
   if (is.na(qualifier_unknown)) {
     stop(
@@ -468,7 +468,7 @@ getNewContinuous <- function(
     # this worker acquired the lock.
     last_data_point <- DBI::dbGetQuery(
       con,
-      "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1",
+      "SELECT MAX(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1",
       params = list(tsid)
     )[1, 1] +
       1
@@ -603,9 +603,9 @@ getNewContinuous <- function(
         no_period <- dbGetQueryDT(
           con,
           paste0(
-            "SELECT datetime FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT datetime FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
-            " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ",
+            " AND datetime >= (SELECT MIN(datetime) FROM continuous.measurements_continuous WHERE period IS NULL AND timeseries_id = ",
             tsid,
             ") AND datetime NOT IN ('",
             paste(requested_datetimes, collapse = "', '"),
@@ -622,7 +622,7 @@ getNewContinuous <- function(
             for (j in seq_len(nrow(no_period))) {
               DBI::dbExecute(
                 con,
-                "UPDATE measurements_continuous SET period = $1 WHERE datetime = $2 AND timeseries_id = $3",
+                "UPDATE continuous.measurements_continuous SET period = $1 WHERE datetime = $2 AND timeseries_id = $3",
                 params = list(
                   no_period$period[j],
                   no_period$datetime[j],
@@ -644,7 +644,7 @@ getNewContinuous <- function(
         }
       }
 
-      dbAppendTableRLS(con, "measurements_continuous", ts)
+      dbAppendTableRLS(con, "continuous.measurements_continuous", ts)
     }
 
     rows_added <- nrow(ts)
@@ -948,7 +948,7 @@ getNewContinuous <- function(
     {
       DBI::dbExecute(
         con,
-        "UPDATE internal_status SET value = NOW() WHERE event = 'last_new_continuous'"
+        "UPDATE information.internal_status SET value = NOW() WHERE event = 'last_new_continuous'"
       )
     },
     silent = TRUE

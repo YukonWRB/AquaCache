@@ -26,7 +26,7 @@ update_hydat <- function(
   local_hydat <- tidyhydat::hy_version(hydat_path)$Date
   DB_hydat <- DBI::dbGetQuery(
     con,
-    "SELECT value FROM internal_status WHERE event = 'HYDAT_version'"
+    "SELECT value FROM information.internal_status WHERE event = 'HYDAT_version'"
   )[1, 1]
   new_hydat <- is.na(DB_hydat) || !identical(as.character(DB_hydat), as.character(local_hydat))
 
@@ -51,8 +51,8 @@ update_hydat <- function(
          t.timeseries_id,
          t.source_fx_args,
          l.location_id
-       FROM timeseries t
-       JOIN locations l
+       FROM continuous.timeseries t
+       JOIN public.locations l
          ON t.location_id = l.location_id
        WHERE source_fx = 'downloadWSC';"
     )
@@ -65,8 +65,8 @@ update_hydat <- function(
            t.timeseries_id,
            t.source_fx_args,
            l.location_id
-         FROM timeseries t
-         JOIN locations l
+         FROM continuous.timeseries t
+         JOIN public.locations l
            ON t.location_id = l.location_id
          WHERE t.timeseries_id IN ('",
         paste(timeseries_id, collapse = "', '"),
@@ -107,12 +107,12 @@ update_hydat <- function(
 
   organization_id <- DBI::dbGetQuery(
     con,
-    "SELECT organization_id FROM organizations WHERE name = 'Water Survey of Canada'"
+    "SELECT organization_id FROM public.organizations WHERE name = 'Water Survey of Canada'"
   )[1, 1]
   if (is.na(organization_id)) {
     organization_id <- DBI::dbGetQuery(
       con,
-      "INSERT INTO organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
+      "INSERT INTO public.organizations (name, name_fr) VALUES ($1, $2) RETURNING organization_id;",
       params = list(
         "Water Survey of Canada",
         "Releve hydrometrique du Canada"
@@ -122,7 +122,7 @@ update_hydat <- function(
 
   grade_unspecified <- DBI::dbGetQuery(
     con,
-    "SELECT grade_type_id FROM grade_types WHERE grade_type_code = 'UNS'"
+    "SELECT grade_type_id FROM public.grade_types WHERE grade_type_code = 'UNS'"
   )[1, 1]
   if (is.na(grade_unspecified)) {
     stop(
@@ -131,7 +131,7 @@ update_hydat <- function(
   }
   approval_approved <- DBI::dbGetQuery(
     con,
-    "SELECT approval_type_id FROM approval_types WHERE approval_type_code = 'A'"
+    "SELECT approval_type_id FROM public.approval_types WHERE approval_type_code = 'A'"
   )[1, 1]
   if (is.na(approval_approved)) {
     stop(
@@ -139,7 +139,7 @@ update_hydat <- function(
     )
   }
 
-  qualifiers <- DBI::dbGetQuery(con, "SELECT * FROM qualifier_types")
+  qualifiers <- DBI::dbGetQuery(con, "SELECT * FROM public.qualifier_types")
   qualifier_mapping <- c(
     "B" = qualifiers[
       qualifiers$qualifier_type_code == "ICE",
@@ -206,18 +206,18 @@ update_hydat <- function(
   ensure_wsc_timeseries <- function(location, location_id, param_name) {
     parameter_id <- DBI::dbGetQuery(
       con,
-      "SELECT parameter_id FROM parameters WHERE param_name = $1",
+      "SELECT parameter_id FROM public.parameters WHERE param_name = $1",
       params = list(param_name)
     )[1, 1]
     media_id <- DBI::dbGetQuery(
       con,
-      "SELECT media_id FROM media_types WHERE media_type = 'surface water'"
+      "SELECT media_id FROM public.media_types WHERE media_type = 'surface water'"
     )[1, 1]
 
     tsid <- DBI::dbGetQuery(
       con,
       "SELECT timeseries_id
-       FROM timeseries
+       FROM continuous.timeseries
        WHERE parameter_id = $1
          AND location_id = $2
          AND source_fx = 'downloadWSC'
@@ -242,11 +242,11 @@ update_hydat <- function(
           auto_unbox = TRUE
         )
       )
-      dbAppendTableRLS(con, "timeseries", new_entry)
+      dbAppendTableRLS(con, "continuous.timeseries", new_entry)
       tsid <- DBI::dbGetQuery(
         con,
         "SELECT timeseries_id
-         FROM timeseries
+         FROM continuous.timeseries
          WHERE location_id = $1
            AND parameter_id = $2
            AND source_fx = 'downloadWSC'
@@ -265,7 +265,7 @@ update_hydat <- function(
 
     offset <- DBI::dbGetQuery(
       con,
-      "SELECT timezone_daily_calc FROM timeseries WHERE timeseries_id = $1",
+      "SELECT timezone_daily_calc FROM continuous.timeseries WHERE timeseries_id = $1",
       params = list(tsid)
     )[1, 1]
     if (is.na(offset)) {
@@ -290,7 +290,7 @@ update_hydat <- function(
            (mc.datetime + make_interval(hours => $2))::date AS local_date,
            mc.datetime,
            mc.period
-         FROM measurements_continuous mc
+         FROM continuous.measurements_continuous mc
          WHERE mc.timeseries_id = $1
            AND mc.datetime >= $3
            AND mc.datetime < $4
@@ -312,7 +312,7 @@ update_hydat <- function(
       "SELECT
          (mc.datetime + make_interval(hours => $2))::date AS date,
          mc.value
-       FROM measurements_continuous mc
+       FROM continuous.measurements_continuous mc
        WHERE mc.timeseries_id = $1
          AND mc.datetime >= $3
          AND mc.datetime < $4
@@ -365,7 +365,7 @@ update_hydat <- function(
       {
         deleted <- DBI::dbExecute(
           con,
-          "DELETE FROM measurements_continuous mc
+          "DELETE FROM continuous.measurements_continuous mc
            WHERE mc.timeseries_id = $1
              AND mc.datetime >= $2
              AND mc.datetime < $3
@@ -380,7 +380,7 @@ update_hydat <- function(
         if (nrow(to_write) > 0) {
           dbAppendTableRLS(
             con,
-            "measurements_continuous",
+            "continuous.measurements_continuous",
             to_write[, c(
               "datetime",
               "value",
@@ -419,7 +419,7 @@ update_hydat <- function(
 
         DBI::dbExecute(
           con,
-          "UPDATE timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
+          "UPDATE continuous.timeseries SET last_new_data = NOW() WHERE timeseries_id = $1",
           params = list(tsid)
         )
         ok <- deleted > 0 || nrow(to_write) > 0
@@ -487,7 +487,7 @@ update_hydat <- function(
     {
       DBI::dbExecute(
         con,
-        "UPDATE internal_status SET value = $1 WHERE event = 'HYDAT_version'",
+        "UPDATE information.internal_status SET value = $1 WHERE event = 'HYDAT_version'",
         params = list(as.character(local_hydat))
       )
     },

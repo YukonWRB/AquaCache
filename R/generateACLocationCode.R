@@ -93,7 +93,7 @@ generateACLocationCode <- function(
 
   location_types <- DBI::dbGetQuery(
     con,
-    "SELECT type_id, type_suffix FROM location_types;"
+    "SELECT type_id, type_suffix FROM public.location_types;"
   )
 
   extract_suffix <- function(code) {

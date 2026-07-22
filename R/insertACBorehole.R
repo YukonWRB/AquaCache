@@ -124,7 +124,7 @@ insertACBorehole <- function(
     exists <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT location_id FROM locations WHERE location_id = ",
+        "SELECT location_id FROM public.locations WHERE location_id = ",
         location_id,
         ";"
       )
@@ -168,7 +168,7 @@ insertACBorehole <- function(
     exists <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT borehole_well_purpose_id FROM borehole_well_purposes WHERE borehole_well_purpose_id = ",
+        "SELECT borehole_well_purpose_id FROM boreholes.borehole_well_purposes WHERE borehole_well_purpose_id = ",
         purpose_of_borehole,
         ";"
       )
@@ -184,7 +184,7 @@ insertACBorehole <- function(
     exists <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT borehole_well_purpose_id FROM borehole_well_purposes WHERE borehole_well_purpose_id = ",
+        "SELECT borehole_well_purpose_id FROM boreholes.borehole_well_purposes WHERE borehole_well_purpose_id = ",
         purpose_of_well,
         ";"
       )
@@ -270,7 +270,7 @@ insertACBorehole <- function(
 
   # Construct SQL query for borehole insertion
   query <- paste0(
-    "INSERT INTO boreholes (
+    "INSERT INTO boreholes.boreholes (
       share_with, 
       location_id, 
       latitude, 
@@ -331,7 +331,7 @@ insertACBorehole <- function(
   # If permafrost is present, insert permafrost record
   if (permafrost_present) {
     query <- paste0(
-      "INSERT INTO permafrost (
+      "INSERT INTO boreholes.permafrost (
         borehole_id, 
         depth_from_m, 
         depth_to_m) 
@@ -349,7 +349,7 @@ insertACBorehole <- function(
   # If borehole is a well, insert well-specific data
   if (is_well) {
     query <- paste0(
-      "INSERT INTO wells (
+      "INSERT INTO boreholes.wells (
         borehole_id, 
         casing_diameter_mm, 
         screen_top_depth_m, 

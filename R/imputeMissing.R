@@ -63,7 +63,7 @@ imputeMissing <- function(
   entry <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT l.name, l.location_id, p.param_name AS parameter, at.aggregation_type, t.record_rate, t.timezone_daily_calc FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.timeseries_id = ",
+      "SELECT l.name, l.location_id, p.param_name AS parameter, at.aggregation_type, t.record_rate, t.timezone_daily_calc FROM continuous.timeseries AS t JOIN public.locations AS l ON t.location_id = l.location_id JOIN public.parameters AS p on t.parameter_id = p.parameter_id JOIN continuous.aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE t.timeseries_id = ",
       tsid,
       ";"
     )
@@ -75,7 +75,7 @@ imputeMissing <- function(
     exist.values <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+        "SELECT datetime, value, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
         tsid,
         " AND datetime >= '",
         start,
@@ -89,7 +89,7 @@ imputeMissing <- function(
     exist.cont <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+        "SELECT datetime, value, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
         tsid,
         " AND datetime >= '",
         start,
@@ -103,7 +103,7 @@ imputeMissing <- function(
       exist.values <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
+          "SELECT date, value, imputed FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
           tsid,
           " AND date >= '",
           as.Date(max(exist.cont$datetime)),
@@ -125,7 +125,7 @@ imputeMissing <- function(
       exist.values <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
+          "SELECT date, value, imputed FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
           tsid,
           " AND date >= '",
           as.Date(start),
@@ -182,7 +182,7 @@ imputeMissing <- function(
         exist.values <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT datetime, value, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND datetime >= '",
             start,
@@ -210,7 +210,7 @@ imputeMissing <- function(
         exist.values <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT date, value, imputed FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND date >= '",
             day.start,
@@ -266,7 +266,7 @@ imputeMissing <- function(
         goto_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT min(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT min(date) FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND date > '",
             as.Date(end),
@@ -276,7 +276,7 @@ imputeMissing <- function(
         goto_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT date, value, imputed FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND date <= '",
             goto_date,
@@ -294,7 +294,7 @@ imputeMissing <- function(
         goto_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT min(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT min(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND datetime > '",
             end,
@@ -304,7 +304,7 @@ imputeMissing <- function(
         goto_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT datetime, value, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND datetime <= '",
             goto_date,
@@ -327,7 +327,7 @@ imputeMissing <- function(
         gofrom_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT max(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT max(date) FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND value IS NOT NULL AND date < '",
             as.Date(start),
@@ -338,7 +338,7 @@ imputeMissing <- function(
         gofrom_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT date, value, imputed FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND date >= '",
             gofrom_date,
@@ -354,7 +354,7 @@ imputeMissing <- function(
         gofrom_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT max(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT max(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND value IS NOT NULL AND datetime < '",
             start,
@@ -365,7 +365,7 @@ imputeMissing <- function(
         gofrom_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT datetime, value, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND datetime >= '",
             gofrom_date,
@@ -391,7 +391,7 @@ imputeMissing <- function(
         goto_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT min(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT min(date) FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND date > '",
             as.Date(end),
@@ -401,7 +401,7 @@ imputeMissing <- function(
         goto_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT date, value, imputed FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND date <= '",
             goto_date,
@@ -418,7 +418,7 @@ imputeMissing <- function(
         goto_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT min(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT min(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND datetime > '",
             end,
@@ -428,7 +428,7 @@ imputeMissing <- function(
         goto_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT datetime, value, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND datetime <= '",
             goto_date,
@@ -451,7 +451,7 @@ imputeMissing <- function(
         gofrom_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT max(date) FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT max(date) FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND value IS NOT NULL AND date < '",
             as.Date(start),
@@ -462,7 +462,7 @@ imputeMissing <- function(
         gofrom_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT date, value, imputed FROM measurements_calculated_daily WHERE timeseries_id = ",
+            "SELECT date, value, imputed FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
             tsid,
             " AND date >= '",
             gofrom_date,
@@ -478,7 +478,7 @@ imputeMissing <- function(
         gofrom_date <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT max(datetime) FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT max(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND value IS NOT NULL AND datetime < '",
             start,
@@ -489,7 +489,7 @@ imputeMissing <- function(
         gofrom_data <- DBI::dbGetQuery(
           con,
           paste0(
-            "SELECT datetime, value, imputed FROM measurements_continuous WHERE timeseries_id = ",
+            "SELECT datetime, value, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
             tsid,
             " AND datetime >= '",
             gofrom_date,
@@ -543,9 +543,9 @@ imputeMissing <- function(
   nrby <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT l.location_id, l.name, ST_Distance(ST_Transform(v.geom, 3857), ST_Transform((SELECT v2.geom FROM vectors v2 JOIN locations l2 ON v2.geom_id = l2.geom_id WHERE l2.location_id = '",
+      "SELECT l.location_id, l.name, ST_Distance(ST_Transform(v.geom, 3857), ST_Transform((SELECT v2.geom FROM spatial.vectors v2 JOIN public.locations l2 ON v2.geom_id = l2.geom_id WHERE l2.location_id = '",
       entry$location_id,
-      "'), 3857)) AS distance_meters FROM locations l JOIN vectors v ON l.geom_id = v.geom_id WHERE ST_DWithin(ST_Transform(v.geom, 3857), ST_Transform((SELECT v3.geom FROM vectors v3 JOIN locations l3 ON v3.geom_id = l3.geom_id WHERE l3.location_id = '",
+      "'), 3857)) AS distance_meters FROM public.locations l JOIN spatial.vectors v ON l.geom_id = v.geom_id WHERE ST_DWithin(ST_Transform(v.geom, 3857), ST_Transform((SELECT v3.geom FROM spatial.vectors v3 JOIN public.locations l3 ON v3.geom_id = l3.geom_id WHERE l3.location_id = '",
       entry$location_id,
       "' AND v3.geom_type = 'ST_Point'), 3857), ",
       radius * 1000,
@@ -559,7 +559,7 @@ imputeMissing <- function(
     similar <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT l.location_id, l.name, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE l.location_id IN ('",
+        "SELECT l.location_id, l.name, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM continuous.timeseries AS t JOIN public.locations AS l ON t.location_id = l.location_id JOIN public.parameters AS p on t.parameter_id = p.parameter_id JOIN continuous.aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE l.location_id IN ('",
         paste(nrby$location_id, collapse = "', '"),
         "') AND p.param_name IN ('",
         paste(
@@ -581,7 +581,7 @@ imputeMissing <- function(
     similar <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT l.location_id, l.name, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM timeseries AS t JOIN locations AS l ON t.location_id = l.location_id JOIN parameters AS p on t.parameter_id = p.parameter_id JOIN aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE l.location_id IN ('",
+        "SELECT l.location_id, l.name, t.timeseries_id, p.param_name AS parameter, at.aggregation_type, t.record_rate FROM continuous.timeseries AS t JOIN public.locations AS l ON t.location_id = l.location_id JOIN public.parameters AS p on t.parameter_id = p.parameter_id JOIN continuous.aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE l.location_id IN ('",
         paste(nrby$location_id, collapse = "', '"),
         "') AND p.param_name = '",
         entry$parameter,
@@ -734,7 +734,7 @@ imputeMissing <- function(
           df <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT datetime, value FROM measurements_continuous WHERE timeseries_id = ",
+              "SELECT datetime, value FROM continuous.measurements_continuous WHERE timeseries_id = ",
               similar[i, "timeseries_id"],
               " AND datetime >= '",
               start,
@@ -747,7 +747,7 @@ imputeMissing <- function(
             to_add <- DBI::dbGetQuery(
               con,
               paste0(
-                "SELECT date, value FROM measurements_calculated_daily WHERE timeseries_id = ",
+                "SELECT date, value FROM continuous.measurements_calculated_daily WHERE timeseries_id = ",
                 similar[i, "timeseries_id"],
                 " AND date >= '",
                 as.Date(start),
@@ -1270,15 +1270,15 @@ imputeMissing <- function(
     to_push$timeseries_id <- tsid
     grade_unspecified <- DBI::dbGetQuery(
       con,
-      "SELECT grade_type_id FROM grade_types WHERE grade_type_description = 'Unspecified';"
+      "SELECT grade_type_id FROM public.grade_types WHERE grade_type_description = 'Unspecified';"
     )[1, 1]
     approval_unspecified <- DBI::dbGetQuery(
       con,
-      "SELECT approval_type_id FROM approval_types WHERE approval_type_description = 'Unspecified';"
+      "SELECT approval_type_id FROM public.approval_types WHERE approval_type_description = 'Unspecified';"
     )[1, 1]
     qualifier_unspecified <- DBI::dbGetQuery(
       con,
-      "SELECT qualifier_type_id FROM qualifier_types WHERE qualifier_type_description = 'unspecified';"
+      "SELECT qualifier_type_id FROM public.qualifier_types WHERE qualifier_type_description = 'unspecified';"
     )[1, 1]
     to_push$approval <- approval_unspecified
     to_push$grade <- grade_unspecified
@@ -1294,7 +1294,7 @@ imputeMissing <- function(
       DBI::dbExecute(
         con,
         paste0(
-          "DELETE FROM measurements_continuous WHERE timeseries_id = ",
+          "DELETE FROM continuous.measurements_continuous WHERE timeseries_id = ",
           tsid,
           " AND datetime IN ('",
           paste(to_push$datetime, collapse = "', '"),
@@ -1304,7 +1304,7 @@ imputeMissing <- function(
 
       dbAppendTableRLS(
         con,
-        "measurements_continuous",
+        "continuous.measurements_continuous",
         to_push[, c("timeseries_id", "datetime", "value", "imputed", "period")]
       )
 
@@ -1351,7 +1351,7 @@ imputeMissing <- function(
       DBI::dbExecute(
         con,
         paste0(
-          "DELETE FROM measurements_continuous WHERE timeseries_id = ",
+          "DELETE FROM continuous.measurements_continuous WHERE timeseries_id = ",
           tsid,
           " AND datetime IN ('",
           paste(to_push$datetime, collapse = "', '"),
@@ -1360,7 +1360,7 @@ imputeMissing <- function(
       ) #delete is here in case previously imputed values are being over-written
       dbAppendTableRLS(
         con,
-        "measurements_continuous",
+        "continuous.measurements_continuous",
         to_push[, c("timeseries_id", "datetime", "value", "imputed", "period")]
       )
 

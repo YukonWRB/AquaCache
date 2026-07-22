@@ -52,7 +52,7 @@ addNewDiscrete <- function(con, sample, results) {
   # Define a commit function that will be run within a transaction
   commit_fx <- function(con, sample, results) {
     # Insert the sample data
-    dbAppendTableRLS(con, "samples", sample)
+    dbAppendTableRLS(con, "discrete.samples", sample)
 
     sample_id <- find_discrete_sample_id(con, sample)
 
@@ -63,7 +63,7 @@ addNewDiscrete <- function(con, sample, results) {
       sample_media_id = sample$media_id[1],
       results = results
     )
-    dbAppendTableRLS(con, "results", results)
+    dbAppendTableRLS(con, "discrete.results", results)
 
     return(sample_id)
   }

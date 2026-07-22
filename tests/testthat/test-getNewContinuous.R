@@ -35,7 +35,7 @@ mock_getnew_db_get_query <- function(
   timeseries_type = rep("basic", length(timeseries_ids))
 ) {
   function(con, statement, params = NULL, ...) {
-    if (grepl("FROM timeseries t", statement, fixed = TRUE)) {
+    if (grepl("FROM continuous.timeseries t", statement, fixed = TRUE)) {
       return(mock_getnew_timeseries_table(
         timeseries_ids = timeseries_ids,
         source_fx_name = source_fx_name,
@@ -44,18 +44,18 @@ mock_getnew_db_get_query <- function(
         timeseries_type = timeseries_type
       ))
     }
-    if (grepl("FROM grade_types", statement, fixed = TRUE)) {
+    if (grepl("FROM public.grade_types", statement, fixed = TRUE)) {
       return(data.frame(grade_type_id = 1L))
     }
-    if (grepl("FROM approval_types", statement, fixed = TRUE)) {
+    if (grepl("FROM public.approval_types", statement, fixed = TRUE)) {
       return(data.frame(approval_type_id = 1L))
     }
-    if (grepl("FROM qualifier_types", statement, fixed = TRUE)) {
+    if (grepl("FROM public.qualifier_types", statement, fixed = TRUE)) {
       return(data.frame(qualifier_type_id = 1L))
     }
     if (
       grepl(
-        "SELECT MAX(datetime) FROM measurements_continuous WHERE timeseries_id = $1",
+        "SELECT MAX(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1",
         statement,
         fixed = TRUE
       )
@@ -371,9 +371,9 @@ test_that("getNewContinuous does not delete history when period calculation need
   candidate <- DBI::dbGetQuery(
     con,
     "SELECT t.timeseries_id
-     FROM timeseries t
-     JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id
-     JOIN measurements_continuous mc ON mc.timeseries_id = t.timeseries_id
+     FROM continuous.timeseries t
+     JOIN continuous.aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id
+     JOIN continuous.measurements_continuous mc ON mc.timeseries_id = t.timeseries_id
      WHERE at.aggregation_type <> 'instantaneous'
      GROUP BY t.timeseries_id
      HAVING COUNT(mc.datetime) > 20
@@ -388,7 +388,7 @@ test_that("getNewContinuous does not delete history when period calculation need
   history <- DBI::dbGetQuery(
     con,
     "SELECT datetime, value
-     FROM measurements_continuous
+     FROM continuous.measurements_continuous
      WHERE timeseries_id = $1
      ORDER BY datetime DESC
      LIMIT 5",
@@ -444,7 +444,7 @@ test_that("getNewContinuous does not delete history when period calculation need
 
   DBI::dbExecute(
     con,
-    "UPDATE timeseries
+    "UPDATE continuous.timeseries
      SET source_fx = $1,
          source_fx_args = $2
      WHERE timeseries_id = $3",
@@ -472,7 +472,7 @@ test_that("getNewContinuous does not delete history when period calculation need
   inserted_count <- DBI::dbGetQuery(
     con,
     "SELECT COUNT(*)
-     FROM measurements_continuous
+     FROM continuous.measurements_continuous
      WHERE timeseries_id = $1
        AND datetime >= $2",
     params = list(tsid, min(new_rows$datetime))
@@ -490,9 +490,9 @@ test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinut
   candidate <- DBI::dbGetQuery(
     con,
     "SELECT t.timeseries_id, MAX(mc.datetime) AS last_datetime
-     FROM timeseries t
-     JOIN aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id
-     JOIN measurements_continuous mc ON mc.timeseries_id = t.timeseries_id
+     FROM continuous.timeseries t
+     JOIN continuous.aggregation_types at ON at.aggregation_type_id = t.aggregation_type_id
+     JOIN continuous.measurements_continuous mc ON mc.timeseries_id = t.timeseries_id
      WHERE at.aggregation_type = 'instantaneous'
      GROUP BY t.timeseries_id
      ORDER BY MAX(mc.datetime) DESC
@@ -515,7 +515,7 @@ test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinut
 
   DBI::dbExecute(
     con,
-    "UPDATE timeseries
+    "UPDATE continuous.timeseries
      SET source_fx = $1,
          source_fx_args = $2
      WHERE timeseries_id = $3",
@@ -550,7 +550,7 @@ test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinut
   inserted_count <- DBI::dbGetQuery(
     con,
     "SELECT COUNT(*)
-     FROM measurements_continuous
+     FROM continuous.measurements_continuous
      WHERE timeseries_id = $1
        AND datetime >= $2",
     params = list(tsid, min(new_rows$datetime))
@@ -617,7 +617,7 @@ test_that("getNewContinuous leaves daily refresh to database triggers", {
     stats = TRUE
   )
 
-  expect_equal(captured$table, "measurements_continuous")
+  expect_equal(captured$table, "continuous.measurements_continuous")
   expect_equal(min(captured$value$datetime), min(new_rows$datetime))
   expect_true(tsid %in% result$timeseries_id)
 })

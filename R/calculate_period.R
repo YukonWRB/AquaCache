@@ -52,9 +52,9 @@ calculate_period <- function(data, timeseries_id, con = NULL) {
       paste0(
         "SELECT ",
         paste(col_names, collapse = ', '),
-        " FROM measurements_continuous WHERE timeseries_id = ",
+        " FROM continuous.measurements_continuous WHERE timeseries_id = ",
         timeseries_id,
-        " AND datetime >= (SELECT MIN(datetime) FROM measurements_continuous WHERE period IS NULL AND timeseries_id = ",
+        " AND datetime >= (SELECT MIN(datetime) FROM continuous.measurements_continuous WHERE period IS NULL AND timeseries_id = ",
         timeseries_id,
         ") AND datetime NOT IN ('",
         paste(data$datetime, collapse = "', '"),
@@ -145,7 +145,7 @@ calculate_period <- function(data, timeseries_id, con = NULL) {
       paste0(
         "SELECT ",
         paste(col_names, collapse = ', '),
-        " FROM measurements_continuous WHERE timeseries_id = ",
+        " FROM continuous.measurements_continuous WHERE timeseries_id = ",
         timeseries_id,
         " ORDER BY datetime DESC LIMIT 10;"
       )

@@ -39,7 +39,7 @@ maintain <- function(
       {
         DBI::dbExecute(
           con,
-          "UPDATE internal_status SET value = NOW() WHERE event = 'last_vacuum';"
+          "UPDATE information.internal_status SET value = NOW() WHERE event = 'last_vacuum';"
         )
       },
       silent = TRUE
@@ -92,7 +92,7 @@ maintain <- function(
   }
 
   if (locations_check) {
-    loc_tbl <- DBI::dbGetQuery(con, "SELECT * FROM locations;")
+    loc_tbl <- DBI::dbGetQuery(con, "SELECT * FROM public.locations;")
 
     # Get the foreign key references for the locations table
     refs <- DBI::dbGetQuery(
@@ -103,12 +103,12 @@ maintain <- function(
             ns.nspname AS fk_schema,
             cl.relname AS fk_table,
             a.attname AS fk_column
-          FROM pg_constraint con
-          JOIN pg_class cl ON cl.oid = con.conrelid
-          JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+          FROM pg_catalog.pg_constraint con
+          JOIN pg_catalog.pg_class cl ON cl.oid = con.conrelid
+          JOIN pg_catalog.pg_namespace ns ON ns.oid = cl.relnamespace
           JOIN unnest(con.confkey) WITH ORDINALITY AS fk_cols(colnum, ord) 
             ON TRUE
-          JOIN pg_attribute a 
+          JOIN pg_catalog.pg_attribute a
             ON a.attrelid = con.confrelid 
            AND a.attnum   = con.confkey[fk_cols.ord]
           WHERE con.contype = 'f'
