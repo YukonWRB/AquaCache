@@ -496,6 +496,11 @@ getNewContinuous <- function(
         " is not tabular."
       )
     }
+    # Make that there are at least some rows (otherwise we might fail when checking for column names)
+    if (nrow(ts) == 0) {
+      return(build_status_row(i, tsid, state = "no_new_data"))
+    }
+    
     # Make sure we have the required columns
     if (!all(c("value", "datetime") %in% names(ts))) {
       stop(
@@ -511,7 +516,7 @@ getNewContinuous <- function(
       ts <- ts[ts$datetime >= last_data_point, ]
     }
 
-    # If there are no new data points, skip to the next timeseries.
+    # If there are no new data points after that, skip to the next timeseries.
     if (nrow(ts) == 0) {
       return(build_status_row(i, tsid, state = "no_new_data"))
     }
