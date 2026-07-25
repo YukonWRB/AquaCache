@@ -84,6 +84,11 @@ insertACDocument <- function(
   }
 
   if (!is.null(geoms)) {
+    # Ensure that all geom_ids are integers
+    if (!all(sapply(geoms, function(x) is.numeric(x) && x == as.integer(x)))) {
+      stop("All geom_ids must be integers.")
+    }
+
     #Check to make sure the geom_ids exist, report back to the user what actually got associated.
     exist_geoms <- DBI::dbGetQuery(
       con,
@@ -92,16 +97,19 @@ insertACDocument <- function(
        WHERE geom_id IN (
          SELECT jsonb_array_elements_text($1::jsonb)::integer
        )",
-      params = list(jsonlite::toJSON(as.integer(geoms), auto_unbox = FALSE))
+      params = list(jsonlite::toJSON(
+        unique(as.integer(geoms)),
+        auto_unbox = FALSE
+      ))
     )
     if (nrow(exist_geoms) == 0) {
       stop(
-        "None of the geom_ids you specified for parameter geoms can be found in the table vectors. Try again."
+        "None of the geom_ids you specified for parameter geoms can be found in the table 'spatial.vectors.' Try again."
       )
     }
     if (nrow(exist_geoms != length(geoms))) {
       warning(
-        "At least one of the geom_ids you specified for parameter geoms could not be found in table vectors."
+        "At least one of the geom_ids you specified for parameter geoms could not be found in table 'spatial.vectors.'"
       )
     }
   }
