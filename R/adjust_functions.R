@@ -148,6 +148,107 @@ collapse_segments_with_split <- function(
   final
 }
 
+#' @title Merge overlapping segments with the same value
+#' @description
+#' Merge overlapping or touching segments that have the same value while
+#' preserving an existing segment ID where possible. Existing IDs made
+#' redundant by a merge are returned for deletion.
+#' @param segments A data.frame of proposed segments.
+#' @param value_col The name of the value column used to group segments.
+#' @param id_col The name of the segment ID column.
+#' @return A list containing the merged `segments` and redundant `delete_ids`.
+#' @noRd
+#' @keywords internal
+merge_overlapping_same_value_segments <- function(
+  segments,
+  value_col,
+  id_col
+) {
+  if (nrow(segments) == 0) {
+    return(list(segments = segments, delete_ids = integer()))
+  }
+
+  delete_ids <- segments[
+    segments$timeseries_id == -1 & !is.na(segments[[id_col]]),
+    id_col
+  ]
+  segments <- segments[
+    segments$timeseries_id != -1,
+    ,
+    drop = FALSE
+  ]
+
+  if (nrow(segments) <= 1) {
+    return(list(
+      segments = segments,
+      delete_ids = unique(as.integer(delete_ids))
+    ))
+  }
+
+  segments <- segments[
+    order(
+      segments[[value_col]],
+      segments$start_dt,
+      segments$end_dt,
+      is.na(segments[[id_col]])
+    ),
+    ,
+    drop = FALSE
+  ]
+
+  merged <- vector("list", nrow(segments))
+  merged_count <- 0L
+
+  for (value in unique(segments[[value_col]])) {
+    value_segments <- segments[
+      segments[[value_col]] == value,
+      ,
+      drop = FALSE
+    ]
+    current <- value_segments[1, , drop = FALSE]
+
+    if (nrow(value_segments) > 1) {
+      for (i in 2:nrow(value_segments)) {
+        next_segment <- value_segments[i, , drop = FALSE]
+
+        if (next_segment$start_dt <= current$end_dt) {
+          current$end_dt <- max(current$end_dt, next_segment$end_dt)
+
+          current_id <- current[[id_col]][1]
+          next_id <- next_segment[[id_col]][1]
+          if (is.na(current_id) && !is.na(next_id)) {
+            current[[id_col]] <- next_id
+          } else if (
+            !is.na(current_id) &&
+              !is.na(next_id) &&
+              current_id != next_id
+          ) {
+            delete_ids <- c(delete_ids, next_id)
+          }
+        } else {
+          merged_count <- merged_count + 1L
+          merged[[merged_count]] <- current
+          current <- next_segment
+        }
+      }
+    }
+
+    merged_count <- merged_count + 1L
+    merged[[merged_count]] <- current
+  }
+
+  merged <- do.call(rbind, merged[seq_len(merged_count)])
+  rownames(merged) <- NULL
+
+  duplicate_ids <- duplicated(merged[[id_col]]) & !is.na(merged[[id_col]])
+  merged[[id_col]][duplicate_ids] <- NA
+
+  list(
+    segments = merged,
+    delete_ids = unique(as.integer(delete_ids))
+  )
+}
+
 #' @title Segment state key
 #' @description Create a unique key for a set of segments based on the id, timeseries_id, value, start_dt, and end_dt columns, to facilitate comparison of segment states.
 #' @param data A data.frame of segments with columns for id, timeseries_id, value, start_dt, and end_dt.
@@ -727,26 +828,16 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         ]
       }
 
-      if (nrow(proposed_state_all) > 0) {
-        proposed_existing_ids <- proposed_state_all[
-          !is.na(proposed_state_all$qualifier_id),
-          ,
-          drop = FALSE
-        ]
-        proposed_new_ids <- proposed_state_all[
-          is.na(proposed_state_all$qualifier_id),
-          ,
-          drop = FALSE
-        ]
-        if (nrow(proposed_existing_ids) > 0) {
-          proposed_existing_ids <- proposed_existing_ids[
-            !duplicated(proposed_existing_ids$qualifier_id),
-            ,
-            drop = FALSE
-          ]
-        }
-        proposed_state_all <- rbind(proposed_existing_ids, proposed_new_ids)
-      }
+      merged_qualifiers <- merge_overlapping_same_value_segments(
+        segments = proposed_state_all,
+        value_col = "qualifier_type_id",
+        id_col = "qualifier_id"
+      )
+      proposed_state_all <- merged_qualifiers$segments
+      sync_delete_ids <- unique(c(
+        sync_delete_ids,
+        merged_qualifiers$delete_ids
+      ))
 
       reconcile_segment_changes(
         con = con,
