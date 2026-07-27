@@ -116,8 +116,9 @@ test_that("adjust_qualifier merges a qualifier repeated across rank streams", {
        (timeseries_id, qualifier_type_id, start_dt, end_dt)
      VALUES
        ($1, $2, '2099-01-01 00:00:00+00', '2099-01-10 00:00:00+00'),
-       ($1, $3, '2099-01-01 00:00:00+00', '2099-01-10 00:00:00+00');",
-    params = list(ts_id, qualifier_b, qualifier_c)
+       ($1, $3, '2099-01-01 00:00:00+00', '2099-01-10 00:00:00+00'),
+       ($1, $4, '2099-01-01 00:00:00+00', '2099-01-10 00:00:00+00');",
+    params = list(ts_id, qualifier_a, qualifier_b, qualifier_c)
   )
 
   update_data <- data.frame(
@@ -163,6 +164,60 @@ test_that("adjust_qualifier merges a qualifier repeated across rank streams", {
   expect_equal(
     qualifier_b_out$end_dt,
     as.POSIXct("2099-01-10 00:00:00", tz = "UTC")
+  )
+
+  qualifier_a_out <- DBI::dbGetQuery(
+    con,
+    "SELECT start_dt, end_dt
+       FROM continuous.qualifiers
+      WHERE timeseries_id = $1
+        AND qualifier_type_id = $2
+        AND start_dt >= '2099-01-01 00:00:00+00'
+        AND end_dt <= '2099-01-10 00:00:00+00'
+      ORDER BY start_dt;",
+    params = list(ts_id, qualifier_a)
+  )
+
+  expect_equal(nrow(qualifier_a_out), 1)
+  expect_equal(
+    qualifier_a_out$start_dt,
+    as.POSIXct("2099-01-01 00:00:00", tz = "UTC")
+  )
+  expect_equal(
+    qualifier_a_out$end_dt,
+    as.POSIXct("2099-01-10 00:00:00", tz = "UTC")
+  )
+
+  ids_after_first_adjustment <- DBI::dbGetQuery(
+    con,
+    "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt
+       FROM continuous.qualifiers
+      WHERE timeseries_id = $1
+        AND start_dt >= '2099-01-01 00:00:00+00'
+        AND end_dt <= '2099-01-10 00:00:00+00'
+      ORDER BY qualifier_type_id, start_dt, end_dt;",
+    params = list(ts_id)
+  )
+
+  expect_warning(
+    adjust_qualifier(con, ts_id, update_data),
+    NA
+  )
+
+  ids_after_second_adjustment <- DBI::dbGetQuery(
+    con,
+    "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt
+       FROM continuous.qualifiers
+      WHERE timeseries_id = $1
+        AND start_dt >= '2099-01-01 00:00:00+00'
+        AND end_dt <= '2099-01-10 00:00:00+00'
+      ORDER BY qualifier_type_id, start_dt, end_dt;",
+    params = list(ts_id)
+  )
+
+  expect_equal(
+    ids_after_second_adjustment,
+    ids_after_first_adjustment
   )
 })
 

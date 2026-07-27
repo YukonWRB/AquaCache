@@ -463,7 +463,7 @@ reconcile_segment_changes <- function(
 #' @param con A connection to the database with write privileges to the 'grades' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'grade'. 'datetime' should be POSIXct and 'grade' should either character (in which case it must refer to entries in column 'grade_type_code' of table 'grade_types' or integer/numeric, in which case it must refer to column 'grade_type_id' of the same table.
-#' @param delete Logical. If TRUE, the function will delete grades which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
+#' @param delete Logical. If TRUE, the function will delete grades which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
 #'
 #' @return Modifies the 'grades' table in the database.
 #' @export
@@ -641,7 +641,7 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
 #' @param con A connection to the database with write privileges to the 'qualifiers' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'qualifier'. 'datetime' should be POSIXct and 'qualifier' should either character (in which case it must refer to entries in column 'qualifier_type_code' of table 'qualifiers' or integer/numeric, in which case it must refer to column 'qualifier_type_id' of the same table.
-#' @param delete Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
+#' @param delete Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
 #'
 #' @return Modifies the 'qualifiers' table in the database.
 #' @export
@@ -828,6 +828,61 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         ]
       }
 
+      proposed_types <- unique(proposed_state_all$qualifier_type_id[
+        proposed_state_all$timeseries_id != -1
+      ])
+      missing_existing_types <- setdiff(
+        proposed_types,
+        unique(existing_state_all$qualifier_type_id)
+      )
+
+      if (length(missing_existing_types) > 0) {
+        missing_existing <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT qualifier_id, timeseries_id, qualifier_type_id,
+                    start_dt, end_dt
+               FROM continuous.qualifiers
+              WHERE timeseries_id = $1
+                AND qualifier_type_id IN (",
+            paste(as.integer(missing_existing_types), collapse = ", "),
+            ")
+              ORDER BY qualifier_type_id, start_dt, end_dt;"
+          ),
+          params = list(timeseries_id)
+        )
+
+        if (nrow(missing_existing) > 0) {
+          overlaps_proposal <- vapply(
+            seq_len(nrow(missing_existing)),
+            function(i) {
+              any(
+                proposed_state_all$timeseries_id != -1 &
+                  proposed_state_all$qualifier_type_id ==
+                    missing_existing$qualifier_type_id[i] &
+                  proposed_state_all$start_dt <= missing_existing$end_dt[i] &
+                  proposed_state_all$end_dt >= missing_existing$start_dt[i]
+              )
+            },
+            logical(1)
+          )
+          missing_existing <- missing_existing[
+            overlaps_proposal,
+            ,
+            drop = FALSE
+          ]
+
+          existing_state_all <- rbind(
+            existing_state_all,
+            missing_existing
+          )
+          proposed_state_all <- rbind(
+            proposed_state_all,
+            missing_existing
+          )
+        }
+      }
+
       merged_qualifiers <- merge_overlapping_same_value_segments(
         segments = proposed_state_all,
         value_col = "qualifier_type_id",
@@ -838,6 +893,50 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         sync_delete_ids,
         merged_qualifiers$delete_ids
       ))
+
+      # Prefer the ID of an exact existing interval. The rank-based rebuild can
+      # otherwise attach a later interval's ID to an earlier interval, causing
+      # needless delete/insert churn on every synchronization.
+      if (
+        nrow(existing_state_all) > 0 &&
+          nrow(proposed_state_all) > 0
+      ) {
+        proposed_ids <- proposed_state_all$qualifier_id
+        aligned_ids <- rep(NA_integer_, nrow(proposed_state_all))
+        used_ids <- integer()
+
+        for (i in seq_len(nrow(proposed_state_all))) {
+          exact_match <- which(
+            existing_state_all$qualifier_type_id ==
+              proposed_state_all$qualifier_type_id[i] &
+              existing_state_all$start_dt == proposed_state_all$start_dt[i] &
+              existing_state_all$end_dt == proposed_state_all$end_dt[i] &
+              !(existing_state_all$qualifier_id %in% used_ids)
+          )
+          if (length(exact_match) > 0) {
+            aligned_ids[i] <- existing_state_all$qualifier_id[exact_match[1]]
+            used_ids <- c(used_ids, aligned_ids[i])
+          }
+        }
+
+        for (i in which(is.na(aligned_ids))) {
+          candidate_id <- proposed_ids[i]
+          if (
+            !is.na(candidate_id) &&
+              !(candidate_id %in% used_ids) &&
+              any(
+                existing_state_all$qualifier_id == candidate_id &
+                  existing_state_all$qualifier_type_id ==
+                    proposed_state_all$qualifier_type_id[i]
+              )
+          ) {
+            aligned_ids[i] <- candidate_id
+            used_ids <- c(used_ids, candidate_id)
+          }
+        }
+
+        proposed_state_all$qualifier_id <- aligned_ids
+      }
 
       reconcile_segment_changes(
         con = con,
@@ -872,7 +971,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
 #' @param con A connection to the database with write privileges to the 'approvals' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'approval'. 'datetime' should be POSIXct and 'approval' should either character (in which case it must refer to entries in column 'approval_type_code' of table 'approval_types' or integer/numeric, in which case it must refer to column 'approval_type_id' of the same table.
-#' @param delete Logical. If TRUE, the function will delete approvals which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
+#' @param delete Logical. If TRUE, the function will delete approvals which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
 #'
 #' @return Modifies the 'approvals' table in the database.
 #' @export
@@ -1050,7 +1149,7 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
 #' @param con A connection to the database with write privileges to the 'owners' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'owner'. 'datetime' should be POSIXct and 'owner' should be either character (in which case it must refer to entries in column 'name' of table 'organizations' or integer/numeric, in which case it must refer to column 'organization_id' of the same table.
-#' @param delete Logical. If TRUE, the function will delete owners which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
+#' @param delete Logical. If TRUE, the function will delete owners which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
 #'
 #' @return Modifies the 'owners' table in the database.
 #' @export
@@ -1217,7 +1316,7 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
 #' @param con A connection to the database with write privileges to the 'contributors' and 'measurements_continuous' tables.
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'contributor'. 'datetime' should be POSIXct and 'contributor' should be either character (in which case it must refer to entries in column 'name' of table 'organizations' or integer/numeric, in which case it must refer to column 'organization_id' of the same table.
-#' @param delete Logical. If TRUE, the function will delete contributors which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
+#' @param delete Logical. If TRUE, the function will delete contributors which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
 #'
 #' @return Modifies the 'contributors' table in the database.
 #' @export
@@ -1384,7 +1483,7 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
 #' @param con A connection to the database with write privileges to the 'timeseries_data_sharing_agreements' table.
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'data_sharing_agreement_id'. 'datetime' should be POSIXct and 'data_sharing_agreement_id' should refer to column 'document_id' of table 'files.documents'.
-#' @param delete Logical. If TRUE, the function will delete data sharing agreements which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.
+#' @param delete Logical. If TRUE, the function will delete data sharing agreements which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
 #'
 #' @return Modifies the 'timeseries_data_sharing_agreements' table in the database.
 #' @export

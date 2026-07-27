@@ -626,15 +626,15 @@ synchronize_continuous <- function(
       # mismatch is TRUE: there was a mismatch between the remote and the local data
       inRemote <- inRemote[inRemote$datetime >= cutoff, ]
       if (nrow(inRemote) > 0) {
-        #assign a period to the data
+        # assign a period to the data
         if (aggregation_type == "instantaneous") {
-          #Period is always 0 for instantaneous data
+          # Period is always 0 for instantaneous data
           inRemote$period <- "00:00:00"
         } else if (
           (aggregation_type != "instantaneous") &
             !("period" %in% names(inRemote))
         ) {
-          #aggregation_types of mean, median, min, max should all have a period
+          # aggregation_types of mean, median, min, max should all have a period
           period <- calculate_period(
             data = inRemote[, "datetime"],
             timeseries_id = tsid,
@@ -642,7 +642,7 @@ synchronize_continuous <- function(
           )
           inRemote <- merge(inRemote, period, by = "datetime", all.x = TRUE)
         } else {
-          #Check to make sure that the supplied period can actually be coerced to a period
+          # Check to make sure that the supplied period can actually be coerced to a period
           check <- lubridate::period(unique(inRemote$period))
           if (NA %in% check) {
             inRemote$period <- NA

@@ -13,7 +13,7 @@ adjust_data_sharing_agreement(con, timeseries_id, data, delete = FALSE)
 
 \item{data}{A data.frame with columns for 'datetime' and 'data_sharing_agreement_id'. 'datetime' should be POSIXct and 'data_sharing_agreement_id' should refer to column 'document_id' of table 'files.documents'.}
 
-\item{delete}{Logical. If TRUE, the function will delete data sharing agreements which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called from the 'synchronize' functions.}
+\item{delete}{Logical. If TRUE, the function will delete data sharing agreements which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.}
 }
 \value{
 Modifies the 'timeseries_data_sharing_agreements' table in the database.
