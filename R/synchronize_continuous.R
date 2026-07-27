@@ -701,7 +701,7 @@ synchronize_continuous <- function(
 
         delete_datetimes <- sort(unique(comparison$datetime[
           !is.na(comparison$value_db) &
-            (is.na(comparison$value_remote) | row_changed)
+            is.na(comparison$value_remote)
         ]))
         append_datetimes <- sort(unique(comparison$datetime[
           !is.na(comparison$value_remote) &
@@ -736,7 +736,10 @@ synchronize_continuous <- function(
               "period",
               "timeseries_id",
               "imputed"
-            )]
+            )],
+            on_conflict = "update",
+            conflict_cols = c("timeseries_id", "datetime"),
+            update_cols = c("value", "period", "imputed")
           )
         }
         DBI::dbExecute(
