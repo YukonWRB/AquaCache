@@ -172,6 +172,18 @@ test_that("dbAppendTableRLS supports ON CONFLICT DO UPDATE", {
   )
   expect_equal(out$txt, c("new", "fresh"))
   expect_equal(out$note, c("replace", "new-row"))
+
+  unchanged_rows <- dbAppendTableRLS(
+    con,
+    "ac_append_conflict_update",
+    data.frame(id = 1L, txt = "new", note = "replace"),
+    method = "staging",
+    on_conflict = "update",
+    conflict_cols = "id",
+    update_cols = c("txt", "note")
+  )
+
+  expect_equal(unclass(unchanged_rows), 0L)
 })
 
 
@@ -257,6 +269,12 @@ test_that("dbAppendTableRLS works for RLS tables when role cannot use COPY FROM"
   on.exit(
     {
       suppressWarnings(try(DBI::dbExecute(con, "RESET ROLE"), silent = TRUE))
+      suppressWarnings(
+        try(
+          DBI::dbExecute(con, "DROP TABLE IF EXISTS public.ac_append_rls"),
+          silent = TRUE
+        )
+      )
       suppressWarnings(
         try(
           DBI::dbExecute(

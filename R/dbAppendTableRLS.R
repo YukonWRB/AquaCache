@@ -171,8 +171,22 @@ dbAppendTableRLS <- function(
       as.character(DBI::dbQuoteIdentifier(con, update_cols)),
       collapse = ", "
     )
+    changed_sql <- paste0(
+      "ac_target.",
+      as.character(DBI::dbQuoteIdentifier(con, update_cols)),
+      " IS DISTINCT FROM EXCLUDED.",
+      as.character(DBI::dbQuoteIdentifier(con, update_cols)),
+      collapse = " OR "
+    )
 
-    paste0(" ON CONFLICT (", conflict_sql, ") DO UPDATE SET ", set_sql)
+    paste0(
+      " ON CONFLICT (",
+      conflict_sql,
+      ") DO UPDATE SET ",
+      set_sql,
+      " WHERE ",
+      changed_sql
+    )
   }
 
   conflict_sql <- .db_append_rls_conflict_sql(
@@ -224,6 +238,7 @@ dbAppendTableRLS <- function(
       paste0(
         "INSERT INTO ",
         target,
+        " AS ac_target",
         " (",
         cols_sql,
         ") SELECT ",
@@ -249,6 +264,7 @@ dbAppendTableRLS <- function(
     insert_sql <- paste0(
       "INSERT INTO ",
       target,
+      " AS ac_target",
       " (",
       cols_sql,
       ") VALUES (",

@@ -47,6 +47,37 @@ test_that("addNewContinuous inserts a new measurement", {
     params = list(tsid, new_datetime)
   )[[1]]
   expect_equal(inserted, 1)
+
+  replacement <- df
+  replacement$value <- replacement$value + 1
+  addNewContinuous(tsid, replacement, con = con, overwrite = "conflict")
+
+  overwritten <- DBI::dbGetQuery(
+    con,
+    "
+    SELECT value
+    FROM continuous.measurements_continuous
+    WHERE timeseries_id = $1 AND datetime = $2
+    ",
+    params = list(tsid, new_datetime)
+  )
+  expect_equal(nrow(overwritten), 1L)
+  expect_equal(overwritten$value[[1]], replacement$value[[1]])
+
+  audit_actions <- DBI::dbGetQuery(
+    con,
+    "
+    SELECT action, count(*) AS n
+    FROM audit.measurements_continuous_log
+    WHERE transaction_id = txid_current()
+      AND timeseries_id = $1
+      AND measurement_datetime = $2
+    GROUP BY action
+    ",
+    params = list(tsid, new_datetime)
+  )
+  expect_equal(audit_actions$action, "UPDATE")
+  expect_equal(as.numeric(audit_actions$n), 1)
 })
 
 test_that("addNewContinuous errors when datetime is missing", {

@@ -283,27 +283,43 @@ addNewContinuous <- function(
     }
 
     if (overwrite == "all") {
+      tmp_name <- paste0(
+        "ac_tmp_measurement_keys_",
+        as.integer(stats::runif(1, 1e7, 9e7))
+      )
+      tmp_ident <- as.character(DBI::dbQuoteIdentifier(con, tmp_name))
       DBI::dbExecute(
         con,
-        "DELETE FROM continuous.measurements_continuous WHERE datetime BETWEEN $1 AND $2 AND timeseries_id = $3;",
+        paste0(
+          "CREATE TEMP TABLE ",
+          tmp_ident,
+          " (datetime TIMESTAMPTZ PRIMARY KEY) ON COMMIT DROP"
+        )
+      )
+      DBI::dbAppendTable(
+        con,
+        DBI::SQL(tmp_ident),
+        data.frame(datetime = unique(df$datetime))
+      )
+      DBI::dbExecute(
+        con,
+        paste0(
+          "DELETE FROM continuous.measurements_continuous m ",
+          "WHERE m.datetime BETWEEN $1 AND $2 ",
+          "AND m.timeseries_id = $3 ",
+          "AND NOT EXISTS (",
+          "SELECT 1 FROM ",
+          tmp_ident,
+          " incoming WHERE incoming.datetime = m.datetime",
+          ")"
+        ),
         params = list(
           min(df$datetime),
           max(df$datetime),
           tsid
         )
       )
-    } else if (overwrite == "conflict") {
-      DBI::dbExecute(
-        con,
-        paste0(
-          "DELETE FROM continuous.measurements_continuous WHERE datetime IN ('",
-          paste(df$datetime, collapse = "', '"),
-          "') AND timeseries_id = ",
-          tsid,
-          ";"
-        )
-      )
-    } else {
+    } else if (overwrite == "no") {
       # If overwrite is "no", we remove any rows in df that conflict with existing data
       existing_datetimes <- DBI::dbGetQuery(
         con,
@@ -324,7 +340,22 @@ addNewContinuous <- function(
         "addNewContinuous: No new data to add after applying overwrite rules. No changes have been made to the database."
       )
     }
-    dbAppendTableRLS(con, "continuous.measurements_continuous", df)
+    if (overwrite %in% c("all", "conflict")) {
+      measurement_update_cols <- intersect(
+        c("value", "period", "imputed", "no_update"),
+        names(df)
+      )
+      dbAppendTableRLS(
+        con,
+        "continuous.measurements_continuous",
+        df,
+        on_conflict = "update",
+        conflict_cols = c("timeseries_id", "datetime"),
+        update_cols = measurement_update_cols
+      )
+    } else {
+      dbAppendTableRLS(con, "continuous.measurements_continuous", df)
+    }
 
     # Daily calculations and continuous.timeseries metadata are maintained
     # by database triggers on measurements_continuous.
