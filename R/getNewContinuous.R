@@ -44,7 +44,6 @@
 #' @param dbPort The port of the database. If left NULL, the function will use the default port from the .Renviron file as per [AquaConnect()].
 #' @param dbUser The username for the database. If left NULL, the function will use the default username from the .Renviron file as per [AquaConnect()].
 #' @param dbPass The password for the database. If left NULL, the function will use the default password from the .Renviron file as per [AquaConnect()].
-#' @param stats Deprecated compatibility argument. Daily calculations are maintained by database triggers after measurements are changed.
 #' @param verbose If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.
 #' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
 #' @export
@@ -58,7 +57,6 @@ getNewContinuous <- function(
   dbPort = NULL,
   dbUser = NULL,
   dbPass = NULL,
-  stats = TRUE,
   verbose = FALSE
 ) {
   if (!active %in% c('default', 'all')) {
@@ -409,7 +407,7 @@ getNewContinuous <- function(
 
   get_adapter_capability <- function(source_fx) {
     matches <- adapter_capabilities$source_fx == source_fx
-    rows <- adapter_capabilities[which(matches)]
+    rows <- adapter_capabilities[which(matches), , drop = FALSE]
     if (nrow(rows) != 1L) {
       stop(
         "getNewContinuous: Source-adapter registry lookup failed for ",
@@ -590,7 +588,7 @@ getNewContinuous <- function(
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_timeseries), style = 3)
   }
 
-  worker <- function(i, con, parallel, stats) {
+  worker <- function(i, con, parallel) {
     tsid <- all_timeseries$timeseries_id[i]
     if (verbose && !parallel) {
       message(
@@ -839,9 +837,9 @@ getNewContinuous <- function(
     )
   }
 
-  run_worker_iteration <- function(i, con, parallel, stats) {
+  run_worker_iteration <- function(i, con, parallel) {
     tryCatch(
-      worker(i, con = con, parallel = parallel, stats = stats),
+      worker(i, con = con, parallel = parallel),
       error = function(e) {
         build_status_row(
           i,
@@ -853,15 +851,14 @@ getNewContinuous <- function(
     )
   }
 
-  run_worker_group <- function(indices, con, parallel, stats) {
+  run_worker_group <- function(indices, con, parallel) {
     status_group <- vector("list", length(indices))
 
     for (j in seq_along(indices)) {
       status_group[[j]] <- run_worker_iteration(
         indices[[j]],
         con = con,
-        parallel = parallel,
-        stats = stats
+        parallel = parallel
       )
     }
 
@@ -881,7 +878,7 @@ getNewContinuous <- function(
     }
 
     message(
-      "Parallel plan: ",
+      "\nParallel plan: ",
       nrow(all_timeseries),
       " timeseries across ",
       task_summary$task_group_count,
@@ -917,7 +914,8 @@ getNewContinuous <- function(
         "dbHost",
         "dbPort",
         "dbUser",
-        "dbPass"
+        "dbPass",
+        "source_adapter_args_decode"
       ),
       envir = environment()
     )
@@ -967,8 +965,7 @@ getNewContinuous <- function(
               run_worker_group(
                 task_groups[[i]],
                 con = parcon,
-                parallel = TRUE,
-                stats = stats
+                parallel = TRUE
               )
             },
             finally = {
@@ -1008,8 +1005,7 @@ getNewContinuous <- function(
               run_worker_group(
                 task_groups[[i]],
                 con = parcon,
-                parallel = TRUE,
-                stats = stats
+                parallel = TRUE
               )
             },
             finally = {
@@ -1040,11 +1036,6 @@ getNewContinuous <- function(
         " groups; sequential mode can reuse the session cache directly."
       )
     }
-    if (stats) {
-      message(
-        "Statistics will be updated after each timeseries as requested."
-      )
-    }
 
     status_rows <- vector("list", nrow(all_timeseries))
     sequential_indices <- unlist(task_groups, use.names = FALSE)
@@ -1053,8 +1044,7 @@ getNewContinuous <- function(
       status_rows[[j]] <- run_worker_iteration(
         j,
         con = con,
-        parallel = FALSE,
-        stats = stats
+        parallel = FALSE
       )
       if (interactive()) {
         utils::setTxtProgressBar(pb, position)

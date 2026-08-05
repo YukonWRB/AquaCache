@@ -5,8 +5,7 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
     getNewContinuous = function(con, timeseries_id, stats = FALSE, ...) {
       captured$getnew_args <- list(
         con = con,
-        timeseries_id = timeseries_id,
-        stats = stats
+        timeseries_id = timeseries_id
       )
       data.frame(timeseries_id = timeseries_id)
     },

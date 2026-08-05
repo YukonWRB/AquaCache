@@ -221,6 +221,18 @@ test_that("synchronize_continuous groups cache-sharing ECCC tasks in parallel", 
   connect_calls <- 0L
   captured <- new.env(parent = emptyenv())
   captured$parameters <- character()
+  captured$cluster_exports <- character()
+
+  adapter_capabilities <- data.frame(
+    source_fx = c("downloadRWIS", "downloadECCCwx"),
+    inject_timeseries_id = c(FALSE, FALSE),
+    parallel_group_strategy = c("timeseries", "source_args"),
+    stringsAsFactors = FALSE
+  )
+  adapter_capabilities$parallel_group_args <- I(list(
+    character(),
+    c("location", "interval")
+  ))
 
   source_fx_args <- c(
     '{"location":"27950","parameter":"temp","interval":"hour"}',
@@ -248,6 +260,7 @@ test_that("synchronize_continuous groups cache-sharing ECCC tasks in parallel", 
     advisory_lock_acquire = function(...) TRUE,
     advisory_lock_release = function(...) TRUE,
     dbTransBegin = function(con, silent = TRUE) TRUE,
+    getSourceAdapterCapabilities = function(...) adapter_capabilities,
     downloadECCCwx = function(start_datetime, con, location, parameter, interval, ...) {
       captured$parameters <- c(captured$parameters, parameter)
       data.frame(
@@ -275,7 +288,10 @@ test_that("synchronize_continuous groups cache-sharing ECCC tasks in parallel", 
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
-    clusterExport = function(cl, varlist, envir) invisible(TRUE),
+    clusterExport = function(cl, varlist, envir) {
+      captured$cluster_exports <- varlist
+      invisible(TRUE)
+    },
     .package = "parallel"
   )
   local_mocked_bindings(
@@ -310,6 +326,7 @@ test_that("synchronize_continuous groups cache-sharing ECCC tasks in parallel", 
   expect_true(all(res$success))
   expect_equal(connect_calls, 3L)
   expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
+  expect_true("source_adapter_args_decode" %in% captured$cluster_exports)
 })
 
 test_that("synchronize_continuous groups cache-sharing ECCC minute tasks in parallel", {

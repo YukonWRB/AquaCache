@@ -329,7 +329,7 @@ synchronize_continuous <- function(
 
   get_adapter_capability <- function(source_fx) {
     matches <- adapter_capabilities$source_fx == source_fx
-    rows <- adapter_capabilities[which(matches)]
+    rows <- adapter_capabilities[which(matches), , drop = FALSE]
     if (nrow(rows) != 1L) {
       stop(
         "synchronize_continuous: Source-adapter registry lookup failed for ",
@@ -1042,7 +1042,8 @@ synchronize_continuous <- function(
         "dbPort",
         "dbUser",
         "dbPass",
-        "task_groups"
+        "task_groups",
+        "source_adapter_args_decode"
       ),
       envir = environment()
     )

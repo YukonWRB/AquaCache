@@ -13,7 +13,6 @@ getNewContinuous(
   dbPort = NULL,
   dbUser = NULL,
   dbPass = NULL,
-  stats = TRUE,
   verbose = FALSE
 )
 }
@@ -33,8 +32,6 @@ getNewContinuous(
 \item{dbUser}{The username for the database. If left NULL, the function will use the default username from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
-
-\item{stats}{Deprecated compatibility argument. Daily calculations are maintained by database triggers after measurements are changed.}
 
 \item{verbose}{If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.}
 }

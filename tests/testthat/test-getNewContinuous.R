@@ -252,6 +252,18 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   captured <- new.env(parent = emptyenv())
   captured$parameters <- character()
   captured$connect_args <- list()
+  captured$cluster_exports <- character()
+
+  adapter_capabilities <- data.frame(
+    source_fx = c("downloadAquarius", "downloadECCCwx"),
+    inject_timeseries_id = c(FALSE, FALSE),
+    parallel_group_strategy = c("timeseries", "source_args"),
+    stringsAsFactors = FALSE
+  )
+  adapter_capabilities$parallel_group_args <- I(list(
+    character(),
+    c("location", "interval")
+  ))
 
   timeseries_ids <- c(1323L, 1322L, 2000L)
   last_data_point <- as.POSIXct(
@@ -306,6 +318,7 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    getSourceAdapterCapabilities = function(...) adapter_capabilities,
     downloadECCCwx = function(start_datetime, con, location, parameter, interval, ...) {
       captured$parameters <- c(captured$parameters, parameter)
       data.frame(
@@ -330,7 +343,10 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
-    clusterExport = function(cl, varlist, envir) invisible(TRUE),
+    clusterExport = function(cl, varlist, envir) {
+      captured$cluster_exports <- varlist
+      invisible(TRUE)
+    },
     .package = "parallel"
   )
   local_mocked_bindings(
@@ -363,6 +379,7 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   expect_equal(res$timeseries_id, timeseries_ids)
   expect_equal(connect_calls, 3L)
   expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
+  expect_true("source_adapter_args_decode" %in% captured$cluster_exports)
   expect_true(all(vapply(
     captured$connect_args,
     function(args) identical(args, list(
@@ -1026,8 +1043,7 @@ test_that("getNewContinuous leaves daily refresh to database triggers", {
   result <- getNewContinuous(
     con = structure(list(), class = "mock_con"),
     timeseries_id = tsid,
-    active = "all",
-    stats = TRUE
+    active = "all"
   )
 
   expect_equal(captured$table, "continuous.measurements_continuous")
