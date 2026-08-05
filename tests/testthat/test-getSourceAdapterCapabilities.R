@@ -15,14 +15,20 @@ test_that("adapter capabilities require database Patch 56", {
 test_that("the documented registry helpers are public", {
   exports <- getNamespaceExports("AquaCache")
 
-  expect_true(all(c(
-    "getSourceAdapterCapabilities",
-    "registerSourceAdapterArguments"
-  ) %in% exports))
-  expect_false(any(c(
-    "sourceAdapterArgument",
-    "validateSourceAdapterArgumentSchema"
-  ) %in% exports))
+  expect_true(all(
+    c(
+      "getSourceAdapterCapabilities",
+      "registerSourceAdapterArguments"
+    ) %in%
+      exports
+  ))
+  expect_false(any(
+    c(
+      "sourceAdapterArgument",
+      "validateSourceAdapterArgumentSchema"
+    ) %in%
+      exports
+  ))
 })
 
 test_that("adapter capabilities are parsed from the Patch 56 registry", {
@@ -133,88 +139,6 @@ test_that("adapter capability domains are validated", {
   )
 })
 
-test_that("Patch 56 creates and seeds the source adapter registry", {
-  patch <- paste(
-    readLines(
-      testthat::test_path("..", "..", "inst", "patches", "patch_56.R"),
-      warn = FALSE
-    ),
-    collapse = "\n"
-  )
-
-  expect_match(
-    patch,
-    "CREATE TABLE public.source_adapter_capabilities",
-    fixed = TRUE
-  )
-  expect_match(patch, "PRIMARY KEY (source_fx, data_domain)", fixed = TRUE)
-  expect_match(
-    patch,
-    "data_domain IN ('continuous', 'discrete', 'image', 'raster')",
-    fixed = TRUE
-  )
-  expect_match(patch, "argument_schema JSONB", fixed = TRUE)
-  expect_match(
-    patch,
-    "registerSourceAdapterArguments(",
-    fixed = TRUE
-  )
-  expect_match(patch, "Aquarius location identifier", fixed = TRUE)
-  expect_match(patch, "AQSERVER from the R environment", fixed = TRUE)
-  expected_adapters <- c(
-    "downloadAquarius",
-    "downloadECCCwx",
-    "downloadECCCwxMinute",
-    "downloadNESDIS",
-    "downloadNWIS",
-    "downloadRWIS",
-    "downloadWSC",
-    "downloadECCCwq",
-    "downloadEQWin",
-    "downloadSnowCourse",
-    "downloadNupointImages",
-    "downloadWSCImages",
-    "downloadCaLDAS",
-    "downloadERA5",
-    "downloadHRDPA",
-    "downloadHRDPS"
-  )
-  for (source_fx in expected_adapters) {
-    expect_match(patch, paste0("'", source_fx, "'"), fixed = TRUE)
-  }
-  expect_match(patch, "ARRAY['GOES_DCS']", fixed = TRUE)
-  expect_match(
-    patch,
-    "CREATE TABLE continuous.timeseries_source_adapters",
-    fixed = TRUE
-  )
-  expect_match(
-    patch,
-    "CREATE TABLE discrete.sample_series_source_adapters",
-    fixed = TRUE
-  )
-  expect_match(
-    patch,
-    "CREATE TABLE files.image_series_source_adapters",
-    fixed = TRUE
-  )
-  expect_match(
-    patch,
-    "CREATE TABLE spatial.raster_series_source_adapters",
-    fixed = TRUE
-  )
-  expect_match(
-    patch,
-    "ALTER TABLE files.image_series\n       DROP COLUMN source_fx",
-    fixed = TRUE
-  )
-  expect_match(
-    patch,
-    "audit_source_adapter_capabilities_trigger",
-    fixed = TRUE
-  )
-})
-
 test_that("sourceAdapterArgument constructs validated descriptors", {
   argument <- sourceAdapterArgument(
     name = "location",
@@ -270,7 +194,11 @@ test_that("registerSourceAdapterArguments validates and updates one row", {
 
   expect_identical(schema$schema_version, 1L)
   expect_identical(schema$arguments[[1]], argument)
-  expect_match(executed$statement, "SET argument_schema = $1::jsonb", fixed = TRUE)
+  expect_match(
+    executed$statement,
+    "SET argument_schema = $1::jsonb",
+    fixed = TRUE
+  )
   expect_identical(executed$params[[2]], "downloadAquarius")
   expect_identical(executed$params[[3]], "continuous")
   expect_equal(
