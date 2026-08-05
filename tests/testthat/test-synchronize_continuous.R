@@ -12,8 +12,10 @@ mock_sync_timeseries_table <- function(
   data.frame(
     parameter_id = rep(1L, length(timeseries_ids)),
     timeseries_id = timeseries_ids,
+    timeseries_source_adapter_id = seq_along(timeseries_ids),
     source_fx = source_fx,
     source_fx_args = source_fx_args,
+    synchronize_priority = rep(1L, length(timeseries_ids)),
     last_daily_calculation = rep(
       as.POSIXct(NA, tz = "UTC"),
       length(timeseries_ids)
@@ -22,6 +24,10 @@ mock_sync_timeseries_table <- function(
     default_owner = rep(NA_integer_, length(timeseries_ids)),
     active = rep(TRUE, length(timeseries_ids)),
     sync_remote = rep(TRUE, length(timeseries_ids)),
+    transmission_platform_identifier = rep(
+      NA_character_,
+      length(timeseries_ids)
+    ),
     stringsAsFactors = FALSE
   )
 }
@@ -33,7 +39,45 @@ mock_sync_db_get_query <- function(
 ) {
   function(con, statement, ...) {
     if (
-      grepl("FROM continuous.timeseries t JOIN continuous.aggregation_types", statement, fixed = TRUE)
+      grepl("FROM public.source_adapter_capabilities", statement, fixed = TRUE) &&
+        !grepl("FROM continuous.timeseries t", statement, fixed = TRUE)
+    ) {
+      return(data.frame(
+        source_fx = c(
+          "downloadECCCwx",
+          "downloadECCCwxMinute",
+          "downloadNESDIS",
+          "downloadRWIS"
+        ),
+        data_domain = rep("continuous", 4L),
+        adapter_kind = c("standard", "standard", "transmission", "standard"),
+        requires_transmission_mapping = c(FALSE, FALSE, TRUE, FALSE),
+        inject_timeseries_id = c(FALSE, FALSE, TRUE, FALSE),
+        parallel_group_strategy = c(
+          "source_args",
+          "source_args",
+          "transmission_platform",
+          "timeseries"
+        ),
+        parallel_group_args_json = c(
+          '["location","interval"]',
+          '["location"]',
+          "[]",
+          "[]"
+        ),
+        allow_empty_initial_fetch = c(FALSE, FALSE, TRUE, FALSE),
+        transmission_method_codes_json = c("[]", "[]", '["GOES_DCS"]', "[]"),
+        argument_schema_json = rep(
+          '{"schema_version":1,"arguments":[]}',
+          4L
+        ),
+        ui_config_json = rep("{}", 4L),
+        enabled = TRUE,
+        note = NA_character_
+      ))
+    }
+    if (
+      grepl("FROM continuous.timeseries t", statement, fixed = TRUE)
     ) {
       return(mock_sync_timeseries_table(
         timeseries_ids = timeseries_ids,
@@ -55,56 +99,23 @@ mock_sync_db_get_query <- function(
   }
 }
 
-test_sync_source_warning <- function(start_datetime, con) {
-  warning("simulated synchronize warning")
-  data.frame(
-    datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
-    value = 1
-  )
-}
-
 test_that("synchronize_continuous records sequential failures instead of leaving NAs", {
-  had_existing_source_fx <- exists(
-    "test_sync_source_warning",
-    envir = .GlobalEnv,
-    inherits = FALSE
-  )
-  if (had_existing_source_fx) {
-    existing_source_fx <- get(
-      "test_sync_source_warning",
-      envir = .GlobalEnv,
-      inherits = FALSE
-    )
-  }
-  assign(
-    "test_sync_source_warning",
-    test_sync_source_warning,
-    envir = .GlobalEnv
-  )
-  on.exit(
-    {
-      if (had_existing_source_fx) {
-        assign(
-          "test_sync_source_warning",
-          existing_source_fx,
-          envir = .GlobalEnv
-        )
-      } else {
-        rm(list = "test_sync_source_warning", envir = .GlobalEnv)
-      }
-    },
-    add = TRUE
-  )
-
   local_mocked_bindings(
     advisory_lock_acquire = function(...) TRUE,
     advisory_lock_release = function(...) TRUE,
+    downloadRWIS = function(start_datetime, con, ...) {
+      warning("simulated synchronize warning")
+      data.frame(
+        datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        value = 1
+      )
+    },
     .package = "AquaCache"
   )
   local_mocked_bindings(
     dbGetQuery = mock_sync_db_get_query(
       c(1323L, 1322L),
-      "test_sync_source_warning"
+      "downloadRWIS"
     ),
     dbExecute = function(con, statement, ...) 1L,
     .package = "DBI"
@@ -131,38 +142,6 @@ test_that("synchronize_continuous handles a single parallel result without simpl
   skip_if_not_installed("foreach")
   skip_if_not_installed("doSNOW")
 
-  had_existing_source_fx <- exists(
-    "test_sync_source_warning",
-    envir = .GlobalEnv,
-    inherits = FALSE
-  )
-  if (had_existing_source_fx) {
-    existing_source_fx <- get(
-      "test_sync_source_warning",
-      envir = .GlobalEnv,
-      inherits = FALSE
-    )
-  }
-  assign(
-    "test_sync_source_warning",
-    test_sync_source_warning,
-    envir = .GlobalEnv
-  )
-  on.exit(
-    {
-      if (had_existing_source_fx) {
-        assign(
-          "test_sync_source_warning",
-          existing_source_fx,
-          envir = .GlobalEnv
-        )
-      } else {
-        rm(list = "test_sync_source_warning", envir = .GlobalEnv)
-      }
-    },
-    add = TRUE
-  )
-
   mock_dopar <- function(obj, expr) {
     expr_sub <- substitute(expr)
     parent_env <- parent.frame()
@@ -179,10 +158,17 @@ test_that("synchronize_continuous handles a single parallel result without simpl
     AquaConnect = function(...) structure(list(), class = "mock_con"),
     advisory_lock_acquire = function(...) TRUE,
     advisory_lock_release = function(...) TRUE,
+    downloadRWIS = function(start_datetime, con, ...) {
+      warning("simulated synchronize warning")
+      data.frame(
+        datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        value = 1
+      )
+    },
     .package = "AquaCache"
   )
   local_mocked_bindings(
-    dbGetQuery = mock_sync_db_get_query(1323L, "test_sync_source_warning"),
+    dbGetQuery = mock_sync_db_get_query(1323L, "downloadRWIS"),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
     .package = "DBI"

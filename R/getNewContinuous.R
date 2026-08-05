@@ -2,10 +2,31 @@
 #'
 #' @description
 #'
-#' Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on basic timeseries that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to [addACTimeseries()] for how to add new stations. Does not work on derived/compound timeseries or any timeseries of category "discrete": for that, use [getNewDiscrete()]. Timeseries with no specified source_fx will be ignored.
+#' Retrieves new real-time data starting from the last local data point. The
+#' active assignment with the lowest fetch priority in
+#' `continuous.timeseries_source_adapters` supplies each timeseries' source
+#' function and arguments. Timeseries without an eligible assignment are
+#' ignored. See [addACTimeseries()] for creating assignments.
+#'
+#' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function for start_datetime, defaults to the instant after the last point already existing in the DB. The rest of the fetch parameters are set using the "source_fx_args" column in the "timeseries" table; refer to [addACTimeseries()] for a description of how to formulate these arguments.
+#' This function passes `start_datetime`, defaulting to the instant after the
+#' last local point. Other fetch parameters come from the selected assignment's
+#' `source_fx_args` JSON object.
+#'
+#' ## Multi-timeseries transmission sources:
+#' Source-adapter capabilities registered by database Patch 56 control
+#' automatic argument injection and cache-sharing groups. For example,
+#' `downloadNESDIS` receives the current `timeseries_id` automatically and
+#' timeseries sharing a DCP address reuse one raw transmission payload.
+#' Platform identifiers and field mappings remain database metadata; they do
+#' not need to be duplicated in each timeseries assignment's arguments.
+#'
+#' Every assigned `source_fx` must have an enabled entry in
+#' `public.source_adapter_capabilities` for the continuous domain. This keeps
+#' scheduled imports and administrative clients aligned on the supported
+#' continuous-data adapters.
 #'
 #' ## Assigning measurement periods:
 #' With the exception of "instantaneous" timeseries which automatically receive a period of "00:00:00" (0 time), the period associated with measurements (ex: 1 hour precipitation sum) is derived from the interval between measurements UNLESS a period column is provided by the source function (column source_fx, may also depend on source_fx_args). This function typically fetches only a few hours of measurements at a time, so if the interval cannot be conclusively determined from the new data (i.e. hourly measurements over four hours with two measurements missed) then additional data points will be pulled from the database.
@@ -111,6 +132,10 @@ getNewContinuous <- function(
   }
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
+  adapter_capabilities <- getSourceAdapterCapabilities(
+    con = con,
+    data_domain = "continuous"
+  )
 
   # Create table of basic timeseries that can fetch material data.
   if (timeseries_id[1] == "all") {
@@ -120,22 +145,64 @@ getNewContinuous <- function(
         t.parameter_id,
         t.timeseries_id,
         t.timeseries_type,
-        t.source_fx,
-        t.source_fx_args,
+        source.timeseries_source_adapter_id,
+        source.source_fx,
+        source.source_fx_args,
+        source.fetch_priority,
         at.aggregation_type,
         t.default_owner,
         t.default_data_sharing_agreement_id,
         t.active,
-        mc.last_data_point
+        mc.last_data_point,
+        transmission_route.platform_identifier
+          AS transmission_platform_identifier
       FROM continuous.timeseries t
       JOIN continuous.aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
+      LEFT JOIN LATERAL (
+        SELECT
+          tsa.timeseries_source_adapter_id,
+          tsa.source_fx,
+          tsa.source_fx_args,
+          tsa.fetch_priority
+        FROM continuous.timeseries_source_adapters tsa
+        WHERE tsa.timeseries_id = t.timeseries_id
+          AND tsa.active
+          AND tsa.fetch_priority IS NOT NULL
+        ORDER BY tsa.fetch_priority, tsa.timeseries_source_adapter_id
+        LIMIT 1
+      ) source ON TRUE
       LEFT JOIN (
         SELECT timeseries_id, MAX(datetime) AS last_data_point
         FROM continuous.measurements_continuous
         GROUP BY timeseries_id
       ) mc ON mc.timeseries_id = t.timeseries_id
+      LEFT JOIN LATERAL (
+        SELECT UPPER(TRIM(s.platform_identifier)) AS platform_identifier
+        FROM public.source_adapter_capabilities sac
+        JOIN continuous.transmission_timeseries_mappings m
+          ON m.timeseries_id = t.timeseries_id
+         AND m.enabled
+        JOIN public.locations_metadata_transmission_routes r
+          ON r.transmission_route_id = m.transmission_route_id
+        JOIN public.locations_metadata_transmission_setups s
+          ON s.transmission_setup_id = r.transmission_setup_id
+        JOIN instruments.transmission_methods tm
+          ON tm.transmission_method_id = s.transmission_method_id
+        WHERE sac.source_fx = source.source_fx
+          AND sac.data_domain = 'continuous'
+          AND sac.enabled
+          AND sac.requires_transmission_mapping
+          AND (
+            cardinality(sac.transmission_method_codes) = 0
+            OR tm.method_code = ANY(sac.transmission_method_codes)
+          )
+          AND s.start_datetime <= CURRENT_TIMESTAMP
+          AND (s.end_datetime IS NULL OR s.end_datetime > CURRENT_TIMESTAMP)
+        ORDER BY s.start_datetime DESC, r.transmission_route_id
+        LIMIT 1
+      ) transmission_route ON TRUE
       WHERE t.timeseries_type = 'basic'
-        AND t.source_fx IS NOT NULL;"
+        AND source.source_fx IS NOT NULL;"
     )
   } else {
     requested_ids <- suppressWarnings(as.integer(timeseries_id))
@@ -154,20 +221,62 @@ getNewContinuous <- function(
           t.parameter_id,
           t.timeseries_id,
           t.timeseries_type,
-          t.source_fx,
-          t.source_fx_args,
+          source.timeseries_source_adapter_id,
+          source.source_fx,
+          source.source_fx_args,
+          source.fetch_priority,
           at.aggregation_type,
           t.default_owner,
           t.default_data_sharing_agreement_id,
           t.active,
-          mc.last_data_point
+          mc.last_data_point,
+          transmission_route.platform_identifier
+            AS transmission_platform_identifier
         FROM continuous.timeseries t
         JOIN continuous.aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id
+        LEFT JOIN LATERAL (
+          SELECT
+            tsa.timeseries_source_adapter_id,
+            tsa.source_fx,
+            tsa.source_fx_args,
+            tsa.fetch_priority
+          FROM continuous.timeseries_source_adapters tsa
+          WHERE tsa.timeseries_id = t.timeseries_id
+            AND tsa.active
+            AND tsa.fetch_priority IS NOT NULL
+          ORDER BY tsa.fetch_priority, tsa.timeseries_source_adapter_id
+          LIMIT 1
+        ) source ON TRUE
         LEFT JOIN (
           SELECT timeseries_id, MAX(datetime) AS last_data_point
           FROM continuous.measurements_continuous
           GROUP BY timeseries_id
         ) mc ON mc.timeseries_id = t.timeseries_id
+        LEFT JOIN LATERAL (
+          SELECT UPPER(TRIM(s.platform_identifier)) AS platform_identifier
+          FROM public.source_adapter_capabilities sac
+          JOIN continuous.transmission_timeseries_mappings m
+            ON m.timeseries_id = t.timeseries_id
+           AND m.enabled
+          JOIN public.locations_metadata_transmission_routes r
+            ON r.transmission_route_id = m.transmission_route_id
+          JOIN public.locations_metadata_transmission_setups s
+            ON s.transmission_setup_id = r.transmission_setup_id
+          JOIN instruments.transmission_methods tm
+            ON tm.transmission_method_id = s.transmission_method_id
+          WHERE sac.source_fx = source.source_fx
+            AND sac.data_domain = 'continuous'
+            AND sac.enabled
+            AND sac.requires_transmission_mapping
+            AND (
+              cardinality(sac.transmission_method_codes) = 0
+              OR tm.method_code = ANY(sac.transmission_method_codes)
+            )
+            AND s.start_datetime <= CURRENT_TIMESTAMP
+            AND (s.end_datetime IS NULL OR s.end_datetime > CURRENT_TIMESTAMP)
+          ORDER BY s.start_datetime DESC, r.transmission_route_id
+          LIMIT 1
+        ) transmission_route ON TRUE
         WHERE t.timeseries_id IN (",
         requested_sql,
         ");"
@@ -209,7 +318,7 @@ getNewContinuous <- function(
         nrow(all_timeseries) != nrow(requested_timeseries)
     ) {
       warning(
-        "At least one of the timeseries IDs you called for cannot be found in the database or has no function specified in column source_fx."
+        "At least one requested timeseries ID was not found or has no active source-adapter assignment with a fetch priority."
       )
     }
   }
@@ -220,6 +329,31 @@ getNewContinuous <- function(
 
   if (nrow(all_timeseries) == 0) {
     stop("Could not find any timeseries matching your input parameters.")
+  }
+
+  unregistered_sources <- sort(unique(
+    all_timeseries$source_fx[
+      !all_timeseries$source_fx %in% adapter_capabilities$source_fx
+    ]
+  ))
+  if (length(unregistered_sources) > 0L) {
+    affected <- vapply(
+      unregistered_sources,
+      function(source_fx) {
+        ids <- all_timeseries$timeseries_id[
+          all_timeseries$source_fx == source_fx
+        ]
+        paste0(source_fx, " (timeseries_id: ", paste(ids, collapse = ", "), ")")
+      },
+      character(1)
+    )
+    stop(
+      "getNewContinuous: Every source_fx must have an enabled entry in ",
+      "public.source_adapter_capabilities for the continuous domain. ",
+      "Missing or disabled: ",
+      paste(affected, collapse = "; "),
+      "."
+    )
   }
 
   origin_datetime <- as.POSIXct("1970-01-01 00:00:00", tz = "UTC")
@@ -250,12 +384,11 @@ getNewContinuous <- function(
 
     tryCatch(
       {
-        args <- jsonlite::fromJSON(source_fx_args)
-        if (is.null(args) || is.null(names(args))) {
+        args <- source_adapter_args_decode(source_fx_args)
+        if (!length(args)) {
           return(NULL)
         }
-
-        lapply(args, as.character)
+        args
       },
       error = function(e) NULL
     )
@@ -274,6 +407,20 @@ getNewContinuous <- function(
     value
   }
 
+  get_adapter_capability <- function(source_fx) {
+    matches <- adapter_capabilities$source_fx == source_fx
+    rows <- adapter_capabilities[which(matches)]
+    if (nrow(rows) != 1L) {
+      stop(
+        "getNewContinuous: Source-adapter registry lookup failed for ",
+        source_fx,
+        "."
+      )
+    }
+
+    rows
+  }
+
   get_row_last_data_point <- function(i) {
     last_point <- all_timeseries$last_data_point[[i]]
     if (is.null(last_point) || is.na(last_point)) {
@@ -286,12 +433,31 @@ getNewContinuous <- function(
   get_parallel_group_key <- function(i) {
     source_fx <- all_timeseries$source_fx[[i]]
     args <- parse_source_fx_args_safe(all_timeseries$source_fx_args[[i]])
+    capability <- get_adapter_capability(source_fx)
 
-    if (identical(source_fx, "downloadECCCwx")) {
-      location <- get_source_fx_arg(args, "location")
-      interval <- get_source_fx_arg(args, "interval")
-      if (!is.null(location) && !is.null(interval)) {
-        return(paste(source_fx, location, interval, sep = "|"))
+    strategy <- capability$parallel_group_strategy[[1]]
+    if (identical(strategy, "source_args")) {
+      group_args <- capability$parallel_group_args[[1]]
+      group_values <- vapply(
+        group_args,
+        function(name) get_source_fx_arg(args, name, default = NA_character_),
+        character(1)
+      )
+      if (length(group_values) > 0L && !anyNA(group_values)) {
+        return(paste(c(source_fx, group_values), collapse = "|"))
+      }
+    }
+    if (
+      identical(strategy, "transmission_platform") &&
+        "transmission_platform_identifier" %in% names(all_timeseries)
+    ) {
+      dcp_address <- all_timeseries$transmission_platform_identifier[[i]]
+      if (
+        length(dcp_address) == 1L &&
+          !is.na(dcp_address) &&
+          nzchar(dcp_address)
+      ) {
+        return(paste(source_fx, toupper(trimws(dcp_address)), sep = "|"))
       }
     }
 
@@ -479,8 +645,15 @@ getNewContinuous <- function(
 
     args_list <- list(start_datetime = last_data_point, con = con)
     if (!is.na(source_fx_args)) {
-      args <- jsonlite::fromJSON(source_fx_args)
-      args_list <- c(args_list, lapply(args, as.character))
+      args <- source_adapter_args_decode(source_fx_args)
+      args_list <- c(args_list, args)
+    }
+    capability <- get_adapter_capability(source_fx)
+    if (isTRUE(capability$inject_timeseries_id[[1]])) {
+      # A shared source can feed many timeseries. Keep source_fx_args focused
+      # on adapter options and inject the current timeseries automatically.
+      args_list <- args_list[names(args_list) != "timeseries_id"]
+      args_list$timeseries_id <- tsid
     }
 
     ts <- do.call(source_fx, args_list)
@@ -500,7 +673,7 @@ getNewContinuous <- function(
     if (nrow(ts) == 0) {
       return(build_status_row(i, tsid, state = "no_new_data"))
     }
-    
+
     # Make sure we have the required columns
     if (!all(c("value", "datetime") %in% names(ts))) {
       stop(
@@ -734,6 +907,7 @@ getNewContinuous <- function(
       cl,
       c(
         "all_timeseries",
+        "adapter_capabilities",
         "grade_unknown",
         "approval_unknown",
         "qualifier_unknown",
@@ -873,7 +1047,9 @@ getNewContinuous <- function(
     }
 
     status_rows <- vector("list", nrow(all_timeseries))
-    for (j in seq_len(nrow(all_timeseries))) {
+    sequential_indices <- unlist(task_groups, use.names = FALSE)
+    for (position in seq_along(sequential_indices)) {
+      j <- sequential_indices[[position]]
       status_rows[[j]] <- run_worker_iteration(
         j,
         con = con,
@@ -881,7 +1057,7 @@ getNewContinuous <- function(
         stats = stats
       )
       if (interactive()) {
-        utils::setTxtProgressBar(pb, j)
+        utils::setTxtProgressBar(pb, position)
       }
     }
     status_rows <- do.call(rbind, status_rows)

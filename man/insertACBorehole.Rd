@@ -99,7 +99,9 @@ insertACBorehole(
 
 \item{drilled_by}{Company or individual who drilled the borehole.}
 
-\item{drill_method}{Method used for drilling.}
+\item{drill_method}{Drilling-method ID from \code{boreholes.drill_methods}, or an
+English or French method name already present in that table. Text matching
+is case-insensitive and ignores surrounding whitespace.}
 
 \item{purpose_of_well}{Purpose of the borehole as integer matching the database's borehole_well_purpose column. Default is \code{purpose_of_borehole}.}
 

@@ -2,10 +2,17 @@
 #'
 #' @description
 #'
-#' Retrieves new data corresponding to entries in the table "image_series". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addACTimeseries()] for a description of how to formulate these arguments.
+#' Retrieves images using the active assignment with the lowest fetch priority
+#' in `files.image_series_source_adapters` for each image series.
+#' Every source function must have an enabled image-domain entry in
+#' `public.source_adapter_capabilities`.
 #'
 #' ## Default arguments passed to 'source_fx' functions:
-#' This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
+#' This function passes `start_datetime`, defaulting to the instant after the
+#' last image. Additional parameters come from the selected assignment's
+#' `source_fx_args` JSON object.
+#'
+#' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 #'
 #' @param image_series_ids A vector of image_series_id's. Default 'all' fetches all ids in the table.
 #' @param con A connection to the database. Leaving NULL will create a connection and close it automatically.
@@ -29,24 +36,39 @@ getNewImages <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
+  image_series_select_sql <-
+    "SELECT i.img_series_id, i.last_img, source.source_fx,
+            source.source_fx_args, source.fetch_priority,
+            i.active, i.location_id
+     FROM files.image_series i
+     LEFT JOIN LATERAL (
+       SELECT isa.source_fx, isa.source_fx_args, isa.fetch_priority
+       FROM files.image_series_source_adapters isa
+       WHERE isa.img_series_id = i.img_series_id
+         AND isa.active
+       ORDER BY isa.fetch_priority, isa.image_series_source_adapter_id
+       LIMIT 1
+     ) source ON TRUE"
+
   # Create table of series_ids
   if (image_series_ids[1] == "all") {
     series_ids <- DBI::dbGetQuery(
       con,
-      "SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM files.image_series i WHERE i.source_fx IS NOT NULL;"
+      image_series_select_sql
     )
   } else {
     series_ids <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT i.img_series_id, i.last_img, i.source_fx, i.source_fx_args, i.active, i.location_id FROM files.image_series i WHERE i.source_fx IS NOT NULL AND img_series_id IN ('",
+        image_series_select_sql,
+        " WHERE i.img_series_id IN ('",
         paste(image_series_ids, collapse = "', '"),
         "');"
       )
     )
     if (length(image_series_ids) != nrow(series_ids)) {
       warning(
-        "At least one of the image_series_ids you called for cannot be found in the database or has no function specified in column source_fx of table image_series."
+        "At least one requested image_series_id could not be found."
       )
     }
   }
@@ -59,6 +81,38 @@ getNewImages <- function(
   }
   if (nrow(series_ids) == 0) {
     stop("No active image_series_ids could be found matching your criteria.")
+  }
+
+  missing_source <- is.na(series_ids$source_fx)
+  if (any(missing_source)) {
+    warning(
+      "The following image series have no active source-adapter assignment ",
+      "and will be ignored: ",
+      paste(series_ids$img_series_id[missing_source], collapse = ", "),
+      "."
+    )
+    series_ids <- series_ids[!missing_source, , drop = FALSE]
+  }
+  if (nrow(series_ids) == 0L) {
+    stop("No image series has an active source-adapter assignment.")
+  }
+
+  registered_source_fx <- getSourceAdapterCapabilities(
+    con = con,
+    data_domain = "image"
+  )$source_fx
+  unregistered_source_fx <- setdiff(
+    unique(series_ids$source_fx),
+    registered_source_fx
+  )
+  if (length(unregistered_source_fx) > 0L) {
+    stop(
+      "getNewImages: Every source_fx must have an enabled entry in ",
+      "public.source_adapter_capabilities for the image domain. ",
+      "Missing or disabled: ",
+      paste(unregistered_source_fx, collapse = ", "),
+      "."
+    )
   }
 
   message("Fetching new images with getNewImages...")
@@ -94,8 +148,8 @@ getNewImages <- function(
         args_list <- list(start_datetime = next_instant)
         if (!is.na(source_fx_args)) {
           #add some arguments if they are specified
-          args <- jsonlite::fromJSON(source_fx_args)
-          args_list <- c(args_list, lapply(args, as.character))
+          args <- source_adapter_args_decode(source_fx_args)
+          args_list <- c(args_list, args)
         }
         imgs <- do.call(source_fx, args_list) # Get the data using the args_list
         if (is.null(imgs)) {

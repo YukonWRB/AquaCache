@@ -10,7 +10,9 @@
 #'
 #' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote exactly matching the datetime of the imputed entry, and any data point labelled as no_update = TRUE is not replaced by the remote dat (imputed or not).
 #'
-#'Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see [downloadAquarius()] for more information.
+#' A timeseries whose selected synchronization assignment uses
+#' `downloadAquarius` needs credentials in `.Renviron` or in that assignment's
+#' arguments; see [downloadAquarius()].
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. If you wish to run this function in parallel you MUST leave this argument NULL. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -105,6 +107,10 @@ synchronize_continuous <- function(
   }
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
+  adapter_capabilities <- getSourceAdapterCapabilities(
+    con = con,
+    data_domain = "continuous"
+  )
 
   # Check length of start_datetime is either 1 of same as timeseries_id
   if (length(start_datetime) != 1) {
@@ -117,20 +123,80 @@ synchronize_continuous <- function(
     timeseries_id <- unique(timeseries_id)
   }
 
-  if (timeseries_id[1] == "all") {
-    all_timeseries <- DBI::dbGetQuery(
-      con,
-      "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM continuous.timeseries t JOIN continuous.aggregation_types at ON t.aggregation_type_id = at.aggregation_type_id WHERE source_fx IS NOT NULL"
-    )
+  requested_filter <- if (timeseries_id[1] == "all") {
+    ""
   } else {
-    all_timeseries <- DBI::dbGetQuery(
-      con,
-      paste0(
-        "SELECT t.parameter_id, t.timeseries_id, t.source_fx, t.source_fx_args, t.last_daily_calculation, at.aggregation_type, t.default_owner, t.active, t.sync_remote FROM continuous.timeseries t JOIN continuous.aggregation_types AS at ON t.aggregation_type_id = at.aggregation_type_id WHERE timeseries_id IN (",
-        paste(timeseries_id, collapse = ", "),
-        ") AND source_fx IS NOT NULL;"
-      )
+    paste0(
+      "WHERE t.timeseries_id IN (",
+      paste(timeseries_id, collapse = ", "),
+      ")"
     )
+  }
+  all_timeseries <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT
+         t.parameter_id,
+         t.timeseries_id,
+         source.timeseries_source_adapter_id,
+         source.source_fx,
+         source.source_fx_args,
+         source.synchronize_priority,
+         t.last_daily_calculation,
+         at.aggregation_type,
+         t.default_owner,
+         t.active,
+         t.sync_remote,
+         transmission_route.platform_identifier
+           AS transmission_platform_identifier
+       FROM continuous.timeseries t
+       JOIN continuous.aggregation_types at
+         ON t.aggregation_type_id = at.aggregation_type_id
+       LEFT JOIN LATERAL (
+         SELECT
+           tsa.timeseries_source_adapter_id,
+           tsa.source_fx,
+           tsa.source_fx_args,
+           tsa.synchronize_priority
+         FROM continuous.timeseries_source_adapters tsa
+         WHERE tsa.timeseries_id = t.timeseries_id
+           AND tsa.active
+           AND tsa.synchronize_priority IS NOT NULL
+         ORDER BY
+           tsa.synchronize_priority,
+           tsa.timeseries_source_adapter_id
+         LIMIT 1
+       ) source ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT UPPER(TRIM(s.platform_identifier)) AS platform_identifier
+         FROM public.source_adapter_capabilities sac
+         JOIN continuous.transmission_timeseries_mappings m
+           ON m.timeseries_id = t.timeseries_id
+          AND m.enabled
+         JOIN public.locations_metadata_transmission_routes r
+           ON r.transmission_route_id = m.transmission_route_id
+         JOIN public.locations_metadata_transmission_setups s
+           ON s.transmission_setup_id = r.transmission_setup_id
+         JOIN instruments.transmission_methods tm
+           ON tm.transmission_method_id = s.transmission_method_id
+         WHERE sac.source_fx = source.source_fx
+           AND sac.data_domain = 'continuous'
+           AND sac.enabled
+           AND sac.requires_transmission_mapping
+           AND (
+             cardinality(sac.transmission_method_codes) = 0
+             OR tm.method_code = ANY(sac.transmission_method_codes)
+           )
+           AND s.start_datetime <= CURRENT_TIMESTAMP
+           AND (s.end_datetime IS NULL OR s.end_datetime > CURRENT_TIMESTAMP)
+         ORDER BY s.start_datetime DESC, r.transmission_route_id
+         LIMIT 1
+       ) transmission_route ON TRUE
+       ",
+      requested_filter
+    )
+  )
+  if (timeseries_id[1] != "all") {
     if (length(unique(timeseries_id)) != nrow(all_timeseries)) {
       fail <- timeseries_id[!timeseries_id %in% all_timeseries$timeseries_id]
       ifelse(
@@ -157,6 +223,39 @@ synchronize_continuous <- function(
     all_timeseries <- all_timeseries[
       all_timeseries$sync_remote,
     ]
+  }
+
+  if (nrow(all_timeseries) == 0L) {
+    stop("Could not find any timeseries matching your input parameters.")
+  }
+  missing_source <- is.na(all_timeseries$source_fx)
+  if (any(missing_source)) {
+    warning(
+      "The following timeseries have no active source-adapter assignment ",
+      "with a synchronize priority and will be ignored: ",
+      paste(all_timeseries$timeseries_id[missing_source], collapse = ", "),
+      "."
+    )
+    all_timeseries <- all_timeseries[!missing_source, , drop = FALSE]
+  }
+  if (nrow(all_timeseries) == 0L) {
+    stop(
+      "Could not find any timeseries with an active source-adapter ",
+      "assignment for synchronization."
+    )
+  }
+
+  unregistered_sources <- setdiff(
+    unique(all_timeseries$source_fx),
+    adapter_capabilities$source_fx
+  )
+  if (length(unregistered_sources) > 0L) {
+    stop(
+      "synchronize_continuous: Missing or disabled continuous source ",
+      "adapter capabilities: ",
+      paste(unregistered_sources, collapse = ", "),
+      "."
+    )
   }
 
   grade_unknown <- DBI::dbGetQuery(
@@ -205,12 +304,11 @@ synchronize_continuous <- function(
 
     tryCatch(
       {
-        args <- jsonlite::fromJSON(source_fx_args)
-        if (is.null(args) || is.null(names(args))) {
+        args <- source_adapter_args_decode(source_fx_args)
+        if (!length(args)) {
           return(NULL)
         }
-
-        lapply(args, as.character)
+        args
       },
       error = function(e) NULL
     )
@@ -229,6 +327,21 @@ synchronize_continuous <- function(
     value
   }
 
+  get_adapter_capability <- function(source_fx) {
+    matches <- adapter_capabilities$source_fx == source_fx
+    rows <- adapter_capabilities[which(matches)]
+    if (nrow(rows) != 1L) {
+      stop(
+        "synchronize_continuous: Source-adapter registry lookup failed for ",
+        source_fx,
+        ". Available continuous adapters: ",
+        paste(adapter_capabilities$source_fx, collapse = ", "),
+        "."
+      )
+    }
+    rows
+  }
+
   get_row_start_datetime <- function(i) {
     if (length(start_datetime) > 1) {
       start_datetime[[i]]
@@ -240,20 +353,31 @@ synchronize_continuous <- function(
   get_parallel_group_key <- function(i) {
     source_fx <- all_timeseries$source_fx[[i]]
     args <- parse_source_fx_args_safe(all_timeseries$source_fx_args[[i]])
+    capability <- get_adapter_capability(source_fx)
 
-    if (identical(source_fx, "downloadECCCwx")) {
-      location <- get_source_fx_arg(args, "location")
-      interval <- get_source_fx_arg(args, "interval")
-      if (!is.null(location) && !is.null(interval)) {
-        return(paste(source_fx, location, interval, sep = "|"))
+    strategy <- capability$parallel_group_strategy[[1]]
+    if (identical(strategy, "source_args")) {
+      group_args <- capability$parallel_group_args[[1]]
+      group_values <- vapply(
+        group_args,
+        function(name) get_source_fx_arg(args, name, default = NA_character_),
+        character(1)
+      )
+      if (length(group_values) > 0L && !anyNA(group_values)) {
+        return(paste(c(source_fx, group_values), collapse = "|"))
       }
     }
-
-    if (identical(source_fx, "downloadECCCwxMinute")) {
-      location <- get_source_fx_arg(args, "location")
-      station_type <- get_source_fx_arg(args, "station_type", default = "AUTO")
-      if (!is.null(location) && !is.null(station_type)) {
-        return(paste(source_fx, location, station_type, sep = "|"))
+    if (
+      identical(strategy, "transmission_platform") &&
+      "transmission_platform_identifier" %in% names(all_timeseries)
+    ) {
+      dcp_address <- all_timeseries$transmission_platform_identifier[[i]]
+      if (
+        length(dcp_address) == 1L &&
+          !is.na(dcp_address) &&
+          nzchar(dcp_address)
+      ) {
+        return(paste(source_fx, toupper(trimws(dcp_address)), sep = "|"))
       }
     }
 
@@ -478,8 +602,13 @@ synchronize_continuous <- function(
     args_list <- list(start_datetime = start_dt, con = con)
     if (!is.na(source_fx_args)) {
       # add some arguments if they are specified
-      args <- jsonlite::fromJSON(source_fx_args)
-      args_list <- c(args_list, lapply(args, as.character))
+      args <- source_adapter_args_decode(source_fx_args)
+      args_list <- c(args_list, args)
+    }
+    capability <- get_adapter_capability(source_fx)
+    if (isTRUE(capability$inject_timeseries_id[[1]])) {
+      args_list <- args_list[names(args_list) != "timeseries_id"]
+      args_list$timeseries_id <- tsid
     }
 
     inRemote <- do.call(source_fx, args_list) # Get the data using the args_list
@@ -903,6 +1032,7 @@ synchronize_continuous <- function(
       cl,
       c(
         "all_timeseries",
+        "adapter_capabilities",
         "approval_unknown",
         "grade_unknown",
         "qualifier_unknown",

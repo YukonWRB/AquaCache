@@ -27,5 +27,11 @@ getNewRasters(
 \item{end_datetime}{An end datetime to fetch rasters to. By default, fetches to the current time, however this parameter is provided for flexibility. If combined with \code{replace = TRUE} (Warning! parameter not implemented yet), could be used to replace rasters from \code{start_datetime} to a specific datetime. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!}
 }
 \description{
-Retrieves new data corresponding to entries in the table "raster_series_index" for which the column 'public' is TRUE. You can add a new raster series with \code{\link[=addACRasterSeries]{addACRasterSeries()}}. As with the timeseries and images table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
+Retrieves rasters using the active assignment with the lowest fetch priority
+in \code{spatial.raster_series_source_adapters} for each raster series. See
+\code{\link[=addACRasterSeries]{addACRasterSeries()}} for creating a series and its assignments.
+Every source function must have an enabled raster-domain entry in
+\code{public.source_adapter_capabilities}.
+
+If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 }
