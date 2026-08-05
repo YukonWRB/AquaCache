@@ -131,6 +131,86 @@ test_that("insertACBorehole rejects unknown drill methods", {
   )
 })
 
+test_that("insertACBorehole resolves and binds seal and screen details", {
+  well_statement <- NULL
+  well_params <- NULL
+
+  local_mocked_bindings(
+    dbExecute = function(con, statement, params = NULL, ...) {
+      if (grepl("INSERT INTO boreholes.wells", statement, fixed = TRUE)) {
+        well_statement <<- statement
+        well_params <<- params
+      }
+      0L
+    },
+    dbGetQuery = function(con, statement, params = NULL, ...) {
+      if (grepl("FROM boreholes.seal_materials", statement, fixed = TRUE)) {
+        return(data.frame(seal_material_id = 2L))
+      }
+      if (grepl("FROM boreholes.screen_materials", statement, fixed = TRUE)) {
+        return(data.frame(screen_material_id = 3L))
+      }
+      if (grepl("FROM boreholes.screen_types", statement, fixed = TRUE)) {
+        return(data.frame(screen_type_id = 4L))
+      }
+      if (grepl("INSERT INTO boreholes.boreholes", statement, fixed = TRUE)) {
+        return(data.frame(borehole_id = 104L))
+      }
+      stop("Unexpected query in insertACBorehole test: ", statement)
+    },
+    .package = "DBI"
+  )
+
+  result <- insertACBorehole(
+    con = structure(list(), class = "mock_con"),
+    well_name = "Construction details",
+    latitude = 60,
+    longitude = -135,
+    is_well = TRUE,
+    seal_material = "Bentonite chips or pellets",
+    seal_diameter_mm = 203.2,
+    seal_depth_from = 0,
+    seal_depth_to = 6.1,
+    screen_material = "Stainless steel",
+    screen_type = "Continuous wire-wrap"
+  )
+
+  expect_equal(result, 104L)
+  expect_match(well_statement, "seal_material_id", fixed = TRUE)
+  expect_match(well_statement, "screen_type_id", fixed = TRUE)
+  expect_equal(well_params[12:17], list(2L, 203.2, 0, 6.1, 3L, 4L))
+})
+
+test_that("insertACBorehole rejects reversed construction intervals", {
+  local_mocked_bindings(
+    dbExecute = function(...) 0L,
+    .package = "DBI"
+  )
+
+  expect_error(
+    insertACBorehole(
+      con = structure(list(), class = "mock_con"),
+      well_name = "Reversed screen",
+      latitude = 60,
+      longitude = -135,
+      top_of_screen = 20,
+      bottom_of_screen = 10
+    ),
+    "bottom_of_screen.*greater than or equal"
+  )
+  expect_error(
+    insertACBorehole(
+      con = structure(list(), class = "mock_con"),
+      well_name = "Reversed seal",
+      latitude = 60,
+      longitude = -135,
+      seal_depth_from = 10,
+      seal_depth_to = 5
+    ),
+    "seal_depth_to.*greater than or equal"
+  )
+})
+
 test_that("Patch 56 migrates borehole drill methods as governed reference data", {
   patch <- paste(
     readLines(
@@ -145,11 +225,7 @@ test_that("Patch 56 migrates borehole drill methods as governed reference data",
     "CREATE TABLE boreholes.drill_methods",
     fixed = TRUE
   )
-  expect_match(
-    patch,
-    'DBI::Id(schema = "boreholes", table = "drill_methods")',
-    fixed = TRUE
-  )
+  expect_match(patch, "ON CONFLICT (method_name) DO UPDATE", fixed = TRUE)
   expect_match(
     patch,
     "SET drill_method = dm.drill_method_id::text",
@@ -175,5 +251,49 @@ test_that("Patch 56 migrates borehole drill methods as governed reference data",
       patch,
       fixed = TRUE
     )
+  )
+})
+
+test_that("Patch 56 adds governed well seal and screen construction data", {
+  patch <- paste(
+    readLines(
+      testthat::test_path("..", "..", "inst", "patches", "patch_56.R"),
+      warn = FALSE
+    ),
+    collapse = "\n"
+  )
+
+  for (table_name in c(
+    "boreholes.seal_materials",
+    "boreholes.screen_materials",
+    "boreholes.screen_types"
+  )) {
+    expect_match(patch, paste("CREATE TABLE", table_name), fixed = TRUE)
+  }
+  for (column_name in c(
+    "seal_material_id",
+    "seal_diameter_mm",
+    "seal_depth_from_m",
+    "seal_depth_to_m",
+    "screen_material_id",
+    "screen_type_id"
+  )) {
+    expect_match(patch, paste("ADD COLUMN", column_name), fixed = TRUE)
+  }
+  expect_match(patch, "wells_seal_interval_valid", fixed = TRUE)
+  expect_match(
+    patch,
+    "SET screen_top_depth_m = screen_bottom_depth_m",
+    fixed = TRUE
+  )
+  expect_match(patch, "wells_screen_interval_valid", fixed = TRUE)
+  expect_match(patch, "Continuous wire-wrap", fixed = TRUE)
+  expect_match(patch, "Open hole", fixed = TRUE)
+  expect_match(patch, "Drill cuttings", fixed = TRUE)
+  expect_match(patch, "CREATE TRIGGER audit_%s_trigger", fixed = TRUE)
+  expect_match(
+    patch,
+    "boreholes.screen_types_screen_type_id_seq",
+    fixed = TRUE
   )
 })

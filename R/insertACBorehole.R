@@ -27,6 +27,16 @@
 #' @param well_depth Total depth of the well in meters.
 #' @param top_of_screen Depth to the top of the well screen in meters.
 #' @param bottom_of_screen Depth to the bottom of the well screen in meters.
+#' @param seal_material Seal-material ID from `boreholes.seal_materials`, or an
+#'   English or French material name already present in that table.
+#' @param seal_diameter_mm Outside diameter of the annular seal in millimeters.
+#' @param seal_depth_from Depth to the top of the seal in meters below ground.
+#' @param seal_depth_to Depth to the bottom of the seal in meters below ground.
+#' @param screen_material Screen-material ID from
+#'   `boreholes.screen_materials`, or an English or French material name
+#'   already present in that table.
+#' @param screen_type Screen-type ID from `boreholes.screen_types`, or an
+#'   English or French type name already present in that table.
 #' @param well_head_stick_up Height of the well head above ground in meters.
 #' @param static_water_level Static water level measured from the top of the well in meters.
 #' @param estimated_yield Estimated yield of the well in liters per minute.
@@ -88,7 +98,13 @@ insertACBorehole <- function(
   drill_method = NULL,
   purpose_of_well = purpose_of_borehole,
   purpose_well_inferred = purpose_borehole_inferred,
-  share_with_well = share_with_borehole
+  share_with_well = share_with_borehole,
+  seal_material = NULL,
+  seal_diameter_mm = NULL,
+  seal_depth_from = NULL,
+  seal_depth_to = NULL,
+  screen_material = NULL,
+  screen_type = NULL
 ) {
   # Establish database connection if not provided
   if (is.null(con)) {
@@ -120,51 +136,118 @@ insertACBorehole <- function(
     stop("'location_source' must be character if provided.")
   }
 
-  # Resolve either a catalogue key or an existing English/French method name.
-  if (!is.null(drill_method)) {
-    if (is.numeric(drill_method)) {
-      if (
-        length(drill_method) != 1L ||
-          is.na(drill_method) ||
-          !is.finite(drill_method) ||
-          drill_method <= 0 ||
-          drill_method != floor(drill_method) ||
-          drill_method > .Machine$integer.max
-      ) {
-        stop("'drill_method' must be one positive integer ID or one method name.")
-      }
-      drill_method <- as.integer(drill_method)
-      drill_method_match <- DBI::dbGetQuery(
-        con,
-        "SELECT drill_method_id
-         FROM boreholes.drill_methods
-         WHERE drill_method_id = $1",
-        params = list(drill_method)
-      )
-    } else if (is.character(drill_method) && length(drill_method) == 1L) {
-      drill_method <- trimws(drill_method)
-      if (is.na(drill_method) || !nzchar(drill_method)) {
-        stop("'drill_method' cannot be blank when provided.")
-      }
-      drill_method_match <- DBI::dbGetQuery(
-        con,
-        "SELECT drill_method_id
-         FROM boreholes.drill_methods
-         WHERE lower(method_name) = lower($1)
-            OR lower(method_name_fr) = lower($1)",
-        params = list(drill_method)
-      )
-    } else {
-      stop("'drill_method' must be one positive integer ID or one method name.")
+  resolve_catalogue_value <- function(
+    value,
+    table,
+    id_column,
+    name_column,
+    name_fr_column,
+    argument
+  ) {
+    if (is.null(value)) {
+      return(NULL)
     }
 
-    if (nrow(drill_method_match) != 1L) {
+    if (is.numeric(value)) {
+      if (
+        length(value) != 1L ||
+          is.na(value) ||
+          !is.finite(value) ||
+          value <= 0 ||
+          value != floor(value) ||
+          value > .Machine$integer.max
+      ) {
+        stop(
+          sprintf(
+            "'%s' must be one positive integer ID or one catalogue name.",
+            argument
+          )
+        )
+      }
+      value <- as.integer(value)
+      match <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT %s FROM boreholes.%s WHERE %s = $1",
+          id_column,
+          table,
+          id_column
+        ),
+        params = list(value)
+      )
+    } else if (is.character(value) && length(value) == 1L) {
+      value <- trimws(value)
+      if (is.na(value) || !nzchar(value)) {
+        stop(sprintf("'%s' cannot be blank when provided.", argument))
+      }
+      match <- DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT %s
+             FROM boreholes.%s
+            WHERE lower(%s) = lower($1)
+               OR lower(%s) = lower($1)",
+          id_column,
+          table,
+          name_column,
+          name_fr_column
+        ),
+        params = list(value)
+      )
+    } else {
       stop(
-        "The specified 'drill_method' does not match exactly one entry in boreholes.drill_methods."
+        sprintf(
+          "'%s' must be one positive integer ID or one catalogue name.",
+          argument
+        )
       )
     }
-    drill_method <- drill_method_match$drill_method_id[[1]]
+
+    if (nrow(match) != 1L) {
+      stop(
+        sprintf(
+          "The specified '%s' does not match exactly one entry in boreholes.%s.",
+          argument,
+          table
+        )
+      )
+    }
+
+    as.integer(match[[id_column]][[1]])
   }
+
+  drill_method <- resolve_catalogue_value(
+    drill_method,
+    table = "drill_methods",
+    id_column = "drill_method_id",
+    name_column = "method_name",
+    name_fr_column = "method_name_fr",
+    argument = "drill_method"
+  )
+  seal_material <- resolve_catalogue_value(
+    seal_material,
+    table = "seal_materials",
+    id_column = "seal_material_id",
+    name_column = "material_name",
+    name_fr_column = "material_name_fr",
+    argument = "seal_material"
+  )
+  screen_material <- resolve_catalogue_value(
+    screen_material,
+    table = "screen_materials",
+    id_column = "screen_material_id",
+    name_column = "material_name",
+    name_fr_column = "material_name_fr",
+    argument = "screen_material"
+  )
+  screen_type <- resolve_catalogue_value(
+    screen_type,
+    table = "screen_types",
+    id_column = "screen_type_id",
+    name_column = "type_name",
+    name_fr_column = "type_name_fr",
+    argument = "screen_type"
+  )
 
   # Validate location_id if provided
   if (!is.null(location_id)) {
@@ -302,13 +385,46 @@ insertACBorehole <- function(
     "longitude",
     "surveyed_ground_elev",
     "permafrost_top",
-    "permafrost_bot"
+    "permafrost_bot",
+    "seal_diameter_mm",
+    "seal_depth_from",
+    "seal_depth_to"
   )
   for (field in numeric_fields) {
     value <- get(field)
     if (!is.null(value) && !is.numeric(value)) {
       stop(paste0("'", field, "' must be numeric if provided."))
     }
+  }
+
+  nonnegative_fields <- c(
+    "top_of_screen",
+    "bottom_of_screen",
+    "seal_depth_from",
+    "seal_depth_to"
+  )
+  for (field in nonnegative_fields) {
+    value <- get(field)
+    if (!is.null(value) && value < 0) {
+      stop(paste0("'", field, "' must be non-negative if provided."))
+    }
+  }
+  if (!is.null(seal_diameter_mm) && seal_diameter_mm <= 0) {
+    stop("'seal_diameter_mm' must be greater than zero if provided.")
+  }
+  if (
+    !is.null(top_of_screen) &&
+      !is.null(bottom_of_screen) &&
+      bottom_of_screen < top_of_screen
+  ) {
+    stop("'bottom_of_screen' must be greater than or equal to 'top_of_screen'.")
+  }
+  if (
+    !is.null(seal_depth_from) &&
+      !is.null(seal_depth_to) &&
+      seal_depth_to < seal_depth_from
+  ) {
+    stop("'seal_depth_to' must be greater than or equal to 'seal_depth_from'.")
   }
 
   # Bound parameters preserve quotes and other special characters in text fields.
@@ -385,8 +501,17 @@ insertACBorehole <- function(
         well_purpose_id,
         inferred_purpose,
         notes,
-        share_with)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[])",
+        share_with,
+        seal_material_id,
+        seal_diameter_mm,
+        seal_depth_from_m,
+        seal_depth_to_m,
+        screen_material_id,
+        screen_type_id)
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[],
+        $12, $13, $14, $15, $16, $17
+      )",
       params = list(
         borehole_id,
         if (is.null(casing_od)) NA_real_ else casing_od,
@@ -398,7 +523,13 @@ insertACBorehole <- function(
         if (is.null(purpose_of_well)) NA_integer_ else purpose_of_well,
         purpose_well_inferred,
         if (is.null(notes_well)) NA_character_ else notes_well,
-        paste0("{", paste(share_with_well, collapse = ","), "}")
+        paste0("{", paste(share_with_well, collapse = ","), "}"),
+        if (is.null(seal_material)) NA_integer_ else seal_material,
+        if (is.null(seal_diameter_mm)) NA_real_ else seal_diameter_mm,
+        if (is.null(seal_depth_from)) NA_real_ else seal_depth_from,
+        if (is.null(seal_depth_to)) NA_real_ else seal_depth_to,
+        if (is.null(screen_material)) NA_integer_ else screen_material,
+        if (is.null(screen_type)) NA_integer_ else screen_type
       )
     )
   }

@@ -12,13 +12,15 @@ test_that("adapter capabilities require database Patch 56", {
   )
 })
 
-test_that("only the runtime registry reader is public", {
+test_that("the documented registry helpers are public", {
   exports <- getNamespaceExports("AquaCache")
 
-  expect_true("getSourceAdapterCapabilities" %in% exports)
+  expect_true(all(c(
+    "getSourceAdapterCapabilities",
+    "registerSourceAdapterArguments"
+  ) %in% exports))
   expect_false(any(c(
     "sourceAdapterArgument",
-    "registerSourceAdapterArguments",
     "validateSourceAdapterArgumentSchema"
   ) %in% exports))
 })
@@ -69,6 +71,56 @@ test_that("adapter capabilities are parsed from the Patch 56 registry", {
     "timeseries_id"
   )
   expect_equal(capabilities$data_domain, "continuous")
+})
+
+test_that("adapter capability filters select rows from a multi-domain registry", {
+  registry <- data.frame(
+    source_fx = c(
+      "downloadNESDIS",
+      "downloadNupointImages",
+      "downloadECCCwq"
+    ),
+    data_domain = c("continuous", "image", "discrete"),
+    adapter_kind = c("transmission", "standard", "standard"),
+    requires_transmission_mapping = c(TRUE, FALSE, FALSE),
+    inject_timeseries_id = c(TRUE, FALSE, FALSE),
+    parallel_group_strategy = "timeseries",
+    parallel_group_args_json = "[]",
+    allow_empty_initial_fetch = FALSE,
+    transmission_method_codes_json = "[]",
+    argument_schema_json = '{"schema_version":1,"arguments":[]}',
+    ui_config_json = "{}",
+    enabled = c(TRUE, TRUE, FALSE),
+    note = NA_character_
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(...) registry,
+    .package = "DBI"
+  )
+
+  image_capabilities <- getSourceAdapterCapabilities(
+    con = structure(list(), class = "mock_con"),
+    data_domain = "image"
+  )
+  expect_identical(image_capabilities$source_fx, "downloadNupointImages")
+  expect_identical(image_capabilities$data_domain, "image")
+
+  selected_capabilities <- getSourceAdapterCapabilities(
+    con = structure(list(), class = "mock_con"),
+    source_fx = c("downloadNESDIS", "downloadECCCwq"),
+    data_domain = c("continuous", "discrete"),
+    enabled_only = FALSE
+  )
+  expect_identical(
+    selected_capabilities$source_fx,
+    c("downloadNESDIS", "downloadECCCwq")
+  )
+
+  disabled_capability <- getSourceAdapterCapabilities(
+    con = structure(list(), class = "mock_con"),
+    source_fx = "downloadECCCwq"
+  )
+  expect_equal(nrow(disabled_capability), 0L)
 })
 
 test_that("adapter capability domains are validated", {

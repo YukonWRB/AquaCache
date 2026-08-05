@@ -1,5 +1,5 @@
 # Patch 56 adds a source-adapter registry, provider-neutral transmission
-# mappings, and operational history.
+# mappings, operational history, and governed well-construction catalogues.
 # The first adapter using these objects retrieves GOES DCS transmissions from
 # NESDIS/LRGS, but the schema also supports other providers and transports.
 
@@ -11,7 +11,7 @@ if (check$session_user != "postgres") {
 }
 
 message(
-  "Working on patch 56: adding the cross-domain source-adapter registry, provider-neutral transmission mappings, and import-run history. Changes are being made within a transaction, so an error will roll back the database."
+  "Working on patch 56: adding the cross-domain source-adapter registry, provider-neutral transmission mappings, import-run history, and governed well-construction details. Changes are being made within a transaction, so an error will roll back the database."
 )
 
 if (dbTransCheck(con)) {
@@ -35,6 +35,7 @@ tryCatch(
          to_regclass('spatial.raster_series_index') IS NOT NULL AS has_raster_series,
          to_regclass('instruments.transmission_methods') IS NOT NULL AS has_methods,
          to_regclass('boreholes.boreholes') IS NOT NULL AS has_boreholes,
+         to_regclass('boreholes.wells') IS NOT NULL AS has_wells,
          to_regclass('information.version_info') IS NOT NULL AS has_version_info,
          to_regprocedure('public.user_modified()') IS NOT NULL AS has_user_modified,
          to_regprocedure('public.update_modified()') IS NOT NULL AS has_update_modified,
@@ -43,7 +44,7 @@ tryCatch(
     if (!all(unlist(required[1, ], use.names = FALSE))) {
       stop(
         "Patch 56 requires the transmission metadata, continuous, discrete, ",
-        "image, raster, borehole, audit, and version objects created by earlier patches."
+        "image, raster, borehole, well, audit, and version objects created by earlier patches."
       )
     }
 
@@ -1445,7 +1446,11 @@ tryCatch(
        SELECT
          timeseries_id,
          source_fx,
-         source_fx_args,
+         CASE
+          WHEN jsonb_typeof(source_fx_args) = 'array'
+            THEN source_fx_args -> 0
+          ELSE source_fx_args
+         END,
          1,
          1,
          TRUE,
@@ -1468,7 +1473,11 @@ tryCatch(
        SELECT
          sample_series_id,
          source_fx,
-         source_fx_args,
+         CASE
+          WHEN jsonb_typeof(source_fx_args) = 'array'
+            THEN source_fx_args -> 0
+          ELSE source_fx_args
+         END,
          1,
          1,
          TRUE,
@@ -1480,22 +1489,47 @@ tryCatch(
     DBI::dbExecute(
       con,
       "INSERT INTO files.image_series_source_adapters (
-         img_series_id, source_fx, source_fx_args, fetch_priority,
-         active, note
+         img_series_id, 
+         source_fx, 
+         source_fx_args, 
+         fetch_priority,
+         active, 
+         note
        )
-       SELECT img_series_id, source_fx, source_fx_args, 1, TRUE,
-              'Migrated from files.image_series by Patch 56.'
+       SELECT 
+       img_series_id, 
+       source_fx, 
+       CASE
+         WHEN jsonb_typeof(source_fx_args) = 'array'
+           THEN source_fx_args -> 0
+         ELSE source_fx_args
+       END,
+       1,
+       TRUE,
+       'Migrated from files.image_series by Patch 56.'
        FROM files.image_series
        WHERE source_fx IS NOT NULL"
     )
     DBI::dbExecute(
       con,
       "INSERT INTO spatial.raster_series_source_adapters (
-         raster_series_id, source_fx, source_fx_args, fetch_priority,
+         raster_series_id, 
+         source_fx, 
+         source_fx_args, 
+         fetch_priority,
          active, note
        )
-       SELECT raster_series_id, source_fx, source_fx_args, 1, TRUE,
-              'Migrated from spatial.raster_series_index by Patch 56.'
+       SELECT 
+       raster_series_id, 
+       source_fx, 
+       CASE
+         WHEN jsonb_typeof(source_fx_args) = 'array'
+           THEN source_fx_args -> 0
+         ELSE source_fx_args
+       END, 
+       1, 
+       TRUE,
+       'Migrated from spatial.raster_series_index by Patch 56.'
        FROM spatial.raster_series_index
        WHERE source_fx IS NOT NULL"
     )
@@ -2421,6 +2455,340 @@ tryCatch(
       )
     }
 
+    # Add governed catalogues and construction fields for well seals and screens.
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE boreholes.seal_materials (
+         seal_material_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+         material_name TEXT NOT NULL UNIQUE,
+         material_name_fr TEXT NOT NULL UNIQUE,
+         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+         modified_by TEXT,
+         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+         modified TIMESTAMPTZ
+       )"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE boreholes.screen_materials (
+         screen_material_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+         material_name TEXT NOT NULL UNIQUE,
+         material_name_fr TEXT NOT NULL UNIQUE,
+         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+         modified_by TEXT,
+         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+         modified TIMESTAMPTZ
+       )"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE boreholes.screen_types (
+         screen_type_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+         type_name TEXT NOT NULL UNIQUE,
+         type_name_fr TEXT NOT NULL UNIQUE,
+         created_by TEXT DEFAULT CURRENT_USER NOT NULL,
+         modified_by TEXT,
+         created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+         modified TIMESTAMPTZ
+       )"
+    )
+
+    for (table_name in c(
+      "seal_materials",
+      "screen_materials",
+      "screen_types"
+    )) {
+      DBI::dbExecute(
+        con,
+        sprintf("ALTER TABLE boreholes.%s OWNER TO admin", table_name)
+      )
+    }
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE boreholes.seal_materials IS
+       'Controlled catalogue of materials used to construct annular seals in wells.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE boreholes.screen_materials IS
+       'Controlled catalogue of materials used for well screens and intake assemblies.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE boreholes.screen_types IS
+       'Controlled catalogue of well-screen and open-intake construction types.'"
+    )
+
+    seal_materials <- data.frame(
+      material_name = c(
+        "Bentonite",
+        "Bentonite chips or pellets",
+        "Bentonite grout",
+        "Cement grout",
+        "Cement-bentonite grout",
+        "Concrete",
+        "Drill cuttings",
+        "Native material",
+        "Sand",
+        "Gravel",
+        "Other",
+        "Unknown"
+      ),
+      material_name_fr = c(
+        "Bentonite",
+        "Copeaux ou granules de bentonite",
+        "Coulis de bentonite",
+        "Coulis de ciment",
+        "Coulis ciment-bentonite",
+        "Béton",
+        "Déblais de forage",
+        "Matériau naturel sur place",
+        "Sable",
+        "Gravier",
+        "Autre",
+        "Inconnu"
+      )
+    )
+    DBI::dbAppendTable(
+      con,
+      DBI::Id(schema = "boreholes", table = "seal_materials"),
+      seal_materials
+    )
+
+    screen_materials <- data.frame(
+      material_name = c(
+        "Stainless steel",
+        "Steel",
+        "Galvanized steel",
+        "PVC",
+        "ABS",
+        "Plastic (unspecified)",
+        "Fibreglass",
+        "Brass or bronze",
+        "Other",
+        "Unknown"
+      ),
+      material_name_fr = c(
+        "Acier inoxydable",
+        "Acier",
+        "Acier galvanisé",
+        "PVC",
+        "ABS",
+        "Plastique (non précisé)",
+        "Fibre de verre",
+        "Laiton ou bronze",
+        "Autre",
+        "Inconnu"
+      )
+    )
+    DBI::dbAppendTable(
+      con,
+      DBI::Id(schema = "boreholes", table = "screen_materials"),
+      screen_materials
+    )
+
+    screen_types <- data.frame(
+      type_name = c(
+        "Continuous wire-wrap",
+        "Louvered",
+        "Bridge-slot",
+        "Slotted",
+        "Perforated",
+        "Porous",
+        "Well point",
+        "Open hole",
+        "Open bottom",
+        "Other",
+        "Unknown"
+      ),
+      type_name_fr = c(
+        "À fil enroulé continu",
+        "À persiennes",
+        "À fentes en pont",
+        "À fentes",
+        "Perforé",
+        "Poreux",
+        "Pointe filtrante",
+        "Trou ouvert",
+        "Fond ouvert",
+        "Autre",
+        "Inconnu"
+      )
+    )
+    DBI::dbAppendTable(
+      con,
+      DBI::Id(schema = "boreholes", table = "screen_types"),
+      screen_types
+    )
+
+    # Correct legacy intervals whose endpoints were stored in reverse order
+    # before enforcing the construction-depth invariants.
+    DBI::dbExecute(
+      con,
+      "UPDATE boreholes.wells
+       SET screen_top_depth_m = screen_bottom_depth_m,
+           screen_bottom_depth_m = screen_top_depth_m
+       WHERE screen_top_depth_m IS NOT NULL
+         AND screen_bottom_depth_m IS NOT NULL
+         AND screen_bottom_depth_m < screen_top_depth_m"
+    )
+
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.wells
+       ADD COLUMN seal_material_id INTEGER
+         REFERENCES boreholes.seal_materials(seal_material_id)
+         ON UPDATE CASCADE ON DELETE SET NULL,
+       ADD COLUMN seal_diameter_mm NUMERIC,
+       ADD COLUMN seal_depth_from_m NUMERIC,
+       ADD COLUMN seal_depth_to_m NUMERIC,
+       ADD COLUMN screen_material_id INTEGER
+         REFERENCES boreholes.screen_materials(screen_material_id)
+         ON UPDATE CASCADE ON DELETE SET NULL,
+       ADD COLUMN screen_type_id INTEGER
+         REFERENCES boreholes.screen_types(screen_type_id)
+         ON UPDATE CASCADE ON DELETE SET NULL,
+       ADD CONSTRAINT wells_seal_diameter_positive
+         CHECK (seal_diameter_mm IS NULL OR seal_diameter_mm > 0),
+       ADD CONSTRAINT wells_seal_depth_from_nonnegative
+         CHECK (seal_depth_from_m IS NULL OR seal_depth_from_m >= 0),
+       ADD CONSTRAINT wells_seal_depth_to_nonnegative
+         CHECK (seal_depth_to_m IS NULL OR seal_depth_to_m >= 0),
+       ADD CONSTRAINT wells_seal_interval_valid
+         CHECK (
+           seal_depth_from_m IS NULL
+           OR seal_depth_to_m IS NULL
+           OR seal_depth_to_m >= seal_depth_from_m
+         ),
+       ADD CONSTRAINT wells_screen_top_depth_nonnegative
+         CHECK (screen_top_depth_m IS NULL OR screen_top_depth_m >= 0),
+       ADD CONSTRAINT wells_screen_bottom_depth_nonnegative
+         CHECK (screen_bottom_depth_m IS NULL OR screen_bottom_depth_m >= 0),
+       ADD CONSTRAINT wells_screen_interval_valid
+         CHECK (
+           screen_top_depth_m IS NULL
+           OR screen_bottom_depth_m IS NULL
+           OR screen_bottom_depth_m >= screen_top_depth_m
+         )"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN boreholes.wells.seal_material_id IS
+       'Material used for the annular seal, from boreholes.seal_materials.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN boreholes.wells.seal_diameter_mm IS
+       'Outside diameter of the annular seal in millimetres.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN boreholes.wells.seal_depth_from_m IS
+       'Depth to the top of the annular seal in metres below ground surface.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN boreholes.wells.seal_depth_to_m IS
+       'Depth to the bottom of the annular seal in metres below ground surface.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN boreholes.wells.screen_material_id IS
+       'Well-screen material, from boreholes.screen_materials.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN boreholes.wells.screen_type_id IS
+       'Well-screen or open-intake construction type, from boreholes.screen_types.'"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX wells_seal_material_idx
+       ON boreholes.wells (seal_material_id)"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX wells_screen_material_idx
+       ON boreholes.wells (screen_material_id)"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX wells_screen_type_idx
+       ON boreholes.wells (screen_type_id)"
+    )
+
+    for (table_name in c(
+      "seal_materials",
+      "screen_materials",
+      "screen_types"
+    )) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE TRIGGER %s_user_modified_trigger
+           BEFORE UPDATE ON boreholes.%s
+           FOR EACH ROW EXECUTE FUNCTION public.user_modified()",
+          table_name,
+          table_name
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE TRIGGER %s_update_modified_trigger
+           BEFORE UPDATE ON boreholes.%s
+           FOR EACH ROW EXECUTE FUNCTION public.update_modified()",
+          table_name,
+          table_name
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE TRIGGER audit_%s_trigger
+           AFTER UPDATE OR DELETE ON boreholes.%s
+           FOR EACH ROW EXECUTE FUNCTION audit.if_modified_func()",
+          table_name,
+          table_name
+        )
+      )
+    }
+
+    DBI::dbExecute(
+      con,
+      "GRANT SELECT ON TABLE
+         boreholes.seal_materials,
+         boreholes.screen_materials,
+         boreholes.screen_types
+       TO PUBLIC"
+    )
+    for (role_name in editor_roles) {
+      quoted_role <- as.character(DBI::dbQuoteIdentifier(con, role_name))
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+             boreholes.seal_materials,
+             boreholes.screen_materials,
+             boreholes.screen_types
+           TO %s",
+          quoted_role
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "GRANT USAGE, SELECT, UPDATE ON SEQUENCE
+             boreholes.seal_materials_seal_material_id_seq,
+             boreholes.screen_materials_screen_material_id_seq,
+             boreholes.screen_types_screen_type_id_seq
+           TO %s",
+          quoted_role
+        )
+      )
+    }
+
     DBI::dbExecute(
       con,
       "UPDATE information.version_info SET version = '56'
@@ -2436,7 +2804,7 @@ tryCatch(
     DBI::dbExecute(con, "COMMIT")
     active <- FALSE
     message(
-      "Patch 56 applied successfully. Continuous, discrete, image, and raster source adapters are now registered by data domain; transmission adapters can also declare shared capabilities, map provider fields to AquaCache timeseries, and retain durable import history."
+      "Patch 56 applied successfully. Source adapters are now registered by data domain, transmission imports retain durable mappings and history, and wells use governed seal and screen construction details."
     )
   },
   error = function(e) {

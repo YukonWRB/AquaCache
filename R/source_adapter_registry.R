@@ -131,12 +131,12 @@ getSourceAdapterCapabilities <- function(
     capabilities <- capabilities[which(capabilities$enabled)]
   }
   if (!is.null(source_fx)) {
-    capabilities <- capabilities[which(capabilities$source_fx %in% source_fx)]
+    keep <- capabilities[["source_fx"]] %in% source_fx
+    capabilities <- capabilities[which(keep)]
   }
   if (!is.null(data_domain)) {
-    capabilities <- capabilities[
-      which(capabilities$data_domain %in% data_domain)
-    ]
+    keep <- capabilities[["data_domain"]] %in% data_domain
+    capabilities <- capabilities[which(keep)]
   }
 
   capabilities[]

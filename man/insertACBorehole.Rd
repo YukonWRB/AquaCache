@@ -37,7 +37,13 @@ insertACBorehole(
   drill_method = NULL,
   purpose_of_well = purpose_of_borehole,
   purpose_well_inferred = purpose_borehole_inferred,
-  share_with_well = share_with_borehole
+  share_with_well = share_with_borehole,
+  seal_material = NULL,
+  seal_diameter_mm = NULL,
+  seal_depth_from = NULL,
+  seal_depth_to = NULL,
+  screen_material = NULL,
+  screen_type = NULL
 )
 }
 \arguments{
@@ -108,6 +114,22 @@ is case-insensitive and ignores surrounding whitespace.}
 \item{purpose_well_inferred}{Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is \code{purpose_borehole_inferred}.}
 
 \item{share_with_well}{A character vector of the user group(s) with which to share the well, one elemtn per group. Default is \code{share_with_borehole}.}
+
+\item{seal_material}{Seal-material ID from \code{boreholes.seal_materials}, or an
+English or French material name already present in that table.}
+
+\item{seal_diameter_mm}{Outside diameter of the annular seal in millimeters.}
+
+\item{seal_depth_from}{Depth to the top of the seal in meters below ground.}
+
+\item{seal_depth_to}{Depth to the bottom of the seal in meters below ground.}
+
+\item{screen_material}{Screen-material ID from
+\code{boreholes.screen_materials}, or an English or French material name
+already present in that table.}
+
+\item{screen_type}{Screen-type ID from \code{boreholes.screen_types}, or an
+English or French type name already present in that table.}
 }
 \value{
 The borehole_id of the newly inserted record.
