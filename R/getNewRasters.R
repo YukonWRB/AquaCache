@@ -311,7 +311,7 @@ getNewRasters <- function(
               message(
                 "Appending raster ",
                 j,
-                " out of ",
+                " of ",
                 length(rasters),
                 " for raster_series_id ",
                 id
