@@ -92,7 +92,10 @@ create_test_db <- function(
   tryCatch(
     {
       # Check if the testdb database exists already
-      existing_dbs <- DBI::dbGetQuery(con, "SELECT datname FROM pg_catalog.pg_database;")
+      existing_dbs <- DBI::dbGetQuery(
+        con,
+        "SELECT datname FROM pg_catalog.pg_database;"
+      )
       if ("testdb" %in% existing_dbs$datname) {
         # Ask the user if they want to delete and replace the existing testdb database
         message(
@@ -333,10 +336,15 @@ create_test_db <- function(
     "public.parameters",
     "public.parameter_relationships",
     "public.qualifier_types",
+    "public.source_adapter_capabilities",
     "spatial.raster_types",
     "boreholes.borehole_well_purposes",
     "boreholes.casing_materials",
     "boreholes.drillers",
+    "boreholes.drill_methods",
+    "boreholes.seal_materials",
+    "boreholes.screen_types",
+    "boreholes.screen_materials",
     "criteria.guideline_publishers",
     "criteria.guideline_series",
     "criteria.guideline_comparison_operators",
