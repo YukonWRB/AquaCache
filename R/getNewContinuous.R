@@ -1070,7 +1070,7 @@ getNewContinuous <- function(
 
   message(
     updated_count,
-    " out of ",
+    " of ",
     nrow(all_timeseries),
     " timeseries were updated; added ",
     rows_added_total,

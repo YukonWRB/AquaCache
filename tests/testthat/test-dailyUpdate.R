@@ -48,5 +48,4 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
   )
 
   expect_equal(captured$getnew_args$timeseries_id, c(101L, 202L))
-  expect_true(isTRUE(captured$getnew_args$stats))
 })

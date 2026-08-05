@@ -793,8 +793,7 @@ addACTimeseries <- function(
               )
               getNewContinuous(
                 con = con,
-                timeseries_id = new_tsid,
-                stats = TRUE
+                timeseries_id = new_tsid
               )
             },
             error = function(e) {

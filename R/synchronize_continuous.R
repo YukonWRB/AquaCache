@@ -369,7 +369,7 @@ synchronize_continuous <- function(
     }
     if (
       identical(strategy, "transmission_platform") &&
-      "transmission_platform_identifier" %in% names(all_timeseries)
+        "transmission_platform_identifier" %in% names(all_timeseries)
     ) {
       dcp_address <- all_timeseries$transmission_platform_identifier[[i]]
       if (
@@ -1209,7 +1209,7 @@ synchronize_continuous <- function(
   message(
     "Successfully checked ",
     sum(updated$success, na.rm = TRUE),
-    " timeseries out of ",
+    " timeseries of ",
     nrow(all_timeseries),
     " timeseries; failed on ",
     sum(!updated$success, na.rm = TRUE),

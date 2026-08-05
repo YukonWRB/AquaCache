@@ -560,7 +560,7 @@ getNewRasters <- function(
 
   message(
     count,
-    " out of ",
+    " of ",
     nrow(meta_ids),
     " raster_series_id's were updated."
   )

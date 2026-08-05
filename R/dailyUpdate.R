@@ -115,8 +115,7 @@ dailyUpdate <- function(
           rt_start <- Sys.time()
           getNewContinuous(
             con = con,
-            timeseries_id = continuous_ts$timeseries_id,
-            stats = TRUE
+            timeseries_id = continuous_ts$timeseries_id
           )
           rt_duration <- Sys.time() - rt_start
           message(

@@ -219,7 +219,7 @@ getNewImages <- function(
     close(pb)
   }
 
-  message(count, " out of ", nrow(series_ids), " img_series_ids were updated.")
+  message(count, " of ", nrow(series_ids), " img_series_ids were updated.")
   message(image_count, " images were added in total.")
 
   try(
