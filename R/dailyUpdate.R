@@ -9,7 +9,9 @@
 #'
 #' Note that new timeseries should be added using function [addACTimeseries()].
 #'
-#' Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function.
+#' Continuous and discrete series participate when they have an active fetch
+#' assignment. A selected `downloadAquarius` assignment needs credentials in
+#' `.Renviron` or in its `source_fx_args`; see [downloadAquarius()].
 #'
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -53,15 +55,31 @@ dailyUpdate <- function(
   if (timeseries_id[1] == "all") {
     continuous_ts <- DBI::dbGetQuery(
       con,
-      "SELECT timeseries_id, last_daily_calculation, active FROM continuous.timeseries WHERE source_fx IS NOT NULL"
+      "SELECT timeseries_id, last_daily_calculation, active
+       FROM continuous.timeseries t
+       WHERE EXISTS (
+         SELECT 1
+         FROM continuous.timeseries_source_adapters tsa
+         WHERE tsa.timeseries_id = t.timeseries_id
+           AND tsa.active
+           AND tsa.fetch_priority IS NOT NULL
+       )"
     )
   } else {
     continuous_ts <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT timeseries_id, last_daily_calculation, active FROM continuous.timeseries WHERE timeseries_id IN (",
+        "SELECT timeseries_id, last_daily_calculation, active
+         FROM continuous.timeseries t
+         WHERE timeseries_id IN (",
         paste(timeseries_id, collapse = ", "),
-        ") AND source_fx IS NOT NULL"
+        ") AND EXISTS (
+           SELECT 1
+           FROM continuous.timeseries_source_adapters tsa
+           WHERE tsa.timeseries_id = t.timeseries_id
+             AND tsa.active
+             AND tsa.fetch_priority IS NOT NULL
+         )"
       )
     )
     if (length(timeseries_id) != nrow(continuous_ts)) {
@@ -97,8 +115,7 @@ dailyUpdate <- function(
           rt_start <- Sys.time()
           getNewContinuous(
             con = con,
-            timeseries_id = continuous_ts$timeseries_id,
-            stats = TRUE
+            timeseries_id = continuous_ts$timeseries_id
           )
           rt_duration <- Sys.time() - rt_start
           message(
@@ -123,15 +140,31 @@ dailyUpdate <- function(
     if (sample_series_id[1] == "all") {
       discrete_ids <- DBI::dbGetQuery(
         con,
-        "SELECT sample_series_id FROM discrete.sample_series WHERE source_fx IS NOT NULL"
+        "SELECT sample_series_id
+         FROM discrete.sample_series ss
+         WHERE EXISTS (
+           SELECT 1
+           FROM discrete.sample_series_source_adapters ssa
+           WHERE ssa.sample_series_id = ss.sample_series_id
+             AND ssa.active
+             AND ssa.fetch_priority IS NOT NULL
+         )"
       )
     } else {
       discrete_ids <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT sample_series_id FROM discrete.sample_series WHERE sample_series_id IN (",
+          "SELECT sample_series_id
+           FROM discrete.sample_series ss
+           WHERE sample_series_id IN (",
           paste(sample_series_id, collapse = ", "),
-          ") AND source_fx IS NOT NULL"
+          ") AND EXISTS (
+             SELECT 1
+             FROM discrete.sample_series_source_adapters ssa
+             WHERE ssa.sample_series_id = ss.sample_series_id
+               AND ssa.active
+               AND ssa.fetch_priority IS NOT NULL
+           )"
         )
       )
       if (length(sample_series_id) != nrow(discrete_ids)) {

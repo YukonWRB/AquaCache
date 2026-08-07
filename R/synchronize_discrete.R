@@ -5,7 +5,13 @@
 #' This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
 #'
 #' @details
-#' Deleting sample data found in AquaCache but not in the remote sources is done with the following logic: each sample_series_id is checked for any data found on the remote using the source_fx and the synch_from and synch_to datetimes assigned in table 'sample_series'. Any samples not found in the remote are deleted from the local database if the 'import_source' of the new and existing samples match. If the 'import_source' of the new and existing samples do not match, the sample is not deleted.
+#' Each sample series uses the active source-adapter assignment with the lowest
+#' synchronization priority. Samples missing remotely are deleted only when
+#' their existing `import_source` matches the selected source function,
+#' protecting records imported through another route.
+#'
+#' Every source function must have an enabled discrete-domain entry in
+#' `public.source_adapter_capabilities`.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param sample_series_id The sample_series_id you wish to have updated, as character or numeric vector. Defaults to "all".
@@ -49,6 +55,30 @@ synchronize_discrete <- function(
   EQWinConCache <- eqwin_connection_cache_new()
   on.exit(eqwin_connection_cache_disconnect(EQWinConCache), add = TRUE)
 
+  series_select_sql <-
+    "SELECT
+       ss.*,
+       source.sample_series_source_adapter_id,
+       source.source_fx,
+       source.source_fx_args,
+       source.synchronize_priority
+     FROM discrete.sample_series ss
+     LEFT JOIN LATERAL (
+       SELECT
+         ssa.sample_series_source_adapter_id,
+         ssa.source_fx,
+         ssa.source_fx_args,
+         ssa.synchronize_priority
+       FROM discrete.sample_series_source_adapters ssa
+       WHERE ssa.sample_series_id = ss.sample_series_id
+         AND ssa.active
+         AND ssa.synchronize_priority IS NOT NULL
+       ORDER BY
+         ssa.synchronize_priority,
+         ssa.sample_series_source_adapter_id
+       LIMIT 1
+     ) source ON TRUE"
+
   start <- Sys.time()
 
   message("Synchronizing sample series with synchronize_discrete...")
@@ -70,12 +100,13 @@ synchronize_discrete <- function(
   }
 
   if (sample_series_id[1] == "all") {
-    all_series <- DBI::dbGetQuery(con, "SELECT * FROM discrete.sample_series;")
+    all_series <- DBI::dbGetQuery(con, series_select_sql)
   } else {
     all_series <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT * FROM discrete.sample_series WHERE sample_series_id IN (",
+        series_select_sql,
+        " WHERE ss.sample_series_id IN (",
         paste(sample_series_id, collapse = ", "),
         ");"
       )
@@ -108,6 +139,41 @@ synchronize_discrete <- function(
   }
   if (nrow(all_series) == 0) {
     stop("Could not find any sample series matching your input parameters.")
+  }
+
+  missing_source <- is.na(all_series$source_fx)
+  if (any(missing_source)) {
+    warning(
+      "The following sample series have no active source-adapter assignment ",
+      "with a synchronize priority and will be ignored: ",
+      paste(all_series$sample_series_id[missing_source], collapse = ", "),
+      "."
+    )
+    all_series <- all_series[!missing_source, , drop = FALSE]
+  }
+  if (nrow(all_series) == 0L) {
+    stop(
+      "Could not find any sample series with an active source-adapter ",
+      "assignment for synchronization."
+    )
+  }
+
+  registered_source_fx <- getSourceAdapterCapabilities(
+    con = con,
+    data_domain = "discrete"
+  )$source_fx
+  unregistered_source_fx <- setdiff(
+    unique(all_series$source_fx),
+    registered_source_fx
+  )
+  if (length(unregistered_source_fx) > 0L) {
+    stop(
+      "synchronize_discrete: Every source_fx must have an enabled entry in ",
+      "public.source_adapter_capabilities for the discrete domain. ",
+      "Missing or disabled: ",
+      paste(unregistered_source_fx, collapse = ", "),
+      "."
+    )
   }
 
   valid_sample_names <- DBI::dbGetQuery(
@@ -189,8 +255,8 @@ synchronize_discrete <- function(
         )
         if (!is.na(source_fx_args)) {
           # add some arguments if they are specified
-          args <- jsonlite::fromJSON(source_fx_args)
-          args_list <- c(args_list, lapply(args, as.character))
+          args <- source_adapter_args_decode(source_fx_args)
+          args_list <- c(args_list, args)
         }
 
         if (source_fx == "downloadEQWin") {

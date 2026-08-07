@@ -49,12 +49,22 @@ update_hydat <- function(
       "SELECT
          t.parameter_id,
          t.timeseries_id,
-         t.source_fx_args,
+         tsa.source_fx_args,
          l.location_id
        FROM continuous.timeseries t
+       JOIN LATERAL (
+         SELECT source_fx_args, timeseries_source_adapter_id
+         FROM continuous.timeseries_source_adapters
+         WHERE timeseries_id = t.timeseries_id
+           AND source_fx = 'downloadWSC'
+           AND active
+         ORDER BY COALESCE(fetch_priority, synchronize_priority),
+           timeseries_source_adapter_id
+         LIMIT 1
+       ) tsa ON TRUE
        JOIN public.locations l
          ON t.location_id = l.location_id
-       WHERE source_fx = 'downloadWSC';"
+       ORDER BY t.timeseries_id, tsa.timeseries_source_adapter_id;"
     )
   } else {
     all_timeseries <- DBI::dbGetQuery(
@@ -63,14 +73,25 @@ update_hydat <- function(
         "SELECT
            t.parameter_id,
            t.timeseries_id,
-           t.source_fx_args,
+           tsa.source_fx_args,
            l.location_id
          FROM continuous.timeseries t
+         JOIN LATERAL (
+           SELECT source_fx_args, timeseries_source_adapter_id
+           FROM continuous.timeseries_source_adapters
+           WHERE timeseries_id = t.timeseries_id
+             AND source_fx = 'downloadWSC'
+             AND active
+           ORDER BY COALESCE(fetch_priority, synchronize_priority),
+             timeseries_source_adapter_id
+           LIMIT 1
+         ) tsa ON TRUE
          JOIN public.locations l
            ON t.location_id = l.location_id
          WHERE t.timeseries_id IN ('",
         paste(timeseries_id, collapse = "', '"),
-        "') AND source_fx = 'downloadWSC';"
+        "')
+         ORDER BY t.timeseries_id, tsa.timeseries_source_adapter_id;"
       )
     )
     if (length(timeseries_id) != nrow(all_timeseries)) {
@@ -217,10 +238,16 @@ update_hydat <- function(
     tsid <- DBI::dbGetQuery(
       con,
       "SELECT timeseries_id
-       FROM continuous.timeseries
-       WHERE parameter_id = $1
-         AND location_id = $2
-         AND source_fx = 'downloadWSC'
+       FROM continuous.timeseries t
+       WHERE t.parameter_id = $1
+         AND t.location_id = $2
+         AND EXISTS (
+           SELECT 1
+           FROM continuous.timeseries_source_adapters tsa
+           WHERE tsa.timeseries_id = t.timeseries_id
+             AND tsa.source_fx = 'downloadWSC'
+             AND tsa.active
+         )
        LIMIT 1;",
       params = list(parameter_id, location_id)
     )[1, 1]
@@ -235,12 +262,7 @@ update_hydat <- function(
         media_id = media_id,
         last_new_data = .POSIXct(Sys.time(), tz = "UTC"),
         share_with = "{public_reader}",
-        owner = 1,
-        source_fx = "downloadWSC",
-        source_fx_args = jsonlite::toJSON(
-          list(location = location),
-          auto_unbox = TRUE
-        )
+        owner = 1
       )
       dbAppendTableRLS(con, "continuous.timeseries", new_entry)
       tsid <- DBI::dbGetQuery(
@@ -249,10 +271,25 @@ update_hydat <- function(
          FROM continuous.timeseries
          WHERE location_id = $1
            AND parameter_id = $2
-           AND source_fx = 'downloadWSC'
+         ORDER BY timeseries_id DESC
          LIMIT 1;",
         params = list(location_id, parameter_id)
       )[1, 1]
+      DBI::dbExecute(
+        con,
+        "INSERT INTO continuous.timeseries_source_adapters (
+           timeseries_id,
+           source_fx,
+           source_fx_args,
+           fetch_priority,
+           synchronize_priority,
+           active
+         ) VALUES ($1, 'downloadWSC', $2::jsonb, 1, 1, TRUE)",
+        params = list(
+          tsid,
+          jsonlite::toJSON(list(location = location), auto_unbox = TRUE)
+        )
+      )
     }
 
     tsid

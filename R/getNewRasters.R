@@ -1,7 +1,13 @@
 #' Get new rasters
 #'
 #' @description
-#' Retrieves new data corresponding to entries in the table "raster_series_index" for which the column 'public' is TRUE. You can add a new raster series with [addACRasterSeries()]. As with the timeseries and images table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to [addACTimeseries()] for a description of how to formulate these arguments.
+#' Retrieves rasters using the active assignment with the lowest fetch priority
+#' in `spatial.raster_series_source_adapters` for each raster series. See
+#' [addACRasterSeries()] for creating a series and its assignments.
+#' Every source function must have an enabled raster-domain entry in
+#' `public.source_adapter_capabilities`.
+#'
+#' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 #'
 #' @param raster_series_ids A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.
 #' @param con A connection to the database. Default is NULL, which will use the package default connection settings and close the connection afterwards.
@@ -58,48 +64,48 @@ getNewRasters <- function(
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
+  raster_series_select_sql <-
+    "SELECT
+       rs.raster_series_id,
+       rs.end_datetime,
+       rs.last_issue,
+       rt.raster_type_name AS type,
+       source.source_fx,
+       source.source_fx_args,
+       source.fetch_priority,
+       COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name,
+       rs.active
+     FROM spatial.raster_series_index rs
+     JOIN spatial.raster_types rt ON rt.raster_type_id = rs.raster_type_id
+     LEFT JOIN public.parameters p ON p.parameter_id = rs.parameter_id
+     LEFT JOIN LATERAL (
+       SELECT rsa.source_fx, rsa.source_fx_args, rsa.fetch_priority
+       FROM spatial.raster_series_source_adapters rsa
+       WHERE rsa.raster_series_id = rs.raster_series_id
+         AND rsa.active
+       ORDER BY rsa.fetch_priority, rsa.raster_series_source_adapter_id
+       LIMIT 1
+     ) source ON TRUE"
+
   # Create table of meta_ids
   if (raster_series_ids[1] == "all") {
     meta_ids <- DBI::dbGetQuery(
       con,
-      "SELECT 
-        rs.raster_series_id, 
-        rs.end_datetime, 
-        rs.last_issue, 
-        rt.raster_type_name AS type, 
-        rs.source_fx, 
-        rs.source_fx_args, 
-        COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name, 
-        rs.active 
-      FROM spatial.raster_series_index rs
-      JOIN spatial.raster_types rt ON rt.raster_type_id = rs.raster_type_id
-      LEFT JOIN public.parameters p ON p.parameter_id = rs.parameter_id
-      WHERE rs.source_fx IS NOT NULL;"
+      raster_series_select_sql
     )
   } else {
     meta_ids <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT 
-          rs.raster_series_id, 
-          rs.end_datetime, 
-          rs.last_issue, 
-          rt.raster_type_name AS type, 
-          rs.source_fx, 
-          rs.source_fx_args, 
-          COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name, 
-          rs.active 
-        FROM spatial.raster_series_index rs
-        JOIN spatial.raster_types rt ON rt.raster_type_id = rs.raster_type_id
-        LEFT JOIN public.parameters p ON p.parameter_id = rs.parameter_id
-        WHERE rs.raster_series_id IN ('",
+        raster_series_select_sql,
+        " WHERE rs.raster_series_id IN ('",
         paste(raster_series_ids, collapse = "', '"),
-        "') AND rs.source_fx IS NOT NULL;"
+        "');"
       )
     )
     if (length(raster_series_ids) != nrow(meta_ids)) {
       warning(
-        "At least one of the raster_series_ids you called for cannot be found in the database or has no function specified in column source_fx of table raster_series_index"
+        "At least one requested raster_series_id could not be found."
       )
     }
   }
@@ -111,6 +117,39 @@ getNewRasters <- function(
   if (nrow(meta_ids) == 0) {
     message("No raster_series_id's found to update based on input parameters.")
     return(NULL)
+  }
+
+  missing_source <- is.na(meta_ids$source_fx)
+  if (any(missing_source)) {
+    warning(
+      "The following raster series have no active source-adapter assignment ",
+      "and will be ignored: ",
+      paste(meta_ids$raster_series_id[missing_source], collapse = ", "),
+      "."
+    )
+    meta_ids <- meta_ids[!missing_source, , drop = FALSE]
+  }
+  if (nrow(meta_ids) == 0L) {
+    message("No raster series has an active source-adapter assignment.")
+    return(NULL)
+  }
+
+  registered_source_fx <- getSourceAdapterCapabilities(
+    con = con,
+    data_domain = "raster"
+  )$source_fx
+  unregistered_source_fx <- setdiff(
+    unique(meta_ids$source_fx),
+    registered_source_fx
+  )
+  if (length(unregistered_source_fx) > 0L) {
+    stop(
+      "getNewRasters: Every source_fx must have an enabled entry in ",
+      "public.source_adapter_capabilities for the raster domain. ",
+      "Missing or disabled: ",
+      paste(unregistered_source_fx, collapse = ", "),
+      "."
+    )
   }
 
   message("Fetching new rasters with getNewRasters")
@@ -227,8 +266,8 @@ getNewRasters <- function(
           }
           if (!is.na(source_fx_args)) {
             # add some arguments if they are specified
-            args <- jsonlite::fromJSON(source_fx_args)
-            args_list <- c(args_list, lapply(args, as.character))
+            args <- source_adapter_args_decode(source_fx_args)
+            args_list <- c(args_list, args)
           }
 
           rasters <- suppressWarnings(do.call(source_fx, args_list)) # Get the data using the args_list
@@ -272,7 +311,7 @@ getNewRasters <- function(
               message(
                 "Appending raster ",
                 j,
-                " out of ",
+                " of ",
                 length(rasters),
                 " for raster_series_id ",
                 id
@@ -521,7 +560,7 @@ getNewRasters <- function(
 
   message(
     count,
-    " out of ",
+    " of ",
     nrow(meta_ids),
     " raster_series_id's were updated."
   )

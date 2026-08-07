@@ -46,5 +46,7 @@ Calls several functions in sequence: \code{\link[=getNewContinuous]{getNewContin
 
 Note that new timeseries should be added using function \code{\link[=addACTimeseries]{addACTimeseries()}}.
 
-Any timeseries labelled as downloadAquarius in the source_fx column in the timeseries table will need your Aquarius username, password, and server URL present in your .Renviron profile, or those three parameters entered in the column source_fx_args: see downloadAquarius for more information about that function.
+Continuous and discrete series participate when they have an active fetch
+assignment. A selected \code{downloadAquarius} assignment needs credentials in
+\code{.Renviron} or in its \code{source_fx_args}; see \code{\link[=downloadAquarius]{downloadAquarius()}}.
 }

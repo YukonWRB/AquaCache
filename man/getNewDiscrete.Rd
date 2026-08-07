@@ -30,10 +30,18 @@ getNewDiscrete(
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-Retrieves new discrete data starting from the last data point in the local database, using the function specified in the sample_series table column "source_fx". Each sample series can also have a specified time range, allowing a certain location/sub-location to have multiple sample_series with different source functions and time ranges. The function will update the database in-place with the new data.
+Retrieves new discrete data starting from the last local sample. The active
+assignment with the lowest fetch priority in
+\code{discrete.sample_series_source_adapters} supplies each series' source
+function and arguments. Each series may also have a configured time range.
+Every source function must have an enabled discrete-domain entry in
+\code{public.source_adapter_capabilities}.
 \subsection{Making functions called by getNewDiscrete:}{
 
-Each sample_series_id in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return a list of lists, with each list element containing two data.frames: one named 'sample' with sample metadata and one named 'results' for associated results. The 'sample' data.frame must contain the following columns:
+An eligible source-adapter assignment specifies the function called to get
+new data and, optionally, its arguments. Source functions must return
+a list of lists, each containing data frames named \code{sample} and \code{results}.
+The \code{sample} data frame must contain the following columns:
 \itemize{
 \item 'location_id': a numeric specifying the location_id of the data point from table 'locations'.
 \item 'media_id': a numeric specifying the media_id of the data point from table 'medias'.
@@ -65,5 +73,6 @@ Additionally, the following columns may need to be included:
 }
 
 Additionally, functions must be able to handle the case where no new data is available and return an empty list.
+If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 }
 }

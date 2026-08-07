@@ -50,5 +50,7 @@ In addition, grades, qualifiers, and approvals are always updated as it's comput
 
 NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote exactly matching the datetime of the imputed entry, and any data point labelled as no_update = TRUE is not replaced by the remote dat (imputed or not).
 
-Any timeseries labelled as 'downloadAquarius' in the source_fx column in the timeseries table will need your Aquarius username, password, and server address present in your .Renviron profile: see \code{\link[=downloadAquarius]{downloadAquarius()}} for more information.
+A timeseries whose selected synchronization assignment uses
+\code{downloadAquarius} needs credentials in \code{.Renviron} or in that assignment's
+arguments; see \code{\link[=downloadAquarius]{downloadAquarius()}}.
 }

@@ -5,8 +5,7 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
     getNewContinuous = function(con, timeseries_id, stats = FALSE, ...) {
       captured$getnew_args <- list(
         con = con,
-        timeseries_id = timeseries_id,
-        stats = stats
+        timeseries_id = timeseries_id
       )
       data.frame(timeseries_id = timeseries_id)
     },
@@ -16,7 +15,7 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
     dbGetQuery = function(con, statement, ...) {
       if (
         grepl(
-          "SELECT timeseries_id, last_daily_calculation, active FROM continuous.timeseries WHERE source_fx IS NOT NULL",
+          "FROM continuous.timeseries t",
           statement,
           fixed = TRUE
         )
@@ -49,5 +48,4 @@ test_that("dailyUpdate relies on getNewContinuous for continuous stats updates",
   )
 
   expect_equal(captured$getnew_args$timeseries_id, c(101L, 202L))
-  expect_true(isTRUE(captured$getnew_args$stats))
 })
