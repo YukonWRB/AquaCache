@@ -48,6 +48,390 @@ tryCatch(
       )
     }
 
+    # Transmission setups belong directly to a location. A deployed logger is
+    # useful metadata when known, but it must not be required to configure a
+    # provider platform or ingest route.
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_metadata_transmission_setups
+       ADD COLUMN location_id INTEGER"
+    )
+    DBI::dbExecute(
+      con,
+      "UPDATE public.locations_metadata_transmission_setups s
+       SET location_id = lmi.location_id
+       FROM public.locations_metadata_instruments lmi
+       WHERE lmi.metadata_id = s.logger_metadata_id"
+    )
+    missing_setup_locations <- DBI::dbGetQuery(
+      con,
+      "SELECT transmission_setup_id
+       FROM public.locations_metadata_transmission_setups
+       WHERE location_id IS NULL"
+    )
+    if (nrow(missing_setup_locations) > 0L) {
+      stop(
+        "Patch 56 could not determine a location for transmission setup(s): ",
+        paste(missing_setup_locations$transmission_setup_id, collapse = ", ")
+      )
+    }
+    overlapping_setups <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         earlier.transmission_setup_id AS earlier_setup_id,
+         later.transmission_setup_id AS later_setup_id
+       FROM public.locations_metadata_transmission_setups earlier
+       JOIN public.locations_metadata_transmission_setups later
+         ON earlier.transmission_setup_id < later.transmission_setup_id
+        AND earlier.location_id = later.location_id
+        AND earlier.transmission_method_id = later.transmission_method_id
+        AND COALESCE(earlier.provider_name, '') =
+          COALESCE(later.provider_name, '')
+        AND COALESCE(earlier.platform_identifier, '') =
+          COALESCE(later.platform_identifier, '')
+        AND earlier.start_datetime <
+          COALESCE(later.end_datetime, 'infinity'::timestamptz)
+        AND COALESCE(earlier.end_datetime, 'infinity'::timestamptz) >
+          later.start_datetime"
+    )
+    if (nrow(overlapping_setups) > 0L) {
+      conflicts <- paste0(
+        overlapping_setups$earlier_setup_id,
+        "/",
+        overlapping_setups$later_setup_id
+      )
+      stop(
+        "Patch 56 found overlapping transmission setups for the same ",
+        "location, method, provider, and platform: ",
+        paste(conflicts, collapse = ", ")
+      )
+    }
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations_metadata_transmission_setups
+       DROP CONSTRAINT IF EXISTS
+         locations_metadata_transmission_setups_logger_metadata_id_fkey,
+       ALTER COLUMN logger_metadata_id DROP NOT NULL,
+       ALTER COLUMN location_id SET NOT NULL,
+       ADD CONSTRAINT locations_metadata_transmission_setups_location_fkey
+         FOREIGN KEY (location_id)
+         REFERENCES public.locations(location_id)
+         ON DELETE CASCADE ON UPDATE CASCADE,
+       ADD CONSTRAINT locations_metadata_transmission_setups_logger_fkey
+         FOREIGN KEY (logger_metadata_id)
+         REFERENCES public.locations_metadata_instruments(metadata_id)
+         ON DELETE SET NULL ON UPDATE CASCADE"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE public.locations_metadata_transmission_setups IS
+       'Temporal metadata describing how a location sends data outward through a provider platform. A deployed logger may be linked when known; attached telemetry hardware and route-level schedules live in child tables.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN public.locations_metadata_transmission_setups.location_id IS
+       'Location that owns this telemetry setup and its routes. This direct relationship remains required when the originating logger deployment is unknown.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN public.locations_metadata_transmission_setups.logger_metadata_id IS
+       'Optional deployed logger that originates the telemetry stream. When supplied, it must belong to location_id and span the setup period.'"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX locations_metadata_transmission_setups_location_range_idx
+       ON public.locations_metadata_transmission_setups
+       (location_id, start_datetime, end_datetime)"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.check_transmission_setup_bounds()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $$
+       DECLARE
+         logger_row RECORD;
+         logger_can_be_logger BOOLEAN;
+       BEGIN
+         IF NEW.logger_metadata_id IS NULL THEN
+           RETURN NEW;
+         END IF;
+
+         SELECT metadata_id, location_id, instrument_id, start_datetime,
+                end_datetime
+         INTO logger_row
+         FROM public.locations_metadata_instruments
+         WHERE metadata_id = NEW.logger_metadata_id;
+
+         IF NOT FOUND THEN
+           RAISE EXCEPTION 'Logger deployment % does not exist.',
+             NEW.logger_metadata_id;
+         END IF;
+
+         IF logger_row.location_id <> NEW.location_id THEN
+           RAISE EXCEPTION
+             'Logger deployment % belongs to location %, but transmission setup % belongs to location %.',
+             NEW.logger_metadata_id,
+             logger_row.location_id,
+             NEW.transmission_setup_id,
+             NEW.location_id;
+         END IF;
+
+         IF logger_row.instrument_id IS NULL THEN
+           RAISE EXCEPTION
+             'Logger deployment % must reference a deployed instrument.',
+             NEW.logger_metadata_id;
+         END IF;
+
+         SELECT can_be_logger
+         INTO logger_can_be_logger
+         FROM instruments.instruments
+         WHERE instrument_id = logger_row.instrument_id;
+
+         IF NOT FOUND OR logger_can_be_logger IS DISTINCT FROM TRUE THEN
+           RAISE EXCEPTION
+             'Logger deployment % must reference an instrument marked can_be_logger = TRUE.',
+             NEW.logger_metadata_id;
+         END IF;
+
+         IF NEW.start_datetime < logger_row.start_datetime THEN
+           RAISE EXCEPTION
+             'Transmission setup start_datetime must not be earlier than the logger deployment start.';
+         END IF;
+
+         IF COALESCE(NEW.end_datetime, 'infinity'::timestamptz) >
+            COALESCE(logger_row.end_datetime, 'infinity'::timestamptz) THEN
+           RAISE EXCEPTION
+             'Transmission setup end_datetime must not extend beyond the logger deployment period.';
+         END IF;
+
+         RETURN NEW;
+       END;
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.check_transmission_setup_overlap()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $$
+       BEGIN
+         IF EXISTS (
+           SELECT 1
+           FROM public.locations_metadata_transmission_setups s
+           WHERE s.transmission_setup_id <> NEW.transmission_setup_id
+             AND s.location_id = NEW.location_id
+             AND s.transmission_method_id = NEW.transmission_method_id
+             AND COALESCE(s.provider_name, '') = COALESCE(NEW.provider_name, '')
+             AND COALESCE(s.platform_identifier, '') =
+               COALESCE(NEW.platform_identifier, '')
+             AND NEW.start_datetime <
+               COALESCE(s.end_datetime, 'infinity'::timestamptz)
+             AND COALESCE(NEW.end_datetime, 'infinity'::timestamptz) >
+               s.start_datetime
+         ) THEN
+           RAISE EXCEPTION
+             'Duplicate overlapping telemetry setup detected for location %, method %, provider %, and platform identifier %.',
+             NEW.location_id,
+             NEW.transmission_method_id,
+             COALESCE(NEW.provider_name, '(none)'),
+             COALESCE(NEW.platform_identifier, '(none)');
+         END IF;
+
+         RETURN NEW;
+       END;
+       $$"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.check_transmission_component_bounds()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $$
+       DECLARE
+         setup_row RECORD;
+         component_row RECORD;
+         component_can_participate BOOLEAN;
+       BEGIN
+         SELECT transmission_setup_id, location_id, start_datetime, end_datetime
+         INTO setup_row
+         FROM public.locations_metadata_transmission_setups
+         WHERE transmission_setup_id = NEW.transmission_setup_id;
+
+         IF NOT FOUND THEN
+           RAISE EXCEPTION 'Transmission setup % does not exist.',
+             NEW.transmission_setup_id;
+         END IF;
+
+         SELECT metadata_id, location_id, instrument_id, start_datetime,
+                end_datetime
+         INTO component_row
+         FROM public.locations_metadata_instruments
+         WHERE metadata_id = NEW.component_metadata_id;
+
+         IF NOT FOUND THEN
+           RAISE EXCEPTION 'Transmission component deployment % does not exist.',
+             NEW.component_metadata_id;
+         END IF;
+
+         IF component_row.instrument_id IS NULL THEN
+           RAISE EXCEPTION
+             'Transmission component deployment % must reference a deployed instrument.',
+             NEW.component_metadata_id;
+         END IF;
+
+         SELECT (can_be_telemetry_component OR can_be_logger)
+         INTO component_can_participate
+         FROM instruments.instruments
+         WHERE instrument_id = component_row.instrument_id;
+
+         IF NOT FOUND OR component_can_participate IS DISTINCT FROM TRUE THEN
+           RAISE EXCEPTION
+             'Transmission component deployment % must reference an instrument marked can_be_telemetry_component = TRUE or can_be_logger = TRUE.',
+             NEW.component_metadata_id;
+         END IF;
+
+         IF component_row.location_id <> setup_row.location_id THEN
+           RAISE EXCEPTION
+             'Transmission component deployment % belongs to location %, but transmission setup % belongs to location %.',
+             NEW.component_metadata_id,
+             component_row.location_id,
+             NEW.transmission_setup_id,
+             setup_row.location_id;
+         END IF;
+
+         IF setup_row.start_datetime < component_row.start_datetime THEN
+           RAISE EXCEPTION
+             'Telemetry component deployment % must start on or before the telemetry setup start_datetime.',
+             NEW.component_metadata_id;
+         END IF;
+
+         IF COALESCE(setup_row.end_datetime, 'infinity'::timestamptz) >
+            COALESCE(component_row.end_datetime, 'infinity'::timestamptz) THEN
+           RAISE EXCEPTION
+             'Telemetry component deployment % must remain active for the full telemetry setup period.',
+             NEW.component_metadata_id;
+         END IF;
+
+         RETURN NEW;
+       END;
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.check_transmission_setup_component_bounds()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $$
+       BEGIN
+         IF EXISTS (
+           SELECT 1
+           FROM public.locations_metadata_transmission_components tc
+           JOIN public.locations_metadata_instruments c
+             ON c.metadata_id = tc.component_metadata_id
+           LEFT JOIN instruments.instruments ci
+             ON ci.instrument_id = c.instrument_id
+           WHERE tc.transmission_setup_id = NEW.transmission_setup_id
+             AND (
+               c.instrument_id IS NULL OR
+               (
+                 COALESCE(ci.can_be_telemetry_component, FALSE) IS DISTINCT FROM TRUE
+                 AND COALESCE(ci.can_be_logger, FALSE) IS DISTINCT FROM TRUE
+               ) OR
+               c.location_id <> NEW.location_id OR
+               NEW.start_datetime < c.start_datetime OR
+               COALESCE(NEW.end_datetime, 'infinity'::timestamptz) >
+                 COALESCE(c.end_datetime, 'infinity'::timestamptz)
+             )
+         ) THEN
+           RAISE EXCEPTION
+             'Existing telemetry components do not match the location or full period of transmission setup %.',
+             NEW.transmission_setup_id;
+         END IF;
+
+         RETURN NEW;
+       END;
+       $$"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.check_locations_metadata_instruments_transmission_dependents()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $$
+       BEGIN
+         IF EXISTS (
+           SELECT 1
+           FROM public.locations_metadata_transmission_setups s
+           JOIN public.locations_metadata_instruments l
+             ON l.metadata_id = s.logger_metadata_id
+           LEFT JOIN instruments.instruments li
+             ON li.instrument_id = l.instrument_id
+           WHERE s.logger_metadata_id = NEW.metadata_id
+             AND (
+               l.instrument_id IS NULL OR
+               li.can_be_logger IS DISTINCT FROM TRUE OR
+               l.location_id <> s.location_id OR
+               s.start_datetime < l.start_datetime OR
+               COALESCE(s.end_datetime, 'infinity'::timestamptz) >
+                 COALESCE(l.end_datetime, 'infinity'::timestamptz)
+             )
+         ) THEN
+           RAISE EXCEPTION
+             'Updating instrument deployment % would invalidate existing transmission setup metadata.',
+             NEW.metadata_id;
+         END IF;
+
+         IF EXISTS (
+           SELECT 1
+           FROM public.locations_metadata_transmission_components tc
+           JOIN public.locations_metadata_transmission_setups s
+             ON s.transmission_setup_id = tc.transmission_setup_id
+           JOIN public.locations_metadata_instruments c
+             ON c.metadata_id = tc.component_metadata_id
+           LEFT JOIN public.locations_metadata_instruments l
+             ON l.metadata_id = s.logger_metadata_id
+           LEFT JOIN instruments.instruments li
+             ON li.instrument_id = l.instrument_id
+           LEFT JOIN instruments.instruments ci
+             ON ci.instrument_id = c.instrument_id
+           WHERE (s.logger_metadata_id = NEW.metadata_id OR
+                  tc.component_metadata_id = NEW.metadata_id)
+             AND (
+               (
+                 s.logger_metadata_id IS NOT NULL AND (
+                   l.instrument_id IS NULL OR
+                   li.can_be_logger IS DISTINCT FROM TRUE OR
+                   l.location_id <> s.location_id OR
+                   s.start_datetime < l.start_datetime OR
+                   COALESCE(s.end_datetime, 'infinity'::timestamptz) >
+                     COALESCE(l.end_datetime, 'infinity'::timestamptz)
+                 )
+               ) OR
+               c.instrument_id IS NULL OR
+               (
+                 COALESCE(ci.can_be_telemetry_component, FALSE) IS DISTINCT FROM TRUE
+                 AND COALESCE(ci.can_be_logger, FALSE) IS DISTINCT FROM TRUE
+               ) OR
+               c.location_id <> s.location_id OR
+               s.start_datetime < c.start_datetime OR
+               COALESCE(s.end_datetime, 'infinity'::timestamptz) >
+                 COALESCE(c.end_datetime, 'infinity'::timestamptz)
+             )
+         ) THEN
+           RAISE EXCEPTION
+             'Updating instrument deployment % would invalidate existing transmission component metadata.',
+             NEW.metadata_id;
+         END IF;
+
+         RETURN NEW;
+       END;
+       $$"
+    )
+
     DBI::dbExecute(
       con,
       "CREATE TABLE public.source_adapter_capabilities (
@@ -1844,13 +2228,11 @@ tryCatch(
          target_location_id INTEGER;
          target_timeseries_type TEXT;
        BEGIN
-         SELECT lmi.location_id
+         SELECT s.location_id
          INTO route_location_id
          FROM public.locations_metadata_transmission_routes r
          JOIN public.locations_metadata_transmission_setups s
            ON s.transmission_setup_id = r.transmission_setup_id
-         JOIN public.locations_metadata_instruments lmi
-           ON lmi.metadata_id = s.logger_metadata_id
          WHERE r.transmission_route_id = NEW.transmission_route_id;
 
          IF NOT FOUND THEN

@@ -528,14 +528,12 @@ nesdis_get_routes <- function(con, route_ids, effective_at) {
        s.platform_identifier,
        s.start_datetime AS start_datetime_setup,
        s.end_datetime AS end_datetime_setup,
-       lmi.location_id
+       s.location_id
      FROM public.locations_metadata_transmission_routes r
      JOIN public.locations_metadata_transmission_setups s
        ON s.transmission_setup_id = r.transmission_setup_id
      JOIN instruments.transmission_methods tm
        ON tm.transmission_method_id = s.transmission_method_id
-     JOIN public.locations_metadata_instruments lmi
-       ON lmi.metadata_id = s.logger_metadata_id
      WHERE tm.method_code = 'GOES_DCS'
        AND s.start_datetime <= $1
        AND (s.end_datetime IS NULL OR s.end_datetime > $1)",

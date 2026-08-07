@@ -32,6 +32,30 @@ read_nesdis_fixture <- function(name) {
   )
 }
 
+test_that("NESDIS route lookup uses the setup location without a logger join", {
+  statement <- NULL
+  parameters <- NULL
+  local_mocked_bindings(
+    dbGetQuery = function(con, sql, params = NULL, ...) {
+      statement <<- sql
+      parameters <<- params
+      data.frame()
+    },
+    .package = "DBI"
+  )
+
+  result <- AquaCache:::nesdis_get_routes(
+    con = structure(list(), class = "mock_con"),
+    route_ids = 17L,
+    effective_at = as.POSIXct("2026-08-05 12:00:00", tz = "UTC")
+  )
+
+  expect_s3_class(result, "data.table")
+  expect_match(statement, "s.location_id", fixed = TRUE)
+  expect_false(grepl("locations_metadata_instruments", statement, fixed = TRUE))
+  expect_equal(length(parameters), 1L)
+})
+
 test_that("standard SHEF transmissions are parsed to normalized long data", {
   line <- make_lrgs_shef_line(
     "47002136",
