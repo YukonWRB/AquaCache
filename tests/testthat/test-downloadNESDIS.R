@@ -567,3 +567,39 @@ test_that("OpenDCS exception output is reported as a retrieval failure", {
     fixed = TRUE
   )
 })
+
+test_that("OpenDCS can use unauthenticated DDS access", {
+  skip_if(.Platform$OS.type != "windows")
+
+  client <- tempfile(fileext = ".bat")
+  on.exit(unlink(client, force = TRUE), add = TRUE)
+  writeLines(
+    c(
+      "@echo off",
+      ":check_args",
+      "if \"%~1\"==\"\" goto payload",
+      "if \"%~1\"==\"-P\" exit /b 33",
+      "shift",
+      "goto check_args",
+      ":payload",
+      'echo 4700000126209131337G4201NN123EAB00042":NESDIS_TEST 0 I15 42'
+    ),
+    client,
+    useBytes = TRUE
+  )
+
+  fetched <- AquaCache:::nesdis_fetch_lrgs(
+    dcp_address = "47000001",
+    since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
+    until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
+    client_path = client,
+    username = "test-user",
+    password = "",
+    servers = "127.0.0.1",
+    port = 16003,
+    timezone_offset = -8,
+    timeout_seconds = 30
+  )
+
+  expect_match(fetched$message, "NESDIS_TEST", fixed = TRUE)
+})

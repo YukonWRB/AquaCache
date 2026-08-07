@@ -44,7 +44,9 @@
 #' @param client_path Path to OpenDCS `getDcpMessages.bat`. The default is read
 #'   from `NESDIS_LRGS_CLIENT`, falling back to the standard local install path.
 #' @param username LRGS username. Defaults to `NESDIS_LRGS_USER`.
-#' @param password LRGS password. Defaults to `NESDIS_LRGS_PASSWORD`.
+#' @param password Optional LRGS password. Defaults to
+#'   `NESDIS_LRGS_PASSWORD`. Leave blank for servers that permit
+#'   unauthenticated DDS access.
 #' @param servers Optional character vector of LRGS servers. Route-level
 #'   `route_config.lrgs_servers` takes precedence when present.
 #' @param port Optional LRGS port. Route-level `route_config.lrgs_port` takes
@@ -877,10 +879,9 @@ nesdis_fetch_lrgs <- function(
       "'. Set NESDIS_LRGS_CLIENT environment variables or pass client_path."
     )
   }
-  if (!nzchar(username) || !nzchar(password)) {
+  if (!nzchar(username)) {
     stop(
-      "downloadNESDIS: Set NESDIS_LRGS_USER and NESDIS_LRGS_PASSWORD environment variables or pass ",
-      "username and password explicitly."
+      "downloadNESDIS: Set NESDIS_LRGS_USER or pass username explicitly."
     )
   }
   servers <- as.character(unlist(servers, use.names = FALSE))
@@ -925,9 +926,13 @@ nesdis_fetch_lrgs <- function(
       "-p",
       as.character(as.integer(port)),
       "-u",
-      username,
-      "-P",
-      password,
+      username
+    )
+    if (nzchar(password)) {
+      arguments <- c(arguments, "-P", password)
+    }
+    arguments <- c(
+      arguments,
       "-f",
       criteria_file,
       "-n"

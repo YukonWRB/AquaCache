@@ -47,7 +47,9 @@ from \code{NESDIS_LRGS_CLIENT}, falling back to the standard local install path.
 
 \item{username}{LRGS username. Defaults to \code{NESDIS_LRGS_USER}.}
 
-\item{password}{LRGS password. Defaults to \code{NESDIS_LRGS_PASSWORD}.}
+\item{password}{Optional LRGS password. Defaults to
+\code{NESDIS_LRGS_PASSWORD}. Leave blank for servers that permit
+unauthenticated DDS access.}
 
 \item{servers}{Optional character vector of LRGS servers. Route-level
 \code{route_config.lrgs_servers} takes precedence when present.}
