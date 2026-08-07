@@ -893,16 +893,12 @@ nesdis_fetch_lrgs <- function(
     pattern = paste0("nesdis_", dcp_address, "_"),
     fileext = ".sc"
   )
-  raw_log <- tempfile(
-    pattern = paste0("nesdis_", dcp_address, "_"),
-    fileext = ".log"
-  )
   stderr_file <- tempfile(
     pattern = paste0("nesdis_", dcp_address, "_stderr_"),
     fileext = ".log"
   )
   on.exit(
-    unlink(c(criteria_file, raw_log, stderr_file), force = TRUE),
+    unlink(c(criteria_file, stderr_file), force = TRUE),
     add = TRUE
   )
 
@@ -934,16 +930,16 @@ nesdis_fetch_lrgs <- function(
       password,
       "-f",
       criteria_file,
-      "-v",
-      "-n",
-      "-l",
-      raw_log
+      "-n"
     )
     normalized_client <- normalizePath(
       client_path,
       winslash = "\\",
       mustWork = TRUE
     )
+    # Keep diagnostics on stderr for system2() to capture. Asking OpenDCS to
+    # manage a separate -l file can fail before it connects to the LRGS.
+    unlink(stderr_file, force = TRUE)
     output <- tryCatch(
       system2(
         normalized_client,
@@ -956,16 +952,65 @@ nesdis_fetch_lrgs <- function(
     )
 
     if (inherits(output, "error")) {
-      attempts[[server]] <- conditionMessage(output)
+      diagnostic_text <- conditionMessage(output)
+      if (nzchar(password)) {
+        diagnostic_text <- gsub(
+          password,
+          "<redacted>",
+          diagnostic_text,
+          fixed = TRUE
+        )
+      }
+      attempts[[server]] <- list(
+        status = NA_integer_,
+        payload_bytes = 0,
+        failed = TRUE,
+        diagnostic = diagnostic_text
+      )
       next
     }
     status <- attr(output, "status") %||% 0L
     message_text <- paste(output, collapse = "\n")
+    stderr_text <- if (file.exists(stderr_file)) {
+      paste(readLines(stderr_file, warn = FALSE), collapse = "\n")
+    } else {
+      ""
+    }
+    output_lines <- trimws(strsplit(
+      message_text,
+      "\r\n|\n|\r",
+      perl = TRUE
+    )[[1L]])
+    # OpenDCS may exit successfully after printing status or exception text.
+    # Only a line with the requested DCP header is a retrieved payload.
+    has_payload <- any(startsWith(output_lines, dcp_address))
+    diagnostic_text <- paste(
+      c(message_text, stderr_text)[nzchar(c(message_text, stderr_text))],
+      collapse = "\n"
+    )
+    command_failed <- !identical(status, 0L) || (
+      !has_payload &&
+        grepl(
+          "exception|error|unable to|failed",
+          diagnostic_text,
+          ignore.case = TRUE
+        )
+    )
+    if (nzchar(password) && nzchar(diagnostic_text)) {
+      diagnostic_text <- gsub(
+        password,
+        "<redacted>",
+        diagnostic_text,
+        fixed = TRUE
+      )
+    }
     attempts[[server]] <- list(
       status = status,
-      payload_bytes = length(charToRaw(enc2utf8(message_text)))
+      payload_bytes = length(charToRaw(enc2utf8(message_text))),
+      failed = command_failed,
+      diagnostic = diagnostic_text
     )
-    if (identical(status, 0L) && nchar(message_text, type = "bytes") > 38L) {
+    if (!command_failed && has_payload) {
       return(list(
         message = message_text,
         server = server,
@@ -982,7 +1027,9 @@ nesdis_fetch_lrgs <- function(
   # failed, retain the attempt summary in the error without exposing secrets.
   successful <- vapply(
     attempts,
-    function(x) is.list(x) && identical(x$status, 0L),
+    function(x) {
+      is.list(x) && identical(x$status, 0L) && !isTRUE(x$failed)
+    },
     logical(1)
   )
   if (any(successful)) {
@@ -998,11 +1045,23 @@ nesdis_fetch_lrgs <- function(
     ))
   }
 
+  failure_details <- vapply(
+    names(attempts),
+    function(server) {
+      attempt <- attempts[[server]]
+      diagnostic <- attempt$diagnostic
+      if (length(diagnostic) == 0L || !nzchar(diagnostic)) {
+        diagnostic <- "OpenDCS exited without a usable response."
+      }
+      paste0(server, ": ", diagnostic)
+    },
+    character(1)
+  )
   stop(
     "downloadNESDIS: All LRGS servers failed for DCP ",
     dcp_address,
-    ". Attempted: ",
-    paste(names(attempts), collapse = ", "),
+    ". ",
+    paste(failure_details, collapse = "; "),
     "."
   )
 }
