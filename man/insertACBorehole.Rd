@@ -43,7 +43,9 @@ insertACBorehole(
   seal_depth_from = NULL,
   seal_depth_to = NULL,
   screen_material = NULL,
-  screen_type = NULL
+  screen_type = NULL,
+  borehole_name = well_name[1],
+  document_name = NULL
 )
 }
 \arguments{
@@ -51,7 +53,12 @@ insertACBorehole(
 
 \item{path}{Path to a document/file to attach to the borehole record. If NULL, no document is attached.}
 
-\item{well_name}{Name of the borehole/well. Required.}
+\item{document_name}{Optional name for the attached document. When omitted,
+the name defaults to \code{"Document for borehole/well <borehole_name>"}.}
+
+\item{well_name}{Character vector containing one name per well when
+\code{is_well = TRUE}. For backward compatibility, the first value is also the
+default \code{borehole_name}.}
 
 \item{location_id}{Optional location ID if the borehole is associated with a predefined location.}
 
@@ -69,7 +76,8 @@ insertACBorehole(
 
 \item{bedrock_reached}{Logical indicating if bedrock was reached during drilling. Default is NULL (unknown).}
 
-\item{depth_to_bedrock}{Depth to bedrock in meters.}
+\item{depth_to_bedrock}{Depth to bedrock in meters. \code{NULL} or the character
+value \code{"Unknown"} records an unknown depth.}
 
 \item{permafrost_present}{Logical indicating if permafrost is present. Default is FALSE.}
 
@@ -79,27 +87,31 @@ insertACBorehole(
 
 \item{date_drilled}{Date when the borehole was drilled.}
 
-\item{casing_od}{Outside diameter of the casing in milimeters}
+\item{casing_od}{Outside diameter of each well casing in millimeters. A
+scalar is recycled across wells.}
 
 \item{is_well}{Logical indicating if the borehole is also a well. Default is FALSE.}
 
 \item{well_depth}{Total depth of the well in meters.}
 
-\item{top_of_screen}{Depth to the top of the well screen in meters.}
+\item{top_of_screen}{Depth to the top of each well screen in meters. A
+scalar is recycled across wells.}
 
-\item{bottom_of_screen}{Depth to the bottom of the well screen in meters.}
+\item{bottom_of_screen}{Depth to the bottom of each well screen in meters. A
+scalar is recycled across wells.}
 
-\item{well_head_stick_up}{Height of the well head above ground in meters.}
+\item{well_head_stick_up}{Height of each well head above ground in meters.}
 
-\item{static_water_level}{Static water level measured from the top of the well in meters.}
+\item{static_water_level}{Static water level measured from the top of each
+well in meters.}
 
-\item{estimated_yield}{Estimated yield of the well in liters per minute.}
+\item{estimated_yield}{Estimated yield of each well in liters per second.}
 
 \item{ground_elev_m}{Ground elevation in meters.}
 
 \item{notes_borehole}{Additional notes about the borehole.}
 
-\item{notes_well}{Additional notes about the well.}
+\item{notes_well}{Additional notes for each well.}
 
 \item{share_with_borehole}{A character vector of the user group(s) with which to share the borehole, one element per group. Default is "public_reader".}
 
@@ -109,14 +121,18 @@ insertACBorehole(
 English or French method name already present in that table. Text matching
 is case-insensitive and ignores surrounding whitespace.}
 
-\item{purpose_of_well}{Purpose of the borehole as integer matching the database's borehole_well_purpose column. Default is \code{purpose_of_borehole}.}
+\item{purpose_of_well}{Purpose of each well as an integer matching the
+database's borehole_well_purpose column. A scalar is recycled across wells.}
 
-\item{purpose_well_inferred}{Logical indicating if the purpose of the borehole is inferred (TRUE) or explicit in documentation (FALSE). Default is \code{purpose_borehole_inferred}.}
+\item{purpose_well_inferred}{Logical vector indicating whether each well
+purpose is inferred. A scalar is recycled across wells.}
 
-\item{share_with_well}{A character vector of the user group(s) with which to share the well, one elemtn per group. Default is \code{share_with_borehole}.}
+\item{share_with_well}{A character vector of groups applied to every well,
+or a list containing one character vector of groups per well.}
 
 \item{seal_material}{Seal-material ID from \code{boreholes.seal_materials}, or an
-English or French material name already present in that table.}
+English or French material name already present in that table. A scalar is
+recycled across wells.}
 
 \item{seal_diameter_mm}{Outside diameter of the annular seal in millimeters.}
 
@@ -126,10 +142,15 @@ English or French material name already present in that table.}
 
 \item{screen_material}{Screen-material ID from
 \code{boreholes.screen_materials}, or an English or French material name
-already present in that table.}
+already present in that table. A scalar is recycled across wells.}
 
 \item{screen_type}{Screen-type ID from \code{boreholes.screen_types}, or an
-English or French type name already present in that table.}
+English or French type name already present in that table. A scalar is
+recycled across wells.}
+
+\item{borehole_name}{Name of the borehole. Defaults to the first element of
+\code{well_name}, preserving the historical one-to-one borehole/well naming
+behaviour.}
 }
 \value{
 The borehole_id of the newly inserted record.
@@ -138,6 +159,8 @@ The borehole_id of the newly inserted record.
 This function facilitates the addition of a borehole record to the database. If the borehole
 is also a well, additional well-specific information can be provided. The function can also
 associate a document with the borehole and handle permafrost information if present.
+Supply one \code{well_name} per well. Other well-specific arguments may contain
+either one value, which is recycled, or one value per well.
 }
 \examples{
 \dontrun{

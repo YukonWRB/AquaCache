@@ -10,8 +10,7 @@ downloadNESDIS(
   start_datetime = NULL,
   end_datetime = Sys.time(),
   con = NULL,
-  client_path = Sys.getenv("NESDIS_LRGS_CLIENT",
-    "C:/opendcs-7.0.16-RC06/bin/getDcpMessages.bat"),
+  client_path = NULL,
   username = Sys.getenv("NESDIS_LRGS_USER"),
   password = Sys.getenv("NESDIS_LRGS_PASSWORD"),
   servers = NULL,
@@ -42,8 +41,10 @@ the latest successful route query is used with the configured overlap.}
 \item{con}{AquaCache database connection. When \code{NULL}, \code{\link[=AquaConnect]{AquaConnect()}} is
 used and the connection is closed on exit.}
 
-\item{client_path}{Path to OpenDCS \code{getDcpMessages.bat}. The default is read
-from \code{NESDIS_LRGS_CLIENT}, falling back to the standard local install path.}
+\item{client_path}{Optional path to the OpenDCS \code{getDcpMessages} launcher
+(\code{getDcpMessages.bat} on Windows). When \code{NULL}, AquaCache checks
+\code{NESDIS_LRGS_CLIENT}, the system \code{PATH}, \code{DCSTOOL_HOME/bin}, and finally
+the legacy AquaCache Windows install path.}
 
 \item{username}{LRGS username. Defaults to \code{NESDIS_LRGS_USER}.}
 

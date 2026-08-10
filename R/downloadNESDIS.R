@@ -41,8 +41,10 @@
 #' @param end_datetime End of the query window. Defaults to the current time.
 #' @param con AquaCache database connection. When `NULL`, [AquaConnect()] is
 #'   used and the connection is closed on exit.
-#' @param client_path Path to OpenDCS `getDcpMessages.bat`. The default is read
-#'   from `NESDIS_LRGS_CLIENT`, falling back to the standard local install path.
+#' @param client_path Optional path to the OpenDCS `getDcpMessages` launcher
+#'   (`getDcpMessages.bat` on Windows). When `NULL`, AquaCache checks
+#'   `NESDIS_LRGS_CLIENT`, the system `PATH`, `DCSTOOL_HOME/bin`, and finally
+#'   the legacy AquaCache Windows install path.
 #' @param username LRGS username. Defaults to `NESDIS_LRGS_USER`.
 #' @param password Optional LRGS password. Defaults to
 #'   `NESDIS_LRGS_PASSWORD`. Leave blank for servers that permit
@@ -81,10 +83,7 @@ downloadNESDIS <- function(
   start_datetime = NULL,
   end_datetime = Sys.time(),
   con = NULL,
-  client_path = Sys.getenv(
-    "NESDIS_LRGS_CLIENT",
-    "C:/opendcs-7.0.16-RC06/bin/getDcpMessages.bat"
-  ),
+  client_path = NULL,
   username = Sys.getenv("NESDIS_LRGS_USER"),
   password = Sys.getenv("NESDIS_LRGS_PASSWORD"),
   servers = NULL,
@@ -872,13 +871,7 @@ nesdis_fetch_lrgs <- function(
   timezone_offset,
   timeout_seconds
 ) {
-  if (!nzchar(client_path) || !file.exists(client_path)) {
-    stop(
-      "downloadNESDIS: OpenDCS LRGS client was not found at '",
-      client_path,
-      "'. Set NESDIS_LRGS_CLIENT environment variables or pass client_path."
-    )
-  }
+  client_path <- nesdis_resolve_client_path(client_path)
   if (!nzchar(username)) {
     stop(
       "downloadNESDIS: Set NESDIS_LRGS_USER or pass username explicitly."
@@ -1067,6 +1060,101 @@ nesdis_fetch_lrgs <- function(
     dcp_address,
     ". ",
     paste(failure_details, collapse = "; "),
+    "."
+  )
+}
+
+#' @keywords internal
+#' @noRd
+nesdis_resolve_client_path <- function(client_path = NULL) {
+  if (!is.null(client_path)) {
+    if (
+      length(client_path) != 1L ||
+        is.na(client_path) ||
+        !nzchar(trimws(client_path))
+    ) {
+      stop(
+        "downloadNESDIS: client_path must be NULL or one non-empty path."
+      )
+    }
+    client_path <- path.expand(trimws(client_path))
+    if (!file.exists(client_path)) {
+      stop(
+        "downloadNESDIS: OpenDCS LRGS client was not found at '",
+        client_path,
+        "'."
+      )
+    }
+    if (.Platform$OS.type != "windows" && file.access(client_path, 1L) != 0L) {
+      stop(
+        "downloadNESDIS: OpenDCS LRGS client is not executable: '",
+        client_path,
+        "'."
+      )
+    }
+    return(normalizePath(
+      client_path,
+      winslash = if (.Platform$OS.type == "windows") "\\" else "/",
+      mustWork = TRUE
+    ))
+  }
+
+  launcher_names <- if (.Platform$OS.type == "windows") {
+    c("getDcpMessages.bat", "getDcpMessages")
+  } else {
+    "getDcpMessages"
+  }
+  candidates <- character()
+
+  environment_client <- trimws(Sys.getenv(
+    "NESDIS_LRGS_CLIENT",
+    unset = ""
+  ))
+  if (nzchar(environment_client)) {
+    candidates <- c(candidates, environment_client)
+  }
+
+  path_clients <- unname(Sys.which(launcher_names))
+  candidates <- c(candidates, path_clients[nzchar(path_clients)])
+
+  dcstool_home <- trimws(Sys.getenv("DCSTOOL_HOME", unset = ""))
+  if (nzchar(dcstool_home)) {
+    candidates <- c(
+      candidates,
+      file.path(dcstool_home, "bin", launcher_names)
+    )
+  }
+
+  if (.Platform$OS.type == "windows") {
+    candidates <- c(
+      candidates,
+      "C:/opendcs-7.0.16-RC06/bin/getDcpMessages.bat"
+    )
+  }
+
+  candidates <- unique(path.expand(candidates[nzchar(candidates)]))
+  usable <- file.exists(candidates)
+  if (.Platform$OS.type != "windows" && any(usable)) {
+    usable[usable] <- file.access(candidates[usable], 1L) == 0L
+  }
+  if (any(usable)) {
+    return(normalizePath(
+      candidates[which(usable)[1L]],
+      winslash = if (.Platform$OS.type == "windows") "\\" else "/",
+      mustWork = TRUE
+    ))
+  }
+
+  checked <- if (length(candidates)) {
+    paste(sprintf("'%s'", candidates), collapse = ", ")
+  } else {
+    "no candidate files"
+  }
+  stop(
+    "downloadNESDIS: OpenDCS LRGS client was not found. Pass client_path, ",
+    "set NESDIS_LRGS_CLIENT, add getDcpMessages to PATH, or set ",
+    "DCSTOOL_HOME. Checked: ",
+    checked,
     "."
   )
 }

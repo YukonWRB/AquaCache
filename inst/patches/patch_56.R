@@ -1,5 +1,6 @@
 # Patch 56 adds a source-adapter registry, provider-neutral transmission
-# mappings, operational history, and governed well-construction catalogues.
+# mappings, operational history, borehole and well approval status, and
+# governed well-construction catalogues.
 # The first adapter using these objects retrieves GOES DCS transmissions from
 # NESDIS/LRGS, but the schema also supports other providers and transports.
 
@@ -11,7 +12,7 @@ if (check$session_user != "postgres") {
 }
 
 message(
-  "Working on patch 56: adding the cross-domain source-adapter registry, provider-neutral transmission mappings, import-run history, and governed well-construction details. Changes are being made within a transaction, so an error will roll back the database."
+  "Working on patch 56: adding the cross-domain source-adapter registry, provider-neutral transmission mappings, import-run history, borehole and well approval status, and governed well-construction details. Changes are being made within a transaction, so an error will roll back the database."
 )
 
 if (dbTransCheck(con)) {
@@ -34,6 +35,7 @@ tryCatch(
          to_regclass('files.image_series') IS NOT NULL AS has_image_series,
          to_regclass('spatial.raster_series_index') IS NOT NULL AS has_raster_series,
          to_regclass('instruments.transmission_methods') IS NOT NULL AS has_methods,
+         to_regclass('public.approval_types') IS NOT NULL AS has_approval_types,
          to_regclass('boreholes.boreholes') IS NOT NULL AS has_boreholes,
          to_regclass('boreholes.wells') IS NOT NULL AS has_wells,
          to_regclass('information.version_info') IS NOT NULL AS has_version_info,
@@ -44,9 +46,26 @@ tryCatch(
     if (!all(unlist(required[1, ], use.names = FALSE))) {
       stop(
         "Patch 56 requires the transmission metadata, continuous, discrete, ",
-        "image, raster, borehole, well, audit, and version objects created by earlier patches."
+        "image, raster, approval-type, borehole, well, audit, and version objects created by earlier patches."
       )
     }
+
+    not_reviewed <- DBI::dbGetQuery(
+      con,
+      "SELECT approval_type_id
+       FROM public.approval_types
+       WHERE approval_type_code = 'N'"
+    )
+    if (
+      nrow(not_reviewed) != 1L ||
+        is.na(not_reviewed$approval_type_id[[1]])
+    ) {
+      stop(
+        "Patch 56 requires exactly one public.approval_types row with code ",
+        "'N' (Not reviewed)."
+      )
+    }
+    not_reviewed_id <- as.integer(not_reviewed$approval_type_id[[1]])
 
     # Transmission setups belong directly to a location. A deployed logger is
     # useful metadata when known, but it must not be required to configure a
@@ -960,7 +979,7 @@ tryCatch(
             managed(
               "client_path",
               "environment",
-              "The function default reads NESDIS_LRGS_CLIENT."
+              "AquaCache resolves the OpenDCS launcher from NESDIS_LRGS_CLIENT, PATH, or DCSTOOL_HOME when a path is not supplied explicitly."
             ),
             managed(
               "username",
@@ -2633,6 +2652,143 @@ tryCatch(
       )
     }
 
+    # Add record-level approval status to boreholes and wells. Existing table
+    # privileges apply automatically to added columns, preserving the PUBLIC
+    # and role-based access already established for these base tables.
+    for (table_name in c("boreholes", "wells")) {
+      qualified_table <- paste0("boreholes.", table_name)
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER TABLE %s
+           ADD COLUMN IF NOT EXISTS approval_type_id INTEGER",
+          qualified_table
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "UPDATE %s
+           SET approval_type_id = $1",
+          qualified_table
+        ),
+        params = list(not_reviewed_id)
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER TABLE %s
+           ALTER COLUMN approval_type_id SET NOT NULL,
+           ALTER COLUMN approval_type_id SET DEFAULT %d",
+          qualified_table,
+          not_reviewed_id
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DO $body$
+           BEGIN
+             IF NOT EXISTS (
+               SELECT 1
+               FROM pg_constraint
+               WHERE conrelid = '%s'::regclass
+                 AND conname = '%s_approval_type_id_fkey'
+             ) THEN
+               ALTER TABLE %s
+               ADD CONSTRAINT %s_approval_type_id_fkey
+               FOREIGN KEY (approval_type_id)
+               REFERENCES public.approval_types(approval_type_id)
+               ON UPDATE CASCADE
+               ON DELETE RESTRICT;
+             END IF;
+           END
+           $body$",
+          qualified_table,
+          table_name,
+          qualified_table,
+          table_name
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "COMMENT ON COLUMN %s.approval_type_id IS
+           'Current review and approval level from public.approval_types. New records default to Not reviewed (N).'",
+          qualified_table
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE INDEX IF NOT EXISTS %s_approval_type_id_idx
+           ON %s (approval_type_id)",
+          table_name,
+          qualified_table
+        )
+      )
+    }
+
+    # Wells are independent records beneath a borehole and therefore need
+    # their own names when more than one well occupies the same borehole.
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.wells
+       ADD COLUMN IF NOT EXISTS well_name TEXT"
+    )
+    DBI::dbExecute(
+      con,
+      "WITH numbered_wells AS (
+         SELECT w.well_id,
+                COALESCE(
+                  NULLIF(BTRIM(b.borehole_name), ''),
+                  'Borehole ' || b.borehole_id
+                ) AS base_name,
+                ROW_NUMBER() OVER (
+                  PARTITION BY w.borehole_id
+                  ORDER BY w.well_id
+                ) AS well_number,
+                COUNT(*) OVER (PARTITION BY w.borehole_id) AS well_count
+         FROM boreholes.wells w
+         INNER JOIN boreholes.boreholes b USING (borehole_id)
+       )
+       UPDATE boreholes.wells w
+       SET well_name = CASE
+         WHEN numbered_wells.well_count = 1 THEN numbered_wells.base_name
+         ELSE numbered_wells.base_name || ' ' || numbered_wells.well_number
+       END
+       FROM numbered_wells
+       WHERE w.well_id = numbered_wells.well_id
+         AND NULLIF(BTRIM(w.well_name), '') IS NULL"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE boreholes.wells
+       ALTER COLUMN well_name SET NOT NULL"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN boreholes.wells.well_name IS
+       'Name of this well. It may match its borehole for a one-to-one relationship but must identify the individual well when a borehole contains multiple wells.'"
+    )
+    DBI::dbExecute(
+      con,
+      "DO $body$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1
+           FROM pg_constraint
+           WHERE conrelid = 'boreholes.wells'::regclass
+             AND conname = 'wells_borehole_well_name_key'
+         ) THEN
+           ALTER TABLE boreholes.wells
+           ADD CONSTRAINT wells_borehole_well_name_key
+           UNIQUE (borehole_id, well_name);
+         END IF;
+       END
+       $body$"
+    )
+
     # Add a controlled catalogue for borehole drilling methods.
     DBI::dbExecute(
       con,
@@ -3186,7 +3342,7 @@ tryCatch(
     DBI::dbExecute(con, "COMMIT")
     active <- FALSE
     message(
-      "Patch 56 applied successfully. Source adapters are now registered by data domain, transmission imports retain durable mappings and history, and wells use governed seal and screen construction details."
+      "Patch 56 applied successfully. Source adapters are now registered by data domain, transmission imports retain durable mappings and history, boreholes and wells have record-level approval status, and wells have individual names plus governed seal and screen construction details."
     )
   },
   error = function(e) {

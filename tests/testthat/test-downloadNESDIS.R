@@ -32,6 +32,26 @@ read_nesdis_fixture <- function(name) {
   )
 }
 
+make_test_lrgs_client <- function() {
+  client_dir <- tempfile("opendcs-client-")
+  dir.create(client_dir)
+  launcher <- if (.Platform$OS.type == "windows") {
+    "getDcpMessages.bat"
+  } else {
+    "getDcpMessages"
+  }
+  client <- file.path(client_dir, launcher)
+  writeLines(
+    if (.Platform$OS.type == "windows") "@echo off" else "#!/bin/sh",
+    client,
+    useBytes = TRUE
+  )
+  if (.Platform$OS.type != "windows") {
+    Sys.chmod(client, mode = "0755")
+  }
+  list(directory = client_dir, client = client)
+}
+
 test_that("NESDIS route lookup uses the setup location without a logger join", {
   statement <- NULL
   parameters <- NULL
@@ -496,6 +516,75 @@ test_that("raw DCP cache reuses a covering payload", {
   expect_equal(second$message, "payload")
   expect_equal(fetch_count, 1L)
   expect_true(second$source_metadata$cache_hit)
+})
+
+test_that("OpenDCS client discovery honors an explicit path", {
+  test_client <- make_test_lrgs_client()
+  on.exit(unlink(test_client$directory, recursive = TRUE, force = TRUE), add = TRUE)
+
+  expect_equal(
+    AquaCache:::nesdis_resolve_client_path(test_client$client),
+    normalizePath(test_client$client, mustWork = TRUE)
+  )
+})
+
+test_that("OpenDCS client discovery honors NESDIS_LRGS_CLIENT", {
+  test_client <- make_test_lrgs_client()
+  on.exit(unlink(test_client$directory, recursive = TRUE, force = TRUE), add = TRUE)
+  withr::local_envvar(c(NESDIS_LRGS_CLIENT = test_client$client))
+
+  expect_equal(
+    AquaCache:::nesdis_resolve_client_path(),
+    normalizePath(test_client$client, mustWork = TRUE)
+  )
+})
+
+test_that("OpenDCS client discovery searches PATH", {
+  test_client <- make_test_lrgs_client()
+  on.exit(unlink(test_client$directory, recursive = TRUE, force = TRUE), add = TRUE)
+  withr::local_envvar(c(
+    NESDIS_LRGS_CLIENT = NA,
+    DCSTOOL_HOME = NA,
+    PATH = test_client$directory
+  ))
+
+  expect_equal(
+    AquaCache:::nesdis_resolve_client_path(),
+    normalizePath(test_client$client, mustWork = TRUE)
+  )
+})
+
+test_that("OpenDCS client discovery searches DCSTOOL_HOME", {
+  test_client <- make_test_lrgs_client()
+  dcstool_home <- tempfile("DCSTOOL_HOME-")
+  dir.create(file.path(dcstool_home, "bin"), recursive = TRUE)
+  dcstool_client <- file.path(
+    dcstool_home,
+    "bin",
+    basename(test_client$client)
+  )
+  file.copy(test_client$client, dcstool_client)
+  if (.Platform$OS.type != "windows") {
+    Sys.chmod(dcstool_client, mode = "0755")
+  }
+  on.exit(
+    unlink(
+      c(test_client$directory, dcstool_home),
+      recursive = TRUE,
+      force = TRUE
+    ),
+    add = TRUE
+  )
+  withr::local_envvar(c(
+    NESDIS_LRGS_CLIENT = NA,
+    DCSTOOL_HOME = dcstool_home,
+    PATH = ""
+  ))
+
+  expect_equal(
+    AquaCache:::nesdis_resolve_client_path(),
+    normalizePath(dcstool_client, mustWork = TRUE)
+  )
 })
 
 test_that("OpenDCS batch clients are invoked directly on Windows", {
