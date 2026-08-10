@@ -173,6 +173,7 @@ getSourceAdapterCapabilities <- function(
 #'   section.
 #'
 #' @return A validated JSON-compatible argument descriptor.
+#' @export
 sourceAdapterArgument <- function(
   name,
   source = c("user", "runtime", "environment", "internal"),
