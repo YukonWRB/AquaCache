@@ -2010,120 +2010,6 @@ tryCatch(
        )"
     )
 
-    # Calculated-daily rows are a derived cache, not source observations. Patch
-    # 41 allowed their date-only values to update timeseries datetime bounds by
-    # converting each date to midnight UTC. For a series whose first source
-    # observation occurred later that day, the daily-cache insert therefore
-    # replaced the precise timestamp with 00:00:00. Keep bounds tied to the
-    # source measurements and remove the cache-to-metadata feedback path.
-    message(
-      "Fixing issue with timeseries start datetime metadata where the start defaulted to the day's start rather than the actual data start. Recalculation can take a while."
-    )
-    for (trigger_name in c(
-      "refresh_basic_metadata_on_daily_measurements_insert_tr",
-      "refresh_basic_metadata_on_daily_measurements_update_tr",
-      "refresh_basic_metadata_on_daily_measurements_delete_tr"
-    )) {
-      DBI::dbExecute(
-        con,
-        sprintf(
-          "DROP TRIGGER %s ON continuous.measurements_calculated_daily",
-          trigger_name
-        )
-      )
-    }
-    for (function_name in c(
-      "refresh_basic_metadata_on_daily_measurements_insert",
-      "refresh_basic_metadata_on_daily_measurements_update",
-      "refresh_basic_metadata_on_daily_measurements_delete"
-    )) {
-      DBI::dbExecute(
-        con,
-        sprintf(
-          "DROP FUNCTION continuous.%s()",
-          function_name
-        )
-      )
-    }
-    DBI::dbExecute(
-      con,
-      "CREATE OR REPLACE FUNCTION continuous.refresh_basic_timeseries_datetime_bounds(
-         p_timeseries_ids INTEGER[]
-       )
-       RETURNS void
-       LANGUAGE sql
-       AS $function$
-         WITH ids AS (
-           SELECT DISTINCT x.timeseries_id
-           FROM unnest(p_timeseries_ids) AS x(timeseries_id)
-           WHERE x.timeseries_id IS NOT NULL
-         ),
-         bounds AS (
-           SELECT
-             ids.timeseries_id,
-             MIN(mc.datetime) AS start_datetime,
-             MAX(mc.datetime) AS end_datetime
-           FROM ids
-           LEFT JOIN continuous.measurements_continuous mc
-             ON mc.timeseries_id = ids.timeseries_id
-           GROUP BY ids.timeseries_id
-         )
-         UPDATE continuous.timeseries t
-         SET
-           start_datetime = b.start_datetime,
-           end_datetime = b.end_datetime
-         FROM bounds b
-         WHERE t.timeseries_id = b.timeseries_id
-           AND t.timeseries_type = 'basic'
-           AND (
-             t.start_datetime IS DISTINCT FROM b.start_datetime OR
-             t.end_datetime IS DISTINCT FROM b.end_datetime
-           );
-       $function$"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON FUNCTION continuous.refresh_basic_timeseries_datetime_bounds(INTEGER[]) IS
-       'Recomputes start_datetime and end_datetime exactly for the supplied basic continuous timeseries_ids from source rows in measurements_continuous. The derived measurements_calculated_daily cache does not define source-data bounds.'"
-    )
-    DBI::dbExecute(
-      con,
-      "SELECT continuous.refresh_basic_timeseries_datetime_bounds(
-         ARRAY(
-           SELECT timeseries_id
-           FROM continuous.timeseries
-           WHERE timeseries_type = 'basic'
-         )
-       )"
-    )
-
-    datetime_bound_errors <- DBI::dbGetQuery(
-      con,
-      "SELECT
-         t.timeseries_id,
-         t.start_datetime,
-         MIN(mc.datetime) AS expected_start_datetime,
-         t.end_datetime,
-         MAX(mc.datetime) AS expected_end_datetime
-       FROM continuous.timeseries t
-       LEFT JOIN continuous.measurements_continuous mc
-         ON mc.timeseries_id = t.timeseries_id
-       WHERE t.timeseries_type = 'basic'
-       GROUP BY
-         t.timeseries_id,
-         t.start_datetime,
-         t.end_datetime
-       HAVING
-         t.start_datetime IS DISTINCT FROM MIN(mc.datetime)
-         OR t.end_datetime IS DISTINCT FROM MAX(mc.datetime)"
-    )
-    if (nrow(datetime_bound_errors) > 0L) {
-      stop(
-        "Patch 56 could not align continuous.timeseries datetime bounds with ",
-        "the source continuous measurements for timeseries_id(s): ",
-        paste(datetime_bound_errors$timeseries_id, collapse = ", ")
-      )
-    }
     DBI::dbExecute(
       con,
       "CREATE FUNCTION continuous.check_basic_timeseries_source_adapter()
@@ -3033,6 +2919,125 @@ tryCatch(
         "Cannot convert boreholes.boreholes.drill_method because these existing values are not in the new catalogue: ",
         paste(existing_drill_methods$drill_method, collapse = ", "),
         ". Update Patch 56's catalogue or clean those values before applying the patch."
+      )
+    }
+
+    # Calculated-daily rows are a derived cache, not source observations. Patch
+    # 41 allowed their date-only values to update timeseries datetime bounds by
+    # converting each date to midnight UTC. For a series whose first source
+    # observation occurred later that day, the daily-cache insert therefore
+    # replaced the precise timestamp with 00:00:00. Keep bounds tied to the
+    # source measurements and remove the cache-to-metadata feedback path.
+    #
+    # Keep this backfill after every ALTER TABLE on continuous.timeseries. The
+    # update fires timeseries triggers, and PostgreSQL will reject a later ALTER
+    # TABLE while any resulting trigger events are still pending.
+    message(
+      "Fixing issue with timeseries start datetime metadata where the start defaulted to the day's start rather than the actual data start. Recalculation can take a while."
+    )
+    for (trigger_name in c(
+      "refresh_basic_metadata_on_daily_measurements_insert_tr",
+      "refresh_basic_metadata_on_daily_measurements_update_tr",
+      "refresh_basic_metadata_on_daily_measurements_delete_tr"
+    )) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP TRIGGER %s ON continuous.measurements_calculated_daily",
+          trigger_name
+        )
+      )
+    }
+    for (function_name in c(
+      "refresh_basic_metadata_on_daily_measurements_insert",
+      "refresh_basic_metadata_on_daily_measurements_update",
+      "refresh_basic_metadata_on_daily_measurements_delete"
+    )) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "DROP FUNCTION continuous.%s()",
+          function_name
+        )
+      )
+    }
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION continuous.refresh_basic_timeseries_datetime_bounds(
+         p_timeseries_ids INTEGER[]
+       )
+       RETURNS void
+       LANGUAGE sql
+       AS $function$
+         WITH ids AS (
+           SELECT DISTINCT x.timeseries_id
+           FROM unnest(p_timeseries_ids) AS x(timeseries_id)
+           WHERE x.timeseries_id IS NOT NULL
+         ),
+         bounds AS (
+           SELECT
+             ids.timeseries_id,
+             MIN(mc.datetime) AS start_datetime,
+             MAX(mc.datetime) AS end_datetime
+           FROM ids
+           LEFT JOIN continuous.measurements_continuous mc
+             ON mc.timeseries_id = ids.timeseries_id
+           GROUP BY ids.timeseries_id
+         )
+         UPDATE continuous.timeseries t
+         SET
+           start_datetime = b.start_datetime,
+           end_datetime = b.end_datetime
+         FROM bounds b
+         WHERE t.timeseries_id = b.timeseries_id
+           AND t.timeseries_type = 'basic'
+           AND (
+             t.start_datetime IS DISTINCT FROM b.start_datetime OR
+             t.end_datetime IS DISTINCT FROM b.end_datetime
+           );
+       $function$"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON FUNCTION continuous.refresh_basic_timeseries_datetime_bounds(INTEGER[]) IS
+       'Recomputes start_datetime and end_datetime exactly for the supplied basic continuous timeseries_ids from source rows in measurements_continuous. The derived measurements_calculated_daily cache does not define source-data bounds.'"
+    )
+    DBI::dbExecute(
+      con,
+      "SELECT continuous.refresh_basic_timeseries_datetime_bounds(
+         ARRAY(
+           SELECT timeseries_id
+           FROM continuous.timeseries
+           WHERE timeseries_type = 'basic'
+         )
+       )"
+    )
+
+    datetime_bound_errors <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         t.timeseries_id,
+         t.start_datetime,
+         MIN(mc.datetime) AS expected_start_datetime,
+         t.end_datetime,
+         MAX(mc.datetime) AS expected_end_datetime
+       FROM continuous.timeseries t
+       LEFT JOIN continuous.measurements_continuous mc
+         ON mc.timeseries_id = t.timeseries_id
+       WHERE t.timeseries_type = 'basic'
+       GROUP BY
+         t.timeseries_id,
+         t.start_datetime,
+         t.end_datetime
+       HAVING
+         t.start_datetime IS DISTINCT FROM MIN(mc.datetime)
+         OR t.end_datetime IS DISTINCT FROM MAX(mc.datetime)"
+    )
+    if (nrow(datetime_bound_errors) > 0L) {
+      stop(
+        "Patch 56 could not align continuous.timeseries datetime bounds with ",
+        "the source continuous measurements for timeseries_id(s): ",
+        paste(datetime_bound_errors$timeseries_id, collapse = ", ")
       )
     }
 
