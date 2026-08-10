@@ -53,9 +53,6 @@ insertACBorehole(
 
 \item{path}{Path to a document/file to attach to the borehole record. If NULL, no document is attached.}
 
-\item{document_name}{Optional name for the attached document. When omitted,
-the name defaults to \code{"Document for borehole/well <borehole_name>"}.}
-
 \item{well_name}{Character vector containing one name per well when
 \code{is_well = TRUE}. For backward compatibility, the first value is also the
 default \code{borehole_name}.}
@@ -151,6 +148,9 @@ recycled across wells.}
 \item{borehole_name}{Name of the borehole. Defaults to the first element of
 \code{well_name}, preserving the historical one-to-one borehole/well naming
 behaviour.}
+
+\item{document_name}{Optional name for the attached document. When omitted,
+the name defaults to \code{"Document for borehole/well <borehole_name>"}.}
 }
 \value{
 The borehole_id of the newly inserted record.
