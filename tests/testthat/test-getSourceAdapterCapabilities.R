@@ -24,7 +24,6 @@ test_that("the documented registry helpers are public", {
   ))
   expect_false(any(
     c(
-      "sourceAdapterArgument",
       "validateSourceAdapterArgumentSchema"
     ) %in%
       exports
