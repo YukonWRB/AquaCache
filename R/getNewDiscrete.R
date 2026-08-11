@@ -2,10 +2,18 @@
 #'
 #' @description
 #'
-#' Retrieves new discrete data starting from the last data point in the local database, using the function specified in the sample_series table column "source_fx". Each sample series can also have a specified time range, allowing a certain location/sub-location to have multiple sample_series with different source functions and time ranges. The function will update the database in-place with the new data.
+#' Retrieves new discrete data starting from the last local sample. The active
+#' assignment with the lowest fetch priority in
+#' `discrete.sample_series_source_adapters` supplies each series' source
+#' function and arguments. Each series may also have a configured time range.
+#' Every source function must have an enabled discrete-domain entry in
+#' `public.source_adapter_capabilities`.
 #'
 #' ## Making functions called by getNewDiscrete:
-#' Each sample_series_id in the database has a source_fx column that specifies the function to be called to get new data and, optionally, function arguments specified in source_fx_args. Source functions must return a list of lists, with each list element containing two data.frames: one named 'sample' with sample metadata and one named 'results' for associated results. The 'sample' data.frame must contain the following columns:
+#' An eligible source-adapter assignment specifies the function called to get
+#' new data and, optionally, its arguments. Source functions must return
+#' a list of lists, each containing data frames named `sample` and `results`.
+#' The `sample` data frame must contain the following columns:
 #' - 'location_id': a numeric specifying the location_id of the data point from table 'locations'.
 #' - 'media_id': a numeric specifying the media_id of the data point from table 'medias'.
 #' - 'datetime': a POSIXct datetime object in UTC 0 time zone, specifying the datetime of the data point.
@@ -21,7 +29,6 @@
 #' - 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
 #' - 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 #'
-#'
 #' The 'results' data.frame should contain one row per result and must contain the following columns:
 #' - 'parameter_id': a numeric specifying the parameter_id of the data point from table 'parameters'.
 #' - 'result': a numeric specifying the sample's results, matched to the parameters
@@ -34,6 +41,7 @@
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 #'
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
+#' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 #'
 #' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param location_id The location_ids you wish to have updated, as character or numeric vector. Defaults to NULL which will fetch data from all location_ids in the 'sample_series' table for all corresponding time ranges using the associated source functions (if more than one per location).
@@ -71,19 +79,45 @@ getNewDiscrete <- function(
   EQWinConCache <- eqwin_connection_cache_new()
   on.exit(eqwin_connection_cache_disconnect(EQWinConCache), add = TRUE)
 
+  series_select_sql <-
+    "SELECT
+       ss.*,
+       source.sample_series_source_adapter_id,
+       source.source_fx,
+       source.source_fx_args,
+       source.fetch_priority
+     FROM discrete.sample_series ss
+     LEFT JOIN LATERAL (
+       SELECT
+         ssa.sample_series_source_adapter_id,
+         ssa.source_fx,
+         ssa.source_fx_args,
+         ssa.fetch_priority
+       FROM discrete.sample_series_source_adapters ssa
+       WHERE ssa.sample_series_id = ss.sample_series_id
+         AND ssa.active
+         AND ssa.fetch_priority IS NOT NULL
+       ORDER BY ssa.fetch_priority, ssa.sample_series_source_adapter_id
+       LIMIT 1
+     ) source ON TRUE"
+
   if (is.null(location_id)) {
     if (is.null(sample_series_id)) {
       all_series <- DBI::dbGetQuery(
         con,
-        "SELECT * FROM discrete.sample_series WHERE (synch_to IS NULL OR synch_to >= now())"
+        paste0(
+          series_select_sql,
+          " WHERE (ss.synch_to IS NULL OR ss.synch_to >= now())"
+        )
       )
     } else {
       all_series <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT * FROM discrete.sample_series WHERE sample_series_id IN (",
+          series_select_sql,
+          " WHERE ss.sample_series_id IN (",
           paste(sample_series_id, collapse = ", "),
-          ") AND (synch_to IS NULL OR synch_to >= now())"
+          ") AND (ss.synch_to IS NULL OR ss.synch_to >= now())"
         )
       )
       if (length(unique(sample_series_id)) != nrow(all_series)) {
@@ -110,20 +144,22 @@ getNewDiscrete <- function(
       all_series <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT * FROM discrete.sample_series WHERE location_id IN (",
+          series_select_sql,
+          " WHERE ss.location_id IN (",
           paste(location_id, collapse = ", "),
-          ") AND (synch_to IS NULL OR synch_to >= now())"
+          ") AND (ss.synch_to IS NULL OR ss.synch_to >= now())"
         )
       )
     } else {
       all_series <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT * FROM discrete.sample_series WHERE location_id IN (",
+          series_select_sql,
+          " WHERE ss.location_id IN (",
           paste(location_id, collapse = ", "),
-          ") AND sub_location_id IN (",
+          ") AND ss.sub_location_id IN (",
           paste(sub_location_id, collapse = ", "),
-          ") AND (synch_to IS NULL OR synch_to >= now())"
+          ") AND (ss.synch_to IS NULL OR ss.synch_to >= now())"
         )
       )
     }
@@ -149,7 +185,44 @@ getNewDiscrete <- function(
     all_series <- all_series[all_series$active, ]
   }
   if (nrow(all_series) == 0) {
-    stop("Could not find any active sample series matching your input parameters.")
+    stop(
+      "Could not find any active sample series matching your input parameters."
+    )
+  }
+
+  missing_source <- is.na(all_series$source_fx)
+  if (any(missing_source)) {
+    warning(
+      "The following sample series have no active source-adapter assignment ",
+      "with a fetch priority and will be ignored: ",
+      paste(all_series$sample_series_id[missing_source], collapse = ", "),
+      "."
+    )
+    all_series <- all_series[!missing_source, , drop = FALSE]
+  }
+  if (nrow(all_series) == 0L) {
+    stop(
+      "Could not find any sample series with an active source-adapter ",
+      "assignment for fetching."
+    )
+  }
+
+  registered_source_fx <- getSourceAdapterCapabilities(
+    con = con,
+    data_domain = "discrete"
+  )$source_fx
+  unregistered_source_fx <- setdiff(
+    unique(all_series$source_fx),
+    registered_source_fx
+  )
+  if (length(unregistered_source_fx) > 0L) {
+    stop(
+      "getNewDiscrete: Every source_fx must have an enabled entry in ",
+      "public.source_adapter_capabilities for the discrete domain. ",
+      "Missing or disabled: ",
+      paste(unregistered_source_fx, collapse = ", "),
+      "."
+    )
   }
 
   count <- 0 #counter for number of successful new pulls (samples - not individual results)
@@ -255,8 +328,8 @@ getNewDiscrete <- function(
         )
         if (!is.na(source_fx_args)) {
           # add some arguments if they are specified
-          args <- jsonlite::fromJSON(source_fx_args)
-          args_list <- c(args_list, lapply(args, as.character))
+          args <- source_adapter_args_decode(source_fx_args)
+          args_list <- c(args_list, args)
         }
 
         if (source_fx == "downloadEQWin") {

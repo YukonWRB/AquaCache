@@ -1,0 +1,240 @@
+test_that("adapter capabilities require database Patch 56", {
+  local_mocked_bindings(
+    dbGetQuery = function(...) stop("relation does not exist"),
+    .package = "DBI"
+  )
+
+  expect_error(
+    getSourceAdapterCapabilities(
+      con = structure(list(), class = "mock_con")
+    ),
+    "requires database Patch 56"
+  )
+})
+
+test_that("the documented registry helpers are public", {
+  exports <- getNamespaceExports("AquaCache")
+
+  expect_true(all(
+    c(
+      "getSourceAdapterCapabilities",
+      "registerSourceAdapterArguments"
+    ) %in%
+      exports
+  ))
+  expect_false(any(
+    c(
+      "validateSourceAdapterArgumentSchema"
+    ) %in%
+      exports
+  ))
+})
+
+test_that("adapter capabilities are parsed from the Patch 56 registry", {
+  query_count <- 0L
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, ...) {
+      query_count <<- query_count + 1L
+      data.frame(
+        source_fx = "downloadNESDIS",
+        data_domain = "continuous",
+        adapter_kind = "transmission",
+        requires_transmission_mapping = TRUE,
+        inject_timeseries_id = TRUE,
+        parallel_group_strategy = "source_args",
+        parallel_group_args_json = '["station","interval"]',
+        allow_empty_initial_fetch = TRUE,
+        transmission_method_codes_json = '["IRIDIUM_SBD"]',
+        argument_schema_json = paste0(
+          '{"schema_version":1,"arguments":[',
+          '{"name":"timeseries_id","source":"runtime",',
+          '"help":"Injected from the import queue."}]}'
+        ),
+        ui_config_json = '{"provider_name":"Example"}',
+        enabled = TRUE,
+        note = NA_character_
+      )
+    },
+    .package = "DBI"
+  )
+
+  capabilities <- getSourceAdapterCapabilities(
+    con = structure(list(), class = "mock_con"),
+    source_fx = "downloadNESDIS",
+    data_domain = "continuous"
+  )
+
+  expect_equal(query_count, 1L)
+  expect_equal(capabilities$parallel_group_args[[1]], c("station", "interval"))
+  expect_equal(
+    capabilities$transmission_method_codes[[1]],
+    "IRIDIUM_SBD"
+  )
+  expect_equal(capabilities$ui_config[[1]]$provider_name, "Example")
+  expect_equal(
+    capabilities$argument_schema[[1]]$arguments[[1]]$name,
+    "timeseries_id"
+  )
+  expect_equal(capabilities$data_domain, "continuous")
+})
+
+test_that("adapter capability filters select rows from a multi-domain registry", {
+  registry <- data.frame(
+    source_fx = c(
+      "downloadNESDIS",
+      "downloadNupointImages",
+      "downloadECCCwq"
+    ),
+    data_domain = c("continuous", "image", "discrete"),
+    adapter_kind = c("transmission", "standard", "standard"),
+    requires_transmission_mapping = c(TRUE, FALSE, FALSE),
+    inject_timeseries_id = c(TRUE, FALSE, FALSE),
+    parallel_group_strategy = "timeseries",
+    parallel_group_args_json = "[]",
+    allow_empty_initial_fetch = FALSE,
+    transmission_method_codes_json = "[]",
+    argument_schema_json = '{"schema_version":1,"arguments":[]}',
+    ui_config_json = "{}",
+    enabled = c(TRUE, TRUE, FALSE),
+    note = NA_character_
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(...) registry,
+    .package = "DBI"
+  )
+
+  image_capabilities <- getSourceAdapterCapabilities(
+    con = structure(list(), class = "mock_con"),
+    data_domain = "image"
+  )
+  expect_identical(image_capabilities$source_fx, "downloadNupointImages")
+  expect_identical(image_capabilities$data_domain, "image")
+
+  selected_capabilities <- getSourceAdapterCapabilities(
+    con = structure(list(), class = "mock_con"),
+    source_fx = c("downloadNESDIS", "downloadECCCwq"),
+    data_domain = c("continuous", "discrete"),
+    enabled_only = FALSE
+  )
+  expect_identical(
+    selected_capabilities$source_fx,
+    c("downloadNESDIS", "downloadECCCwq")
+  )
+
+  disabled_capability <- getSourceAdapterCapabilities(
+    con = structure(list(), class = "mock_con"),
+    source_fx = "downloadECCCwq"
+  )
+  expect_equal(nrow(disabled_capability), 0L)
+})
+
+test_that("adapter capability domains are validated", {
+  expect_error(
+    getSourceAdapterCapabilities(
+      con = structure(list(), class = "mock_con"),
+      data_domain = "document"
+    ),
+    "data_domain must contain only"
+  )
+})
+
+test_that("sourceAdapterArgument constructs validated descriptors", {
+  argument <- sourceAdapterArgument(
+    name = "location",
+    source = "user",
+    help = "Provider station identifier.",
+    label = "Station ID",
+    value_type = "character",
+    control = "text",
+    required = TRUE
+  )
+
+  expect_identical(argument$name, "location")
+  expect_identical(argument$source, "user")
+  expect_true(argument$required)
+  expect_error(
+    sourceAdapterArgument(
+      name = "location",
+      source = "user",
+      help = "",
+      label = "Station ID",
+      value_type = "character",
+      control = "text"
+    ),
+    "requires non-blank help text"
+  )
+})
+
+test_that("registerSourceAdapterArguments validates and updates one row", {
+  executed <- NULL
+  local_mocked_bindings(
+    dbExecute = function(con, statement, params, ...) {
+      executed <<- list(statement = statement, params = params)
+      1L
+    },
+    .package = "DBI"
+  )
+  argument <- sourceAdapterArgument(
+    name = "location",
+    source = "user",
+    help = "Aquarius location identifier.",
+    label = "Location",
+    value_type = "character",
+    control = "text",
+    required = TRUE
+  )
+
+  schema <- registerSourceAdapterArguments(
+    con = structure(list(), class = "mock_con"),
+    source_fx = "downloadAquarius",
+    data_domain = "continuous",
+    arguments = list(argument)
+  )
+
+  expect_identical(schema$schema_version, 1L)
+  expect_identical(schema$arguments[[1]], argument)
+  expect_match(
+    executed$statement,
+    "SET argument_schema = $1::jsonb",
+    fixed = TRUE
+  )
+  expect_identical(executed$params[[2]], "downloadAquarius")
+  expect_identical(executed$params[[3]], "continuous")
+  expect_equal(
+    jsonlite::fromJSON(executed$params[[1]])$arguments$name,
+    "location"
+  )
+})
+
+test_that("registerSourceAdapterArguments requires exactly one registry row", {
+  local_mocked_bindings(
+    dbExecute = function(...) 0L,
+    .package = "DBI"
+  )
+  argument <- sourceAdapterArgument(
+    name = "start_datetime",
+    source = "runtime",
+    help = "AquaCache supplies the synchronization start."
+  )
+
+  expect_error(
+    registerSourceAdapterArguments(
+      con = structure(list(), class = "mock_con"),
+      source_fx = "downloadAquarius",
+      data_domain = "continuous",
+      arguments = list(argument)
+    ),
+    "updated 0"
+  )
+})
+
+test_that("typed source arguments remain typed when decoded", {
+  args <- source_adapter_args_decode(
+    '{"station":"2101300","difference":true,"reset_drop":20,"hrs":[0,6]}'
+  )
+
+  expect_identical(args$station, "2101300")
+  expect_true(args$difference)
+  expect_identical(args$reset_drop, 20L)
+  expect_identical(args$hrs, c(0L, 6L))
+})

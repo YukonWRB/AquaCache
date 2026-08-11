@@ -4,7 +4,11 @@ mock_getnew_timeseries_table <- function(
   source_fx_args = rep(NA_character_, length(timeseries_ids)),
   last_data_point = rep(as.POSIXct(NA, tz = "UTC"), length(timeseries_ids)),
   aggregation_type = rep("instantaneous", length(timeseries_ids)),
-  timeseries_type = rep("basic", length(timeseries_ids))
+  timeseries_type = rep("basic", length(timeseries_ids)),
+  transmission_platform_identifier = rep(
+    NA_character_,
+    length(timeseries_ids)
+  )
 ) {
   source_fx <- if (length(source_fx_name) == 1L) {
     rep(source_fx_name, length(timeseries_ids))
@@ -16,15 +20,52 @@ mock_getnew_timeseries_table <- function(
     parameter_id = rep(1L, length(timeseries_ids)),
     timeseries_id = timeseries_ids,
     timeseries_type = timeseries_type,
+    timeseries_source_adapter_id = seq_along(timeseries_ids),
     source_fx = source_fx,
     source_fx_args = source_fx_args,
+    fetch_priority = rep(1L, length(timeseries_ids)),
     aggregation_type = aggregation_type,
     default_owner = rep(NA_integer_, length(timeseries_ids)),
     default_data_sharing_agreement_id = rep(NA_integer_, length(timeseries_ids)),
     active = rep(TRUE, length(timeseries_ids)),
     last_data_point = last_data_point,
+    transmission_platform_identifier = transmission_platform_identifier,
     stringsAsFactors = FALSE
   )
+}
+
+ensure_patch56_query_tables <- function(con) {
+  DBI::dbExecute(
+    con,
+    "CREATE TABLE IF NOT EXISTS public.source_adapter_capabilities (
+       source_fx text NOT NULL,
+       data_domain text NOT NULL,
+       enabled boolean NOT NULL DEFAULT TRUE,
+       requires_transmission_mapping boolean NOT NULL DEFAULT FALSE,
+       transmission_method_codes text[] NOT NULL DEFAULT ARRAY[]::text[]
+     )"
+  )
+  DBI::dbExecute(
+    con,
+    "CREATE TABLE IF NOT EXISTS continuous.timeseries_source_adapters (
+       timeseries_source_adapter_id serial PRIMARY KEY,
+       timeseries_id integer NOT NULL,
+       source_fx text NOT NULL,
+       source_fx_args jsonb,
+       fetch_priority smallint,
+       synchronize_priority smallint,
+       active boolean NOT NULL DEFAULT TRUE
+     )"
+  )
+  DBI::dbExecute(
+    con,
+    "CREATE TABLE IF NOT EXISTS continuous.transmission_timeseries_mappings (
+       timeseries_id integer NOT NULL,
+       transmission_route_id integer NOT NULL,
+       enabled boolean NOT NULL DEFAULT TRUE
+     )"
+  )
+  invisible(NULL)
 }
 
 mock_getnew_db_get_query <- function(
@@ -32,16 +73,103 @@ mock_getnew_db_get_query <- function(
   source_fx_name,
   source_fx_args = rep(NA_character_, length(timeseries_ids)),
   last_data_point = rep(as.POSIXct(NA, tz = "UTC"), length(timeseries_ids)),
-  timeseries_type = rep("basic", length(timeseries_ids))
+  timeseries_type = rep("basic", length(timeseries_ids)),
+  transmission_platform_identifier = rep(
+    NA_character_,
+    length(timeseries_ids)
+  )
 ) {
   function(con, statement, params = NULL, ...) {
+    if (
+      grepl(
+        "FROM public.source_adapter_capabilities",
+        statement,
+        fixed = TRUE
+      ) &&
+        !grepl("FROM continuous.timeseries t", statement, fixed = TRUE)
+    ) {
+      return(data.frame(
+        source_fx = c(
+          "downloadAquarius",
+          "downloadECCCwx",
+          "downloadECCCwxMinute",
+          "downloadNESDIS",
+          "downloadNWIS",
+          "downloadRWIS",
+          "downloadWSC"
+        ),
+        data_domain = rep("continuous", 7L),
+        adapter_kind = c(
+          "standard",
+          "standard",
+          "standard",
+          "transmission",
+          "standard",
+          "standard",
+          "standard"
+        ),
+        requires_transmission_mapping = c(
+          FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE
+        ),
+        inject_timeseries_id = c(
+          FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE
+        ),
+        parallel_group_strategy = c(
+          "timeseries",
+          "source_args",
+          "timeseries",
+          "transmission_platform",
+          "timeseries",
+          "timeseries",
+          "timeseries"
+        ),
+        parallel_group_args_json = c(
+          "[]",
+          '["location","interval"]',
+          "[]",
+          "[]",
+          "[]",
+          "[]",
+          "[]"
+        ),
+        allow_empty_initial_fetch = c(
+          FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE
+        ),
+        transmission_method_codes_json = c(
+          "[]",
+          "[]",
+          "[]",
+          '["GOES_DCS"]',
+          "[]",
+          "[]",
+          "[]"
+        ),
+        argument_schema_json = rep(
+          '{"schema_version":1,"arguments":[]}',
+          7L
+        ),
+        ui_config_json = c(
+          "{}",
+          "{}",
+          "{}",
+          '{"provider_name":"NESDIS","source_field_label":"Payload field"}',
+          "{}",
+          "{}",
+          "{}"
+        ),
+        enabled = TRUE,
+        note = NA_character_
+      ))
+    }
     if (grepl("FROM continuous.timeseries t", statement, fixed = TRUE)) {
       return(mock_getnew_timeseries_table(
         timeseries_ids = timeseries_ids,
         source_fx_name = source_fx_name,
         source_fx_args = source_fx_args,
         last_data_point = last_data_point,
-        timeseries_type = timeseries_type
+        timeseries_type = timeseries_type,
+        transmission_platform_identifier =
+          transmission_platform_identifier
       ))
     }
     if (grepl("FROM public.grade_types", statement, fixed = TRUE)) {
@@ -93,6 +221,29 @@ test_that("getNewContinuous rejects compound timeseries", {
   )
 })
 
+test_that("getNewContinuous rejects an unregistered source adapter", {
+  local_mocked_bindings(
+    dbExecute = function(...) invisible(0L),
+    dbGetQuery = mock_getnew_db_get_query(
+      timeseries_ids = 9002L,
+      source_fx_name = "downloadUnregistered"
+    ),
+    .package = "DBI"
+  )
+
+  expect_error(
+    getNewContinuous(
+      con = structure(list(), class = "mock_con"),
+      timeseries_id = 9002L,
+      active = "all"
+    ),
+    paste0(
+      "Every source_fx.*downloadUnregistered ",
+      "\\(timeseries_id: 9002\\)"
+    )
+  )
+})
+
 test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   skip_if_not_installed("foreach")
   skip_if_not_installed("doSNOW")
@@ -101,6 +252,18 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   captured <- new.env(parent = emptyenv())
   captured$parameters <- character()
   captured$connect_args <- list()
+  captured$cluster_exports <- character()
+
+  adapter_capabilities <- data.frame(
+    source_fx = c("downloadAquarius", "downloadECCCwx"),
+    inject_timeseries_id = c(FALSE, FALSE),
+    parallel_group_strategy = c("timeseries", "source_args"),
+    stringsAsFactors = FALSE
+  )
+  adapter_capabilities$parallel_group_args <- I(list(
+    character(),
+    c("location", "interval")
+  ))
 
   timeseries_ids <- c(1323L, 1322L, 2000L)
   last_data_point <- as.POSIXct(
@@ -155,6 +318,7 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    getSourceAdapterCapabilities = function(...) adapter_capabilities,
     downloadECCCwx = function(start_datetime, con, location, parameter, interval, ...) {
       captured$parameters <- c(captured$parameters, parameter)
       data.frame(
@@ -170,6 +334,145 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
       source_fx_name = "downloadECCCwx",
       source_fx_args = source_fx_args,
       last_data_point = last_data_point
+    ),
+    dbExecute = function(con, statement, ...) 1L,
+    dbDisconnect = function(con, ...) invisible(TRUE),
+    .package = "DBI"
+  )
+  local_mocked_bindings(
+    detectCores = function(...) 4L,
+    makeCluster = function(...) structure(list(), class = "mock_cluster"),
+    stopCluster = function(cl) invisible(TRUE),
+    clusterExport = function(cl, varlist, envir) {
+      captured$cluster_exports <- varlist
+      invisible(TRUE)
+    },
+    .package = "parallel"
+  )
+  local_mocked_bindings(
+    registerDoSNOW = function(cl) invisible(TRUE),
+    .package = "doSNOW"
+  )
+  local_mocked_bindings(
+    foreach = function(i, .combine = rbind, ...) {
+      list(iter = i, combine = .combine)
+    },
+    `%dopar%` = mock_dopar,
+    .package = "foreach"
+  )
+
+  expect_message(
+    res <- getNewContinuous(
+      con = NULL,
+      timeseries_id = timeseries_ids,
+      active = "all",
+      dbName = "mock_db",
+      dbHost = "mock_host",
+      dbPort = "5432",
+      dbUser = "mock_user",
+      dbPass = "mock_pass"
+    ),
+    regexp = "Parallel plan: 3 timeseries across 2 task groups"
+  )
+
+  expect_s3_class(res, "data.frame")
+  expect_equal(res$timeseries_id, timeseries_ids)
+  expect_equal(connect_calls, 3L)
+  expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
+  expect_true("source_adapter_args_decode" %in% captured$cluster_exports)
+  expect_true(all(vapply(
+    captured$connect_args,
+    function(args) identical(args, list(
+      name = "mock_db",
+      host = "mock_host",
+      port = "5432",
+      username = "mock_user",
+      password = "mock_pass",
+      silent = TRUE
+    )),
+    logical(1)
+  )))
+})
+
+test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID", {
+  skip_if_not_installed("foreach")
+  skip_if_not_installed("doSNOW")
+
+  connect_calls <- 0L
+  captured <- new.env(parent = emptyenv())
+  captured$timeseries_ids <- integer()
+  captured$route_ids <- integer()
+
+  timeseries_ids <- c(1323L, 1322L, 2000L)
+  last_data_point <- as.POSIXct(
+    c("2026-01-02 00:00:00", "2026-01-01 00:00:00", "2026-01-03 00:00:00"),
+    tz = "UTC"
+  )
+  dcp_addresses <- c("ABCDEF12", "abcdef12", "12345678")
+
+  mock_dopar <- function(obj, expr) {
+    expr_sub <- substitute(expr)
+    parent_env <- parent.frame()
+    rows <- lapply(
+      obj$iter,
+      function(i) {
+        eval(expr_sub, envir = list2env(list(i = i), parent = parent_env))
+      }
+    )
+    do.call(obj$combine, rows)
+  }
+
+  local_mocked_bindings(
+    AquaConnect = function(
+      name = Sys.getenv("aquacacheName"),
+      host = Sys.getenv("aquacacheHost"),
+      port = Sys.getenv("aquacachePort"),
+      username = Sys.getenv("aquacacheAdminUser"),
+      password = Sys.getenv("aquacacheAdminPass"),
+      silent = FALSE
+    ) {
+      connect_calls <<- connect_calls + 1L
+      structure(list(), class = "mock_con")
+    },
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(con, silent = TRUE) TRUE,
+    adjust_grade = function(...) invisible(TRUE),
+    adjust_approval = function(...) invisible(TRUE),
+    adjust_qualifier = function(...) invisible(TRUE),
+    adjust_owner = function(...) invisible(TRUE),
+    adjust_contributor = function(...) invisible(TRUE),
+    adjust_data_sharing_agreement = function(...) invisible(TRUE),
+    dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    downloadNESDIS = function(
+      start_datetime,
+      con,
+      timeseries_id,
+      transmission_route_id,
+      ...
+    ) {
+      captured$timeseries_ids <- c(
+        captured$timeseries_ids,
+        timeseries_id
+      )
+      captured$route_ids <- c(
+        captured$route_ids,
+        transmission_route_id
+      )
+      data.frame(datetime = start_datetime, value = 1)
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = mock_getnew_db_get_query(
+      timeseries_ids = timeseries_ids,
+      source_fx_name = "downloadNESDIS",
+      source_fx_args = sprintf(
+        '{"transmission_route_id":%d}',
+        c(71L, 72L, 73L)
+      ),
+      last_data_point = last_data_point,
+      transmission_platform_identifier = dcp_addresses
     ),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
@@ -211,19 +514,124 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
   expect_equal(connect_calls, 3L)
-  expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
-  expect_true(all(vapply(
-    captured$connect_args,
-    function(args) identical(args, list(
-      name = "mock_db",
-      host = "mock_host",
-      port = "5432",
-      username = "mock_user",
-      password = "mock_pass",
-      silent = TRUE
-    )),
-    logical(1)
-  )))
+  expect_equal(captured$timeseries_ids, c(1322L, 1323L, 2000L))
+  expect_equal(captured$route_ids, c(72L, 71L, 73L))
+})
+
+test_that("getNewContinuous orders NESDIS cache groups in sequential mode", {
+  captured_ids <- integer()
+  timeseries_ids <- c(1323L, 2000L, 1322L)
+  last_data_point <- as.POSIXct(
+    c("2026-01-02 00:00:00", "2026-01-03 00:00:00", "2026-01-01 00:00:00"),
+    tz = "UTC"
+  )
+
+  local_mocked_bindings(
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(con, silent = TRUE) TRUE,
+    adjust_grade = function(...) invisible(TRUE),
+    adjust_approval = function(...) invisible(TRUE),
+    adjust_qualifier = function(...) invisible(TRUE),
+    adjust_owner = function(...) invisible(TRUE),
+    adjust_contributor = function(...) invisible(TRUE),
+    adjust_data_sharing_agreement = function(...) invisible(TRUE),
+    dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    downloadNESDIS = function(start_datetime, con, timeseries_id, ...) {
+      captured_ids <<- c(captured_ids, timeseries_id)
+      data.frame(datetime = start_datetime, value = 1)
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = mock_getnew_db_get_query(
+      timeseries_ids = timeseries_ids,
+      source_fx_name = "downloadNESDIS",
+      last_data_point = last_data_point,
+      transmission_platform_identifier = c(
+        "ABCDEF12",
+        "12345678",
+        "ABCDEF12"
+      )
+    ),
+    dbExecute = function(con, statement, ...) 1L,
+    .package = "DBI"
+  )
+
+  expect_message(
+    result <- getNewContinuous(
+      con = structure(list(), class = "mock_con"),
+      timeseries_id = timeseries_ids,
+      active = "all"
+    ),
+    regexp = "sequential mode can reuse the session cache"
+  )
+
+  expect_equal(result$timeseries_id, timeseries_ids)
+  expect_equal(captured_ids, c(1322L, 1323L, 2000L))
+})
+
+test_that("getNewContinuous applies registry behavior to another provider", {
+  captured_ids <- integer()
+  timeseries_ids <- c(1323L, 1322L)
+  last_data_point <- as.POSIXct(
+    c("2026-01-02 00:00:00", "2026-01-01 00:00:00"),
+    tz = "UTC"
+  )
+  capabilities <- data.table::data.table(
+    source_fx = "downloadRWIS",
+    adapter_kind = "transmission",
+    requires_transmission_mapping = TRUE,
+    inject_timeseries_id = TRUE,
+    parallel_group_strategy = "transmission_platform",
+    parallel_group_args = list(character()),
+    allow_empty_initial_fetch = TRUE,
+    transmission_method_codes = list("IRIDIUM_SBD"),
+    ui_config = list(list(provider_name = "Example")),
+    enabled = TRUE,
+    note = NA_character_
+  )
+
+  local_mocked_bindings(
+    getSourceAdapterCapabilities = function(...) capabilities,
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(con, silent = TRUE) TRUE,
+    adjust_grade = function(...) invisible(TRUE),
+    adjust_approval = function(...) invisible(TRUE),
+    adjust_qualifier = function(...) invisible(TRUE),
+    adjust_owner = function(...) invisible(TRUE),
+    adjust_contributor = function(...) invisible(TRUE),
+    adjust_data_sharing_agreement = function(...) invisible(TRUE),
+    dbAppendTableRLS = function(con, table, value) invisible(TRUE),
+    downloadRWIS = function(start_datetime, con, timeseries_id, ...) {
+      captured_ids <<- c(captured_ids, timeseries_id)
+      data.frame(datetime = start_datetime, value = 1)
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = mock_getnew_db_get_query(
+      timeseries_ids = timeseries_ids,
+      source_fx_name = "downloadRWIS",
+      last_data_point = last_data_point,
+      transmission_platform_identifier = c("PLATFORM-1", "platform-1")
+    ),
+    dbExecute = function(con, statement, ...) 1L,
+    .package = "DBI"
+  )
+
+  expect_message(
+    result <- getNewContinuous(
+      con = structure(list(), class = "mock_con"),
+      timeseries_id = timeseries_ids,
+      active = "all"
+    ),
+    regexp = "sequential mode can reuse the session cache"
+  )
+
+  expect_equal(result$timeseries_id, timeseries_ids)
+  expect_equal(captured_ids, c(1322L, 1323L))
 })
 
 test_that("getNewContinuous does not group ECCC minute tasks", {
@@ -411,6 +819,7 @@ test_that("getNewContinuous does not delete history when period calculation need
 
   AquaCache:::dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
+  ensure_patch56_query_tables(con)
 
   DBI::dbExecute(
     con,
@@ -444,18 +853,28 @@ test_that("getNewContinuous does not delete history when period calculation need
 
   DBI::dbExecute(
     con,
-    "UPDATE continuous.timeseries
-     SET source_fx = $1,
-         source_fx_args = $2
-     WHERE timeseries_id = $3",
-    params = list(
-      "downloadRWIS",
-      '{"location":"TEST","parameter":"TEST"}',
-      tsid
-    )
+    "DELETE FROM continuous.timeseries_source_adapters
+     WHERE timeseries_id = $1",
+    params = list(tsid)
+  )
+  DBI::dbExecute(
+    con,
+    "INSERT INTO continuous.timeseries_source_adapters (
+       timeseries_id, source_fx, source_fx_args, fetch_priority,
+       synchronize_priority, active
+     ) VALUES ($1, 'downloadRWIS', $2::jsonb, 1, 1, TRUE)",
+    params = list(tsid, '{"location":"TEST","parameter":"TEST"}')
   )
 
   testthat::local_mocked_bindings(
+    getSourceAdapterCapabilities = function(...) {
+      data.table::data.table(
+        source_fx = "downloadRWIS",
+        parallel_group_strategy = "timeseries",
+        parallel_group_args = list(character()),
+        inject_timeseries_id = FALSE
+      )
+    },
     downloadRWIS = function(start_datetime, con, ...) {
       new_rows
     },
@@ -512,21 +931,32 @@ test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinut
 
   AquaCache:::dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
+  ensure_patch56_query_tables(con)
 
   DBI::dbExecute(
     con,
-    "UPDATE continuous.timeseries
-     SET source_fx = $1,
-         source_fx_args = $2
-     WHERE timeseries_id = $3",
-    params = list(
-      "downloadECCCwxMinute",
-      '{"location":"CVXY","parameter":"temp"}',
-      tsid
-    )
+    "DELETE FROM continuous.timeseries_source_adapters
+     WHERE timeseries_id = $1",
+    params = list(tsid)
+  )
+  DBI::dbExecute(
+    con,
+    "INSERT INTO continuous.timeseries_source_adapters (
+       timeseries_id, source_fx, source_fx_args, fetch_priority,
+       synchronize_priority, active
+     ) VALUES ($1, 'downloadECCCwxMinute', $2::jsonb, 1, 1, TRUE)",
+    params = list(tsid, '{"location":"CVXY","parameter":"temp"}')
   )
 
   testthat::local_mocked_bindings(
+    getSourceAdapterCapabilities = function(...) {
+      data.table::data.table(
+        source_fx = "downloadECCCwxMinute",
+        parallel_group_strategy = "timeseries",
+        parallel_group_args = list(character()),
+        inject_timeseries_id = FALSE
+      )
+    },
     downloadECCCwxMinute = function(
       start_datetime,
       con,
@@ -613,8 +1043,7 @@ test_that("getNewContinuous leaves daily refresh to database triggers", {
   result <- getNewContinuous(
     con = structure(list(), class = "mock_con"),
     timeseries_id = tsid,
-    active = "all",
-    stats = TRUE
+    active = "all"
   )
 
   expect_equal(captured$table, "continuous.measurements_continuous")

@@ -11,15 +11,15 @@
 #'
 #' If specifying a data.frame for argument `data`, different criteria applies depending on if the timeseries is categorized as continuous or discrete.
 #' For continuous data:
-#' The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered to `measurements_continuous` as one-day-period rows and database triggers maintain `measurements_calculated_daily`. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function [addNewContinuous()] will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
-#' For discrete data:
-#' This is not supported yet.
+#' The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered to `measurements_continuous` as one-day-period rows and database triggers maintain `measurements_calculated_daily`. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function [addNewContinuous()] will be called to add this data to the database. If a fetch source adapter is also specified it will be called to fetch more recent data than that in this data.frame.
 #'
-#' Additional arguments to pass to the function specified in `source_fx` go in argument `source_fx_args` (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
+#' Source adapters are supplied in `source_adapters`. Each assignment may be used for fetching, synchronization, or both, and may be retained while temporarily inactive. The highest active priority (lowest number) is selected for each operation.
 #'
-#' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for `data` must be NA or left as their default values. See notes for the other parameters for more information on each column of df.
+#' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, note. An optional list-column named `source_adapters` may contain one assignment data.frame per new timeseries. If this parameter is provided, all other parameters save for `data` must be left at their defaults.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
-#' @param start_datetime A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.
+#' @param start_datetime A character or POSIXct vector of datetimes from which
+#'   to look for new data when an active fetch assignment is specified. Values
+#'   are coerced to POSIXct in UTC.
 #' @param location A character vector corresponding to locations.location_code (preferred), locations.alias (legacy and nullable), or locations.name OR a numeric vector corresponding to locations.location_id.
 #' @param sub_location A numeric vector corresponding to column 'sub_location_id' of table 'sub_locations'. This is optional and can be left as NA if not specified. It is used to differentiate between multiple timeseries at the same location, e.g. different standpipes or wells.
 #' @param z A numeric vector of elevations in meters for the timeseries observations. This allows for differentiation of things like wind speeds at different heights. Leave as NA if not specified.
@@ -31,8 +31,11 @@
 #' @param record_rate A broad categorization of the rate at which recording takes place. Select from a number fo minutes or hours ('5 minutes', '1 hour'), '1 day', '1 week', '4 weeks', '1 month', '1 year'.
 #' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG" or multiple such strings if specifying multiple timeseries in one go.
 #' @param owner A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!
-#' @param source_fx The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.
-#' @param source_fx_args Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.
+#' @param source_adapters `NULL`, one assignment data.frame when adding one
+#'   timeseries, or a list containing one assignment data.frame (or `NULL`) per
+#'   new timeseries. Columns are `source_fx`, optional JSON or named-list
+#'   `source_fx_args`, `fetch_priority`, `synchronize_priority`, `active`, and
+#'   `note`. Every function must be registered for the continuous domain.
 #' @param note Text notes to append to the timeseries.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. Leave NULL to use the package default connection and have it closed afterwards automatically.
 #'
@@ -41,23 +44,56 @@
 #'
 #' @examples
 #' \dontrun{
-#' #Make a data.frame to pass to the function:
-#' df <- data.frame(start_datetime = "2015-01-01 00:00",
-#' location = "09AA-M3",
-#' z = c(NA, 3),
-#' parameter = c(34, 1154),
-#' media = 7,
-#' sensor_priority = 1,
-#' aggregation_type = c("sum", "mean"),
-#' record_rate = "1 hour",
-#' share_with = "public_reader",
-#' owner = 2,
-#' source_fx = "downloadAquarius",
-#' source_fx_args = NA,
-#' note = c("Total precipitation from standpipe, reset every year in the fall.",
-#' "Hourly average of wind speeds recorded every minute")
+#' # Each timeseries receives its own source-adapter assignment data frame.
+#' precipitation_sources <- data.frame(
+#'   source_fx = c("downloadAquarius", "downloadRWIS"),
+#'   source_fx_args = I(list(
+#'     list(
+#'       location = "09AA-M3",
+#'       parameter = "Precip Total",
+#'       difference = TRUE
+#'     ),
+#'     list(location = "RWIS_STATION", parameter = "Precipitation")
+#'   )),
+#'   fetch_priority = c(1L, 2L),
+#'   synchronize_priority = c(2L, 1L),
+#'   active = c(TRUE, TRUE),
+#'   note = c(
+#'     "Preferred source for routine fetching.",
+#'     "Preferred source for full synchronization."
+#'   )
 #' )
-#' #Add the timeseries using the data.frame
+#'
+#' wind_sources <- data.frame(
+#'   source_fx = "downloadAquarius",
+#'   source_fx_args = I(list(list(
+#'     location = "09AA-M3",
+#'     parameter = "Wind Speed"
+#'   ))),
+#'   fetch_priority = 1L,
+#'   synchronize_priority = 1L,
+#'   active = TRUE
+#' )
+#'
+#' # Add the assignment data frames as a list-column, one per timeseries.
+#' df <- data.frame(
+#'   start_datetime = "2015-01-01 00:00",
+#'   location = "09AA-M3",
+#'   z = c(NA, 3),
+#'   parameter = c(34, 1154),
+#'   media = 7,
+#'   sensor_priority = 1,
+#'   aggregation_type = c("sum", "mean"),
+#'   record_rate = "1 hour",
+#'   share_with = "public_reader",
+#'   owner = 2,
+#'   note = c(
+#'     "Total precipitation from standpipe, reset every fall.",
+#'     "Hourly average of wind speeds recorded every minute."
+#'   )
+#' )
+#' df$source_adapters <- list(precipitation_sources, wind_sources)
+#'
 #' addACTimeseries(df)
 #' }
 
@@ -76,8 +112,7 @@ addACTimeseries <- function(
   record_rate = NA,
   share_with = "public_reader",
   owner = NA,
-  source_fx = NA,
-  source_fx_args = NA,
+  source_adapters = NULL,
   note = NA,
   con = NULL
 ) {
@@ -107,10 +142,9 @@ addACTimeseries <- function(
         matrix_state_id,
         record_rate,
         owner,
-        source_fx,
-        source_fx_args,
         note
-      )))
+      ))) ||
+        !is.null(source_adapters)
     ) {
       stop(
         "You cannot provide a data.frame and other parameters at the same time."
@@ -135,8 +169,6 @@ addACTimeseries <- function(
           "record_rate",
           "share_with",
           "owner",
-          "source_fx",
-          "source_fx_args",
           "note"
         ) %in%
           colnames(df)
@@ -168,8 +200,11 @@ addACTimeseries <- function(
     record_rate <- df$record_rate
     share_with <- df$share_with
     owner <- df$owner
-    source_fx <- df$source_fx
-    source_fx_args <- df$source_fx_args
+    source_adapters <- if ("source_adapters" %in% names(df)) {
+      df$source_adapters
+    } else {
+      rep(list(NULL), nrow(df))
+    }
     note <- df$note
   }
 
@@ -188,8 +223,6 @@ addACTimeseries <- function(
     length(aggregation_type),
     length(record_rate),
     length(owner),
-    length(source_fx),
-    length(source_fx_args),
     length(note)
   )
 
@@ -225,7 +258,10 @@ addACTimeseries <- function(
     new_locs <- NULL
     loc_tbl <- NULL
     if (inherits(location, "numeric")) {
-      exist_locs <- DBI::dbGetQuery(con, "SELECT location_id FROM public.locations")[,
+      exist_locs <- DBI::dbGetQuery(
+        con,
+        "SELECT location_id FROM public.locations"
+      )[,
         1
       ]
       new_locs <- location[!(location %in% exist_locs)]
@@ -433,28 +469,30 @@ addACTimeseries <- function(
     )
   }
 
-  if (any(is.na(source_fx))) {
-    warning(
-      "At least one of the source_fx you entered is NA. This will not allow for automatic fetching of new data. The timeseries will be added to the database, but you will need to manually add data unless you also specified a data.frame with this."
-    )
-  }
-  source_fx_check <- source_fx[!is.na(source_fx)]
-  if (length(source_fx_check) > 0) {
-    if (!all(source_fx_check %in% ls(getNamespace("AquaCache")))) {
+  source_adapters_by_series <- if (is.null(source_adapters)) {
+    rep(list(NULL), maxlength)
+  } else if (inherits(source_adapters, "data.frame")) {
+    if (maxlength != 1L) {
       stop(
-        "At least one of the source_fx strings you entered does not exist in the AquaCache package."
+        "When adding multiple timeseries, source_adapters must be a list ",
+        "with one assignment data.frame or NULL per timeseries."
       )
     }
-  }
-  if (length(source_fx) == 1 && maxlength > 1) {
-    source_fx <- rep(source_fx, maxlength)
-  }
-
-  if (length(source_fx_args) == 1 && maxlength > 1) {
+    list(source_adapters)
+  } else if (is.list(source_adapters) && length(source_adapters) == maxlength) {
+    source_adapters
+  } else {
     stop(
-      "source_fx_args must be a vector of the same length as the other parameters OR left NA; you cannot leave it as length 1 as this function presumes that arguments are particular to single timeseries and won't replicate to length of other vectors."
+      "source_adapters must be NULL, one assignment data.frame for one ",
+      "timeseries, or a list with one element per timeseries."
     )
   }
+  source_adapters_by_series <- lapply(
+    source_adapters_by_series,
+    source_adapter_assignments_normalize,
+    con = con,
+    data_domain = "continuous"
+  )
 
   if (!any(is.na(note))) {
     if (!inherits(note, "character")) {
@@ -513,16 +551,22 @@ addACTimeseries <- function(
     }
     tryCatch(
       {
-        args <- source_fx_args[i]
-        if (is.na(args) || identical(trimws(args), "")) {
-          args <- NA_character_
+        source_assignments <- source_adapters_by_series[[i]]
+        fetch_assignments <- source_assignments[
+          source_assignments$active &
+            !is.na(source_assignments$fetch_priority),
+          ,
+          drop = FALSE
+        ]
+        if (nrow(fetch_assignments) > 0L) {
+          fetch_assignments <- fetch_assignments[
+            order(fetch_assignments$fetch_priority),
+            ,
+            drop = FALSE
+          ]
+          fetch_source_fx <- fetch_assignments$source_fx[[1L]]
         } else {
-          # Split a single "key: value, key2: value2" string into JSON.
-          args <- strsplit(args, ",\\s*")[[1]]
-          keys <- sub(":.*", "", args)
-          vals <- sub("^[^:]+:\\s*", "", args)
-          args <- stats::setNames(as.list(vals), keys)
-          args <- jsonlite::toJSON(args, auto_unbox = TRUE)
+          fetch_source_fx <- NA_character_
         }
 
         aggregation_type_id <- DBI::dbGetQuery(
@@ -593,17 +637,20 @@ addACTimeseries <- function(
           record_rate = record_rate[i],
           share_with = paste0("{", paste(share_with[i], collapse = ", "), "}"),
           default_owner = owner[i],
-          source_fx = source_fx[i],
-          source_fx_args = args,
           note = note[i],
-          end_datetime = if (is.na(source_fx[i])) NA else start_datetime[i] - 1
+          end_datetime = if (is.na(fetch_source_fx)) {
+            NA
+          } else {
+            start_datetime[i] - 1
+          }
         )
 
+        new_timeseries_created <- FALSE
         tryCatch(
           {
             new_tsid <- DBI::dbGetQuery(
               con,
-              "INSERT INTO continuous.timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, source_fx, source_fx_args, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13::jsonb, $14) RETURNING timeseries_id;",
+              "INSERT INTO continuous.timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12) RETURNING timeseries_id;",
               params = list(
                 add$location_id,
                 add$sub_location_id,
@@ -616,11 +663,10 @@ addACTimeseries <- function(
                 add$record_rate,
                 add$share_with,
                 add$default_owner,
-                add$source_fx,
-                add$source_fx_args,
                 add$note
               )
             )[1, 1]
+            new_timeseries_created <- TRUE
 
             message(
               "Added a new entry to the timeseries table for location ",
@@ -679,6 +725,15 @@ addACTimeseries <- function(
           }
         )
 
+        if (new_timeseries_created && nrow(source_assignments) > 0L) {
+          source_adapter_assignments_insert(
+            con = con,
+            data_domain = "continuous",
+            series_id = new_tsid,
+            assignments = source_assignments
+          )
+        }
+
         if (!is.null(data)) {
           x <- data[[i]]
           if (!is.data.frame(x)) {
@@ -711,7 +766,7 @@ addACTimeseries <- function(
           }
         }
 
-        if (!is.na(source_fx[i])) {
+        if (!is.na(fetch_source_fx)) {
           param_name <- DBI::dbGetQuery(
             con,
             paste0(
@@ -738,8 +793,7 @@ addACTimeseries <- function(
               )
               getNewContinuous(
                 con = con,
-                timeseries_id = new_tsid,
-                stats = TRUE
+                timeseries_id = new_tsid
               )
             },
             error = function(e) {
@@ -751,7 +805,7 @@ addACTimeseries <- function(
                 "."
               )
               if (
-                (add$source_fx == "downloadWSC") &
+                (fetch_source_fx == "downloadWSC") &
                   param_name %in% c("water level", "water flow")
               ) {
                 message("Attempting to add historical data from HYDAT database")
@@ -778,7 +832,7 @@ addACTimeseries <- function(
 
           # Now conditionally check for HYDAT data
           if (
-            (add$source_fx == "downloadWSC") &
+            (fetch_source_fx == "downloadWSC") &
               param_name %in% c("water level", "water flow")
           ) {
             message("Adding historical data from HYDAT database")
@@ -827,7 +881,7 @@ addACTimeseries <- function(
           }
         } else {
           message(
-            "You didn't specify a source_fx. No data was added to the measurements_continuous or measurements_discrete table, so make sure you go and add that data ASAP. If you made a mistake delete the timeseries from the timeseries table and restart. The timeseries ID for this new entry is ",
+            "You didn't specify an active fetch source adapter. No data was added to the measurements_continuous table, so make sure you add that data manually. The timeseries ID for this new entry is ",
             new_tsid
           )
         }

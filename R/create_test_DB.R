@@ -92,7 +92,10 @@ create_test_db <- function(
   tryCatch(
     {
       # Check if the testdb database exists already
-      existing_dbs <- DBI::dbGetQuery(con, "SELECT datname FROM pg_catalog.pg_database;")
+      existing_dbs <- DBI::dbGetQuery(
+        con,
+        "SELECT datname FROM pg_catalog.pg_database;"
+      )
       if ("testdb" %in% existing_dbs$datname) {
         # Ask the user if they want to delete and replace the existing testdb database
         message(
@@ -333,10 +336,15 @@ create_test_db <- function(
     "public.parameters",
     "public.parameter_relationships",
     "public.qualifier_types",
+    "public.source_adapter_capabilities",
     "spatial.raster_types",
     "boreholes.borehole_well_purposes",
     "boreholes.casing_materials",
     "boreholes.drillers",
+    "boreholes.drill_methods",
+    "boreholes.seal_materials",
+    "boreholes.screen_types",
+    "boreholes.screen_materials",
     "criteria.guideline_publishers",
     "criteria.guideline_series",
     "criteria.guideline_comparison_operators",
@@ -721,58 +729,49 @@ create_test_db <- function(
     sprintf(
       "INSERT INTO continuous.timeseries (
          timeseries_id, parameter_id, media_id, aggregation_type_id,
-         start_datetime, end_datetime, last_new_data, source_fx,
-         source_fx_args, note, record_rate, location_id, z_id, active,
+         start_datetime, end_datetime, last_new_data,
+         note, record_rate, location_id, z_id, active,
          share_with, default_owner, sensor_priority, sub_location_id,
          timezone_daily_calc, sync_remote, matrix_state_id,
          timeseries_type, publicly_visible
        ) VALUES
          (1, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"water_level\"}'::jsonb,
           'Synthetic 15-minute water level.', interval '15 minutes',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (2, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"water_temperature\"}'::jsonb,
           'Synthetic 15-minute water temperature.', interval '15 minutes',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (3, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"air_temperature\"}'::jsonb,
           'Synthetic hourly air temperature.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (4, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"precipitation\"}'::jsonb,
           'Synthetic hourly precipitation totals.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (5, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"swe\"}'::jsonb,
           'Synthetic daily snow water equivalent.', interval '1 day',
           %d, %d, true, ARRAY['public_reader'], %d, 1, %d, 0, true,
           %d, 'basic', true),
          (6, %d, %d, %d, NULL, NULL, NULL,
-          NULL, NULL, 'Synthetic compound fallback water level.', interval '15 minutes',
+          'Synthetic compound fallback water level.', interval '15 minutes',
           %d, %d, true, ARRAY['public_reader'], %d, 2, NULL, 0, true,
           %d, 'compound', true),
          (7, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"conductance\"}'::jsonb,
          'Synthetic hourly specific conductance.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (8, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"water_flow\"}'::jsonb,
           'Synthetic hourly water flow.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (9, %d, %d, %d, NULL, NULL, NULL,
-          'downloadSynthetic', '{\"series\":\"conductivity\"}'::jsonb,
           'Synthetic hourly conductivity used as a compound member.', interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 1, NULL, 0, true,
           %d, 'basic', true),
          (10, %d, %d, %d, NULL, NULL, NULL,
-          NULL, NULL,
           'Synthetic temperature-corrected specific conductance derived from conductivity and water temperature.',
           interval '1 hour',
           %d, %d, true, ARRAY['public_reader'], %d, 2, NULL, 0, true,
@@ -849,6 +848,35 @@ create_test_db <- function(
       owner_org,
       matrix_liquid
     )
+  )
+
+  DBI::dbExecute(
+    test_con,
+    "INSERT INTO public.source_adapter_capabilities (
+       source_fx, data_domain, adapter_kind, enabled, note
+     ) VALUES
+       ('downloadSynthetic', 'continuous', 'standard', TRUE,
+        'Synthetic adapter used by create_test_db fixtures.'),
+       ('downloadSyntheticDiscrete', 'discrete', 'standard', TRUE,
+        'Synthetic adapter used by create_test_db fixtures.')
+     ON CONFLICT (source_fx, data_domain) DO UPDATE
+       SET enabled = EXCLUDED.enabled"
+  )
+
+  DBI::dbExecute(
+    test_con,
+    "INSERT INTO continuous.timeseries_source_adapters (
+       timeseries_id, source_fx, source_fx_args, fetch_priority,
+       synchronize_priority, active
+     ) VALUES
+       (1, 'downloadSynthetic', '{\"series\":\"water_level\"}', 1, 1, TRUE),
+       (2, 'downloadSynthetic', '{\"series\":\"water_temperature\"}', 1, 1, TRUE),
+       (3, 'downloadSynthetic', '{\"series\":\"air_temperature\"}', 1, 1, TRUE),
+       (4, 'downloadSynthetic', '{\"series\":\"precipitation\"}', 1, 1, TRUE),
+       (5, 'downloadSynthetic', '{\"series\":\"swe\"}', 1, 1, TRUE),
+       (7, 'downloadSynthetic', '{\"series\":\"conductance\"}', 1, 1, TRUE),
+       (8, 'downloadSynthetic', '{\"series\":\"water_flow\"}', 1, 1, TRUE),
+       (9, 'downloadSynthetic', '{\"series\":\"conductivity\"}', 1, 1, TRUE)"
   )
 
   DBI::dbExecute(
@@ -1155,12 +1183,11 @@ create_test_db <- function(
       "INSERT INTO discrete.sample_series (
          sample_series_id, location_id, sub_location_id, synch_from,
          synch_to, default_owner, default_contributor, last_new_data,
-         active, source_fx, source_fx_args, note, sync_remote
+         active, note, sync_remote
        ) VALUES (
          1, %d, %d, '2023-01-01 00:00+00',
          '2023-01-10 00:00+00', %d, %d, '2023-01-10 00:00+00',
-         true, 'downloadSyntheticDiscrete',
-         '{\"series\":\"synthetic_samples\"}'::jsonb,
+         true,
          'Synthetic sample series for automated tests.', true
        )",
       fake_location_id,
@@ -1168,6 +1195,16 @@ create_test_db <- function(
       owner_org,
       contributor_org
     )
+  )
+  DBI::dbExecute(
+    test_con,
+    "INSERT INTO discrete.sample_series_source_adapters (
+       sample_series_id, source_fx, source_fx_args, fetch_priority,
+       synchronize_priority, active
+     ) VALUES (
+       1, 'downloadSyntheticDiscrete',
+       '{\"series\":\"synthetic_samples\"}', 1, 1, TRUE
+     )"
   )
   DBI::dbExecute(
     test_con,

@@ -5,7 +5,9 @@
 #' A function used to fetch weather data from ECCC, using the weathercan package for speed and simplicity. Since ECCC weather data comes in as a tibble with ~36 rows (all parameters)and there is no way to tailor the request to a single parameter, this function will save the output of the first download as an .rdata file to the session temporary folder. Subsequent runs of the function will search the temporary folder for a suitable file and attempt to use it, downloading again only if no suitable file is found. Cached files covering a broader date range can also be reused for narrower requests. Temporary folder contents are deleted when the R session is closed.
 #'
 #' @param location An ECCC Station ID (not to be mistaken for other IDs such as the Nav Canada ID, the WMO ID, or the Climate ID). See [weathercan::stations()] for help finding the right ID.
-#' @param parameter The name of the column containing the desired data, as output in the data.frame given by [weathercan::weather_dl()]. Taken from the source_fx_args in the timeseries table table. Note that this column name varies depending on the interval specified (hour, day, month).
+#' @param parameter The desired column returned by
+#'   [weathercan::weather_dl()]. Usually supplied through the selected source
+#'   assignment's `source_fx_args`; it varies with `interval`.
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
 #' @param interval The interval to pass to [weathercan::weather_dl()], one of "hour", "day", "month".

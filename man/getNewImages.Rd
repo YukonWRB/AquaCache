@@ -14,9 +14,16 @@ getNewImages(image_series_ids = "all", con = NULL, active = "default")
 \item{active}{Sets behavior for import of new images for image series. If set to 'default', the column 'active' in the image_series table will determine whether to get new images or not. If set to 'all', all image series will be fetched regardless of the 'active' column.}
 }
 \description{
-Retrieves new data corresponding to entries in the table "image_series". As with the timeseries table, fetching new data depends on the function listed in the source_fx column of the relevant table and optionally on parameters in column source_fx_args. Refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
+Retrieves images using the active assignment with the lowest fetch priority
+in \code{files.image_series_source_adapters} for each image series.
+Every source function must have an enabled image-domain entry in
+\code{public.source_adapter_capabilities}.
 \subsection{Default arguments passed to 'source_fx' functions:}{
 
-This function passes default arguments to the "source_fx" function: 'location' gets the location referenced by the column 'location_id', start_datetime defaults to the instant after the last point already existing in the DB. Additional parameters can be passed using the "source_fx_args" column in the "timeseries" table.
+This function passes \code{start_datetime}, defaulting to the instant after the
+last image. Additional parameters come from the selected assignment's
+\code{source_fx_args} JSON object.
+
+If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 }
 }

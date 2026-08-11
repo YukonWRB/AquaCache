@@ -19,18 +19,19 @@ addACTimeseries(
   record_rate = NA,
   share_with = "public_reader",
   owner = NA,
-  source_fx = NA,
-  source_fx_args = NA,
+  source_adapters = NULL,
   note = NA,
   con = NULL
 )
 }
 \arguments{
-\item{df}{A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, source_fx, source_fx_args, note. If this parameter is provided, all other parameters save for \code{data} must be NA or left as their default values. See notes for the other parameters for more information on each column of df.}
+\item{df}{A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, note. An optional list-column named \code{source_adapters} may contain one assignment data.frame per new timeseries. If this parameter is provided, all other parameters save for \code{data} must be left at their defaults.}
 
 \item{data}{An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.}
 
-\item{start_datetime}{A character or posixct vector of datetimes from which to look for new data, if source_fx is specified. Will be coerced to posixct with a time zone of UTC if not posixct.}
+\item{start_datetime}{A character or POSIXct vector of datetimes from which
+to look for new data when an active fetch assignment is specified. Values
+are coerced to POSIXct in UTC.}
 
 \item{location}{A character vector corresponding to locations.location_code (preferred), locations.alias (legacy and nullable), or locations.name OR a numeric vector corresponding to locations.location_id.}
 
@@ -54,9 +55,11 @@ addACTimeseries(
 
 \item{owner}{A numeric vector of the owner(s) of the timeseries(s). This can be different from the location owner!}
 
-\item{source_fx}{The function to use for fetching data to append to the timeseries automatically. If specified, must be one of the 'downloadXXX' functions in this R package.}
-
-\item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.}
+\item{source_adapters}{\code{NULL}, one assignment data.frame when adding one
+timeseries, or a list containing one assignment data.frame (or \code{NULL}) per
+new timeseries. Columns are \code{source_fx}, optional JSON or named-list
+\code{source_fx_args}, \code{fetch_priority}, \code{synchronize_priority}, \code{active}, and
+\code{note}. Every function must be registered for the continuous domain.}
 
 \item{note}{Text notes to append to the timeseries.}
 
@@ -75,31 +78,62 @@ You can add the new timeseries by directly editing the database, but this functi
 
 If specifying a data.frame for argument \code{data}, different criteria applies depending on if the timeseries is categorized as continuous or discrete.
 For continuous data:
-The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered to \code{measurements_continuous} as one-day-period rows and database triggers maintain \code{measurements_calculated_daily}. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function \code{\link[=addNewContinuous]{addNewContinuous()}} will be called to add this data to the database. If source_fx is also specified it will be called to fetch more recent data than that in this data.frame.
-For discrete data:
-This is not supported yet.
+The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered to \code{measurements_continuous} as one-day-period rows and database triggers maintain \code{measurements_calculated_daily}. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function \code{\link[=addNewContinuous]{addNewContinuous()}} will be called to add this data to the database. If a fetch source adapter is also specified it will be called to fetch more recent data than that in this data.frame.
 
-Additional arguments to pass to the function specified in \code{source_fx} go in argument \code{source_fx_args} (or a column with same name in 'df') and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
+Source adapters are supplied in \code{source_adapters}. Each assignment may be used for fetching, synchronization, or both, and may be retained while temporarily inactive. The highest active priority (lowest number) is selected for each operation.
 }
 \examples{
 \dontrun{
-#Make a data.frame to pass to the function:
-df <- data.frame(start_datetime = "2015-01-01 00:00",
-location = "09AA-M3",
-z = c(NA, 3),
-parameter = c(34, 1154),
-media = 7,
-sensor_priority = 1,
-aggregation_type = c("sum", "mean"),
-record_rate = "1 hour",
-share_with = "public_reader",
-owner = 2,
-source_fx = "downloadAquarius",
-source_fx_args = NA,
-note = c("Total precipitation from standpipe, reset every year in the fall.",
-"Hourly average of wind speeds recorded every minute")
+# Each timeseries receives its own source-adapter assignment data frame.
+precipitation_sources <- data.frame(
+  source_fx = c("downloadAquarius", "downloadRWIS"),
+  source_fx_args = I(list(
+    list(
+      location = "09AA-M3",
+      parameter = "Precip Total",
+      difference = TRUE
+    ),
+    list(location = "RWIS_STATION", parameter = "Precipitation")
+  )),
+  fetch_priority = c(1L, 2L),
+  synchronize_priority = c(2L, 1L),
+  active = c(TRUE, TRUE),
+  note = c(
+    "Preferred source for routine fetching.",
+    "Preferred source for full synchronization."
+  )
 )
-#Add the timeseries using the data.frame
+
+wind_sources <- data.frame(
+  source_fx = "downloadAquarius",
+  source_fx_args = I(list(list(
+    location = "09AA-M3",
+    parameter = "Wind Speed"
+  ))),
+  fetch_priority = 1L,
+  synchronize_priority = 1L,
+  active = TRUE
+)
+
+# Add the assignment data frames as a list-column, one per timeseries.
+df <- data.frame(
+  start_datetime = "2015-01-01 00:00",
+  location = "09AA-M3",
+  z = c(NA, 3),
+  parameter = c(34, 1154),
+  media = 7,
+  sensor_priority = 1,
+  aggregation_type = c("sum", "mean"),
+  record_rate = "1 hour",
+  share_with = "public_reader",
+  owner = 2,
+  note = c(
+    "Total precipitation from standpipe, reset every fall.",
+    "Hourly average of wind speeds recorded every minute."
+  )
+)
+df$source_adapters <- list(precipitation_sources, wind_sources)
+
 addACTimeseries(df)
 }
 }

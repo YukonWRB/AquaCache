@@ -503,7 +503,13 @@ downloadSnowCourse <- function(
           length(common_datetimes),
           " data points. New location measurements take precedence over old for overlap period.' WHERE location_id = '",
           location_id,
-          "' AND source_fx = 'downloadSnowCourse';"
+          "' AND EXISTS (
+             SELECT 1
+             FROM discrete.sample_series_source_adapters ssa
+             WHERE ssa.sample_series_id = sample_series.sample_series_id
+               AND ssa.source_fx = 'downloadSnowCourse'
+               AND ssa.active
+           );"
         )
       )
     } else {

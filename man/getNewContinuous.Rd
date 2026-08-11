@@ -13,7 +13,6 @@ getNewContinuous(
   dbPort = NULL,
   dbUser = NULL,
   dbPass = NULL,
-  stats = TRUE,
   verbose = FALSE
 )
 }
@@ -34,18 +33,39 @@ getNewContinuous(
 
 \item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 
-\item{stats}{Deprecated compatibility argument. Daily calculations are maintained by database triggers after measurements are changed.}
-
 \item{verbose}{If TRUE, will print the timeseries_id of each iteration as it is processed. Default is FALSE.}
 }
 \value{
 The database is updated in-place, and a data.frame is generated with one row per updated location.
 }
 \description{
-Retrieves new real-time data starting from the last data point in the local database, using the function specified in the timeseries table column "source_fx". Only works on basic timeseries that are ALREADY in the measurements_continuous table and that have a proper entry in the timeseries table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for how to add new stations. Does not work on derived/compound timeseries or any timeseries of category "discrete": for that, use \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Timeseries with no specified source_fx will be ignored.
+Retrieves new real-time data starting from the last local data point. The
+active assignment with the lowest fetch priority in
+\code{continuous.timeseries_source_adapters} supplies each timeseries' source
+function and arguments. Timeseries without an eligible assignment are
+ignored. See \code{\link[=addACTimeseries]{addACTimeseries()}} for creating assignments.
+
+If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 \subsection{Default arguments passed to 'source_fx' functions:}{
 
-This function passes default arguments to the "source_fx" function for start_datetime, defaults to the instant after the last point already existing in the DB. The rest of the fetch parameters are set using the "source_fx_args" column in the "timeseries" table; refer to \code{\link[=addACTimeseries]{addACTimeseries()}} for a description of how to formulate these arguments.
+This function passes \code{start_datetime}, defaulting to the instant after the
+last local point. Other fetch parameters come from the selected assignment's
+\code{source_fx_args} JSON object.
+}
+
+\subsection{Multi-timeseries transmission sources:}{
+
+Source-adapter capabilities registered by database Patch 56 control
+automatic argument injection and cache-sharing groups. For example,
+\code{downloadNESDIS} receives the current \code{timeseries_id} automatically and
+timeseries sharing a DCP address reuse one raw transmission payload.
+Platform identifiers and field mappings remain database metadata; they do
+not need to be duplicated in each timeseries assignment's arguments.
+
+Every assigned \code{source_fx} must have an enabled entry in
+\code{public.source_adapter_capabilities} for the continuous domain. This keeps
+scheduled imports and administrative clients aligned on the supported
+continuous-data adapters.
 }
 
 \subsection{Assigning measurement periods:}{

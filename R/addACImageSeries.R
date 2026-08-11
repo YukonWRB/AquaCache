@@ -2,25 +2,44 @@
 #'
 #' Use this function to add a new image series, i.e. a continually updating time-series of images that can be accessed from the web or internal server location on a regular basis.
 #'
-#' @details
-#' #' Additional arguments to pass to the function specified in `source_fx` go in argument `source_fx_args` and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
+#' @details Source functions and arguments are stored as ordered assignments. The active assignment with the lowest `fetch_priority` is used by [getNewImages()].
 #'
-#' @param location_id The location_id associated with the image series.
+#' @param location_id The AquaCache location_id associated with the image series.
 #' @param start_datetime The datetime (as POSIXct) from which to look for images
-#' @param source_fx The function to use for fetching new images. Must be an existing function in this package.
-#' @param source_fx_args Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.
-#' @param share_with A *character* vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG"
+#' @param source_adapters An assignment data frame with columns `source_fx`, optional JSON or named-list `source_fx_args`, `fetch_priority`, `active`,  and optional `note`. Functions must be enabled for the image domain in `public.source_adapter_capabilities`.
+#' @param share_with A *character* vector of the user group(s) with which to share the timeseries, default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG"
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #'
 #' @return TRUE if successful, and a new entry in the database with images fetched.
 #' @export
 #'
+#' @examples
+#' \dontrun{
+#' image_sources <- data.frame(
+#'   source_fx = c("downloadWSCImages", "downloadNupointImages"),
+#'   source_fx_args = I(list(
+#'     list(location = "09AA001"),
+#'     list(location = "camera-01")
+#'   )),
+#'   fetch_priority = c(1L, 2L),
+#'   active = c(TRUE, FALSE),
+#'   note = c(
+#'     "Primary WSC image feed.",
+#'     "Configured backup, currently inactive."
+#'   )
+#' )
+#'
+#' addACImageSeries(
+#'   location_id = 123L,
+#'   start_datetime = as.POSIXct("2025-01-01", tz = "UTC"),
+#'   source_adapters = image_sources
+#' )
+#' }
 
 addACImageSeries <- function(
   location_id,
   start_datetime,
-  source_fx,
-  source_fx_args = NA,
+  source_adapters,
   share_with = "public_reader",
   con = NULL
 ) {
@@ -29,6 +48,15 @@ addACImageSeries <- function(
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
+  }
+
+  source_adapters <- source_adapter_assignments_normalize(
+    assignments = source_adapters,
+    con = con,
+    data_domain = "image"
+  )
+  if (!nrow(source_adapters)) {
+    stop("At least one image source-adapter assignment is required.")
   }
 
   # Confirm the location_id exists, tell the user the location 'name' that corresponds
@@ -70,35 +98,38 @@ addACImageSeries <- function(
     )
   }
 
-  args <- source_fx_args
-  # split into "argument1: value1" etc.
-  args <- strsplit(args, ",\\s*")[[1]]
-
-  # split only on first colon
-  keys <- sub(":.*", "", args)
-  vals <- sub("^[^:]+:\\s*", "", args)
-
-  # build named list
-  args <- stats::setNames(as.list(vals), keys)
-
-  # convert to JSON
-  args <- jsonlite::toJSON(args, auto_unbox = TRUE)
-
-  # Insert the new entry into the image_series table
-  res <- DBI::dbGetQuery(
-    con,
-    "INSERT INTO files.image_series (location_id, first_img, last_img, source_fx, source_fx_args, share_with, active, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING img_series_id;",
-    params = list(
-      location_id,
-      start_datetime,
-      start_datetime,
-      source_fx,
-      args,
-      paste0("{", paste(share_with, collapse = ","), "}"),
-      TRUE,
-      "Image series automatically taken from a web or server location."
-    )
-  )[1, 1]
+  DBI::dbBegin(con)
+  res <- tryCatch(
+    {
+      id <- DBI::dbGetQuery(
+        con,
+        "INSERT INTO files.image_series (
+           location_id, first_img, last_img, share_with, active, description
+         ) VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING img_series_id;",
+        params = list(
+          location_id,
+          start_datetime,
+          start_datetime,
+          paste0("{", paste(share_with, collapse = ","), "}"),
+          TRUE,
+          "Image series automatically taken from a web or server location."
+        )
+      )[1, 1]
+      source_adapter_assignments_insert(
+        con = con,
+        data_domain = "image",
+        series_id = id,
+        assignments = source_adapters
+      )
+      DBI::dbCommit(con)
+      id
+    },
+    error = function(e) {
+      DBI::dbRollback(con)
+      stop(e)
+    }
+  )
   added <- getNewImages(image_series_ids = res, con = con)
   if (length(added) == 0) {
     warning(

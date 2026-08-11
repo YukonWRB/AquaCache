@@ -7,22 +7,19 @@
 addACImageSeries(
   location_id,
   start_datetime,
-  source_fx,
-  source_fx_args = NA,
+  source_adapters,
   share_with = "public_reader",
   con = NULL
 )
 }
 \arguments{
-\item{location_id}{The location_id associated with the image series.}
+\item{location_id}{The AquaCache location_id associated with the image series.}
 
 \item{start_datetime}{The datetime (as POSIXct) from which to look for images}
 
-\item{source_fx}{The function to use for fetching new images. Must be an existing function in this package.}
+\item{source_adapters}{An assignment data frame with columns \code{source_fx}, optional JSON or named-list \code{source_fx_args}, \code{fetch_priority}, \code{active},  and optional \code{note}. Functions must be enabled for the image domain in \code{public.source_adapter_capabilities}.}
 
-\item{source_fx_args}{Arguments to pass to the function(s) specified in parameter 'source_fx'. See details.}
-
-\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, Default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG"}
+\item{share_with}{A \emph{character} vector of the user group(s) with which to share the timeseries, default is 'public_reader'. Pass multiple groups as a single string, e.g. "public_reader, YG"}
 
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.}
 }
@@ -33,5 +30,28 @@ TRUE if successful, and a new entry in the database with images fetched.
 Use this function to add a new image series, i.e. a continually updating time-series of images that can be accessed from the web or internal server location on a regular basis.
 }
 \details{
-#' Additional arguments to pass to the function specified in \code{source_fx} go in argument \code{source_fx_args} and will be converted to JSON format. It's therefore necessary to pass this argument in as a single length character vector in the style "argument1: value1, argument2: value2".
+Source functions and arguments are stored as ordered assignments. The active assignment with the lowest \code{fetch_priority} is used by \code{\link[=getNewImages]{getNewImages()}}.
+}
+\examples{
+\dontrun{
+image_sources <- data.frame(
+  source_fx = c("downloadWSCImages", "downloadNupointImages"),
+  source_fx_args = I(list(
+    list(location = "09AA001"),
+    list(location = "camera-01")
+  )),
+  fetch_priority = c(1L, 2L),
+  active = c(TRUE, FALSE),
+  note = c(
+    "Primary WSC image feed.",
+    "Configured backup, currently inactive."
+  )
+)
+
+addACImageSeries(
+  location_id = 123L,
+  start_datetime = as.POSIXct("2025-01-01", tz = "UTC"),
+  source_adapters = image_sources
+)
+}
 }
