@@ -528,6 +528,18 @@ test_that("OpenDCS client discovery honors an explicit path", {
   )
 })
 
+test_that("default LRGS servers use NOAA's documented hostnames", {
+  expect_equal(
+    AquaCache:::nesdis_default_servers(),
+    c(
+      "cdadata.wcda.noaa.gov",
+      "cdabackup.wcda.noaa.gov",
+      "lrgseddn1.cr.usgs.gov",
+      "lrgseddn2.cr.usgs.gov"
+    )
+  )
+})
+
 test_that("OpenDCS client discovery honors NESDIS_LRGS_CLIENT", {
   test_client <- make_test_lrgs_client()
   on.exit(unlink(test_client$directory, recursive = TRUE, force = TRUE), add = TRUE)
@@ -587,6 +599,44 @@ test_that("OpenDCS client discovery searches DCSTOOL_HOME", {
   )
 })
 
+test_that("OpenDCS client discovery searches versioned standard installs", {
+  test_client <- make_test_lrgs_client()
+  install_root <- tempfile("opendcs-standard-")
+  old_bin <- file.path(install_root, "7.0.16", "opendcs-7.0.16", "bin")
+  new_bin <- file.path(install_root, "7.0.17", "opendcs-7.0.17", "bin")
+  dir.create(old_bin, recursive = TRUE)
+  dir.create(new_bin, recursive = TRUE)
+  old_client <- file.path(old_bin, basename(test_client$client))
+  new_client <- file.path(new_bin, basename(test_client$client))
+  file.copy(test_client$client, old_client)
+  file.copy(test_client$client, new_client)
+  if (.Platform$OS.type != "windows") {
+    Sys.chmod(c(old_client, new_client), mode = "0755")
+  }
+  Sys.setFileTime(old_client, as.POSIXct("2026-01-01", tz = "UTC"))
+  Sys.setFileTime(new_client, as.POSIXct("2026-02-01", tz = "UTC"))
+  on.exit(
+    unlink(
+      c(test_client$directory, install_root),
+      recursive = TRUE,
+      force = TRUE
+    ),
+    add = TRUE
+  )
+  withr::local_envvar(c(
+    NESDIS_LRGS_CLIENT = NA,
+    DCSTOOL_HOME = NA,
+    PATH = ""
+  ))
+
+  expect_equal(
+    AquaCache:::nesdis_resolve_client_path(
+      standard_install_roots = install_root
+    ),
+    normalizePath(new_client, mustWork = TRUE)
+  )
+})
+
 test_that("OpenDCS batch clients are invoked directly on Windows", {
   skip_if(.Platform$OS.type != "windows")
 
@@ -602,6 +652,7 @@ test_that("OpenDCS batch clients are invoked directly on Windows", {
       "shift",
       "goto check_args",
       ":payload",
+      "echo cli: password=test-password",
       'echo 4700000126209131337G4201NN123EAB00042":NESDIS_TEST 0 I15 42'
     ),
     client,
@@ -623,6 +674,8 @@ test_that("OpenDCS batch clients are invoked directly on Windows", {
 
   expect_equal(fetched$server, "127.0.0.1")
   expect_match(fetched$message, "NESDIS_TEST", fixed = TRUE)
+  expect_false(grepl("test-password", fetched$message, fixed = TRUE))
+  expect_match(fetched$message, "<redacted>", fixed = TRUE)
 })
 
 test_that("OpenDCS exception output is reported as a retrieval failure", {

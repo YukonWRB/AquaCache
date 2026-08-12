@@ -43,14 +43,17 @@
 #'   used and the connection is closed on exit.
 #' @param client_path Optional path to the OpenDCS `getDcpMessages` launcher
 #'   (`getDcpMessages.bat` on Windows). When `NULL`, AquaCache checks
-#'   `NESDIS_LRGS_CLIENT`, the system `PATH`, `DCSTOOL_HOME/bin`, and finally
-#'   the legacy AquaCache Windows install path.
+#'   `NESDIS_LRGS_CLIENT`, the system `PATH`, `DCSTOOL_HOME/bin`, standard
+#'   versioned OpenDCS directories under `/opt` and `/usr/local` on Unix-like
+#'   systems, and finally the legacy AquaCache Windows install path.
 #' @param username LRGS username. Defaults to `NESDIS_LRGS_USER`.
 #' @param password Optional LRGS password. Defaults to
 #'   `NESDIS_LRGS_PASSWORD`. Leave blank for servers that permit
 #'   unauthenticated DDS access.
 #' @param servers Optional character vector of LRGS servers. Route-level
-#'   `route_config.lrgs_servers` takes precedence when present.
+#'   `route_config.lrgs_servers` takes precedence when present. Defaults use
+#'   the public LRGS hostnames documented by NOAA rather than fixed IP
+#'   addresses.
 #' @param port Optional LRGS port. Route-level `route_config.lrgs_port` takes
 #'   precedence. The default is 16003.
 #' @param overwrite Passed to [addNewContinuous()]. `"no"` is recommended for
@@ -633,12 +636,10 @@ nesdis_config_number <- function(config, key, default) {
 #' @noRd
 nesdis_default_servers <- function() {
   c(
-    "205.156.2.189",
-    "205.156.2.186",
-    "205.156.2.174",
-    "152.61.129.81",
-    "152.61.129.82",
-    "152.61.129.93"
+    "cdadata.wcda.noaa.gov",
+    "cdabackup.wcda.noaa.gov",
+    "lrgseddn1.cr.usgs.gov",
+    "lrgseddn2.cr.usgs.gov"
   )
 }
 
@@ -950,15 +951,10 @@ nesdis_fetch_lrgs <- function(
     )
 
     if (inherits(output, "error")) {
-      diagnostic_text <- conditionMessage(output)
-      if (nzchar(password)) {
-        diagnostic_text <- gsub(
-          password,
-          "<redacted>",
-          diagnostic_text,
-          fixed = TRUE
-        )
-      }
+      diagnostic_text <- nesdis_redact_password(
+        conditionMessage(output),
+        password
+      )
       attempts[[server]] <- list(
         status = NA_integer_,
         payload_bytes = 0,
@@ -974,6 +970,10 @@ nesdis_fetch_lrgs <- function(
     } else {
       ""
     }
+    # Some OpenDCS launchers print the complete Java command, including the
+    # value supplied to -P. Redact before parsing, returning, or caching it.
+    message_text <- nesdis_redact_password(message_text, password)
+    stderr_text <- nesdis_redact_password(stderr_text, password)
     output_lines <- trimws(strsplit(
       message_text,
       "\r\n|\n|\r",
@@ -994,14 +994,6 @@ nesdis_fetch_lrgs <- function(
           ignore.case = TRUE
         )
     )
-    if (nzchar(password) && nzchar(diagnostic_text)) {
-      diagnostic_text <- gsub(
-        password,
-        "<redacted>",
-        diagnostic_text,
-        fixed = TRUE
-      )
-    }
     attempts[[server]] <- list(
       status = status,
       payload_bytes = length(charToRaw(enc2utf8(message_text))),
@@ -1066,7 +1058,33 @@ nesdis_fetch_lrgs <- function(
 
 #' @keywords internal
 #' @noRd
-nesdis_resolve_client_path <- function(client_path = NULL) {
+nesdis_redact_password <- function(text, password) {
+  if (
+    !length(text) ||
+      !length(password) ||
+      is.na(password) ||
+      !nzchar(password)
+  ) {
+    return(text)
+  }
+  gsub(password, "<redacted>", text, fixed = TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+nesdis_resolve_client_path <- function(
+  client_path = NULL,
+  standard_install_roots = if (.Platform$OS.type == "windows") {
+    character()
+  } else {
+    c(
+      "/opt/opendcs",
+      "/opt/OpenDCS",
+      "/usr/local/opendcs",
+      "/usr/local/OpenDCS"
+    )
+  }
+) {
   if (!is.null(client_path)) {
     if (
       length(client_path) != 1L ||
@@ -1125,6 +1143,40 @@ nesdis_resolve_client_path <- function(client_path = NULL) {
     )
   }
 
+  # Linux OpenDCS packages are commonly unpacked into a versioned directory,
+  # for example /opt/opendcs/7.0.17/opendcs-7.0.17/bin. Search only bounded,
+  # conventional roots and prefer the most recently modified installation.
+  standard_install_roots <- unique(path.expand(
+    standard_install_roots[
+      !is.na(standard_install_roots) & nzchar(standard_install_roots)
+    ]
+  ))
+  standard_clients <- unlist(
+    lapply(
+      standard_install_roots[dir.exists(standard_install_roots)],
+      function(root) {
+        matches <- list.files(
+          root,
+          pattern = "^getDcpMessages(\\.bat)?$",
+          recursive = TRUE,
+          full.names = TRUE
+        )
+        matches[
+          basename(matches) %in% launcher_names &
+            basename(dirname(matches)) == "bin"
+        ]
+      }
+    ),
+    use.names = FALSE
+  )
+  if (length(standard_clients) > 1L) {
+    modified <- as.numeric(file.info(standard_clients)$mtime)
+    standard_clients <- standard_clients[
+      order(modified, standard_clients, decreasing = TRUE, na.last = TRUE)
+    ]
+  }
+  candidates <- c(candidates, standard_clients)
+
   if (.Platform$OS.type == "windows") {
     candidates <- c(
       candidates,
@@ -1153,7 +1205,8 @@ nesdis_resolve_client_path <- function(client_path = NULL) {
   stop(
     "downloadNESDIS: OpenDCS LRGS client was not found. Pass client_path, ",
     "set NESDIS_LRGS_CLIENT, add getDcpMessages to PATH, or set ",
-    "DCSTOOL_HOME. Checked: ",
+    "DCSTOOL_HOME. AquaCache also searches standard OpenDCS installations ",
+    "under /opt and /usr/local on Unix-like systems. Checked: ",
     checked,
     "."
   )

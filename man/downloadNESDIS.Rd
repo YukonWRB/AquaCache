@@ -43,8 +43,9 @@ used and the connection is closed on exit.}
 
 \item{client_path}{Optional path to the OpenDCS \code{getDcpMessages} launcher
 (\code{getDcpMessages.bat} on Windows). When \code{NULL}, AquaCache checks
-\code{NESDIS_LRGS_CLIENT}, the system \code{PATH}, \code{DCSTOOL_HOME/bin}, and finally
-the legacy AquaCache Windows install path.}
+\code{NESDIS_LRGS_CLIENT}, the system \code{PATH}, \code{DCSTOOL_HOME/bin}, standard
+versioned OpenDCS directories under \verb{/opt} and \verb{/usr/local} on Unix-like
+systems, and finally the legacy AquaCache Windows install path.}
 
 \item{username}{LRGS username. Defaults to \code{NESDIS_LRGS_USER}.}
 
@@ -53,7 +54,8 @@ the legacy AquaCache Windows install path.}
 unauthenticated DDS access.}
 
 \item{servers}{Optional character vector of LRGS servers. Route-level
-\code{route_config.lrgs_servers} takes precedence when present.}
+\code{route_config.lrgs_servers} takes precedence when present. Defaults use
+the public LRGS hostnames documented by NOAA rather than fixed IP addresses.}
 
 \item{port}{Optional LRGS port. Route-level \code{route_config.lrgs_port} takes
 precedence. The default is 16003.}
