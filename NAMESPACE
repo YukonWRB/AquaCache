@@ -84,6 +84,7 @@ export(upsertImportQualifierMappings)
 export(writeRaster)
 export(writeRaster_old)
 import(data.table)
+importFrom(Rcpp,sourceCpp)
 importFrom(data.table,
   ":=",
   .BY,
@@ -97,3 +98,4 @@ importFrom(data.table,
 )
 importFrom(magrittr,"%>%")
 importFrom(rlang,.data)
+useDynLib(AquaCache, .registration = TRUE)

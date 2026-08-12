@@ -16,6 +16,7 @@ compute_increments <- function(
   min_pos = 0,
   max_gap = 0
 ) {
+  # Check if data.table, if not convert for speed
   as_dt <- data.table::is.data.table(ts)
   if (!as_dt) {
     ts <- data.table::as.data.table(ts)
@@ -66,59 +67,67 @@ compute_increments <- function(
   )
   data.table::setorder(ts, "datetime")
 
-  # Precompute length of preceding NA run
-  n <- nrow(ts)
-  is_na <- is.na(ts$value)
-  na_run_len <- integer(n)
-  if (any(is_na)) {
-    r <- rle(is_na)
-    ends <- cumsum(r$lengths)
-    starts <- ends - r$lengths + 1
-    for (k in which(r$values)) {
-      na_run_len[starts[k]:ends[k]] <- r$lengths[k]
-    }
-  }
+  # Offload calc to C++. Retained code below is the R-only method previously used, about 5x slower.
+  inc <- compute_increment_values_cpp(
+    values = ts$value,
+    reset_drop = reset_drop,
+    min_pos = min_pos,
+    max_gap = max_gap
+  )
 
-  # Compute increments with reset_drop, min_pos, and max_gap rules
-  inc <- rep(NA_real_, n)
-  # Initialize baseline
-  last_max <- ts$value[1]
+  # # Precompute length of preceding NA run
+  # n <- nrow(ts)
+  # is_na <- is.na(ts$value)
+  # na_run_len <- integer(n)
+  # if (any(is_na)) {
+  #   r <- rle(is_na)
+  #   ends <- cumsum(r$lengths)
+  #   starts <- ends - r$lengths + 1
+  #   for (k in which(r$values)) {
+  #     na_run_len[starts[k]:ends[k]] <- r$lengths[k]
+  #   }
+  # }
 
-  # Loop through time series
-  for (i in 2:n) {
-    # If we just crossed a gap: enforce max_gap
-    if (is_na[i - 1] && na_run_len[i - 1] > max_gap) {
-      inc[i] <- NA_real_ # don't compute across oversized gap
-      if (!is.na(ts$value[i])) {
-        last_max <- ts$value[i]
-      } # reset baseline at first valid
-      next
-    }
+  # # Compute increments with reset_drop, min_pos, and max_gap rules
+  # inc <- rep(NA_real_, n)
+  # # Initialize baseline
+  # last_max <- ts$value[1]
 
-    # If either side is NA (but gap not oversized), no increment
-    if (is.na(ts$value[i]) || is.na(ts$value[i - 1])) {
-      next
-    }
+  # # Loop through time series
+  # for (i in 2:n) {
+  #   # If we just crossed a gap: enforce max_gap
+  #   if (is_na[i - 1] && na_run_len[i - 1] > max_gap) {
+  #     inc[i] <- NA_real_ # don't compute across oversized gap
+  #     if (!is.na(ts$value[i])) {
+  #       last_max <- ts$value[i]
+  #     } # reset baseline at first valid
+  #     next
+  #   }
 
-    d <- ts$value[i] - ts$value[i - 1]
+  #   # If either side is NA (but gap not oversized), no increment
+  #   if (is.na(ts$value[i]) || is.na(ts$value[i - 1])) {
+  #     next
+  #   }
 
-    # Hard reset if large drop
-    if (d <= -reset_drop) {
-      last_max <- ts$value[i]
-      inc[i] <- 0
-      next
-    }
+  #   d <- ts$value[i] - ts$value[i - 1]
 
-    # Increment beyond baseline, ignore small positive noise
-    base <- max(last_max, ts$value[i - 1])
-    add <- ts$value[i] - base
-    if (add >= min_pos) {
-      inc[i] <- add
-      last_max <- ts$value[i]
-    } else {
-      inc[i] <- 0
-    }
-  }
+  #   # Hard reset if large drop
+  #   if (d <= -reset_drop) {
+  #     last_max <- ts$value[i]
+  #     inc[i] <- 0
+  #     next
+  #   }
+
+  #   # Increment beyond baseline, ignore small positive noise
+  #   base <- max(last_max, ts$value[i - 1])
+  #   add <- ts$value[i] - base
+  #   if (add >= min_pos) {
+  #     inc[i] <- add
+  #     last_max <- ts$value[i]
+  #   } else {
+  #     inc[i] <- 0
+  #   }
+  # }
 
   # Rebuild data.table
   out <- data.table::data.table(datetime = ts$datetime, value = inc)
