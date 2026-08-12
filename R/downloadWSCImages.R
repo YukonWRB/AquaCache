@@ -25,6 +25,24 @@ downloadWSCImages <- function(
     stop("Parameter start_datetime must be a POSIXct.")
   }
 
+  if (!is.null(save_path)) {
+    if (
+      length(save_path) != 1L ||
+        !is.character(save_path) ||
+        is.na(save_path) ||
+        !nzchar(trimws(save_path))
+    ) {
+      stop("Parameter save_path must be a single non-empty directory path.")
+    }
+    if (!dir.exists(save_path)) {
+      dir.create(save_path, recursive = TRUE, showWarnings = FALSE)
+    }
+    if (!dir.exists(save_path)) {
+      stop("Could not create save_path directory: ", save_path)
+    }
+    save_path <- normalizePath(save_path, mustWork = TRUE)
+  }
+
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
   saved_files <- list.files(paste0(tempdir(), "/downloadWSCImages"))
 
@@ -74,13 +92,19 @@ downloadWSCImages <- function(
 
   if (nrow(tbl) > 0) {
     files <- list()
-    for (i in 1:nrow(tbl)) {
+    for (i in seq_len(nrow(tbl))) {
       download_url <- paste0(url, "/", tbl[i, "link"[]])
       file <- httr::GET(
         download_url,
         config = httr::authenticate(username, password)
       )
       file$timestamp <- tbl[i, "datetime"]
+      if (!is.null(save_path)) {
+        writeBin(
+          file$content,
+          file.path(save_path, basename(tbl[i, "link"]))
+        )
+      }
       files[[tbl[i, "link"]]] <- file
     }
   } else {
