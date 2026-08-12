@@ -55,7 +55,8 @@ unauthenticated DDS access.}
 
 \item{servers}{Optional character vector of LRGS servers. Route-level
 \code{route_config.lrgs_servers} takes precedence when present. Defaults use
-the public LRGS hostnames documented by NOAA rather than fixed IP addresses.}
+the public LRGS hostnames documented by NOAA rather than fixed IP
+addresses.}
 
 \item{port}{Optional LRGS port. Route-level \code{route_config.lrgs_port} takes
 precedence. The default is 16003.}

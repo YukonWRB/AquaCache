@@ -206,7 +206,10 @@ getNewRasters <- function(
       )[1, 1] # searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
       if (!is.na(prelim)) {
         if (!is.null(end_datetime)) {
-          if (start_datetime_i < prelim) {
+          if (
+            !is.null(start_datetime_i) &&
+              start_datetime_i < prelim
+          ) {
             next_instant <- start_datetime_i
           } else {
             next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
