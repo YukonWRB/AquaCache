@@ -29,7 +29,13 @@ compute_increments <- function(
 
   # Add points where there are missing data
   ts <- suppressWarnings(calculate_period(ts, timeseries_id = NA))
-  ts[, "period_secs" := as.numeric(lubridate::period(ts$period))]
+
+  period_values <- unique(ts$period)
+  period_seconds <- as.numeric(lubridate::period(period_values))
+
+  ts[,
+    period_secs := period_seconds[match(period, period_values)]
+  ]
 
   # ---- Expand gaps with NA rows at each expected interval ----
   # Build per-row "next observed" and expected step
