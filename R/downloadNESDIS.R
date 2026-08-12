@@ -974,14 +974,13 @@ nesdis_fetch_lrgs <- function(
     # value supplied to -P. Redact before parsing, returning, or caching it.
     message_text <- nesdis_redact_password(message_text, password)
     stderr_text <- nesdis_redact_password(stderr_text, password)
-    output_lines <- trimws(strsplit(
-      message_text,
-      "\r\n|\n|\r",
-      perl = TRUE
-    )[[1L]])
     # OpenDCS may exit successfully after printing status or exception text.
-    # Only a line with the requested DCP header is a retrieved payload.
-    has_payload <- any(startsWith(output_lines, dcp_address))
+    # Only a valid requested-DCP header is a retrieved payload. The extractor
+    # also handles protocol boundary bytes before a header.
+    has_payload <- length(nesdis_extract_lrgs_transmissions(
+      message_text,
+      dcp_address
+    )) > 0L
     diagnostic_text <- paste(
       c(message_text, stderr_text)[nzchar(c(message_text, stderr_text))],
       collapse = "\n"
@@ -1275,7 +1274,35 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
   dcp_address <- toupper(trimws(dcp_address))
   lines <- strsplit(message, "\r\n|\n|\r", perl = TRUE)[[1L]]
   lines <- trimws(lines)
-  possible_header <- startsWith(toupper(lines), dcp_address) &
+
+  # DCP messages may end with a non-printing protocol byte. getDcpMessages
+  # adds a newline between messages, leaving that byte at the beginning of
+  # the next header line. Normalize only prefixes containing no printable
+  # characters so payload text cannot be mistaken for a transmission header.
+  address_positions <- regexpr(
+    dcp_address,
+    toupper(lines),
+    fixed = TRUE
+  )
+  header_prefix_is_nonprinting <- vapply(
+    seq_along(lines),
+    function(i) {
+      position <- address_positions[[i]]
+      if (position < 1L) {
+        return(FALSE)
+      }
+      prefix <- substr(lines[[i]], 1L, position - 1L)
+      !grepl("[[:graph:]]", prefix)
+    },
+    logical(1)
+  )
+  lines[header_prefix_is_nonprinting] <- substring(
+    lines[header_prefix_is_nonprinting],
+    address_positions[header_prefix_is_nonprinting]
+  )
+
+  possible_header <- header_prefix_is_nonprinting &
+    startsWith(toupper(lines), dcp_address) &
     nchar(lines, type = "chars") >= 38L &
     grepl("^[[:digit:]]{11}$", substr(lines, 9L, 19L))
   starts <- which(possible_header)

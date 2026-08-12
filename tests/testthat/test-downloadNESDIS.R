@@ -191,6 +191,80 @@ test_that("BLM transmissions use route-configured rows and sample timing", {
   expect_true(all(is.na(parsed[source_field == "SDQ"]$value)))
 })
 
+test_that("BLM parsing recognizes headers after non-printing boundaries", {
+  dcp_address <- "2C6093C0"
+  body <- paste(
+    c(
+      "0.10 0.20 0.30 0.40",
+      "004 005 006 007",
+      "180 190 200 210",
+      "010 011 012 013",
+      "080 081 082 083",
+      "13.1 13.0 12.9 12.8",
+      "GOOD GOOD GOOD GOOD"
+    ),
+    collapse = "\n"
+  )
+  transmission_times <- as.POSIXct("2026-08-10 00:09:33", tz = "UTC") +
+    0:44 * 60 * 60
+  messages <- vapply(
+    seq_along(transmission_times),
+    function(i) {
+      timestamp <- format(transmission_times[[i]], "%y%j%H%M%S", tz = "UTC")
+      message <- make_lrgs_shef_line(
+        dcp_address,
+        timestamp = timestamp,
+        body = paste0("\n", body)
+      )
+      if (i > 1L) {
+        message <- paste0(intToUtf8(3L), message)
+      }
+      message
+    },
+    character(1)
+  )
+  raw <- paste(messages, collapse = "\n")
+
+  transmissions <- AquaCache:::nesdis_extract_lrgs_transmissions(
+    raw,
+    dcp_address
+  )
+  expect_length(transmissions, 45L)
+  expect_length(
+    AquaCache:::nesdis_extract_lrgs_transmissions(
+      paste0("diagnostic:", messages[[1L]]),
+      dcp_address
+    ),
+    0L
+  )
+  expect_true(all(vapply(
+    transmissions,
+    function(transmission) length(transmission$body_lines) == 7L,
+    logical(1)
+  )))
+
+  parsed <- AquaCache:::nesdis_parse_dispatch(
+    raw,
+    dcp_address,
+    "BLM",
+    route_config = list(
+      parser_config = list(
+        fields = c("rn1", "ws", "wd", "ta", "rh", "vb", "SDQ"),
+        sample_interval_seconds = 15 * 60,
+        sample_offset_seconds = 2 * 60,
+        values_order = "oldest_first",
+        strict_field_count = TRUE
+      )
+    )
+  )
+
+  expect_equal(attr(parsed, "transmissions_received"), 45L)
+  expect_equal(
+    data.table::uniqueN(parsed[source_field == "ta"]$datetime),
+    45L * 4L
+  )
+})
+
 test_that("comma-delimited transmissions preserve numeric and text fields", {
   parsed <- AquaCache:::nesdis_parse_dispatch(
     read_nesdis_fixture("nesdis_comma_delimited.txt"),
