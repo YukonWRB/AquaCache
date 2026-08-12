@@ -153,11 +153,17 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
 
       download_url <- available$path[i]
       rast <- terra::rast(download_url)[[1]]
-      file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
-      rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
-      if (is.null(file[["units"]])) {
-        units <- "kg/(m^2)"
+      raster_units <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
+      if (
+        is.null(raster_units) ||
+          !length(raster_units) ||
+          is.na(raster_units[1]) ||
+          !nzchar(raster_units[1])
+      ) {
+        raster_units <- "kg/(m^2)"
       }
+      file[["units"]] <- raster_units
+      rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
       if (!clipped) {
         if (!is.null(clip)) {
           clip <- terra::project(clip, rast) # project clip vector to crs of the raster
