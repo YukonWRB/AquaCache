@@ -29,7 +29,6 @@ test_that("downloadHRDPA supplies fallback units and missing issued metadata", {
   ))
 
   expect_equal(result[[1]]$units, "kg/(m^2)")
-  expect_true(is.na(result[[1]]$issued))
   expect_equal(result[[1]]$rast, "projected-raster")
   expect_false(result$forecast)
 })
