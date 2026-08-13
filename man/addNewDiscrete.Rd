@@ -4,7 +4,7 @@
 \alias{addNewDiscrete}
 \title{Add new discrete sample data to the database}
 \usage{
-addNewDiscrete(con, sample, results)
+addNewDiscrete(con, sample, results, sample_groups = NULL)
 }
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
@@ -12,27 +12,40 @@ addNewDiscrete(con, sample, results)
 \item{sample}{A data.frame containing the sample metadata for a single discrete sample. Should contain a single row for a single sample.}
 
 \item{results}{A data.frame containing the results corresponding to the sample. Should contain one row per result.}
+
+\item{sample_groups}{Optional sample-group specifications. Supply a numeric
+vector of existing \code{sample_group_id} values, or a data frame with one row
+per group. A data-frame row can contain \code{sample_group_id}, or the arguments
+used by \code{\link[=createSampleGroup]{createSampleGroup()}}. Optional membership columns are
+\code{sequence_in_group} and \code{member_note}. Groups with the same owner, type,
+and code are reused.}
 }
 \value{
 The database sample_id for the inserted sample.
 }
 \description{
-Appends a discrete sample and its results to the AquaCache database inside a transaction, returning the created sample_id. The format of the data.frames passed as arguments are defined in the \code{details} section.
+Appends a discrete sample, its sample-group memberships, and its results to
+AquaCache inside one transaction, returning the created \code{sample_id}. The
+formats of the data frames are defined in the \code{details} section.
 }
 \details{
 The 'sample' data.frame must contain the following columns:
 \itemize{
-\item 'location_id': a numeric specifying the location_id of the data point from table 'locations'.
+\item 'location_id': a numeric location ID, or \code{NA} only when the selected sample
+type does not require a location. Every locationless sample must have at
+least one \code{sample_groups} entry.
 \item 'media_id': a numeric specifying the media_id of the data point from table 'medias'.
 \item 'datetime': a POSIXct datetime object in UTC 0 time zone, specifying the datetime of the data point.
 \item 'collection_method': a numeric specifying the collection_method_id of the data point from table 'collection_methods', such as 1 (observation), 27 (water bottle), or 14 (pump).
 \item 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
-\item 'owner': the owner of the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
-\item 'import_source_id': a numeric specifying the import_source_id of the data point from table 'import_sources' (use for tracking purposes).
+\item 'owner': the numeric organization ID that owns the sample.
 Optional columns are:
+\item 'import_source_id': a source-specific identifier used to match automated
+imports across runs. It must be supplied with \code{import_source}; manual
+samples may omit both fields.
 \item 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
 \item 'note': a character string with a note about the data point(s).
-\item 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
+\item 'contributor': the numeric organization ID that contributed the sample.
 \item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 \item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
 \item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.

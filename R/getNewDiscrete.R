@@ -14,17 +14,23 @@
 #' new data and, optionally, its arguments. Source functions must return
 #' a list of lists, each containing data frames named `sample` and `results`.
 #' The `sample` data frame must contain the following columns:
-#' - 'location_id': a numeric specifying the location_id of the data point from table 'locations'.
+#' - 'location_id': a numeric location ID. It may be `NA` only for a sample
+#'   type whose `requires_location` flag is false. If the column is omitted,
+#'   the sample-series location is used.
 #' - 'media_id': a numeric specifying the media_id of the data point from table 'medias'.
 #' - 'datetime': a POSIXct datetime object in UTC 0 time zone, specifying the datetime of the data point.
 #' - 'collection_method': a numeric specifying the collection_method_id of the data point from table 'collection_methods', such as 1 (observation), 27 (water bottle), or 14 (pump).
 #' - 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
-#' - 'owner': the owner of the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
-#' - 'import_source_id': a numeric specifying the import_source_id of the data point from table 'import_sources' (use for tracking purposes).
+#' - 'owner': the numeric organization ID that owns the sample. If omitted, the
+#'   sample-series default owner is used.
+#' - 'import_source_id': a non-missing source-specific identifier used to
+#'   match the sample across runs. Together with the registered source
+#'   function, it is the database-enforced identity for a locationless sample.
 #' Optional columns are:
 #' - 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
 #' - 'note': a character string with a note about the data point(s).
-#' - 'contributor' the name of the person or organization that contributed the data, as a character string. This should match entries in the 'organizations' table and an error will be thrown if it does not.
+#' - 'contributor': the numeric contributing organization ID. If omitted, the
+#'   sample-series default contributor is used.
 #' - 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 #' - 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
 #' - 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
@@ -40,6 +46,13 @@
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 #'
+#' Each returned sample list may also contain `sample_groups`. It can be a
+#' vector of existing `sample_group_id` values or a data frame in the format
+#' accepted by [addNewDiscrete()]. Source adapters should return the same
+#' `group_type`, `owner`, and `group_code` for related samples; the group will
+#' be created once and reused. A locationless sample, or a sample type whose
+#' `requires_sample_group` flag is true, must provide at least one group.
+#'
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 #' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 #'
@@ -50,7 +63,11 @@
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'sample_series' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
 #'
-#' @return The database is updated in-place, and a data.frame is generated with one row per updated location.
+#' @return A data.table with one row per inserted or previously imported sample
+#'   and columns
+#'   `sample_series_id`, `sample_id`, `action`, and list-columns containing the
+#'   normalized `sample`, `results`, and `sample_groups` input. An empty result
+#'   has the same columns.
 #' @export
 
 getNewDiscrete <- function(
@@ -226,6 +243,7 @@ getNewDiscrete <- function(
   }
 
   count <- 0 #counter for number of successful new pulls (samples - not individual results)
+  import_records <- list()
 
   # Run for loop over timeseries rows
   message("Fetching new discrete data with getNewDiscrete...")
@@ -387,6 +405,11 @@ getNewDiscrete <- function(
           ## Checks on sample metadata ###########
           # Ensure the sample data has required minimum columns
           sample <- data[[j]][["sample"]]
+          sample_groups <- if ("sample_groups" %in% names(data[[j]])) {
+            data[[j]][["sample_groups"]]
+          } else {
+            NULL
+          }
 
           # Functions may pass the location code instead of location_id, change it
           # Also possible that the function did not pass 'location_id' at all, if so fill it in using 'loc_id'
@@ -680,13 +703,93 @@ getNewDiscrete <- function(
             }
           }
 
+          # Every adapter record carries a source ID. Patch 58 makes the source
+          # pair unique for locationless samples, where location metadata
+          # cannot provide a retry key.
+          if (
+            is.na(sample$import_source_id[[1]]) ||
+              !nzchar(trimws(as.character(sample$import_source_id[[1]])))
+          ) {
+            warning(
+              "For sample_series_id ",
+              sid,
+              " element ",
+              j,
+              " import_source_id must be non-missing and nonblank. ",
+              "Skipping this source record."
+            )
+            next
+          }
+          if (is.na(suppressWarnings(as.integer(sample$location_id[[1]])))) {
+            existing_sample <- find_locationless_import_sample(
+              con = con,
+              import_source = source_fx,
+              import_source_id = sample$import_source_id
+            )
+            if (nrow(existing_sample) == 1L) {
+              link_discrete_sample_groups(
+                con = con,
+                sample_id = existing_sample$sample_id[[1]],
+                sample_groups = sample_groups,
+                default_owner = sample$owner[[1]],
+                default_contributor = if (
+                  "contributor" %in% names(sample)
+                ) {
+                  sample$contributor[[1]]
+                } else {
+                  NA_integer_
+                }
+              )
+              import_records[[length(import_records) + 1L]] <-
+                new_discrete_import_record(
+                  sample_series_id = sid,
+                  sample_id = existing_sample$sample_id[[1]],
+                  action = "existing",
+                  sample = sample,
+                  results = results,
+                  sample_groups = sample_groups
+                )
+              next
+            }
+          }
+
           # Append values
           # Transaction is started each time inside addNewDiscrete
+          sample_action <- "inserted"
           sample_id <- tryCatch(
             {
-              addNewDiscrete(con, sample, results)
+              addNewDiscrete(
+                con = con,
+                sample = sample,
+                results = results,
+                sample_groups = sample_groups
+              )
             },
             error = function(e) {
+              if (is.na(suppressWarnings(as.integer(sample$location_id[[1]])))) {
+                existing_sample <- find_locationless_import_sample(
+                  con = con,
+                  import_source = source_fx,
+                  import_source_id = sample$import_source_id
+                )
+                if (nrow(existing_sample) == 1L) {
+                  link_discrete_sample_groups(
+                    con = con,
+                    sample_id = existing_sample$sample_id[[1]],
+                    sample_groups = sample_groups,
+                    default_owner = sample$owner[[1]],
+                    default_contributor = if (
+                      "contributor" %in% names(sample)
+                    ) {
+                      sample$contributor[[1]]
+                    } else {
+                      NA_integer_
+                    }
+                  )
+                  sample_action <<- "existing"
+                  return(existing_sample$sample_id[[1]])
+                }
+              }
               warning(
                 "getNewDiscrete: Failed to commit new data for sample_series_id, ",
                 sid,
@@ -699,7 +802,16 @@ getNewDiscrete <- function(
             }
           )
           if (!is.na(sample_id)) {
-            count <- count + 1
+            if (sample_action == "inserted") count <- count + 1
+            import_records[[length(import_records) + 1L]] <-
+              new_discrete_import_record(
+                sample_series_id = sid,
+                sample_id = sample_id,
+                action = sample_action,
+                sample = sample,
+                results = results,
+                sample_groups = sample_groups
+              )
           }
         } # End of looping over each list element (sample) for a sample_series_id
         DBI::dbExecute(
@@ -747,4 +859,5 @@ getNewDiscrete <- function(
     },
     silent = TRUE
   )
+  bind_discrete_import_records(import_records)
 }
