@@ -980,7 +980,7 @@ tryCatch(
             managed(
               "client_path",
               "environment",
-              "AquaCache resolves the OpenDCS launcher from NESDIS_LRGS_CLIENT, PATH, or DCSTOOL_HOME when a path is not supplied explicitly."
+              "AquaCache resolves the OpenDCS launcher from NESDIS_LRGS_CLIENT, PATH, DCSTOOL_HOME, or standard versioned OpenDCS directories under /opt and /usr/local on Unix-like systems when a path is not supplied explicitly."
             ),
             managed(
               "username",

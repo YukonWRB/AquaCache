@@ -102,6 +102,17 @@ test_that("standard SHEF transmissions are parsed to normalized long data", {
   )
   expect_equal(parsed[source_field == "TA"]$value, c(1.1, 1.2))
   expect_equal(parsed[source_field == "GPS Synch"]$value, 1)
+
+  header_without_gps <- substr(line, 1L, 37L)
+  inline_payload <- substr(line, 39L, nchar(line))
+  parsed_without_gps <- AquaCache:::nesdis_parse_shef(
+    paste0(header_without_gps, inline_payload),
+    "47002136"
+  )
+  expect_equal(parsed_without_gps[source_field == "VB"]$value, c(12.4, 12.5))
+  expect_true(all(is.na(
+    parsed_without_gps[source_field == "GPS Synch"]$value
+  )))
 })
 
 test_that("McMaster underscore fields are preserved and independently mapped", {
@@ -189,6 +200,162 @@ test_that("BLM transmissions use route-configured rows and sample timing", {
     c("GOOD", "GOOD", "SUSPECT", "GOOD")
   )
   expect_true(all(is.na(parsed[source_field == "SDQ"]$value)))
+})
+
+test_that("BLM parsing recognizes headers after non-printing boundaries", {
+  dcp_address <- "2C6093C0"
+  body <- paste(
+    c(
+      "0.10 0.20 0.30 0.40",
+      "004 005 006 007",
+      "180 190 200 210",
+      "010 011 012 013",
+      "080 081 082 083",
+      "13.1 13.0 12.9 12.8",
+      "GOOD GOOD GOOD GOOD"
+    ),
+    collapse = "\n"
+  )
+  transmission_times <- as.POSIXct("2026-08-10 00:09:33", tz = "UTC") +
+    0:44 * 60 * 60
+  messages <- vapply(
+    seq_along(transmission_times),
+    function(i) {
+      timestamp <- format(transmission_times[[i]], "%y%j%H%M%S", tz = "UTC")
+      message <- make_lrgs_shef_line(
+        dcp_address,
+        timestamp = timestamp,
+        body = paste0("\n", body)
+      )
+      if (i > 1L) {
+        message <- paste0(intToUtf8(3L), message)
+      }
+      message
+    },
+    character(1)
+  )
+  raw <- paste(messages, collapse = "\n")
+
+  transmissions <- AquaCache:::nesdis_extract_lrgs_transmissions(
+    raw,
+    dcp_address
+  )
+  expect_length(transmissions, 45L)
+  expect_length(
+    AquaCache:::nesdis_extract_lrgs_transmissions(
+      paste0("diagnostic:", messages[[1L]]),
+      dcp_address
+    ),
+    0L
+  )
+  expect_true(all(vapply(
+    transmissions,
+    function(transmission) length(transmission$body_lines) == 7L,
+    logical(1)
+  )))
+
+  parsed <- AquaCache:::nesdis_parse_dispatch(
+    raw,
+    dcp_address,
+    "BLM",
+    route_config = list(
+      parser_config = list(
+        fields = c("rn1", "ws", "wd", "ta", "rh", "vb", "SDQ"),
+        sample_interval_seconds = 15 * 60,
+        sample_offset_seconds = 2 * 60,
+        values_order = "oldest_first",
+        strict_field_count = TRUE
+      )
+    )
+  )
+
+  expect_equal(attr(parsed, "transmissions_received"), 45L)
+  expect_equal(
+    data.table::uniqueN(parsed[source_field == "ta"]$datetime),
+    45L * 4L
+  )
+})
+
+test_that("BLM parsing accepts 37-character headers and hourly row layouts", {
+  dcp_address <- "2C6093C0"
+  fields <- c(
+    "blm_row_01", "blm_row_02", "ws", "wd", "rn1", "wg",
+    "tmax1", "tmin1", "rhmax1", "rhmin1", "vb", "blm_row_12",
+    "ta", "rh"
+  )
+  bodies <- list(
+    c(
+      "22.4", "034", "004.7", "194", "000.0", "011.5", "22.4",
+      "21.0", "044", "034", "13.6", "2659.13", "22.4", "036"
+    ),
+    c(
+      "21.0", "041", "003.0", "140", "000.0", "011.0", "21.0",
+      "17.8", "055", "041", "13.6", "2659.13", "21.0", "043"
+    ),
+    c(
+      "17.8", "055", "000.6", "229", "000.0", "007.6", "17.8",
+      "15.9", "058", "052", "13.6", "2659.13", "17.8", "053"
+    )
+  )
+  timestamps <- c("26224220933", "26224210933", "26224200933")
+  messages <- vapply(
+    seq_along(bodies),
+    function(i) {
+      header <- substr(
+        make_lrgs_shef_line(dcp_address, timestamp = timestamps[[i]]),
+        1L,
+        37L
+      )
+      if (i == 3L) {
+        header <- paste0(header, "\"")
+      } else {
+        header <- paste0(header, " ")
+      }
+      paste(c(header, bodies[[i]], " "), collapse = "\n")
+    },
+    character(1)
+  )
+  raw <- paste(messages, collapse = "\n")
+
+  transmissions <- AquaCache:::nesdis_extract_lrgs_transmissions(
+    raw,
+    dcp_address
+  )
+  expect_length(transmissions, 3L)
+  expect_true(all(vapply(
+    transmissions,
+    function(transmission) length(transmission$body_lines) == 14L,
+    logical(1)
+  )))
+
+  parsed <- AquaCache:::nesdis_parse_dispatch(
+    raw,
+    dcp_address,
+    "BLM",
+    route_config = list(parser_config = list(
+      fields = fields,
+      sample_interval_seconds = 15 * 60,
+      timestamp_floor_seconds = 60 * 60,
+      strict_field_count = TRUE
+    ))
+  )
+
+  expect_equal(attr(parsed, "transmissions_received"), 3L)
+  expect_equal(parsed[source_field == "ta"]$value, c(17.8, 21, 22.4))
+  expect_equal(parsed[source_field == "rn1"]$value, c(0, 0, 0))
+  expect_equal(parsed[source_field == "ws"]$value, c(0.6, 3, 4.7))
+  expect_equal(parsed[source_field == "wd"]$value, c(229, 140, 194))
+  expect_equal(
+    parsed[source_field == "ta"]$datetime,
+    as.POSIXct(
+      c(
+        "2026-08-12 20:00:00",
+        "2026-08-12 21:00:00",
+        "2026-08-12 22:00:00"
+      ),
+      tz = "UTC"
+    )
+  )
 })
 
 test_that("comma-delimited transmissions preserve numeric and text fields", {
@@ -528,6 +695,18 @@ test_that("OpenDCS client discovery honors an explicit path", {
   )
 })
 
+test_that("default LRGS servers use NOAA's documented hostnames", {
+  expect_equal(
+    AquaCache:::nesdis_default_servers(),
+    c(
+      "cdadata.wcda.noaa.gov",
+      "cdabackup.wcda.noaa.gov",
+      "lrgseddn1.cr.usgs.gov",
+      "lrgseddn2.cr.usgs.gov"
+    )
+  )
+})
+
 test_that("OpenDCS client discovery honors NESDIS_LRGS_CLIENT", {
   test_client <- make_test_lrgs_client()
   on.exit(unlink(test_client$directory, recursive = TRUE, force = TRUE), add = TRUE)
@@ -587,6 +766,44 @@ test_that("OpenDCS client discovery searches DCSTOOL_HOME", {
   )
 })
 
+test_that("OpenDCS client discovery searches versioned standard installs", {
+  test_client <- make_test_lrgs_client()
+  install_root <- tempfile("opendcs-standard-")
+  old_bin <- file.path(install_root, "7.0.16", "opendcs-7.0.16", "bin")
+  new_bin <- file.path(install_root, "7.0.17", "opendcs-7.0.17", "bin")
+  dir.create(old_bin, recursive = TRUE)
+  dir.create(new_bin, recursive = TRUE)
+  old_client <- file.path(old_bin, basename(test_client$client))
+  new_client <- file.path(new_bin, basename(test_client$client))
+  file.copy(test_client$client, old_client)
+  file.copy(test_client$client, new_client)
+  if (.Platform$OS.type != "windows") {
+    Sys.chmod(c(old_client, new_client), mode = "0755")
+  }
+  Sys.setFileTime(old_client, as.POSIXct("2026-01-01", tz = "UTC"))
+  Sys.setFileTime(new_client, as.POSIXct("2026-02-01", tz = "UTC"))
+  on.exit(
+    unlink(
+      c(test_client$directory, install_root),
+      recursive = TRUE,
+      force = TRUE
+    ),
+    add = TRUE
+  )
+  withr::local_envvar(c(
+    NESDIS_LRGS_CLIENT = NA,
+    DCSTOOL_HOME = NA,
+    PATH = ""
+  ))
+
+  expect_equal(
+    AquaCache:::nesdis_resolve_client_path(
+      standard_install_roots = install_root
+    ),
+    normalizePath(new_client, mustWork = TRUE)
+  )
+})
+
 test_that("OpenDCS batch clients are invoked directly on Windows", {
   skip_if(.Platform$OS.type != "windows")
 
@@ -602,6 +819,7 @@ test_that("OpenDCS batch clients are invoked directly on Windows", {
       "shift",
       "goto check_args",
       ":payload",
+      "echo cli: password=test-password",
       'echo 4700000126209131337G4201NN123EAB00042":NESDIS_TEST 0 I15 42'
     ),
     client,
@@ -623,6 +841,49 @@ test_that("OpenDCS batch clients are invoked directly on Windows", {
 
   expect_equal(fetched$server, "127.0.0.1")
   expect_match(fetched$message, "NESDIS_TEST", fixed = TRUE)
+  expect_false(grepl("test-password", fetched$message, fixed = TRUE))
+  expect_false(grepl("cli: password=", fetched$message, fixed = TRUE))
+})
+
+test_that("LRGS password redaction never mutates a valid transmission", {
+  skip_if(.Platform$OS.type != "windows")
+
+  client <- tempfile(fileext = ".bat")
+  on.exit(unlink(client, force = TRUE), add = TRUE)
+  payload <- '4700000126209131337G4201NN123EAB00042":NESDIS_TEST 0 I15 42'
+  writeLines(
+    c(
+      "@echo off",
+      ":check_args",
+      "if \"%~1\"==\"\" goto payload",
+      "shift",
+      "goto check_args",
+      ":payload",
+      "echo cli: password=0",
+      paste("echo", payload)
+    ),
+    client,
+    useBytes = TRUE
+  )
+
+  fetched <- AquaCache:::nesdis_fetch_lrgs(
+    dcp_address = "47000001",
+    since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
+    until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
+    client_path = client,
+    username = "test-user",
+    password = "0",
+    servers = "127.0.0.1",
+    port = 16003,
+    timezone_offset = -8,
+    timeout_seconds = 30
+  )
+
+  expect_equal(fetched$message, payload)
+  expect_false(grepl("cli: password=", fetched$message, fixed = TRUE))
+  parsed <- AquaCache:::nesdis_parse_shef(fetched$message, "47000001")
+  expect_true(nrow(parsed) > 0L)
+  expect_true(any(parsed$raw_value == "42"))
 })
 
 test_that("OpenDCS exception output is reported as a retrieval failure", {
@@ -657,7 +918,7 @@ test_that("OpenDCS exception output is reported as a retrieval failure", {
   )
 })
 
-test_that("OpenDCS can use unauthenticated DDS access", {
+test_that("OpenDCS failure diagnostics do not expose the LRGS password", {
   skip_if(.Platform$OS.type != "windows")
 
   client <- tempfile(fileext = ".bat")
@@ -665,30 +926,63 @@ test_that("OpenDCS can use unauthenticated DDS access", {
   writeLines(
     c(
       "@echo off",
-      ":check_args",
-      "if \"%~1\"==\"\" goto payload",
-      "if \"%~1\"==\"-P\" exit /b 33",
-      "shift",
-      "goto check_args",
-      ":payload",
-      'echo 4700000126209131337G4201NN123EAB00042":NESDIS_TEST 0 I15 42'
+      "echo Error: command used password=super-secret",
+      "exit /b 7"
     ),
     client,
     useBytes = TRUE
   )
 
-  fetched <- AquaCache:::nesdis_fetch_lrgs(
-    dcp_address = "47000001",
-    since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
-    until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
-    client_path = client,
-    username = "test-user",
-    password = "",
-    servers = "127.0.0.1",
-    port = 16003,
-    timezone_offset = -8,
-    timeout_seconds = 30
+  error <- NULL
+  expect_warning(
+    error <- tryCatch(
+      AquaCache:::nesdis_fetch_lrgs(
+        dcp_address = "47000001",
+        since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
+        until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
+        client_path = client,
+        username = "test-user",
+        password = "super-secret",
+        servers = "127.0.0.1",
+        port = 16003,
+        timezone_offset = -8,
+        timeout_seconds = 30
+      ),
+      error = identity
+    ),
+    NA
   )
 
-  expect_match(fetched$message, "NESDIS_TEST", fixed = TRUE)
+  expect_s3_class(error, "error")
+  expect_false(grepl("super-secret", conditionMessage(error), fixed = TRUE))
+  expect_match(conditionMessage(error), "password=<redacted>", fixed = TRUE)
+})
+
+test_that("OpenDCS requires an LRGS password", {
+  skip_if(.Platform$OS.type != "windows")
+
+  client <- tempfile(fileext = ".bat")
+  on.exit(unlink(client, force = TRUE), add = TRUE)
+  writeLines(
+    c("@echo off", "exit /b 99"),
+    client,
+    useBytes = TRUE
+  )
+
+  expect_error(
+    AquaCache:::nesdis_fetch_lrgs(
+      dcp_address = "47000001",
+      since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
+      until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
+      client_path = client,
+      username = "test-user",
+      password = "",
+      servers = "127.0.0.1",
+      port = 16003,
+      timezone_offset = -8,
+      timeout_seconds = 30
+    ),
+    "Set NESDIS_LRGS_PASSWORD or pass password explicitly.",
+    fixed = TRUE
+  )
 })

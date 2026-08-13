@@ -301,7 +301,8 @@ addACTimeseries <- function(
       con,
       "SELECT sub_location_id FROM public.sub_locations;"
     )[, 1]
-    if (!all(sub_location %in% db_sub_loc)) {
+    specified_sub_locations <- sub_location[!is.na(sub_location)]
+    if (!all(specified_sub_locations %in% db_sub_loc)) {
       stop(
         "At least one of the sub_location_ids you specified does not exist in the database. Please add it first using the add sub-location Shiny module."
       )

@@ -20,6 +20,23 @@
 #' route rather than in function arguments. BLM configuration requires
 #' `fields`, ordered one per payload row, and normally supplies
 #' `sample_interval_seconds`, `sample_offset_seconds`, and `values_order`.
+#' `timestamp_floor_seconds` is needed only when the payload body does not carry
+#' observation times and measurements belong on fixed clock boundaries. It
+#' rounds the GOES/LRGS header time down to that interval. For example, a BLM
+#' route with `timestamp_floor_seconds = 3600` treats a message received at
+#' 22:09:33 as an observation at 22:00:00. Omit it when the payload supplies
+#' observation times or when the header time is the intended measurement time.
+#' This is a route setting, so it applies to every timeseries mapped to the
+#' route. A minimal hourly BLM parser configuration has this shape:
+#'
+#' ```r
+#' list(
+#'   parser_config = list(
+#'     fields = c("air_temperature", "relative_humidity"),
+#'     timestamp_floor_seconds = 3600
+#'   )
+#' )
+#' ```
 #' Delimited configuration uses `has_header`; headerless messages also require
 #' `fields`. Datetimes can come from `datetime_field`, with optional
 #' `datetime_format` and `datetime_timezone`, or can be reconstructed using
@@ -43,14 +60,16 @@
 #'   used and the connection is closed on exit.
 #' @param client_path Optional path to the OpenDCS `getDcpMessages` launcher
 #'   (`getDcpMessages.bat` on Windows). When `NULL`, AquaCache checks
-#'   `NESDIS_LRGS_CLIENT`, the system `PATH`, `DCSTOOL_HOME/bin`, and finally
-#'   the legacy AquaCache Windows install path.
+#'   `NESDIS_LRGS_CLIENT`, the system `PATH`, `DCSTOOL_HOME/bin`, standard
+#'   versioned OpenDCS directories under `/opt` and `/usr/local` on Unix-like
+#'   systems, and finally the legacy AquaCache Windows install path.
 #' @param username LRGS username. Defaults to `NESDIS_LRGS_USER`.
-#' @param password Optional LRGS password. Defaults to
-#'   `NESDIS_LRGS_PASSWORD`. Leave blank for servers that permit
-#'   unauthenticated DDS access.
+#' @param password LRGS password. Defaults to `NESDIS_LRGS_PASSWORD` and must
+#'   be non-empty.
 #' @param servers Optional character vector of LRGS servers. Route-level
-#'   `route_config.lrgs_servers` takes precedence when present.
+#'   `route_config.lrgs_servers` takes precedence when present. Defaults use
+#'   the public LRGS hostnames documented by NOAA rather than fixed IP
+#'   addresses.
 #' @param port Optional LRGS port. Route-level `route_config.lrgs_port` takes
 #'   precedence. The default is 16003.
 #' @param overwrite Passed to [addNewContinuous()]. `"no"` is recommended for
@@ -633,12 +652,10 @@ nesdis_config_number <- function(config, key, default) {
 #' @noRd
 nesdis_default_servers <- function() {
   c(
-    "205.156.2.189",
-    "205.156.2.186",
-    "205.156.2.174",
-    "152.61.129.81",
-    "152.61.129.82",
-    "152.61.129.93"
+    "cdadata.wcda.noaa.gov",
+    "cdabackup.wcda.noaa.gov",
+    "lrgseddn1.cr.usgs.gov",
+    "lrgseddn2.cr.usgs.gov"
   )
 }
 
@@ -877,6 +894,15 @@ nesdis_fetch_lrgs <- function(
       "downloadNESDIS: Set NESDIS_LRGS_USER or pass username explicitly."
     )
   }
+  if (
+    length(password) != 1L ||
+      is.na(password) ||
+      !nzchar(password)
+  ) {
+    stop(
+      "downloadNESDIS: Set NESDIS_LRGS_PASSWORD or pass password explicitly."
+    )
+  }
   servers <- as.character(unlist(servers, use.names = FALSE))
   servers <- servers[nzchar(servers)]
   if (length(servers) == 0L) {
@@ -921,9 +947,7 @@ nesdis_fetch_lrgs <- function(
       "-u",
       username
     )
-    if (nzchar(password)) {
-      arguments <- c(arguments, "-P", password)
-    }
+    arguments <- c(arguments, "-P", password)
     arguments <- c(
       arguments,
       "-f",
@@ -939,26 +963,23 @@ nesdis_fetch_lrgs <- function(
     # manage a separate -l file can fail before it connects to the LRGS.
     unlink(stderr_file, force = TRUE)
     output <- tryCatch(
-      system2(
-        normalized_client,
-        args = vapply(arguments, shQuote, character(1), type = "cmd"),
-        stdout = TRUE,
-        stderr = stderr_file,
-        timeout = as.integer(timeout_seconds)
+      suppressWarnings(
+        system2(
+          normalized_client,
+          args = vapply(arguments, shQuote, character(1), type = "cmd"),
+          stdout = TRUE,
+          stderr = stderr_file,
+          timeout = as.integer(timeout_seconds)
+        )
       ),
       error = identity
     )
 
     if (inherits(output, "error")) {
-      diagnostic_text <- conditionMessage(output)
-      if (nzchar(password)) {
-        diagnostic_text <- gsub(
-          password,
-          "<redacted>",
-          diagnostic_text,
-          fixed = TRUE
-        )
-      }
+      diagnostic_text <- nesdis_redact_password(
+        conditionMessage(output),
+        password
+      )
       attempts[[server]] <- list(
         status = NA_integer_,
         payload_bytes = 0,
@@ -968,22 +989,46 @@ nesdis_fetch_lrgs <- function(
       next
     }
     status <- attr(output, "status") %||% 0L
-    message_text <- paste(output, collapse = "\n")
+    raw_message_text <- paste(output, collapse = "\n")
     stderr_text <- if (file.exists(stderr_file)) {
       paste(readLines(stderr_file, warn = FALSE), collapse = "\n")
     } else {
       ""
     }
-    output_lines <- trimws(strsplit(
-      message_text,
-      "\r\n|\n|\r",
-      perl = TRUE
-    )[[1L]])
     # OpenDCS may exit successfully after printing status or exception text.
-    # Only a line with the requested DCP header is a retrieved payload.
-    has_payload <- any(startsWith(output_lines, dcp_address))
+    # Only a valid requested-DCP header is a retrieved payload. The extractor
+    # also handles protocol boundary bytes before a header. Inspect the raw
+    # stdout: a password can legitimately occur in a DCP header or body and
+    # must never be replaced before parsing or caching.
+    transmissions <- nesdis_extract_lrgs_transmissions(
+      raw_message_text,
+      dcp_address
+    )
+    has_payload <- length(transmissions) > 0L
+    if (has_payload) {
+      payload_start <- transmissions[[1L]]$source_line
+      message_text <- paste(
+        output[payload_start:length(output)],
+        collapse = "\n"
+      )
+      stdout_diagnostic <- if (payload_start > 1L) {
+        paste(output[seq_len(payload_start - 1L)], collapse = "\n")
+      } else {
+        ""
+      }
+    } else {
+      message_text <- ""
+      stdout_diagnostic <- raw_message_text
+    }
+    # Some OpenDCS launchers print the complete Java command, including the
+    # value supplied to -P. Only diagnostic output is redacted. Successful
+    # payload output starts at the first validated header and stays untouched.
+    stdout_diagnostic <- nesdis_redact_password(stdout_diagnostic, password)
+    stderr_text <- nesdis_redact_password(stderr_text, password)
     diagnostic_text <- paste(
-      c(message_text, stderr_text)[nzchar(c(message_text, stderr_text))],
+      c(stdout_diagnostic, stderr_text)[
+        nzchar(c(stdout_diagnostic, stderr_text))
+      ],
       collapse = "\n"
     )
     command_failed <- !identical(status, 0L) || (
@@ -994,14 +1039,6 @@ nesdis_fetch_lrgs <- function(
           ignore.case = TRUE
         )
     )
-    if (nzchar(password) && nzchar(diagnostic_text)) {
-      diagnostic_text <- gsub(
-        password,
-        "<redacted>",
-        diagnostic_text,
-        fixed = TRUE
-      )
-    }
     attempts[[server]] <- list(
       status = status,
       payload_bytes = length(charToRaw(enc2utf8(message_text))),
@@ -1066,7 +1103,33 @@ nesdis_fetch_lrgs <- function(
 
 #' @keywords internal
 #' @noRd
-nesdis_resolve_client_path <- function(client_path = NULL) {
+nesdis_redact_password <- function(text, password) {
+  if (
+    !length(text) ||
+      !length(password) ||
+      is.na(password) ||
+      !nzchar(password)
+  ) {
+    return(text)
+  }
+  gsub(password, "<redacted>", text, fixed = TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+nesdis_resolve_client_path <- function(
+  client_path = NULL,
+  standard_install_roots = if (.Platform$OS.type == "windows") {
+    character()
+  } else {
+    c(
+      "/opt/opendcs",
+      "/opt/OpenDCS",
+      "/usr/local/opendcs",
+      "/usr/local/OpenDCS"
+    )
+  }
+) {
   if (!is.null(client_path)) {
     if (
       length(client_path) != 1L ||
@@ -1125,6 +1188,40 @@ nesdis_resolve_client_path <- function(client_path = NULL) {
     )
   }
 
+  # Linux OpenDCS packages are commonly unpacked into a versioned directory,
+  # for example /opt/opendcs/7.0.17/opendcs-7.0.17/bin. Search only bounded,
+  # conventional roots and prefer the most recently modified installation.
+  standard_install_roots <- unique(path.expand(
+    standard_install_roots[
+      !is.na(standard_install_roots) & nzchar(standard_install_roots)
+    ]
+  ))
+  standard_clients <- unlist(
+    lapply(
+      standard_install_roots[dir.exists(standard_install_roots)],
+      function(root) {
+        matches <- list.files(
+          root,
+          pattern = "^getDcpMessages(\\.bat)?$",
+          recursive = TRUE,
+          full.names = TRUE
+        )
+        matches[
+          basename(matches) %in% launcher_names &
+            basename(dirname(matches)) == "bin"
+        ]
+      }
+    ),
+    use.names = FALSE
+  )
+  if (length(standard_clients) > 1L) {
+    modified <- as.numeric(file.info(standard_clients)$mtime)
+    standard_clients <- standard_clients[
+      order(modified, standard_clients, decreasing = TRUE, na.last = TRUE)
+    ]
+  }
+  candidates <- c(candidates, standard_clients)
+
   if (.Platform$OS.type == "windows") {
     candidates <- c(
       candidates,
@@ -1153,7 +1250,8 @@ nesdis_resolve_client_path <- function(client_path = NULL) {
   stop(
     "downloadNESDIS: OpenDCS LRGS client was not found. Pass client_path, ",
     "set NESDIS_LRGS_CLIENT, add getDcpMessages to PATH, or set ",
-    "DCSTOOL_HOME. Checked: ",
+    "DCSTOOL_HOME. AquaCache also searches standard OpenDCS installations ",
+    "under /opt and /usr/local on Unix-like systems. Checked: ",
     checked,
     "."
   )
@@ -1222,8 +1320,36 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
   dcp_address <- toupper(trimws(dcp_address))
   lines <- strsplit(message, "\r\n|\n|\r", perl = TRUE)[[1L]]
   lines <- trimws(lines)
-  possible_header <- startsWith(toupper(lines), dcp_address) &
-    nchar(lines, type = "chars") >= 38L &
+
+  # DCP messages may end with a non-printing protocol byte. getDcpMessages
+  # adds a newline between messages, leaving that byte at the beginning of
+  # the next header line. Normalize only prefixes containing no printable
+  # characters so payload text cannot be mistaken for a transmission header.
+  address_positions <- regexpr(
+    dcp_address,
+    toupper(lines),
+    fixed = TRUE
+  )
+  header_prefix_is_nonprinting <- vapply(
+    seq_along(lines),
+    function(i) {
+      position <- address_positions[[i]]
+      if (position < 1L) {
+        return(FALSE)
+      }
+      prefix <- substr(lines[[i]], 1L, position - 1L)
+      !grepl("[[:graph:]]", prefix)
+    },
+    logical(1)
+  )
+  lines[header_prefix_is_nonprinting] <- substring(
+    lines[header_prefix_is_nonprinting],
+    address_positions[header_prefix_is_nonprinting]
+  )
+
+  possible_header <- header_prefix_is_nonprinting &
+    startsWith(toupper(lines), dcp_address) &
+    nchar(lines, type = "chars") >= 37L &
     grepl("^[[:digit:]]{11}$", substr(lines, 9L, 19L))
   starts <- which(possible_header)
   if (!length(starts)) {
@@ -1236,7 +1362,8 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
     first <- starts[[i]]
     last <- if (i < length(starts)) starts[[i + 1L]] - 1L else length(lines)
     header_line <- lines[[first]]
-    if (nchar(header_line, type = "chars") < 38L) {
+    header_chars <- nchar(header_line, type = "chars")
+    if (header_chars < 37L) {
       next
     }
 
@@ -1247,8 +1374,23 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
       next
     }
 
-    inline_payload <- if (nchar(header_line, type = "chars") > 38L) {
-      trimws(substr(header_line, 39L, nchar(header_line, type = "chars")))
+    # The LRGS header is 37 characters through Message Size. GPS Synch is an
+    # optional 38th character; when it is absent, an inline SHEF payload starts
+    # with ':' at position 38. Most line-oriented payloads begin on the next
+    # line and therefore need no special handling here.
+    header_chars_used <- if (
+      header_chars >= 38L && substr(header_line, 38L, 38L) != ":"
+    ) {
+      38L
+    } else {
+      37L
+    }
+    inline_payload <- if (header_chars > header_chars_used) {
+      trimws(substr(
+        header_line,
+        header_chars_used + 1L,
+        header_chars
+      ))
     } else {
       ""
     }
@@ -1262,10 +1404,11 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
 
     valid_index <- valid_index + 1L
     transmissions[[valid_index]] <- list(
-      header = substr(header_line, 1L, 38L),
+      header = substr(header_line, 1L, header_chars_used),
       transmission_time = transmission_time,
       body_lines = body_lines,
-      transmission_sequence = i
+      transmission_sequence = i,
+      source_line = first
     )
   }
   transmissions[seq_len(valid_index)]
@@ -1393,6 +1536,11 @@ nesdis_parse_blm <- function(message, dcp_address, config) {
     "sample_offset_seconds",
     default = 0
   )
+  timestamp_floor_seconds <- nesdis_parser_number(
+    config,
+    "timestamp_floor_seconds",
+    default = 0
+  )
   values_order <- nesdis_parser_choice(
     config,
     "values_order",
@@ -1497,7 +1645,16 @@ nesdis_parse_blm <- function(message, dcp_address, config) {
       if (values_order == "oldest_first") {
         sample_age <- rev(sample_age)
       }
-      datetimes <- transmission$transmission_time -
+      observation_time <- transmission$transmission_time
+      if (timestamp_floor_seconds > 0) {
+        observation_time <- as.POSIXct(
+          floor(as.numeric(observation_time) / timestamp_floor_seconds) *
+            timestamp_floor_seconds,
+          origin = "1970-01-01",
+          tz = "UTC"
+        )
+      }
+      datetimes <- observation_time -
         offset_seconds -
         sample_age * interval_seconds
       row_index <- row_index + 1L
@@ -1870,7 +2027,7 @@ nesdis_parse_shef_line <- function(line, dcp_address) {
   parts <- strsplit(line, ":", fixed = TRUE)[[1L]]
   header <- parts[[1L]]
   if (
-    nchar(header, type = "chars") < 38L ||
+    nchar(header, type = "chars") < 37L ||
       !startsWith(header, dcp_address)
   ) {
     return(NULL)

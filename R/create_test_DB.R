@@ -581,6 +581,8 @@ create_test_db <- function(
     "SELECT sample_type_id FROM discrete.sample_types WHERE sample_type = 'QC-sample-field replicate' LIMIT 1",
     "field replicate sample type"
   )
+  sample_6_type <- sample_type_field_blank
+  sample_6_note <- "Field blank associated with the April surface-water sample group."
   result_type_field <- first_id(
     "SELECT result_type_id FROM discrete.result_types WHERE result_type = 'field' LIMIT 1",
     "field result type"
@@ -1206,10 +1208,13 @@ create_test_db <- function(
        '{\"series\":\"synthetic_samples\"}', 1, 1, TRUE
      )"
   )
-  DBI::dbExecute(
+  DBI::dbWithTransaction(
     test_con,
-    sprintf(
-      "INSERT INTO discrete.samples (
+    {
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.samples (
          sample_id, location_id, sub_location_id, media_id, z, datetime,
          target_datetime, collection_method, sample_type, sample_volume_ml,
          sample_grade, sample_approval, sample_qualifier, owner,
@@ -1228,43 +1233,43 @@ create_test_db <- function(
           '2023-03-01 12:00+00', %d, %d, 500, %d, %d, NULL,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Synthetic water quality sample 3.', 'SYN-S3')",
-      fake_location_id,
-      fake_sub_location_id,
-      media_surface,
-      collection_method_id,
-      sample_type_id,
-      grade_a,
-      approval_a,
-      qualifier_ice,
-      owner_org,
-      contributor_org,
-      owner_org,
-      fake_location_id,
-      fake_sub_location_id,
-      media_surface,
-      collection_method_id,
-      sample_type_id,
-      grade_b,
-      approval_n,
-      owner_org,
-      contributor_org,
-      owner_org,
-      fake_location_id,
-      fake_sub_location_id,
-      media_surface,
-      collection_method_id,
-      sample_type_id,
-      grade_a,
-      approval_a,
-      owner_org,
-      contributor_org,
-      owner_org
-    )
-  )
-  DBI::dbExecute(
-    test_con,
-    sprintf(
-      "INSERT INTO discrete.samples (
+          fake_location_id,
+          fake_sub_location_id,
+          media_surface,
+          collection_method_id,
+          sample_type_id,
+          grade_a,
+          approval_a,
+          qualifier_ice,
+          owner_org,
+          contributor_org,
+          owner_org,
+          fake_location_id,
+          fake_sub_location_id,
+          media_surface,
+          collection_method_id,
+          sample_type_id,
+          grade_b,
+          approval_n,
+          owner_org,
+          contributor_org,
+          owner_org,
+          fake_location_id,
+          fake_sub_location_id,
+          media_surface,
+          collection_method_id,
+          sample_type_id,
+          grade_a,
+          approval_a,
+          owner_org,
+          contributor_org,
+          owner_org
+        )
+      )
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.samples (
          sample_id, location_id, sub_location_id, media_id, z, datetime,
          target_datetime, collection_method, sample_type, linked_with,
          sample_volume_ml, purge_volume_l, purge_time_min, flow_rate_l_min,
@@ -1286,7 +1291,7 @@ create_test_db <- function(
           '2023-04-01 12:00+00', %d, %d, 4,
           500, NULL, NULL, NULL, %d, %d, NULL,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          true, 'Field blank paired with the April surface-water sample.', 'SYN-S6'),
+          true, %s, 'SYN-S6'),
          (7, %d, %d, %d, -4.2, '2023-05-15 18:00+00',
           '2023-05-15 18:00+00', %d, %d, NULL,
           1000, 18.5, 21, 0.9, %d, %d, NULL,
@@ -1297,57 +1302,108 @@ create_test_db <- function(
           750, NULL, NULL, NULL, %d, %d, NULL,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Rain-water grab sample after a synthetic storm event.', 'SYN-S8')",
-      fake_location_id,
-      fake_sub_location_id,
-      media_surface,
-      collection_method_bottle,
-      sample_type_routine,
-      grade_a,
-      approval_a,
-      owner_org,
-      contributor_org,
-      owner_org,
-      fake_location_id,
-      fake_sub_location_id,
-      media_surface,
-      collection_method_bottle,
-      sample_type_field_replicate,
-      grade_a,
-      approval_a,
-      owner_org,
-      contributor_org,
-      owner_org,
-      fake_location_id,
-      fake_sub_location_id,
-      media_surface,
-      collection_method_bottle,
-      sample_type_field_blank,
-      grade_a,
-      approval_a,
-      owner_org,
-      contributor_org,
-      owner_org,
-      fake_location_id,
-      fake_sub_location_id,
-      media_groundwater,
-      collection_method_pump,
-      sample_type_routine,
-      grade_b,
-      approval_n,
-      owner_org,
-      contributor_org,
-      owner_org,
-      fake_location_id,
-      fake_sub_location_id,
-      media_rain,
-      collection_method_id,
-      sample_type_routine,
-      grade_a,
-      approval_a,
-      owner_org,
-      contributor_org,
-      owner_org
-    )
+          fake_location_id,
+          fake_sub_location_id,
+          media_surface,
+          collection_method_bottle,
+          sample_type_routine,
+          grade_a,
+          approval_a,
+          owner_org,
+          contributor_org,
+          owner_org,
+          fake_location_id,
+          fake_sub_location_id,
+          media_surface,
+          collection_method_bottle,
+          sample_type_field_replicate,
+          grade_a,
+          approval_a,
+          owner_org,
+          contributor_org,
+          owner_org,
+          fake_location_id,
+          fake_sub_location_id,
+          media_surface,
+          collection_method_bottle,
+          sample_6_type,
+          grade_a,
+          approval_a,
+          owner_org,
+          contributor_org,
+          owner_org,
+          DBI::dbQuoteString(test_con, sample_6_note),
+          fake_location_id,
+          fake_sub_location_id,
+          media_groundwater,
+          collection_method_pump,
+          sample_type_routine,
+          grade_b,
+          approval_n,
+          owner_org,
+          contributor_org,
+          owner_org,
+          fake_location_id,
+          fake_sub_location_id,
+          media_rain,
+          collection_method_id,
+          sample_type_routine,
+          grade_a,
+          approval_a,
+          owner_org,
+          contributor_org,
+          owner_org
+        )
+      )
+
+      sample_group_id <- DBI::dbGetQuery(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.sample_groups (
+               group_type,
+               group_code,
+               group_name,
+               start_datetime,
+               end_datetime,
+               owner,
+               contributor,
+               note,
+               share_with
+             ) VALUES (
+               'field_event',
+               'SYN-G1',
+               'Synthetic April surface-water QC group',
+               '2023-04-01 12:00+00',
+               '2023-04-01 12:10+00',
+               %d,
+               %d,
+               'Groups the routine sample, replicate, and field blank.',
+               ARRAY['public_reader']
+             )
+             RETURNING sample_group_id",
+          owner_org,
+          contributor_org
+        )
+      )$sample_group_id[[1]]
+
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.sample_group_members (
+               sample_group_id,
+               sample_id,
+               sequence_in_group,
+               note
+             ) VALUES
+               (%d, 4, 1, 'Primary routine sample.'),
+               (%d, 5, 2, 'Field replicate.'),
+               (%d, 6, 3, 'Field blank.');",
+          sample_group_id,
+          sample_group_id,
+          sample_group_id
+        )
+      )
+    }
   )
   DBI::dbExecute(
     test_con,

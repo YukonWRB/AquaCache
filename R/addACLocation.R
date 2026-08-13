@@ -377,7 +377,7 @@ addACLocation <- function(
             alias[i],
             latitude[i],
             longitude[i],
-            paste0("{", paste(share_with, collapse = ", "), "}"),
+            paste0("{", share_with[i], "}"),
             location_type[i],
             note[i],
             contact[i]

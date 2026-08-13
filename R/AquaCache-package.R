@@ -12,5 +12,7 @@
 #' @importFrom data.table :=
 #' @importFrom data.table data.table
 #' @importFrom rlang .data
+#' @importFrom Rcpp sourceCpp
+#' @useDynLib AquaCache, .registration = TRUE
 ## usethis namespace: end
 NULL

@@ -84,14 +84,18 @@ export(upsertImportQualifierMappings)
 export(writeRaster)
 export(writeRaster_old)
 import(data.table)
-importFrom(data.table,":=")
-importFrom(data.table,.BY)
-importFrom(data.table,.EACHI)
-importFrom(data.table,.GRP)
-importFrom(data.table,.I)
-importFrom(data.table,.N)
-importFrom(data.table,.NGRP)
-importFrom(data.table,.SD)
-importFrom(data.table,data.table)
+importFrom(Rcpp,sourceCpp)
+importFrom(data.table,
+  ":=",
+  .BY,
+  .EACHI,
+  .GRP,
+  .I,
+  .N,
+  .NGRP,
+  .SD,
+  data.table
+)
 importFrom(magrittr,"%>%")
 importFrom(rlang,.data)
+useDynLib(AquaCache, .registration = TRUE)

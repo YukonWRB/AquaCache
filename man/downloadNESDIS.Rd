@@ -43,17 +43,19 @@ used and the connection is closed on exit.}
 
 \item{client_path}{Optional path to the OpenDCS \code{getDcpMessages} launcher
 (\code{getDcpMessages.bat} on Windows). When \code{NULL}, AquaCache checks
-\code{NESDIS_LRGS_CLIENT}, the system \code{PATH}, \code{DCSTOOL_HOME/bin}, and finally
-the legacy AquaCache Windows install path.}
+\code{NESDIS_LRGS_CLIENT}, the system \code{PATH}, \code{DCSTOOL_HOME/bin}, standard
+versioned OpenDCS directories under \verb{/opt} and \verb{/usr/local} on Unix-like
+systems, and finally the legacy AquaCache Windows install path.}
 
 \item{username}{LRGS username. Defaults to \code{NESDIS_LRGS_USER}.}
 
-\item{password}{Optional LRGS password. Defaults to
-\code{NESDIS_LRGS_PASSWORD}. Leave blank for servers that permit
-unauthenticated DDS access.}
+\item{password}{LRGS password. Defaults to \code{NESDIS_LRGS_PASSWORD} and must
+be non-empty.}
 
 \item{servers}{Optional character vector of LRGS servers. Route-level
-\code{route_config.lrgs_servers} takes precedence when present.}
+\code{route_config.lrgs_servers} takes precedence when present. Defaults use
+the public LRGS hostnames documented by NOAA rather than fixed IP
+addresses.}
 
 \item{port}{Optional LRGS port. Route-level \code{route_config.lrgs_port} takes
 precedence. The default is 16003.}
@@ -109,6 +111,23 @@ layout in \code{route_config.parser_config}, keeping format differences with the
 route rather than in function arguments. BLM configuration requires
 \code{fields}, ordered one per payload row, and normally supplies
 \code{sample_interval_seconds}, \code{sample_offset_seconds}, and \code{values_order}.
+\code{timestamp_floor_seconds} is needed only when the payload body does not carry
+observation times and measurements belong on fixed clock boundaries. It
+rounds the GOES/LRGS header time down to that interval. For example, a BLM
+route with \code{timestamp_floor_seconds = 3600} treats a message received at
+22:09:33 as an observation at 22:00:00. Omit it when the payload supplies
+observation times or when the header time is the intended measurement time.
+This is a route setting, so it applies to every timeseries mapped to the
+route. A minimal hourly BLM parser configuration has this shape:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{list(
+  parser_config = list(
+    fields = c("air_temperature", "relative_humidity"),
+    timestamp_floor_seconds = 3600
+  )
+)
+}\if{html}{\out{</div>}}
+
 Delimited configuration uses \code{has_header}; headerless messages also require
 \code{fields}. Datetimes can come from \code{datetime_field}, with optional
 \code{datetime_format} and \code{datetime_timezone}, or can be reconstructed using

@@ -31,17 +31,49 @@ downloadNupointImages <- function(
     stop("Parameter start_datetime must be a POSIXct.")
   }
 
-  # for variables left as "Sys.getenv(xxxx)", check that these exist
-  if (
-    !nzchar(Sys.getenv("nupointUser")) |
-      !nzchar(Sys.getenv("nupointPass")) |
-      !nzchar(Sys.getenv("nupointServer")) |
-      !nzchar(Sys.getenv("nupointPort")) |
-      !nzchar(Sys.getenv("nupointFolder"))
-  ) {
+  connection_values <- list(
+    username = username,
+    password = password,
+    url = url,
+    port = port,
+    folder = folder
+  )
+  missing_values <- vapply(
+    connection_values,
+    function(value) {
+      length(value) != 1L ||
+        is.na(value) ||
+        !nzchar(trimws(as.character(value)))
+    },
+    logical(1)
+  )
+  if (any(missing_values)) {
     stop(
-      "One or more of the necessary environment variables are missing. Please ensure that nupointUser, nupointPass, nupointServer, nupointPort, and nupointFolder are set in your .Renviron file OR specify them yourself in the function call."
+      "Missing required NuPoint connection argument(s): ",
+      paste(names(connection_values)[missing_values], collapse = ", "),
+      ". Set the corresponding nupoint environment variables or provide ",
+      "the arguments explicitly."
     )
+  }
+
+  cache_dir <- file.path(tempdir(), "downloadNupointImages")
+  download_dir <- cache_dir
+  if (!is.null(save_path)) {
+    if (
+      length(save_path) != 1L ||
+        !is.character(save_path) ||
+        is.na(save_path) ||
+        !nzchar(trimws(save_path))
+    ) {
+      stop("Parameter save_path must be a single non-empty directory path.")
+    }
+    if (!dir.exists(save_path)) {
+      dir.create(save_path, recursive = TRUE, showWarnings = FALSE)
+    }
+    if (!dir.exists(save_path)) {
+      stop("Could not create save_path directory: ", save_path)
+    }
+    download_dir <- normalizePath(save_path, mustWork = TRUE)
   }
 
   # Create connection setup to nupoint
@@ -55,7 +87,7 @@ downloadNupointImages <- function(
   )
 
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
-  saved_files <- list.files(paste0(tempdir(), "/downloadNupointImages"))
+  saved_files <- list.files(cache_dir)
 
   if (length(saved_files) == 0) {
     file_exists <- FALSE
@@ -75,11 +107,7 @@ downloadNupointImages <- function(
       target_file <- saved_files[
         order(saved_files$datetime, decreasing = TRUE),
       ][1, ]
-      tbl <- readRDS(paste0(
-        tempdir(),
-        "/downloadNupointImages/",
-        target_file$file
-      ))
+      tbl <- readRDS(file.path(cache_dir, target_file$file))
       file_exists <- TRUE
     } else {
       file_exists <- FALSE
@@ -98,26 +126,26 @@ downloadNupointImages <- function(
       location = sub("^(.*)_\\d{14}.*$", "\\1", links)
     )
 
-    suppressWarnings(dir.create(paste0(tempdir(), "/downloadNupointImages")))
+    dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
     name <- gsub(" ", "", .POSIXct(Sys.time(), tz = "UTC"))
     name <- gsub("-", "", name)
     name <- substr(gsub(":", "", name), 1, 12)
-    saveRDS(tbl, paste0(tempdir(), "/downloadNupointImages/", name, ".rds"))
+    saveRDS(tbl, file.path(cache_dir, paste0(name, ".rds")))
   }
 
   tbl <- tbl[tbl$location == location & tbl$datetime >= start_datetime, ]
 
   if (nrow(tbl) > 0) {
     files <- data.frame()
-    for (i in 1:nrow(tbl)) {
+    for (i in seq_len(nrow(tbl))) {
       file <- tbl[i, "link"]
       sftp::sftp_download(
         file,
-        tofolder = paste0(tempdir(), "/downloadNupointImages"),
+        tofolder = download_dir,
         sftp_connection = nupoint,
         verbose = FALSE
       )
-      files[i, "file"] <- paste0(tempdir(), "/downloadNupointImages/", file)
+      files[i, "file"] <- file.path(download_dir, file)
       files[i, "datetime"] <- tbl[i, "datetime"]
       files[i, "location"] <- tbl[i, "location"]
       if (delete) {
