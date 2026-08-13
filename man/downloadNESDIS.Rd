@@ -112,6 +112,9 @@ layout in \code{route_config.parser_config}, keeping format differences with the
 route rather than in function arguments. BLM configuration requires
 \code{fields}, ordered one per payload row, and normally supplies
 \code{sample_interval_seconds}, \code{sample_offset_seconds}, and \code{values_order}.
+\code{timestamp_floor_seconds} can align transmission timestamps to the payload's
+observation interval when a provider transmits shortly after the observation
+time (for example, hourly observations sent at nine minutes past the hour).
 Delimited configuration uses \code{has_header}; headerless messages also require
 \code{fields}. Datetimes can come from \code{datetime_field}, with optional
 \code{datetime_format} and \code{datetime_timezone}, or can be reconstructed using

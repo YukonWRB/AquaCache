@@ -20,6 +20,9 @@
 #' route rather than in function arguments. BLM configuration requires
 #' `fields`, ordered one per payload row, and normally supplies
 #' `sample_interval_seconds`, `sample_offset_seconds`, and `values_order`.
+#' `timestamp_floor_seconds` can align transmission timestamps to the payload's
+#' observation interval when a provider transmits shortly after the observation
+#' time (for example, hourly observations sent at nine minutes past the hour).
 #' Delimited configuration uses `has_header`; headerless messages also require
 #' `fields`. Datetimes can come from `datetime_field`, with optional
 #' `datetime_format` and `datetime_timezone`, or can be reconstructed using
@@ -1303,7 +1306,7 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
 
   possible_header <- header_prefix_is_nonprinting &
     startsWith(toupper(lines), dcp_address) &
-    nchar(lines, type = "chars") >= 38L &
+    nchar(lines, type = "chars") >= 37L &
     grepl("^[[:digit:]]{11}$", substr(lines, 9L, 19L))
   starts <- which(possible_header)
   if (!length(starts)) {
@@ -1316,7 +1319,8 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
     first <- starts[[i]]
     last <- if (i < length(starts)) starts[[i + 1L]] - 1L else length(lines)
     header_line <- lines[[first]]
-    if (nchar(header_line, type = "chars") < 38L) {
+    header_chars <- nchar(header_line, type = "chars")
+    if (header_chars < 37L) {
       next
     }
 
@@ -1327,8 +1331,23 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
       next
     }
 
-    inline_payload <- if (nchar(header_line, type = "chars") > 38L) {
-      trimws(substr(header_line, 39L, nchar(header_line, type = "chars")))
+    # The LRGS header is 37 characters through Message Size. GPS Synch is an
+    # optional 38th character; when it is absent, an inline SHEF payload starts
+    # with ':' at position 38. Most line-oriented payloads begin on the next
+    # line and therefore need no special handling here.
+    header_chars_used <- if (
+      header_chars >= 38L && substr(header_line, 38L, 38L) != ":"
+    ) {
+      38L
+    } else {
+      37L
+    }
+    inline_payload <- if (header_chars > header_chars_used) {
+      trimws(substr(
+        header_line,
+        header_chars_used + 1L,
+        header_chars
+      ))
     } else {
       ""
     }
@@ -1342,7 +1361,7 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
 
     valid_index <- valid_index + 1L
     transmissions[[valid_index]] <- list(
-      header = substr(header_line, 1L, 38L),
+      header = substr(header_line, 1L, header_chars_used),
       transmission_time = transmission_time,
       body_lines = body_lines,
       transmission_sequence = i
@@ -1473,6 +1492,11 @@ nesdis_parse_blm <- function(message, dcp_address, config) {
     "sample_offset_seconds",
     default = 0
   )
+  timestamp_floor_seconds <- nesdis_parser_number(
+    config,
+    "timestamp_floor_seconds",
+    default = 0
+  )
   values_order <- nesdis_parser_choice(
     config,
     "values_order",
@@ -1577,7 +1601,16 @@ nesdis_parse_blm <- function(message, dcp_address, config) {
       if (values_order == "oldest_first") {
         sample_age <- rev(sample_age)
       }
-      datetimes <- transmission$transmission_time -
+      observation_time <- transmission$transmission_time
+      if (timestamp_floor_seconds > 0) {
+        observation_time <- as.POSIXct(
+          floor(as.numeric(observation_time) / timestamp_floor_seconds) *
+            timestamp_floor_seconds,
+          origin = "1970-01-01",
+          tz = "UTC"
+        )
+      }
+      datetimes <- observation_time -
         offset_seconds -
         sample_age * interval_seconds
       row_index <- row_index + 1L
@@ -1950,7 +1983,7 @@ nesdis_parse_shef_line <- function(line, dcp_address) {
   parts <- strsplit(line, ":", fixed = TRUE)[[1L]]
   header <- parts[[1L]]
   if (
-    nchar(header, type = "chars") < 38L ||
+    nchar(header, type = "chars") < 37L ||
       !startsWith(header, dcp_address)
   ) {
     return(NULL)

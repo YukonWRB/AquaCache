@@ -102,6 +102,17 @@ test_that("standard SHEF transmissions are parsed to normalized long data", {
   )
   expect_equal(parsed[source_field == "TA"]$value, c(1.1, 1.2))
   expect_equal(parsed[source_field == "GPS Synch"]$value, 1)
+
+  header_without_gps <- substr(line, 1L, 37L)
+  inline_payload <- substr(line, 39L, nchar(line))
+  parsed_without_gps <- AquaCache:::nesdis_parse_shef(
+    paste0(header_without_gps, inline_payload),
+    "47002136"
+  )
+  expect_equal(parsed_without_gps[source_field == "VB"]$value, c(12.4, 12.5))
+  expect_true(all(is.na(
+    parsed_without_gps[source_field == "GPS Synch"]$value
+  )))
 })
 
 test_that("McMaster underscore fields are preserved and independently mapped", {
@@ -262,6 +273,88 @@ test_that("BLM parsing recognizes headers after non-printing boundaries", {
   expect_equal(
     data.table::uniqueN(parsed[source_field == "ta"]$datetime),
     45L * 4L
+  )
+})
+
+test_that("BLM parsing accepts 37-character headers and hourly row layouts", {
+  dcp_address <- "2C6093C0"
+  fields <- c(
+    "blm_row_01", "blm_row_02", "ws", "wd", "rn1", "wg",
+    "tmax1", "tmin1", "rhmax1", "rhmin1", "vb", "blm_row_12",
+    "ta", "rh"
+  )
+  bodies <- list(
+    c(
+      "22.4", "034", "004.7", "194", "000.0", "011.5", "22.4",
+      "21.0", "044", "034", "13.6", "2659.13", "22.4", "036"
+    ),
+    c(
+      "21.0", "041", "003.0", "140", "000.0", "011.0", "21.0",
+      "17.8", "055", "041", "13.6", "2659.13", "21.0", "043"
+    ),
+    c(
+      "17.8", "055", "000.6", "229", "000.0", "007.6", "17.8",
+      "15.9", "058", "052", "13.6", "2659.13", "17.8", "053"
+    )
+  )
+  timestamps <- c("26224220933", "26224210933", "26224200933")
+  messages <- vapply(
+    seq_along(bodies),
+    function(i) {
+      header <- substr(
+        make_lrgs_shef_line(dcp_address, timestamp = timestamps[[i]]),
+        1L,
+        37L
+      )
+      if (i == 3L) {
+        header <- paste0(header, "\"")
+      } else {
+        header <- paste0(header, " ")
+      }
+      paste(c(header, bodies[[i]], " "), collapse = "\n")
+    },
+    character(1)
+  )
+  raw <- paste(messages, collapse = "\n")
+
+  transmissions <- AquaCache:::nesdis_extract_lrgs_transmissions(
+    raw,
+    dcp_address
+  )
+  expect_length(transmissions, 3L)
+  expect_true(all(vapply(
+    transmissions,
+    function(transmission) length(transmission$body_lines) == 14L,
+    logical(1)
+  )))
+
+  parsed <- AquaCache:::nesdis_parse_dispatch(
+    raw,
+    dcp_address,
+    "BLM",
+    route_config = list(parser_config = list(
+      fields = fields,
+      sample_interval_seconds = 15 * 60,
+      timestamp_floor_seconds = 60 * 60,
+      strict_field_count = TRUE
+    ))
+  )
+
+  expect_equal(attr(parsed, "transmissions_received"), 3L)
+  expect_equal(parsed[source_field == "ta"]$value, c(17.8, 21, 22.4))
+  expect_equal(parsed[source_field == "rn1"]$value, c(0, 0, 0))
+  expect_equal(parsed[source_field == "ws"]$value, c(0.6, 3, 4.7))
+  expect_equal(parsed[source_field == "wd"]$value, c(229, 140, 194))
+  expect_equal(
+    parsed[source_field == "ta"]$datetime,
+    as.POSIXct(
+      c(
+        "2026-08-12 20:00:00",
+        "2026-08-12 21:00:00",
+        "2026-08-12 22:00:00"
+      ),
+      tz = "UTC"
+    )
   )
 })
 
