@@ -20,9 +20,23 @@
 #' route rather than in function arguments. BLM configuration requires
 #' `fields`, ordered one per payload row, and normally supplies
 #' `sample_interval_seconds`, `sample_offset_seconds`, and `values_order`.
-#' `timestamp_floor_seconds` can align transmission timestamps to the payload's
-#' observation interval when a provider transmits shortly after the observation
-#' time (for example, hourly observations sent at nine minutes past the hour).
+#' `timestamp_floor_seconds` is needed only when the payload body does not carry
+#' observation times and measurements belong on fixed clock boundaries. It
+#' rounds the GOES/LRGS header time down to that interval. For example, a BLM
+#' route with `timestamp_floor_seconds = 3600` treats a message received at
+#' 22:09:33 as an observation at 22:00:00. Omit it when the payload supplies
+#' observation times or when the header time is the intended measurement time.
+#' This is a route setting, so it applies to every timeseries mapped to the
+#' route. A minimal hourly BLM parser configuration has this shape:
+#'
+#' ```r
+#' list(
+#'   parser_config = list(
+#'     fields = c("air_temperature", "relative_humidity"),
+#'     timestamp_floor_seconds = 3600
+#'   )
+#' )
+#' ```
 #' Delimited configuration uses `has_header`; headerless messages also require
 #' `fields`. Datetimes can come from `datetime_field`, with optional
 #' `datetime_format` and `datetime_timezone`, or can be reconstructed using
@@ -50,9 +64,8 @@
 #'   versioned OpenDCS directories under `/opt` and `/usr/local` on Unix-like
 #'   systems, and finally the legacy AquaCache Windows install path.
 #' @param username LRGS username. Defaults to `NESDIS_LRGS_USER`.
-#' @param password Optional LRGS password. Defaults to
-#'   `NESDIS_LRGS_PASSWORD`. Leave blank for servers that permit
-#'   unauthenticated DDS access.
+#' @param password LRGS password. Defaults to `NESDIS_LRGS_PASSWORD` and must
+#'   be non-empty.
 #' @param servers Optional character vector of LRGS servers. Route-level
 #'   `route_config.lrgs_servers` takes precedence when present. Defaults use
 #'   the public LRGS hostnames documented by NOAA rather than fixed IP
@@ -881,6 +894,15 @@ nesdis_fetch_lrgs <- function(
       "downloadNESDIS: Set NESDIS_LRGS_USER or pass username explicitly."
     )
   }
+  if (
+    length(password) != 1L ||
+      is.na(password) ||
+      !nzchar(password)
+  ) {
+    stop(
+      "downloadNESDIS: Set NESDIS_LRGS_PASSWORD or pass password explicitly."
+    )
+  }
   servers <- as.character(unlist(servers, use.names = FALSE))
   servers <- servers[nzchar(servers)]
   if (length(servers) == 0L) {
@@ -925,9 +947,7 @@ nesdis_fetch_lrgs <- function(
       "-u",
       username
     )
-    if (nzchar(password)) {
-      arguments <- c(arguments, "-P", password)
-    }
+    arguments <- c(arguments, "-P", password)
     arguments <- c(
       arguments,
       "-f",
@@ -943,12 +963,14 @@ nesdis_fetch_lrgs <- function(
     # manage a separate -l file can fail before it connects to the LRGS.
     unlink(stderr_file, force = TRUE)
     output <- tryCatch(
-      system2(
-        normalized_client,
-        args = vapply(arguments, shQuote, character(1), type = "cmd"),
-        stdout = TRUE,
-        stderr = stderr_file,
-        timeout = as.integer(timeout_seconds)
+      suppressWarnings(
+        system2(
+          normalized_client,
+          args = vapply(arguments, shQuote, character(1), type = "cmd"),
+          stdout = TRUE,
+          stderr = stderr_file,
+          timeout = as.integer(timeout_seconds)
+        )
       ),
       error = identity
     )
@@ -967,25 +989,46 @@ nesdis_fetch_lrgs <- function(
       next
     }
     status <- attr(output, "status") %||% 0L
-    message_text <- paste(output, collapse = "\n")
+    raw_message_text <- paste(output, collapse = "\n")
     stderr_text <- if (file.exists(stderr_file)) {
       paste(readLines(stderr_file, warn = FALSE), collapse = "\n")
     } else {
       ""
     }
-    # Some OpenDCS launchers print the complete Java command, including the
-    # value supplied to -P. Redact before parsing, returning, or caching it.
-    message_text <- nesdis_redact_password(message_text, password)
-    stderr_text <- nesdis_redact_password(stderr_text, password)
     # OpenDCS may exit successfully after printing status or exception text.
     # Only a valid requested-DCP header is a retrieved payload. The extractor
-    # also handles protocol boundary bytes before a header.
-    has_payload <- length(nesdis_extract_lrgs_transmissions(
-      message_text,
+    # also handles protocol boundary bytes before a header. Inspect the raw
+    # stdout: a password can legitimately occur in a DCP header or body and
+    # must never be replaced before parsing or caching.
+    transmissions <- nesdis_extract_lrgs_transmissions(
+      raw_message_text,
       dcp_address
-    )) > 0L
+    )
+    has_payload <- length(transmissions) > 0L
+    if (has_payload) {
+      payload_start <- transmissions[[1L]]$source_line
+      message_text <- paste(
+        output[payload_start:length(output)],
+        collapse = "\n"
+      )
+      stdout_diagnostic <- if (payload_start > 1L) {
+        paste(output[seq_len(payload_start - 1L)], collapse = "\n")
+      } else {
+        ""
+      }
+    } else {
+      message_text <- ""
+      stdout_diagnostic <- raw_message_text
+    }
+    # Some OpenDCS launchers print the complete Java command, including the
+    # value supplied to -P. Only diagnostic output is redacted. Successful
+    # payload output starts at the first validated header and stays untouched.
+    stdout_diagnostic <- nesdis_redact_password(stdout_diagnostic, password)
+    stderr_text <- nesdis_redact_password(stderr_text, password)
     diagnostic_text <- paste(
-      c(message_text, stderr_text)[nzchar(c(message_text, stderr_text))],
+      c(stdout_diagnostic, stderr_text)[
+        nzchar(c(stdout_diagnostic, stderr_text))
+      ],
       collapse = "\n"
     )
     command_failed <- !identical(status, 0L) || (
@@ -1364,7 +1407,8 @@ nesdis_extract_lrgs_transmissions <- function(message, dcp_address) {
       header = substr(header_line, 1L, header_chars_used),
       transmission_time = transmission_time,
       body_lines = body_lines,
-      transmission_sequence = i
+      transmission_sequence = i,
+      source_line = first
     )
   }
   transmissions[seq_len(valid_index)]

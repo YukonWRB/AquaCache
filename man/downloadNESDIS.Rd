@@ -49,9 +49,8 @@ systems, and finally the legacy AquaCache Windows install path.}
 
 \item{username}{LRGS username. Defaults to \code{NESDIS_LRGS_USER}.}
 
-\item{password}{Optional LRGS password. Defaults to
-\code{NESDIS_LRGS_PASSWORD}. Leave blank for servers that permit
-unauthenticated DDS access.}
+\item{password}{LRGS password. Defaults to \code{NESDIS_LRGS_PASSWORD} and must
+be non-empty.}
 
 \item{servers}{Optional character vector of LRGS servers. Route-level
 \code{route_config.lrgs_servers} takes precedence when present. Defaults use
@@ -112,9 +111,23 @@ layout in \code{route_config.parser_config}, keeping format differences with the
 route rather than in function arguments. BLM configuration requires
 \code{fields}, ordered one per payload row, and normally supplies
 \code{sample_interval_seconds}, \code{sample_offset_seconds}, and \code{values_order}.
-\code{timestamp_floor_seconds} can align transmission timestamps to the payload's
-observation interval when a provider transmits shortly after the observation
-time (for example, hourly observations sent at nine minutes past the hour).
+\code{timestamp_floor_seconds} is needed only when the payload body does not carry
+observation times and measurements belong on fixed clock boundaries. It
+rounds the GOES/LRGS header time down to that interval. For example, a BLM
+route with \code{timestamp_floor_seconds = 3600} treats a message received at
+22:09:33 as an observation at 22:00:00. Omit it when the payload supplies
+observation times or when the header time is the intended measurement time.
+This is a route setting, so it applies to every timeseries mapped to the
+route. A minimal hourly BLM parser configuration has this shape:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{list(
+  parser_config = list(
+    fields = c("air_temperature", "relative_humidity"),
+    timestamp_floor_seconds = 3600
+  )
+)
+}\if{html}{\out{</div>}}
+
 Delimited configuration uses \code{has_header}; headerless messages also require
 \code{fields}. Datetimes can come from \code{datetime_field}, with optional
 \code{datetime_format} and \code{datetime_timezone}, or can be reconstructed using

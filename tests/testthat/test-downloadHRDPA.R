@@ -4,7 +4,7 @@ test_that("downloadHRDPA supplies fallback units and missing issued metadata", {
   dir.create(cache_dir, recursive = TRUE)
   on.exit(unlink(cache_dir, recursive = TRUE, force = TRUE), add = TRUE)
 
-  now <- as.POSIXct("2026-08-12 12:00:00", tz = "UTC")
+  now <- Sys.time()
   available <- data.frame(
     file = "20260812T1159_test.grib2",
     datetime = now - 60,

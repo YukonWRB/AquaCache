@@ -842,7 +842,48 @@ test_that("OpenDCS batch clients are invoked directly on Windows", {
   expect_equal(fetched$server, "127.0.0.1")
   expect_match(fetched$message, "NESDIS_TEST", fixed = TRUE)
   expect_false(grepl("test-password", fetched$message, fixed = TRUE))
-  expect_match(fetched$message, "<redacted>", fixed = TRUE)
+  expect_false(grepl("cli: password=", fetched$message, fixed = TRUE))
+})
+
+test_that("LRGS password redaction never mutates a valid transmission", {
+  skip_if(.Platform$OS.type != "windows")
+
+  client <- tempfile(fileext = ".bat")
+  on.exit(unlink(client, force = TRUE), add = TRUE)
+  payload <- '4700000126209131337G4201NN123EAB00042":NESDIS_TEST 0 I15 42'
+  writeLines(
+    c(
+      "@echo off",
+      ":check_args",
+      "if \"%~1\"==\"\" goto payload",
+      "shift",
+      "goto check_args",
+      ":payload",
+      "echo cli: password=0",
+      paste("echo", payload)
+    ),
+    client,
+    useBytes = TRUE
+  )
+
+  fetched <- AquaCache:::nesdis_fetch_lrgs(
+    dcp_address = "47000001",
+    since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
+    until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
+    client_path = client,
+    username = "test-user",
+    password = "0",
+    servers = "127.0.0.1",
+    port = 16003,
+    timezone_offset = -8,
+    timeout_seconds = 30
+  )
+
+  expect_equal(fetched$message, payload)
+  expect_false(grepl("cli: password=", fetched$message, fixed = TRUE))
+  parsed <- AquaCache:::nesdis_parse_shef(fetched$message, "47000001")
+  expect_true(nrow(parsed) > 0L)
+  expect_true(any(parsed$raw_value == "42"))
 })
 
 test_that("OpenDCS exception output is reported as a retrieval failure", {
@@ -877,7 +918,7 @@ test_that("OpenDCS exception output is reported as a retrieval failure", {
   )
 })
 
-test_that("OpenDCS can use unauthenticated DDS access", {
+test_that("OpenDCS failure diagnostics do not expose the LRGS password", {
   skip_if(.Platform$OS.type != "windows")
 
   client <- tempfile(fileext = ".bat")
@@ -885,30 +926,63 @@ test_that("OpenDCS can use unauthenticated DDS access", {
   writeLines(
     c(
       "@echo off",
-      ":check_args",
-      "if \"%~1\"==\"\" goto payload",
-      "if \"%~1\"==\"-P\" exit /b 33",
-      "shift",
-      "goto check_args",
-      ":payload",
-      'echo 4700000126209131337G4201NN123EAB00042":NESDIS_TEST 0 I15 42'
+      "echo Error: command used password=super-secret",
+      "exit /b 7"
     ),
     client,
     useBytes = TRUE
   )
 
-  fetched <- AquaCache:::nesdis_fetch_lrgs(
-    dcp_address = "47000001",
-    since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
-    until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
-    client_path = client,
-    username = "test-user",
-    password = "",
-    servers = "127.0.0.1",
-    port = 16003,
-    timezone_offset = -8,
-    timeout_seconds = 30
+  error <- NULL
+  expect_warning(
+    error <- tryCatch(
+      AquaCache:::nesdis_fetch_lrgs(
+        dcp_address = "47000001",
+        since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
+        until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
+        client_path = client,
+        username = "test-user",
+        password = "super-secret",
+        servers = "127.0.0.1",
+        port = 16003,
+        timezone_offset = -8,
+        timeout_seconds = 30
+      ),
+      error = identity
+    ),
+    NA
   )
 
-  expect_match(fetched$message, "NESDIS_TEST", fixed = TRUE)
+  expect_s3_class(error, "error")
+  expect_false(grepl("super-secret", conditionMessage(error), fixed = TRUE))
+  expect_match(conditionMessage(error), "password=<redacted>", fixed = TRUE)
+})
+
+test_that("OpenDCS requires an LRGS password", {
+  skip_if(.Platform$OS.type != "windows")
+
+  client <- tempfile(fileext = ".bat")
+  on.exit(unlink(client, force = TRUE), add = TRUE)
+  writeLines(
+    c("@echo off", "exit /b 99"),
+    client,
+    useBytes = TRUE
+  )
+
+  expect_error(
+    AquaCache:::nesdis_fetch_lrgs(
+      dcp_address = "47000001",
+      since = as.POSIXct("2026-07-28 00:00:00", tz = "UTC"),
+      until = as.POSIXct("2026-07-28 01:00:00", tz = "UTC"),
+      client_path = client,
+      username = "test-user",
+      password = "",
+      servers = "127.0.0.1",
+      port = 16003,
+      timezone_offset = -8,
+      timeout_seconds = 30
+    ),
+    "Set NESDIS_LRGS_PASSWORD or pass password explicitly.",
+    fixed = TRUE
+  )
 })
