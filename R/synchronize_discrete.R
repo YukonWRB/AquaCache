@@ -36,8 +36,11 @@ synchronize_discrete_sample_metadata <- function(
       changed_columns <- character()
       changed_values <- list()
       for (column in intersect(names(remote_sample), valid_sample_names)) {
-        # Synchronization must not broaden or narrow local visibility.
-        if (column == "share_with") next
+        # Synchronization must not change local visibility or reassign a
+        # sample to a different source adapter.
+        if (column %in% c("share_with", "import_source")) {
+          next
+        }
 
         database_value <- database_sample[[column]]
         remote_value <- remote_sample[[column]]
@@ -83,7 +86,9 @@ synchronize_discrete_sample_metadata <- function(
           params = c(changed_values, list(database_sample$sample_id[[1]]))
         )
       }
-      if (active_trans) DBI::dbExecute(con, "COMMIT;")
+      if (active_trans) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
       transaction_finished <- TRUE
       length(changed_columns) > 0L
     },
@@ -651,8 +656,7 @@ synchronize_discrete <- function(
               inRemote_sample$sub_location_id[[1]]
             ))
             remote_z <- if (
-              "z" %in% names_inRemote_samp &&
-                length(inRemote_sample$z) > 0L
+              "z" %in% names_inRemote_samp && length(inRemote_sample$z) > 0L
             ) {
               suppressWarnings(as.numeric(inRemote_sample$z[[1]]))
             } else {
@@ -694,6 +698,32 @@ synchronize_discrete <- function(
                 " the remote sample matched more than one database sample."
               )
               next
+            }
+            if (
+              nrow(inDB_sample) == 1L &&
+                !is.na(remote_location_id) &&
+                !isTRUE(
+                  as.character(inDB_sample$import_source[[1]]) ==
+                    as.character(source_fx)
+                )
+            ) {
+              stop(
+                "For sample_series_id ",
+                sid,
+                " the remote sample matches the unique location context of ",
+                "sample_id ",
+                inDB_sample$sample_id[[1]],
+                ", but that sample belongs to import_source ",
+                if (is.na(inDB_sample$import_source[[1]])) {
+                  "NULL"
+                } else {
+                  shQuote(as.character(inDB_sample$import_source[[1]]))
+                },
+                " rather than ",
+                shQuote(as.character(source_fx)),
+                ". Refusing to update or insert against a sample owned by ",
+                "another source."
+              )
             }
 
             # Check for any changes/additions/subtractions to the sample metadata
