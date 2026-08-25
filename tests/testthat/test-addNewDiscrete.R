@@ -70,12 +70,6 @@ test_that("sample group helpers create and assign idempotently", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (!DBI::dbExistsTable(con, DBI::Id(schema = "discrete", table = "sample_groups"))) {
-    testthat::skip("Patch 57 sample group tables are not available.")
-  }
-  if (!DBI::dbExistsTable(con, DBI::Id(schema = "discrete", table = "sample_group_types"))) {
-    testthat::skip("Patch 58 sample-group type catalogue is not available.")
-  }
 
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
@@ -176,12 +170,6 @@ test_that("addNewDiscrete commits a locationless blank with its group", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (!DBI::dbExistsTable(con, DBI::Id(schema = "discrete", table = "sample_groups"))) {
-    testthat::skip("Patch 57 sample group tables are not available.")
-  }
-  if (!DBI::dbExistsTable(con, DBI::Id(schema = "discrete", table = "sample_group_types"))) {
-    testthat::skip("Patch 58 sample-group type catalogue is not available.")
-  }
 
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
@@ -206,9 +194,6 @@ test_that("addNewDiscrete commits a locationless blank with its group", {
      ORDER BY sample_type_id
      LIMIT 1"
   )
-  if (nrow(sample) == 0L || nrow(results) == 0L || nrow(blank_type) == 0L) {
-    testthat::skip("Required Patch 57 sample fixtures are unavailable.")
-  }
 
   sample$sample_id <- NULL
   sample$location_id <- NA_integer_
