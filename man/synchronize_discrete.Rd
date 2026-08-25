@@ -25,12 +25,18 @@ synchronize_discrete(
 
 \item{sync_remote_false}{Controls whether to synchronize sample_series that have the \code{sync_remote} column set to FALSE in the \code{sample_series} table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!}
 
-\item{delete}{If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.}
+\item{delete}{If TRUE, the function will delete located samples and/or
+results that are not found remotely when their \code{import_source} matches the
+selected source function. Locationless samples are not deleted
+automatically because they are not owned by one location-based sample
+series. If FALSE, no data are deleted.}
 
 \item{snowCon}{A connection to the snow course database, created with \code{\link[=snowConnect]{snowConnect()}}. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.}
 }
 \value{
-Updated entries in the hydro database.
+A data.table with one row per inserted or matched remote sample and
+columns \code{sample_series_id}, \code{sample_id}, \code{action}, and list-columns
+containing the normalized \code{sample}, \code{results}, and \code{sample_groups} input.
 }
 \description{
 This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
@@ -43,4 +49,13 @@ protecting records imported through another route.
 
 Every source function must have an enabled discrete-domain entry in
 \code{public.source_adapter_capabilities}.
+
+Source functions use the same \code{sample}, \code{results}, and optional
+\code{sample_groups} return contract documented by \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Existing
+group memberships are not removed when \code{sample_groups} is omitted, and
+source-provided groups are added without replacing unrelated memberships.
+Locationless remote samples are matched by their database-enforced
+\code{import_source} and \code{import_source_id} identity. Located samples retain
+location and collection-context matching because source IDs may legitimately
+recur at different locations.
 }

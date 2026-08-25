@@ -1,6 +1,6 @@
 Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
-Version: 2.8.1
+Version: 2.8.2
 Authors@R: c(
     person("Ghislain", "de Laplante", , email = "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -46,7 +46,6 @@ Imports:
     rpostgis,
     RPostgres,
     rvest,
-    sftp,
     stats,
     terra,
     tidyhydat,
@@ -70,7 +69,6 @@ Suggests:
     YGwater,
 Remotes:
     github::ropensci/weathercan,
-    github::stenevang/sftp,
     github::YukonWRB/YGwater
 VignetteBuilder: 
     knitr

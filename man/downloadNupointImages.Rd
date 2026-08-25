@@ -33,11 +33,16 @@ downloadNupointImages(
 
 \item{save_path}{Optional; path in which to save the image.}
 
-\item{delete}{Should the files be deleted from the SFTP site once they've been successfully been fetched?}
+\item{delete}{Should the files be deleted from the SFTP site once they've
+been successfully fetched?}
 }
 \value{
-A list object of type 'response' containing the image (object$content) and metadata regarding the object and how/when it was fetched.
+A data.frame containing downloaded file paths, datetimes, and
+locations, or NULL if no matching files are found.
 }
 \description{
-Fetches images from a NuPoint SFTP server. Default URL/IP address is Yukon-specific. To fetch from the WSC instead see \code{\link[=downloadWSCImages]{downloadWSCImages()}}. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}.
+Fetches images from a NuPoint SFTP server. To fetch from the WSC instead see
+\code{\link[=downloadWSCImages]{downloadWSCImages()}}. Intended to be called by function \code{\link[=getNewImages]{getNewImages()}}.
+Use caution: this function will delete files from the SFTP server after
+fetching if \code{delete = TRUE} (the default).
 }

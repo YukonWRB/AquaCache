@@ -307,6 +307,7 @@ create_test_db <- function(
     "discrete.result_value_types",
     "discrete.sample_fractions",
     "discrete.sample_types",
+    "discrete.sample_group_types",
     "discrete.laboratories",
     "files.document_types",
     "files.image_types",
@@ -582,7 +583,7 @@ create_test_db <- function(
     "field replicate sample type"
   )
   sample_6_type <- sample_type_field_blank
-  sample_6_note <- "Field blank associated with the April surface-water sample group."
+  sample_6_note <- "Locationless field blank associated with the April surface-water sample group."
   result_type_field <- first_id(
     "SELECT result_type_id FROM discrete.result_types WHERE result_type = 'field' LIMIT 1",
     "field result type"
@@ -1287,8 +1288,8 @@ create_test_db <- function(
           1000, NULL, NULL, NULL, %d, %d, NULL,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Field replicate paired with SYN-S4.', 'SYN-S5'),
-         (6, %d, %d, %d, 0.5, '2023-04-01 12:10+00',
-          '2023-04-01 12:00+00', %d, %d, 4,
+         (6, NULL, NULL, %d, 0.5, '2023-04-01 12:10+00',
+          '2023-04-01 12:00+00', %d, %d, NULL,
           500, NULL, NULL, NULL, %d, %d, NULL,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           true, %s, 'SYN-S6'),
@@ -1322,8 +1323,6 @@ create_test_db <- function(
           owner_org,
           contributor_org,
           owner_org,
-          fake_location_id,
-          fake_sub_location_id,
           media_surface,
           collection_method_bottle,
           sample_6_type,

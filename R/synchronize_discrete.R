@@ -1,3 +1,108 @@
+synchronize_discrete_sample_metadata <- function(
+  con,
+  database_sample,
+  remote_sample,
+  valid_sample_names,
+  sample_groups,
+  default_owner,
+  default_contributor
+) {
+  active_trans <- dbTransBegin(con)
+  transaction_finished <- FALSE
+  on.exit(
+    if (active_trans && !transaction_finished) {
+      try(DBI::dbExecute(con, "ROLLBACK;"), silent = TRUE)
+    },
+    add = TRUE
+  )
+  tryCatch(
+    {
+      link_discrete_sample_groups(
+        con = con,
+        sample_id = database_sample$sample_id[[1]],
+        sample_groups = sample_groups,
+        default_owner = if (!is.na(default_owner)) {
+          default_owner
+        } else {
+          database_sample$owner[[1]]
+        },
+        default_contributor = if (!is.na(default_contributor)) {
+          default_contributor
+        } else {
+          database_sample$contributor[[1]]
+        }
+      )
+
+      changed_columns <- character()
+      changed_values <- list()
+      for (column in intersect(names(remote_sample), valid_sample_names)) {
+        # Synchronization must not change local visibility or reassign a
+        # sample to a different source adapter.
+        if (column %in% c("share_with", "import_source")) {
+          next
+        }
+
+        database_value <- database_sample[[column]]
+        remote_value <- remote_sample[[column]]
+        if (!is.numeric(database_value)) {
+          converted <- suppressWarnings(as.numeric(database_value))
+          if (length(converted) == 1L && !is.na(converted)) {
+            database_value <- converted
+          }
+        }
+        if (!is.numeric(remote_value)) {
+          converted <- suppressWarnings(as.numeric(remote_value))
+          if (length(converted) == 1L && !is.na(converted)) {
+            remote_value <- converted
+          }
+        }
+        if (!isTRUE(all.equal(database_value, remote_value))) {
+          changed_columns <- c(changed_columns, column)
+          changed_values[[length(changed_values) + 1L]] <-
+            if (length(remote_value) == 1L && is.na(remote_value)) {
+              NA
+            } else {
+              remote_value
+            }
+        }
+      }
+
+      if (length(changed_columns) > 0L) {
+        set_sql <- paste0(
+          as.character(DBI::dbQuoteIdentifier(con, changed_columns)),
+          " = $",
+          seq_along(changed_columns),
+          collapse = ", "
+        )
+        DBI::dbExecute(
+          con,
+          paste0(
+            "UPDATE discrete.samples SET ",
+            set_sql,
+            " WHERE sample_id = $",
+            length(changed_values) + 1L,
+            ";"
+          ),
+          params = c(changed_values, list(database_sample$sample_id[[1]]))
+        )
+      }
+      if (active_trans) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
+      transaction_finished <- TRUE
+      length(changed_columns) > 0L
+    },
+    error = function(e) {
+      if (active_trans) {
+        DBI::dbExecute(con, "ROLLBACK;")
+        transaction_finished <<- TRUE
+      }
+      stop(e)
+    }
+  )
+}
+
+
 #' Synchronize hydro DB with remote sources
 #'
 #' @description
@@ -13,15 +118,30 @@
 #' Every source function must have an enabled discrete-domain entry in
 #' `public.source_adapter_capabilities`.
 #'
+#' Source functions use the same `sample`, `results`, and optional
+#' `sample_groups` return contract documented by [getNewDiscrete()]. Existing
+#' group memberships are not removed when `sample_groups` is omitted, and
+#' source-provided groups are added without replacing unrelated memberships.
+#' Locationless remote samples are matched by their database-enforced
+#' `import_source` and `import_source_id` identity. Located samples retain
+#' location and collection-context matching because source IDs may legitimately
+#' recur at different locations.
+#'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after.
 #' @param sample_series_id The sample_series_id you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `sample_series_id`, or one per element of `sample_series_id`
 #' @param active Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id
 #' @param sync_remote_false Controls whether to synchronize sample_series that have the `sync_remote` column set to FALSE in the `sample_series` table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!
-#' @param delete If TRUE, the function will delete any samples and/or results that are not found in the remote source IF these samples are labelled in column 'import_source' as having the same import source. If FALSE, the function will not delete any data. See details for more info.
+#' @param delete If TRUE, the function will delete located samples and/or
+#'   results that are not found remotely when their `import_source` matches the
+#'   selected source function. Locationless samples are not deleted
+#'   automatically because they are not owned by one location-based sample
+#'   series. If FALSE, no data are deleted.
 #' @param snowCon A connection to the snow course database, created with [snowConnect()]. NULL will create a connection using the same connection host and port as the 'con' connection object and close it afterwards. Not used if no data is pulled from the snow database.
 #'
-#' @return Updated entries in the hydro database.
+#' @return A data.table with one row per inserted or matched remote sample and
+#'   columns `sample_series_id`, `sample_id`, `action`, and list-columns
+#'   containing the normalized `sample`, `results`, and `sample_groups` input.
 #' @export
 #'
 
@@ -193,6 +313,7 @@ synchronize_discrete <- function(
   updated_samples <- 0 # Counter for number of updated sample series
   updated_results <- 0 # Counter for number of updated results
   new_results <- 0 # Counter for number of new results
+  sync_records <- list()
 
   # Start of for loop ########################################################
   for (i in seq_len(nrow(all_series))) {
@@ -341,9 +462,54 @@ synchronize_discrete <- function(
 
             inRemote_sample <- inRemote[[j]][["sample"]]
             inRemote_results <- inRemote[[j]][["results"]]
+            sample_groups <- if ("sample_groups" %in% names(inRemote[[j]])) {
+              inRemote[[j]][["sample_groups"]]
+            } else {
+              NULL
+            }
             names_inRemote_samp <- names(inRemote_sample)
 
-            if (delete) {
+            # Normalize adapter location aliases before matching. An explicit
+            # NA location_id is retained for Patch 57 locationless samples.
+            if ("location" %in% names_inRemote_samp) {
+              inRemote_sample$location_id <- loc_id
+              inRemote_sample$location <- NULL
+              names_inRemote_samp <- names(inRemote_sample)
+            } else if (!("location_id" %in% names_inRemote_samp)) {
+              inRemote_sample$location_id <- loc_id
+              names_inRemote_samp <- names(inRemote_sample)
+            }
+            if ("sub_location" %in% names_inRemote_samp) {
+              inRemote_sample$sub_location_id <- sub_loc_id
+              inRemote_sample$sub_location <- NULL
+              names_inRemote_samp <- names(inRemote_sample)
+            } else if (!("sub_location_id" %in% names_inRemote_samp)) {
+              inRemote_sample$sub_location_id <- if (
+                is.na(inRemote_sample$location_id[[1]])
+              ) {
+                NA_integer_
+              } else {
+                sub_loc_id
+              }
+              names_inRemote_samp <- names(inRemote_sample)
+            }
+            inRemote_sample$import_source <- source_fx
+            names_inRemote_samp <- names(inRemote_sample)
+            if (
+              !("import_source_id" %in% names_inRemote_samp) ||
+                is.na(inRemote_sample$import_source_id[[1]]) ||
+                !nzchar(trimws(as.character(
+                  inRemote_sample$import_source_id[[1]]
+                )))
+            ) {
+              warning(
+                "Every source sample must have a non-missing, nonblank ",
+                "import_source_id."
+              )
+              next
+            }
+
+            if (delete && !is.na(inRemote_sample$location_id[[1]])) {
               delete_has_prev <- j > 1 && !is.na(inRemote_datetimes[j - 1])
               delete_has_curr <- !is.na(inRemote_datetimes[j])
               if (delete_has_curr) {
@@ -483,30 +649,82 @@ synchronize_discrete <- function(
             }
             names_inRemote_res <- names(inRemote_results)
 
-            inDB_sample <- DBI::dbGetQuery(
-              con,
-              paste0(
-                "SELECT * FROM discrete.samples WHERE datetime = '",
-                inRemote_sample$datetime,
-                "' AND location_id = ",
-                loc_id,
-                " AND sub_location_id ",
-                if (!is.na(sub_loc_id)) paste0("= ", sub_loc_id) else "IS NULL",
-                " AND z ",
-                if (!is.null(inRemote_sample$z)) {
-                  paste0("= ", inRemote_sample$z)
-                } else {
-                  "IS NULL"
-                },
-                " AND media_id = ",
-                inRemote_sample$media_id,
-                " AND sample_type = ",
-                inRemote_sample$sample_type,
-                " AND collection_method = ",
-                inRemote_sample$collection_method,
-                ";"
+            remote_location_id <- suppressWarnings(as.integer(
+              inRemote_sample$location_id[[1]]
+            ))
+            remote_sub_location_id <- suppressWarnings(as.integer(
+              inRemote_sample$sub_location_id[[1]]
+            ))
+            remote_z <- if (
+              "z" %in% names_inRemote_samp && length(inRemote_sample$z) > 0L
+            ) {
+              suppressWarnings(as.numeric(inRemote_sample$z[[1]]))
+            } else {
+              NA_real_
+            }
+            if (is.na(remote_location_id)) {
+              inDB_sample <- find_locationless_import_sample(
+                con = con,
+                import_source = source_fx,
+                import_source_id = inRemote_sample$import_source_id
               )
-            )
+            } else {
+              inDB_sample <- DBI::dbGetQuery(
+                con,
+                "SELECT *
+                 FROM discrete.samples
+                 WHERE datetime = $1
+                   AND location_id = $2
+                   AND sub_location_id IS NOT DISTINCT FROM $3
+                   AND z IS NOT DISTINCT FROM $4
+                   AND media_id = $5
+                   AND sample_type = $6
+                   AND collection_method = $7;",
+                params = list(
+                  as.POSIXct(inRemote_sample$datetime[[1]], tz = "UTC"),
+                  remote_location_id,
+                  remote_sub_location_id,
+                  remote_z,
+                  as.integer(inRemote_sample$media_id[[1]]),
+                  as.integer(inRemote_sample$sample_type[[1]]),
+                  as.integer(inRemote_sample$collection_method[[1]])
+                )
+              )
+            }
+            if (nrow(inDB_sample) > 1L) {
+              warning(
+                "For sample_series_id ",
+                sid,
+                " the remote sample matched more than one database sample."
+              )
+              next
+            }
+            if (
+              nrow(inDB_sample) == 1L &&
+                !is.na(remote_location_id) &&
+                !isTRUE(
+                  as.character(inDB_sample$import_source[[1]]) ==
+                    as.character(source_fx)
+                )
+            ) {
+              stop(
+                "For sample_series_id ",
+                sid,
+                " the remote sample matches the unique location context of ",
+                "sample_id ",
+                inDB_sample$sample_id[[1]],
+                ", but that sample belongs to import_source ",
+                if (is.na(inDB_sample$import_source[[1]])) {
+                  "NULL"
+                } else {
+                  shQuote(as.character(inDB_sample$import_source[[1]]))
+                },
+                " rather than ",
+                shQuote(as.character(source_fx)),
+                ". Refusing to update or insert against a sample owned by ",
+                "another source."
+              )
+            }
 
             # Check for any changes/additions/subtractions to the sample metadata
             # If changes are detected, update the sample metadata
@@ -518,52 +736,16 @@ synchronize_discrete <- function(
               }
               # Check existing DB sample and results ##################
               ## Check sample metadata ##############
-              updated_samples_flag <- FALSE
-              for (k in intersect(names_inRemote_samp, valid_sample_names)) {
-                # Keep local visibility unchanged for existing samples.
-                if (k == "share_with") {
-                  next
-                }
-                inDB_k <- inDB_sample[[k]]
-                inRemote_k <- inRemote_sample[[k]]
-                # Attempt numeric conversion where possible
-                if (!is.numeric(inDB_k)) {
-                  conv <- suppressWarnings(as.numeric(inDB_k))
-                  if (!is.na(conv)) inDB_k <- conv
-                }
-                if (!is.numeric(inRemote_k)) {
-                  conv <- suppressWarnings(as.numeric(inRemote_k))
-                  if (!is.na(conv)) inRemote_k <- conv
-                }
-                if (!isTRUE(all.equal(inDB_k, inRemote_k))) {
-                  # If TRUE, update the DB
-                  sample_col <- as.character(DBI::dbQuoteIdentifier(con, k))
-                  if (is.na(inRemote_k)) {
-                    DBI::dbExecute(
-                      con,
-                      paste0(
-                        "UPDATE discrete.samples SET ",
-                        sample_col,
-                        " = NULL WHERE sample_id = ",
-                        inDB_sample$sample_id,
-                        ";"
-                      )
-                    )
-                  } else {
-                    DBI::dbExecute(
-                      con,
-                      paste0(
-                        "UPDATE discrete.samples SET ",
-                        sample_col,
-                        " = $1 WHERE sample_id = $2;"
-                      ),
-                      params = list(inRemote_k, inDB_sample$sample_id[[1]])
-                    )
-                  }
-                  updated_samples_flag <- TRUE
-                }
-              }
-              if (updated_samples_flag) {
+              sample_updated <- synchronize_discrete_sample_metadata(
+                con = con,
+                database_sample = inDB_sample,
+                remote_sample = inRemote_sample,
+                valid_sample_names = valid_sample_names,
+                sample_groups = sample_groups,
+                default_owner = default_owner,
+                default_contributor = default_contributor
+              )
+              if (sample_updated) {
                 updated_samples <- updated_samples + 1
               }
 
@@ -916,6 +1098,15 @@ synchronize_discrete <- function(
                   )
                 }
               }
+              sync_records[[length(sync_records) + 1L]] <-
+                new_discrete_import_record(
+                  sample_series_id = sid,
+                  sample_id = inDB_sample$sample_id[[1]],
+                  action = "synchronized",
+                  sample = inRemote_sample,
+                  results = inRemote_results,
+                  sample_groups = sample_groups
+                )
 
               # Inserting a new sample #########
             } else {
@@ -964,8 +1155,6 @@ synchronize_discrete <- function(
                 )
                 next
               }
-
-              inRemote_sample$import_source <- source_fx
 
               # Apply default owner/contributor if not provided
               if (
@@ -1207,11 +1396,41 @@ synchronize_discrete <- function(
               }
 
               # Append values
+              sample_action <- "inserted"
               sample_id <- tryCatch(
                 {
-                  addNewDiscrete(con, inRemote_sample, inRemote_results)
+                  addNewDiscrete(
+                    con = con,
+                    sample = inRemote_sample,
+                    results = inRemote_results,
+                    sample_groups = sample_groups
+                  )
                 },
                 error = function(e) {
+                  if (is.na(inRemote_sample$location_id[[1]])) {
+                    existing_sample <- find_locationless_import_sample(
+                      con = con,
+                      import_source = source_fx,
+                      import_source_id = inRemote_sample$import_source_id
+                    )
+                    if (nrow(existing_sample) == 1L) {
+                      link_discrete_sample_groups(
+                        con = con,
+                        sample_id = existing_sample$sample_id[[1]],
+                        sample_groups = sample_groups,
+                        default_owner = inRemote_sample$owner[[1]],
+                        default_contributor = if (
+                          "contributor" %in% names(inRemote_sample)
+                        ) {
+                          inRemote_sample$contributor[[1]]
+                        } else {
+                          NA_integer_
+                        }
+                      )
+                      sample_action <<- "existing"
+                      return(existing_sample$sample_id[[1]])
+                    }
+                  }
                   warning(
                     "synchronize_discrete: Failed to commit new data for sample_series_id, ",
                     sid,
@@ -1224,7 +1443,18 @@ synchronize_discrete <- function(
                 }
               )
               if (!is.na(sample_id)) {
-                new_samples <- new_samples + 1
+                if (sample_action == "inserted") {
+                  new_samples <- new_samples + 1
+                }
+                sync_records[[length(sync_records) + 1L]] <-
+                  new_discrete_import_record(
+                    sample_series_id = sid,
+                    sample_id = sample_id,
+                    action = sample_action,
+                    sample = inRemote_sample,
+                    results = inRemote_results,
+                    sample_groups = sample_groups
+                  )
               }
             } # End of if no sample is found (making a new one)
           } # End of loop over inRemote
@@ -1316,4 +1546,5 @@ synchronize_discrete <- function(
     units(diff),
     ". End of function."
   )
+  bind_discrete_import_records(sync_records)
 } #End of function
