@@ -1,6 +1,6 @@
 #' Create a small test or seed database
 #'
-#' This function uses the `pg_dump` utility to create a dump of the schema and reference table data, and addsdeterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path and can be restored with [restore_seed_db()]. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `aquacache`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
+#' This function uses the `pg_dump` utility to create a dump of the schema and reference table data, and adds deterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path and can be restored with [restore_seed_db()]. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `aquacache`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. Audit history starts at the completion of the deterministic initial snapshot rather than inheriting the source database's history dates. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
 #'
 #' @param name Target database name (i.e. the one to be dumped). By default, it is set to "aquacache". If you want to dump a different database, specify its name here.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost="hostname".
@@ -363,7 +363,8 @@ create_test_db <- function(
     "criteria.licence_types",
     "criteria.licence_authorities",
     "criteria.guidelines_fractions",
-    "criteria.guidelines_media_types"
+    "criteria.guidelines_media_types",
+    "audit.table_registry"
   )
 
   # Load the ancillary tables into the test database using DBI
@@ -1787,6 +1788,112 @@ create_test_db <- function(
   }
   message("Resetting identity sequences in the test database...")
   reset_identity_sequences(test_con)
+
+  # The schema-only restore creates audit.history_boundaries without rows, and
+  # the copied registry contains history dates from the source database. Those
+  # dates do not describe the new test database. Establish the audit baseline
+  # only after its complete initial snapshot has been loaded; from this point
+  # onward the restored audit triggers can support reliable reconstruction.
+  message("Initializing test database audit history boundaries...")
+  test_history_started_at <- DBI::dbGetQuery(
+    test_con,
+    "SELECT clock_timestamp() AS history_started_at"
+  )$history_started_at[[1]]
+
+  DBI::dbExecute(
+    test_con,
+    "UPDATE audit.table_registry
+     SET history_started_at = CASE
+           WHEN capture_mode LIKE 'excluded_%' THEN NULL
+           ELSE $1
+         END,
+         updated_at = clock_timestamp()",
+    params = list(test_history_started_at)
+  )
+
+  required_history_targets <- DBI::dbGetQuery(
+    test_con,
+    "WITH required_targets (schema_name, table_name) AS (
+       VALUES
+         ('continuous', 'grades'),
+         ('continuous', 'approvals'),
+         ('continuous', 'qualifiers'),
+         ('public', 'grade_types'),
+         ('public', 'approval_types'),
+         ('public', 'qualifier_types'),
+         ('continuous', 'timeseries'),
+         ('continuous', 'aggregation_types'),
+         ('continuous', 'measurements_continuous'),
+         ('continuous', 'corrections'),
+         ('continuous', 'correction_types'),
+         ('continuous', 'timeseries_compounds'),
+         ('continuous', 'timeseries_compound_members')
+     )
+     SELECT required.schema_name, required.table_name
+     FROM required_targets required
+     LEFT JOIN audit.table_registry registry
+       USING (schema_name, table_name)
+     WHERE registry.schema_name IS NULL
+     ORDER BY required.schema_name, required.table_name"
+  )
+  if (nrow(required_history_targets) > 0L) {
+    missing_targets <- paste(
+      paste0(
+        required_history_targets$schema_name,
+        ".",
+        required_history_targets$table_name
+      ),
+      collapse = ", "
+    )
+    stop(
+      "Cannot initialize test audit history because required registry entries are missing: ",
+      missing_targets,
+      "."
+    )
+  }
+
+  DBI::dbExecute(
+    test_con,
+    "WITH boundary_values AS (
+       SELECT
+         'continuous_qc'::TEXT AS history_name,
+         max(history_started_at) AS history_started_at
+       FROM audit.table_registry
+       WHERE (schema_name, table_name) IN (
+         ('continuous', 'grades'),
+         ('continuous', 'approvals'),
+         ('continuous', 'qualifiers'),
+         ('public', 'grade_types'),
+         ('public', 'approval_types'),
+         ('public', 'qualifier_types')
+       )
+       UNION ALL
+       SELECT
+         'continuous_daily_dependencies',
+         max(history_started_at)
+       FROM audit.table_registry
+       WHERE (schema_name, table_name) IN (
+         ('continuous', 'timeseries'),
+         ('continuous', 'aggregation_types'),
+         ('continuous', 'measurements_continuous'),
+         ('continuous', 'corrections'),
+         ('continuous', 'correction_types'),
+         ('continuous', 'timeseries_compounds'),
+         ('continuous', 'timeseries_compound_members'),
+         ('continuous', 'grades'),
+         ('public', 'grade_types')
+       )
+     )
+     INSERT INTO audit.history_boundaries (
+       history_name,
+       history_started_at
+     )
+     SELECT history_name, history_started_at
+     FROM boundary_values
+     WHERE history_started_at IS NOT NULL
+     ON CONFLICT (history_name) DO UPDATE
+     SET history_started_at = EXCLUDED.history_started_at"
+  )
 
   # Do a final dump of the test database schema and data
   # Create the pg_dump command for schema/data
