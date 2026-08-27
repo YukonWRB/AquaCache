@@ -134,7 +134,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
   }
 
   if (nrow(available) > 0) {
-    message("downloadHRDPA: new rasters available. Downloading...")
+    message("downloadHRDPA: candidate rasters available. Downloading...")
     files <- list()
 
     # If interactive, show progress bar
@@ -189,7 +189,7 @@ downloadHRDPA <- function(parameter, start_datetime, clip = NULL) {
       files[[i]] <- file
     }
     files[["forecast"]] <- FALSE
-    message("downloadHRDPA: finished downloading new rasters.")
+    message("downloadHRDPA: finished downloading candidate rasters.")
   } else {
     message("downloadHRDPA: no new rasters found.")
     files <- NULL

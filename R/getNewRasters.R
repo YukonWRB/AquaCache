@@ -206,13 +206,13 @@ getNewRasters <- function(
       prelim <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT min(valid_from) FROM spatial.rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '",
+          "SELECT min(valid_to) FROM spatial.rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '",
           meta_ids[i, "end_datetime"] - 60 * 60 * 24 * 30,
           "' AND raster_series_id = ",
           id,
           ";"
         )
-      )[1, 1] # searches for rasters labelled 'prelim' within the last 30 days. If exists, try to replace it and later rasters
+      )[1, 1] # searches for rasters labelled 'prelim' within the last 30 days. HRDPA filters on product end times, so resume immediately before valid_to.
       if (!is.na(prelim)) {
         if (!is.null(end_datetime)) {
           if (
@@ -362,7 +362,7 @@ getNewRasters <- function(
               # Append rasters one by one in transactions
               tryCatch(
                 {
-                  activeTrans <- dbTransBegin(con)
+                  dbTransBegin(con)
                   DBI::dbExecute(con, "SET LOCAL lock_timeout = '30s';")
                   # Check if the raster already exists. If it does but flag is PRELIMINARY AND the new one is not, delete the prelim one and replace.
                   exists <- DBI::dbGetQuery(
@@ -386,29 +386,53 @@ getNewRasters <- function(
                       )
                     ) # This should cascade to the rasters table
                   } else if (!is.na(exists) & !is.na(flag)) {
-                    # If the raster already exists and the new one is a prelim, skip to to the next one
+                    # The preliminary raster is unchanged. Close the transaction
+                    # before skipping so the caller's connection is not left in
+                    # an active transaction.
+                    DBI::dbExecute(con, "ROLLBACK")
+                    message("Already present; skipped")
                     next
                   } else if (is.na(exists)) {
                     # Check if the raster already exists in non-preliminary format
-                    exists <- DBI::dbGetQuery(
+                    existing_final <- DBI::dbGetQuery(
                       con,
-                      paste0(
-                        "SELECT reference_id FROM spatial.rasters_reference WHERE valid_from = '",
+                      "SELECT
+                         reference_id,
+                         valid_to IS NOT DISTINCT FROM $3::timestamptz AND
+                         issued IS NOT DISTINCT FROM $4::timestamptz AND
+                         source IS NOT DISTINCT FROM $5::text AS is_identical
+                       FROM spatial.rasters_reference
+                       WHERE valid_from = $1
+                         AND raster_series_id = $2
+                         AND flag IS NULL
+                       ORDER BY reference_id
+                       LIMIT 1",
+                      params = list(
                         valid_from,
-                        "' AND raster_series_id = ",
                         id,
-                        " AND flag IS NULL;"
+                        valid_to,
+                        if (is.null(issued)) {
+                          as.POSIXct(NA, tz = "UTC")
+                        } else {
+                          issued
+                        },
+                        if (is.null(source)) NA_character_ else source
                       )
-                    )[1, 1]
-                    # Delete the old raster if it exists
-                    if (!is.na(exists)) {
+                    )
+                    if (nrow(existing_final) > 0L) {
+                      # Never replace a final raster with a preliminary one.
+                      # Identical final rasters are also idempotent no-ops.
+                      if (!is.na(flag) || isTRUE(existing_final$is_identical[1])) {
+                        DBI::dbExecute(con, "ROLLBACK")
+                        message("Already present; skipped")
+                        next
+                      }
+
                       DBI::dbExecute(
                         con,
-                        paste0(
-                          "DELETE FROM spatial.rasters_reference WHERE reference_id = ",
-                          exists,
-                          ";"
-                        )
+                        "DELETE FROM spatial.rasters_reference
+                         WHERE reference_id = $1",
+                        params = list(existing_final$reference_id[1])
                       ) # This will cascade to the rasters table
                     }
                   } # else continue along and insert the new raster
