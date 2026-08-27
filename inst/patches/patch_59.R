@@ -1,6 +1,8 @@
-# Patch 59 creates provider-neutral raw transmission storage and integrates
-# adapter-driven operational history. downloadNESDIS is the first adapter to
-# archive and replay payloads through the shared storage and history contracts.
+# Patch 59 creates provider-neutral raw transmission storage, integrates
+# adapter-driven operational history, and moves raster-series datetime
+# metadata maintenance into database triggers. downloadNESDIS is the first
+# adapter to archive and replay payloads through the shared storage and history
+# contracts.
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 if (check$session_user != "postgres") {
@@ -10,7 +12,7 @@ if (check$session_user != "postgres") {
 }
 
 message(
-  "Working on patch 59: creating provider-neutral durable transmission payload storage, enabling NESDIS replay, and documenting adapter-driven import history. Changes are being made within a transaction, so an error will roll back the database."
+  "Working on patch 59: creating provider-neutral durable transmission payload storage, enabling NESDIS replay, documenting adapter-driven import history, and installing raster-series metadata triggers. Changes are being made within a transaction, so an error will roll back the database."
 )
 
 if (dbTransCheck(con)) {
@@ -503,6 +505,20 @@ tryCatch(
       stop("Patch 59 audit registry verification failed.")
     }
 
+    # raster_series_index datetime metadata is derived from
+    # rasters_reference. Statement-level triggers keep it correct for bulk
+    # appends while exact refreshes cover updates, deletes, and this backfill.
+    raster_metadata_patch <- system.file(
+      "patches",
+      "patch_59_raster_series_metadata.R",
+      package = "AquaCache"
+    )
+    if (!nzchar(raster_metadata_patch)) {
+      stop("Patch 59 raster-series metadata helper was not installed.")
+    }
+    sys.source(raster_metadata_patch, envir = environment())
+    install_raster_series_metadata_triggers(con)
+
     # Update the language around approval_type_code 'A' to be less likely to be confused with grades
     DBI::dbExecute(
       con,
@@ -524,7 +540,7 @@ tryCatch(
     DBI::dbExecute(con, "COMMIT")
     active <- FALSE
     message(
-      "Patch 59 applied successfully. Provider-neutral payload storage and adapter import history are ready, and live NESDIS transmissions are archived for durable replay."
+      "Patch 59 applied successfully. Provider-neutral payload storage and adapter import history are ready, live NESDIS transmissions are archived for durable replay, and raster-series datetime metadata is maintained by database triggers."
     )
   },
   error = function(e) {

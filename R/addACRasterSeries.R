@@ -237,15 +237,13 @@ addACRasterSeries <- function(
     {
       id <- DBI::dbGetQuery(
         con,
-        paste(
-          "INSERT INTO spatial.raster_series_index (",
-          "model, parameter_id, media_id, matrix_state_id, aggregation_type_id,",
-          "z_value, z_units, start_datetime, last_new_raster, end_datetime,",
-          "raster_type_id, active",
-          ") VALUES (",
-          "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12",
-          ") RETURNING raster_series_id;"
-        ),
+        "INSERT INTO spatial.raster_series_index (
+           model, parameter_id, media_id, matrix_state_id,
+           aggregation_type_id, z_value, z_units, raster_type_id, active
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7, $8, $9
+         )
+         RETURNING raster_series_id",
         params = list(
           model,
           parameter_id,
@@ -254,9 +252,6 @@ addACRasterSeries <- function(
           aggregation_type_id,
           z_value,
           z_units,
-          start_datetime,
-          start_datetime,
-          start_datetime,
           raster_type_id,
           TRUE
         )
@@ -276,7 +271,11 @@ addACRasterSeries <- function(
     }
   )
 
-  added <- getNewRasters(raster_series_ids = res, con = con)
+  added <- getNewRasters(
+    raster_series_ids = res,
+    con = con,
+    start_datetime = start_datetime
+  )
   if (length(added) == 0) {
     DBI::dbExecute(
       con,
@@ -287,20 +286,6 @@ addACRasterSeries <- function(
       "Failed to find or add new rasters. The new entry to table raster_series_index has been deleted."
     )
   } else {
-    first_new <- DBI::dbGetQuery(
-      con,
-      "SELECT MIN(valid_from)
-       FROM spatial.rasters_reference
-       WHERE raster_series_id = $1;",
-      params = list(res)
-    )[1, 1]
-    DBI::dbExecute(
-      con,
-      "UPDATE spatial.raster_series_index
-       SET start_datetime = $1
-       WHERE raster_series_id = $2;",
-      params = list(first_new, res)
-    )
     message(
       "Added new raster series for model ",
       model,

@@ -13,7 +13,7 @@
 #' @param con A connection to the database. Default is NULL, which will use the package default connection settings and close the connection afterwards.
 #' @param keep_forecasts Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'
 #' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
-#' @param start_datetime A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with `replace = TRUE`, could be used to replace rasters from a specific datetime to `end_datetime`. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!
+#' @param start_datetime A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with `replace = TRUE`, could be used to replace rasters from a specific datetime to `end_datetime`. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Existing forecast series continue from `last_issue`; this value is used only to initialize a forecast series that has no issue metadata yet.
 #' @param end_datetime An end datetime to fetch rasters to. By default, fetches to the current time, however this parameter is provided for flexibility. If combined with `replace = TRUE` (Warning! parameter not implemented yet), could be used to replace rasters from `start_datetime` to a specific datetime. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!
 #' @return A character vector of raster series IDs that appended at least one
 #'   raster. If individual rasters fail, processing continues, a detailed
@@ -241,18 +241,21 @@ getNewRasters <- function(
         }
       }
     } else if (type == "forecast") {
-      # Forecast rasters should be replaced with the next forecast, so we fetch the last_issue and ignore end and start datetimes
+      # Existing forecast series continue from last_issue. An explicit start is
+      # used only to initialize a new, empty series.
       if (!is.null(end_datetime_i)) {
         end_datetime_i <- NULL
       }
-      if (!is.null(start_datetime_i)) {
-        start_datetime_i <- NULL
-      }
       next_instant <- meta_ids[i, "last_issue"]
       if (is.na(next_instant)) {
-        # If there is no last_issue, we fetch from the last raster end_datetime. This could happen when creating a new series.
-        next_instant <- meta_ids[i, "end_datetime"] + 1 # one second after the last raster end_datetime
+        if (!is.null(start_datetime_i)) {
+          next_instant <- start_datetime_i
+        } else {
+          # A legacy empty series may have an end_datetime but no last_issue.
+          next_instant <- meta_ids[i, "end_datetime"] + 1
+        }
       }
+      start_datetime_i <- NULL
     } else {
       # For other types of rasters, we fetch from the last raster end_datetime + 1 second, or from start_datetime if it is specified.
       if (!is.null(start_datetime_i)) {
@@ -406,16 +409,6 @@ getNewRasters <- function(
                     model = model,
                     con = con
                   ))
-                  DBI::dbExecute(
-                    con,
-                    "UPDATE spatial.raster_series_index SET last_new_raster = NOW() WHERE raster_series_id = $1",
-                    params = list(id)
-                  )
-                  DBI::dbExecute(
-                    con,
-                    "UPDATE spatial.raster_series_index SET end_datetime = $1 WHERE raster_series_id = $2",
-                    params = list(valid_to, id)
-                  )
                   raster_count <- raster_count + 1
                   series_raster_count <- series_raster_count + 1L
 
@@ -479,7 +472,8 @@ getNewRasters <- function(
             }
 
             if (forecast && series_raster_count > 0) {
-              # Delete the old forecast rasters as per input parameters, adjust raster_series_index.last_issue
+              # Delete old forecast rasters as requested. Database triggers
+              # recompute the series bounds and last_issue after each delete.
               valid_from <- as.POSIXct(
                 sapply(rasters, function(x) {
                   if (is.null(x$valid_from)) NA else x$valid_from
@@ -535,27 +529,6 @@ getNewRasters <- function(
                 )
               } # else keep_forecasts == 'all', so delete nothing
 
-              earliest <- DBI::dbGetQuery(
-                con,
-                paste0(
-                  "SELECT MIN(valid_from) FROM spatial.rasters_reference WHERE raster_series_id = ",
-                  id,
-                  ";"
-                )
-              )[1, 1]
-              # Update issued_datetime
-              DBI::dbExecute(
-                con,
-                paste0(
-                  "UPDATE spatial.raster_series_index SET last_issue = '",
-                  issued_datetime,
-                  "', start_datetime = '",
-                  earliest,
-                  "' WHERE raster_series_id = ",
-                  id,
-                  ";"
-                )
-              )
             }
 
             if (series_raster_count > 0) {

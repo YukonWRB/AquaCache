@@ -53,6 +53,54 @@ test_that("getNewRasters handles end_datetime without start_datetime", {
   )
 })
 
+test_that("getNewRasters uses an explicit start for an empty forecast series", {
+  requested_start <- as.POSIXct("2026-08-20 00:00:00", tz = "UTC")
+  captured_args <- NULL
+
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, ...) {
+      if (grepl("FROM spatial.raster_series_index", statement, fixed = TRUE)) {
+        return(data.frame(
+          raster_series_id = 10L,
+          end_datetime = as.POSIXct(NA, tz = "UTC"),
+          last_issue = as.POSIXct(NA, tz = "UTC"),
+          type = "forecast",
+          source_fx = "downloadHRDPS",
+          source_fx_args = NA_character_,
+          fetch_priority = 1L,
+          parameter_name = "precipitation",
+          active = TRUE
+        ))
+      }
+      stop("Unexpected query in empty forecast test: ", statement)
+    },
+    dbExecute = function(...) 1L,
+    .package = "DBI"
+  )
+  local_mocked_bindings(
+    getSourceAdapterCapabilities = function(...) {
+      data.frame(source_fx = "downloadHRDPS")
+    },
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    downloadHRDPS = function(...) {
+      captured_args <<- list(...)
+      NULL
+    },
+    .package = "AquaCache"
+  )
+
+  result <- suppressMessages(getNewRasters(
+    raster_series_ids = 10L,
+    con = structure(list(), class = "mock_con"),
+    start_datetime = requested_start
+  ))
+
+  expect_identical(result, character())
+  expect_equal(captured_args$start_datetime, requested_start)
+  expect_null(captured_args$end_datetime)
+})
+
 test_that("getNewRasters surfaces append failures without changing forecast cleanup", {
   issue <- as.POSIXct("2026-08-27 00:00:00", tz = "UTC")
   successful_valid_from <- issue + 3600
@@ -101,9 +149,6 @@ test_that("getNewRasters surfaces append failures without changing forecast clea
       }
       if (grepl("SELECT reference_id", statement, fixed = TRUE)) {
         return(data.frame(reference_id = NA_integer_))
-      }
-      if (grepl("SELECT MIN(valid_from)", statement, fixed = TRUE)) {
-        return(data.frame(min = successful_valid_from))
       }
       stop("Unexpected query in getNewRasters append-failure test: ", statement)
     },
@@ -159,4 +204,9 @@ test_that("getNewRasters surfaces append failures without changing forecast clea
   expect_length(cleanup_sql, 1L)
   expect_match(cleanup_sql, "2026-08-27 01:00:00", fixed = TRUE)
   expect_match(cleanup_sql, "2026-08-27 02:00:00", fixed = TRUE)
+  expect_false(any(grepl(
+    "UPDATE spatial.raster_series_index",
+    executed_sql,
+    fixed = TRUE
+  )))
 })
