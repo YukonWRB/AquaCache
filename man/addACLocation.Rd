@@ -30,7 +30,7 @@ addACLocation(
 
 \item{name}{A character vector of the location name(s).}
 
-\item{name_fr}{A character vector of the location name(s) in French.}
+\item{name_fr}{A character vector of the location name(s) in French. You're highly encouraged to populate this field, but if left blank (or the corresponding column in \code{df} is missing or empty) it will be populated with 'Translation required!'.}
 
 \item{alias}{A character vector of the location alias(es). This is optional, leave NA if not needed.}
 

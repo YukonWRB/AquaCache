@@ -10,8 +10,22 @@
 #' Transmission setup and route metadata are stored in
 #' `public.locations_metadata_transmission_*`. Field mappings and durable import
 #' history are stored in the provider-neutral tables added by database patch 56.
-#' LRGS credentials are read from environment variables by default and are
-#' never stored in the database.
+#' Database patch 59 adds the provider-neutral durable transmission archive
+#' `continuous.transmission_payloads`. This adapter separates each LRGS response
+#' into its individual transmissions and archives them before parsing, so a
+#' later parser or field-mapping correction can replay the original messages
+#' even after they are no longer available from an LRGS server. LRGS credentials
+#' are read from environment variables by default and are never stored in the
+#' database.
+#'
+#' Every route-oriented write and every timeseries-adapter invocation records an
+#' operational outcome in `continuous.transmission_import_runs`. Adapter mode
+#' delegates measurement writing to [getNewContinuous()] or
+#' [synchronize_continuous()]; those workflows finalize the run with the number
+#' of rows they inserted or upserted. Live, stored-replay, and supplied-message
+#' runs are distinguished in `source_metadata`. Only successful live query
+#' windows whose delegated measurement write completed advance the route's
+#' incremental retrieval cursor.
 #'
 #' ## Route-configured payload formats
 #'
@@ -51,8 +65,9 @@
 #'   enabled field mappings are imported.
 #' @param timeseries_id Optional basic timeseries ID. When supplied,
 #'   `downloadNESDIS()` acts as a `source_fx` adapter and returns only the
-#'   `datetime` and `value` columns for that timeseries. Measurements and
-#'   import-run history are then left for [getNewContinuous()] to manage.
+#'   `datetime` and `value` columns for that timeseries. Measurements are then
+#'   left for [getNewContinuous()] or [synchronize_continuous()] to manage;
+#'   live LRGS transmissions are still archived before parsing.
 #' @param start_datetime Optional start of the LRGS query window. When omitted,
 #'   the latest successful route query is used with the configured overlap.
 #' @param end_datetime End of the query window. Defaults to the current time.
@@ -75,9 +90,15 @@
 #' @param overwrite Passed to [addNewContinuous()]. `"no"` is recommended for
 #'   scheduled imports; `"conflict"` can be used for a deliberate replay.
 #' @param write If `FALSE`, return normalized mapped observations without
-#'   changing measurements or import history.
+#'   changing measurements. Explicit non-adapter calls do not write import
+#'   history, while timeseries-adapter calls always record operational history
+#'   for finalization by the calling AquaCache workflow.
 #' @param raw_messages Optional named character vector or list keyed by DCP
 #'   address. This bypasses the LRGS client for replay and testing.
+#' @param from_storage If `TRUE`, retrieve previously archived transmissions
+#'   from `continuous.transmission_payloads` instead of contacting an LRGS
+#'   server. The selected `start_datetime` and `end_datetime` bound transmission
+#'   times in the archive. This cannot be combined with `raw_messages`.
 #' @param payload_reference Optional external file or object-store reference
 #'   recorded with each import run when `raw_messages` came from durable
 #'   storage.
@@ -86,15 +107,17 @@
 #'   also accept `route_config` or `...`. It must return a data.frame with
 #'   `source_field`, `datetime`, `raw_value`, and `value`. Non-numeric payload
 #'   values remain available in `raw_value` while `value` is `NA_real_`.
-#' @param cache If `TRUE`, reuse an LRGS payload already downloaded during the
-#'   current R session when it covers the requested DCP and time window. The
-#'   cache stores raw transmissions so each route can still use its own parser
-#'   and mappings.
+#' @param cache If `TRUE`, reuse live or archived transmissions already fetched
+#'   during the current R session for the same DCP or transmission setup and
+#'   time window. The cache stores raw transmissions so each route can still
+#'   use its own parser and mappings.
 #'
 #' @return With `timeseries_id = NULL`, a list containing `summary`, with one
 #'   row per route, and `data`, the normalized mapped observations considered
 #'   during the run. With `timeseries_id` supplied, a data table containing
-#'   `datetime` and `value`, suitable for use as a `source_fx`.
+#'   `datetime` and `value`, suitable for use as a `source_fx`. Adapter results
+#'   also carry internal transmission-import run IDs used by AquaCache to
+#'   finalize measurement-write counts.
 #' @export
 downloadNESDIS <- function(
   transmission_route_id = NULL,
@@ -112,7 +135,8 @@ downloadNESDIS <- function(
   raw_messages = NULL,
   payload_reference = NULL,
   parser = NULL,
-  cache = TRUE
+  cache = TRUE,
+  from_storage = FALSE
 ) {
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -130,11 +154,31 @@ downloadNESDIS <- function(
   if (!is.logical(cache) || length(cache) != 1L || is.na(cache)) {
     stop("downloadNESDIS: 'cache' must be TRUE or FALSE.")
   }
+  if (
+    !is.logical(from_storage) ||
+      length(from_storage) != 1L ||
+      is.na(from_storage)
+  ) {
+    stop("downloadNESDIS: 'from_storage' must be TRUE or FALSE.")
+  }
+  if (from_storage && !is.null(raw_messages)) {
+    stop(
+      "downloadNESDIS: 'from_storage' and 'raw_messages' cannot be used together."
+    )
+  }
 
   adapter_timeseries_id <- nesdis_validate_timeseries_id(timeseries_id)
   adapter_mode <- !is.null(adapter_timeseries_id)
   if (adapter_mode) {
     write <- FALSE
+  }
+  record_history <- write || adapter_mode
+  retrieval_mode <- if (from_storage) {
+    "storage"
+  } else if (!is.null(raw_messages)) {
+    "supplied"
+  } else {
+    "live"
   }
 
   end_datetime <- nesdis_as_utc(end_datetime, "end_datetime")
@@ -230,7 +274,7 @@ downloadNESDIS <- function(
   } else {
     routes[, query_since := start_datetime]
   }
-  if (adapter_mode) {
+  if (adapter_mode && !from_storage) {
     routes[,
       query_since := as.POSIXct(
         pmax(
@@ -272,15 +316,45 @@ downloadNESDIS <- function(
   )
   summaries <- list()
   mapped_results <- list()
+  adapter_run_ids <- numeric()
   summary_index <- 0L
   data_index <- 0L
+
+  import_run_metadata <- function(source_metadata = list()) {
+    source_metadata <- source_metadata %||% list()
+    utils::modifyList(
+      source_metadata,
+      list(
+        retrieval_mode = retrieval_mode,
+        adapter_mode = adapter_mode,
+        adapter_timeseries_id = if (adapter_mode) {
+          adapter_timeseries_id
+        } else {
+          NULL
+        },
+        measurement_write_delegated = adapter_mode,
+        measurement_write_completed = !adapter_mode
+      )
+    )
+  }
 
   for (dcp_address in dcp_addresses) {
     group_routes <- routes[platform_identifier == dcp_address]
     group_since <- min(group_routes$query_since)
     group_until <- max(group_routes$query_until)
 
-    fetch_result <- if (!is.null(supplied_messages)) {
+    fetch_result <- if (from_storage) {
+      tryCatch(
+        nesdis_fetch_stored_payloads(
+          con = con,
+          transmission_setup_ids = unique(group_routes$transmission_setup_id),
+          since = group_since,
+          until = group_until,
+          cache = cache
+        ),
+        error = identity
+      )
+    } else if (!is.null(supplied_messages)) {
       list(
         message = supplied_messages[[dcp_address]],
         server = "supplied",
@@ -307,7 +381,33 @@ downloadNESDIS <- function(
           port = fetch_port,
           timezone_offset = timezone_offset,
           timeout_seconds = timeout_seconds,
-          cache = cache
+          cache = cache,
+          archive = function(result) {
+            raw_message <- result$message %||% ""
+            if (!nzchar(raw_message)) {
+              return(result)
+            }
+            archive_result <- nesdis_store_payloads(
+              con = con,
+              transmission_setup_ids = unique(
+                group_routes$transmission_setup_id
+              ),
+              dcp_address = dcp_address,
+              message = raw_message,
+              source_server = result$server,
+              source_metadata = result$source_metadata %||% list()
+            )
+            result$source_metadata <- utils::modifyList(
+              result$source_metadata %||% list(),
+              list(
+                transmissions_archived =
+                  archive_result$transmissions_archived,
+                transmissions_newly_stored =
+                  archive_result$transmissions_inserted
+              )
+            )
+            result
+          }
         ),
         error = identity
       )
@@ -317,8 +417,8 @@ downloadNESDIS <- function(
       for (route_row in seq_len(nrow(group_routes))) {
         summary_index <- summary_index + 1L
         route <- group_routes[route_row]
-        if (write) {
-          nesdis_record_import_run(
+        if (record_history) {
+          run_id <- nesdis_record_import_run(
             con = con,
             route = route,
             status = "failed",
@@ -330,8 +430,11 @@ downloadNESDIS <- function(
             last_message_datetime = as.POSIXct(NA, tz = "UTC"),
             error_message = conditionMessage(fetch_result),
             payload_reference = payload_reference,
-            source_metadata = list()
+            source_metadata = import_run_metadata()
           )
+          if (adapter_mode) {
+            adapter_run_ids <- c(adapter_run_ids, run_id)
+          }
         }
         summaries[[summary_index]] <- nesdis_summary_row(
           route,
@@ -367,10 +470,14 @@ downloadNESDIS <- function(
         error = identity
       )
 
+      if (!inherits(parsed, "error") && from_storage) {
+        parsed <- nesdis_deduplicate_stored_rows(parsed)
+      }
+
       if (inherits(parsed, "error")) {
         summary_index <- summary_index + 1L
-        if (write) {
-          nesdis_record_import_run(
+        if (record_history) {
+          run_id <- nesdis_record_import_run(
             con = con,
             route = route,
             status = "failed",
@@ -382,8 +489,13 @@ downloadNESDIS <- function(
             last_message_datetime = as.POSIXct(NA, tz = "UTC"),
             error_message = conditionMessage(parsed),
             payload_reference = payload_reference,
-            source_metadata = fetch_result$source_metadata %||% list()
+            source_metadata = import_run_metadata(
+              fetch_result$source_metadata %||% list()
+            )
           )
+          if (adapter_mode) {
+            adapter_run_ids <- c(adapter_run_ids, run_id)
+          }
         }
         summaries[[summary_index]] <- nesdis_summary_row(
           route,
@@ -418,10 +530,36 @@ downloadNESDIS <- function(
         payload_bytes = payload_bytes,
         transmissions_received = transmissions_received,
         payload_reference = payload_reference,
-        source_metadata = fetch_result$source_metadata %||% list()
+        source_metadata = import_run_metadata(
+          fetch_result$source_metadata %||% list()
+        )
       )
       summary_index <- summary_index + 1L
       summaries[[summary_index]] <- result$summary
+      if (adapter_mode) {
+        last_message_datetime <- if (nrow(route_data) > 0L) {
+          max(route_data$datetime)
+        } else {
+          as.POSIXct(NA, tz = "UTC")
+        }
+        run_id <- nesdis_record_import_run(
+          con = con,
+          route = route,
+          status = result$summary$status[[1L]],
+          source_server = fetch_result$server,
+          payload_bytes = payload_bytes,
+          transmissions_received = transmissions_received,
+          measurements_parsed = nrow(route_data),
+          measurements_inserted = 0L,
+          last_message_datetime = last_message_datetime,
+          error_message = NA_character_,
+          payload_reference = payload_reference,
+          source_metadata = import_run_metadata(
+            fetch_result$source_metadata %||% list()
+          )
+        )
+        adapter_run_ids <- c(adapter_run_ids, run_id)
+      }
     }
   }
 
@@ -443,10 +581,12 @@ downloadNESDIS <- function(
       )
     }
     if (nrow(data) == 0L) {
-      return(data.table::data.table(
+      adapter_data <- data.table::data.table(
         datetime = as.POSIXct(character(), tz = "UTC"),
         value = numeric()
-      ))
+      )
+      attr(adapter_data, "transmission_import_run_ids") <- adapter_run_ids
+      return(adapter_data)
     }
     adapter_data <- data[
       timeseries_id == adapter_timeseries_id,
@@ -462,6 +602,7 @@ downloadNESDIS <- function(
         "."
       )
     }
+    attr(adapter_data, "transmission_import_run_ids") <- adapter_run_ids
     return(adapter_data)
   }
 
@@ -600,7 +741,18 @@ nesdis_get_cursors <- function(con, route_ids) {
     "SELECT transmission_route_id, max(query_until) AS last_query_until
      FROM continuous.transmission_import_runs
      WHERE importer = 'downloadNESDIS'
+       AND COALESCE(source_metadata ->> 'retrieval_mode', 'live') = 'live'
        AND status IN ('success', 'no_data')
+       AND (
+         COALESCE(
+           (source_metadata ->> 'measurement_write_delegated')::boolean,
+           FALSE
+         ) = FALSE
+         OR COALESCE(
+           (source_metadata ->> 'measurement_write_completed')::boolean,
+           FALSE
+         ) = TRUE
+       )
        AND transmission_route_id IN (",
     paste(as.integer(route_ids), collapse = ", "),
     ")
@@ -799,6 +951,162 @@ nesdis_save_cached_payload <- function(dcp_address, since, until, result) {
   invisible(cache_file)
 }
 
+#' Split one LRGS response into durable individual transmissions
+#'
+#' @keywords internal
+#' @noRd
+nesdis_split_stored_payloads <- function(message, dcp_address) {
+  transmissions <- nesdis_extract_lrgs_transmissions(message, dcp_address)
+  if (length(transmissions) == 0L) {
+    return(data.table::data.table(
+      transmission_datetime = as.POSIXct(character(), tz = "UTC"),
+      payload_text = character()
+    ))
+  }
+
+  raw_lines <- strsplit(message, "\r\n|\n|\r", perl = TRUE)[[1L]]
+  starts <- vapply(transmissions, `[[`, integer(1), "source_line")
+  ends <- c(starts[-1L] - 1L, length(raw_lines))
+  payload_text <- vapply(
+    seq_along(starts),
+    function(i) paste(raw_lines[starts[[i]]:ends[[i]]], collapse = "\n"),
+    character(1)
+  )
+
+  data.table::data.table(
+    transmission_datetime = as.POSIXct(
+      vapply(
+        transmissions,
+        function(x) as.numeric(x$transmission_time),
+        numeric(1)
+      ),
+      origin = "1970-01-01",
+      tz = "UTC"
+    ),
+    payload_text = payload_text
+  )
+}
+
+#' Separate and archive newly retrieved LRGS transmissions
+#'
+#' @keywords internal
+#' @noRd
+nesdis_store_payloads <- function(
+  con,
+  transmission_setup_ids,
+  dcp_address,
+  message,
+  source_server,
+  source_metadata
+) {
+  payloads <- nesdis_split_stored_payloads(message, dcp_address)
+  transmission_store_payloads(
+    con = con,
+    transmission_setup_ids = transmission_setup_ids,
+    payloads = payloads,
+    source_server = source_server,
+    source_metadata = source_metadata
+  )
+}
+
+#' Retrieve archived LRGS transmissions for replay
+#'
+#' @keywords internal
+#' @noRd
+nesdis_fetch_stored_payloads <- function(
+  con,
+  transmission_setup_ids,
+  since,
+  until,
+  cache = TRUE
+) {
+  setup_ids <- unique(as.integer(transmission_setup_ids))
+  if (!is.logical(cache) || length(cache) != 1L || is.na(cache)) {
+    stop("Stored payload cache must be TRUE or FALSE.")
+  }
+
+  cache_file <- file.path(
+    nesdis_cache_dir(),
+    paste0(
+      "storage_",
+      paste(setup_ids, collapse = "-"),
+      "_",
+      format(since, "%Y%m%dT%H%M%S", tz = "UTC"),
+      "_",
+      format(until, "%Y%m%dT%H%M%S", tz = "UTC"),
+      "_",
+      Sys.getpid(),
+      ".rds"
+    )
+  )
+  if (cache && file.exists(cache_file)) {
+    cached <- tryCatch(readRDS(cache_file), error = function(e) NULL)
+    if (is.list(cached) && !is.null(cached$message)) {
+      cached$source_metadata$cache_hit <- TRUE
+      return(cached)
+    }
+  }
+
+  stored <- transmission_fetch_payloads(
+    con = con,
+    transmission_setup_ids = setup_ids,
+    since = since,
+    until = until
+  )
+
+  result <- if (nrow(stored) == 0L) {
+    list(
+      message = "",
+      server = "AquaCache storage",
+      source_metadata = list(
+        retrieval = "continuous.transmission_payloads",
+        stored_transmissions = 0L
+      )
+    )
+  } else {
+    list(
+      message = paste(stored$payload_text, collapse = "\n"),
+      server = "AquaCache storage",
+      source_metadata = list(
+        retrieval = "continuous.transmission_payloads",
+        stored_transmissions = nrow(stored),
+        first_transmission_datetime = format(
+          min(stored$transmission_datetime),
+          "%Y-%m-%dT%H:%M:%SZ",
+          tz = "UTC"
+        ),
+        last_transmission_datetime = format(
+          max(stored$transmission_datetime),
+          "%Y-%m-%dT%H:%M:%SZ",
+          tz = "UTC"
+        )
+      )
+    )
+  }
+
+  if (cache) {
+    dir.create(dirname(cache_file), recursive = TRUE, showWarnings = FALSE)
+    saveRDS(result, cache_file)
+  }
+  result
+}
+
+#' Resolve repeated observations from overlapping archived transmissions
+#'
+#' @keywords internal
+#' @noRd
+nesdis_deduplicate_stored_rows <- function(parsed) {
+  transmissions_received <- attr(parsed, "transmissions_received") %||% 0L
+  if (nrow(parsed) > 1L) {
+    parsed <- data.table::as.data.table(parsed)
+    parsed <- parsed[
+      !duplicated(parsed, by = c("source_field", "datetime"), fromLast = TRUE)
+    ]
+  }
+  attr(parsed, "transmissions_received") <- transmissions_received
+  parsed
+}
+
 #' @keywords internal
 #' @noRd
 nesdis_fetch_cached <- function(
@@ -812,7 +1120,8 @@ nesdis_fetch_cached <- function(
   port,
   timezone_offset,
   timeout_seconds,
-  cache = TRUE
+  cache = TRUE,
+  archive = NULL
 ) {
   # OpenDCS criteria have minute precision. Expanding to full minute bounds
   # also lets sequential source_fx calls share a payload despite slightly
@@ -827,6 +1136,10 @@ nesdis_fetch_cached <- function(
     origin = "1970-01-01",
     tz = "UTC"
   )
+
+  if (!is.null(archive) && !is.function(archive)) {
+    stop("downloadNESDIS: archive must be NULL or a function.")
+  }
 
   if (cache) {
     cached <- nesdis_find_cached_payload(
@@ -847,6 +1160,9 @@ nesdis_fetch_cached <- function(
           )
         )
       )
+      if (!is.null(archive)) {
+        result <- archive(result)
+      }
       return(result)
     }
   }
@@ -863,6 +1179,9 @@ nesdis_fetch_cached <- function(
     timezone_offset = timezone_offset,
     timeout_seconds = timeout_seconds
   )
+  if (!is.null(archive)) {
+    result <- archive(result)
+  }
   if (cache) {
     nesdis_save_cached_payload(
       dcp_address,
@@ -2440,50 +2759,23 @@ nesdis_record_import_run <- function(
   payload_reference,
   source_metadata
 ) {
-  DBI::dbExecute(
-    con,
-    "INSERT INTO continuous.transmission_import_runs (
-       transmission_route_id,
-       query_since,
-       query_until,
-       importer,
-       source_server,
-       status,
-       payload_bytes,
-       transmissions_received,
-       measurements_parsed,
-       measurements_inserted,
-       last_message_datetime,
-       payload_reference,
-       source_metadata,
-       error_message,
-       completed
-     ) VALUES (
-       $1, $2, $3, 'downloadNESDIS', $4, $5, $6, $7, $8, $9,
-       $10, $11, $12::jsonb, $13, clock_timestamp()
-     )",
-    params = list(
-      route$transmission_route_id,
-      route$query_since,
-      route$query_until,
-      source_server,
-      status,
-      as.numeric(payload_bytes),
-      as.integer(transmissions_received),
-      as.integer(measurements_parsed),
-      as.integer(measurements_inserted),
-      last_message_datetime,
-      payload_reference,
-      jsonlite::toJSON(
-        source_metadata,
-        auto_unbox = TRUE,
-        null = "null",
-        na = "null"
-      ),
-      error_message
-    )
+  transmission_record_import_run(
+    con = con,
+    transmission_route_id = route$transmission_route_id,
+    query_since = route$query_since,
+    query_until = route$query_until,
+    importer = "downloadNESDIS",
+    source_server = source_server,
+    status = status,
+    payload_bytes = payload_bytes,
+    transmissions_received = transmissions_received,
+    measurements_parsed = measurements_parsed,
+    measurements_inserted = measurements_inserted,
+    last_message_datetime = last_message_datetime,
+    payload_reference = payload_reference,
+    source_metadata = source_metadata,
+    error_message = error_message
   )
-  invisible(TRUE)
 }
 
 #' @keywords internal

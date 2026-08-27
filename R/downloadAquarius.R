@@ -79,7 +79,7 @@ downloadAquarius <- function(
   }
 
   # Make the Aquarius configuration
-  config = list(
+  config <- list(
     server = server,
     username = login[1],
     password = login[2],
@@ -180,6 +180,10 @@ downloadAquarius <- function(
 
       # Remove all data points prior to the original requested start time
       ts <- ts[ts$datetime >= old_start, ]
+    }
+
+    if (nrow(ts) == 0) {
+      return(data.frame())
     }
 
     # format approvals, grade, qualifiers times
@@ -333,7 +337,10 @@ downloadAquarius <- function(
       )
     }
 
-    qualifiers_DB <- DBI::dbGetQuery(con, "SELECT * FROM public.qualifier_types")
+    qualifiers_DB <- DBI::dbGetQuery(
+      con,
+      "SELECT * FROM public.qualifier_types"
+    )
     if (is.null(nrow(RawDL$Qualifiers)) || nrow(RawDL$Qualifiers) == 0) {
       # Then it's probably an empty list or data.frame because there are no qualifiers
       qualifiers <- data.frame(

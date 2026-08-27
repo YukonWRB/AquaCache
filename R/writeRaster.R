@@ -358,7 +358,12 @@ writeRaster <- function(
     if (length(r2p_err) == 0) {
       r2p_err <- "raster2pgsql exited with a non-zero status but produced no error output."
     }
-    stop(paste0("raster2pgsql failed: ", paste(r2p_err, collapse = "\n")))
+    stop(
+      "raster2pgsql failed with exit status ",
+      r2p_status,
+      ":\n",
+      paste(r2p_err, collapse = "\n")
+    )
   }
 
   qt <- as.character(rast_table_sql) # e.g. "\"spatial\".\"rasters\"" or "\"rasters\""
@@ -372,6 +377,26 @@ writeRaster <- function(
     sql_lines,
     perl = TRUE
   )
+  insert_statement_count <- sum(idx)
+  if (insert_statement_count == 0L) {
+    insert_lines <- grep(
+      "^\\s*INSERT\\s+INTO",
+      sql_lines,
+      value = TRUE,
+      ignore.case = TRUE,
+      perl = TRUE
+    )
+    insert_preview <- if (length(insert_lines) == 0L) {
+      "No INSERT statement was present in raster2pgsql output."
+    } else {
+      substr(insert_lines[[1L]], 1L, 500L)
+    }
+    stop(
+      "writeRaster could not add `RETURNING rid` to the raster2pgsql SQL. ",
+      "No database write was attempted. First INSERT statement: ",
+      insert_preview
+    )
+  }
   sql_lines[idx] <- sub(
     ";\\s*$",
     " RETURNING rid;",
@@ -586,25 +611,58 @@ writeRaster <- function(
   new_rids <- new_rids[!is.na(new_rids)]
 
   if (!identical(psql_result$status, 0L)) {
-    err_msg <- psql_result$err
-    if (length(err_msg) == 0) {
-      err_msg <- "psql exited with a non-zero status but produced no error output."
+    stdout_text <- if (length(psql_result$out) == 0L) {
+      "<empty>"
+    } else {
+      paste(psql_result$out, collapse = "\n")
     }
-    stop(paste0(
-      "psql failed while loading raster tiles: ",
-      paste(err_msg, collapse = "\n")
-    ))
-  }
-
-  if (!length(new_rids)) {
-    msg_out <- paste(readLines(tmp_psql_out, warn = FALSE), collapse = "\n")
-    msg_err <- paste(readLines(tmp_psql_err, warn = FALSE), collapse = "\n")
-    message("psql stdout:\n", msg_out, "\npsql stderr:\n", msg_err)
+    stderr_text <- if (length(psql_result$err) == 0L) {
+      "<empty>"
+    } else {
+      paste(psql_result$err, collapse = "\n")
+    }
+    stop(
+      "psql failed while loading raster tiles with exit status ",
+      psql_result$status,
+      ".\nstdout:\n",
+      stdout_text,
+      "\nstderr:\n",
+      stderr_text
+    )
   }
 
   if (length(new_rids) == 0) {
+    stdout_text <- if (length(psql_result$out) == 0L) {
+      "<empty>"
+    } else {
+      paste(psql_result$out, collapse = "\n")
+    }
+    stderr_text <- if (length(psql_result$err) == 0L) {
+      "<empty>"
+    } else {
+      paste(psql_result$err, collapse = "\n")
+    }
     stop(
-      "No raster tiles were appended by raster2pgsql. Check the raster input and table definition."
+      "psql exited successfully, but writeRaster could not parse any returned ",
+      "raster IDs from ",
+      insert_statement_count,
+      " rewritten INSERT statement",
+      if (insert_statement_count == 1L) "" else "s",
+      ".\nstdout:\n",
+      stdout_text,
+      "\nstderr:\n",
+      stderr_text
+    )
+  }
+
+  if (length(new_rids) != insert_statement_count) {
+    stop(
+      "writeRaster parsed ",
+      length(new_rids),
+      " raster ID(s) from ",
+      insert_statement_count,
+      " rewritten INSERT statement(s). Refusing to associate an incomplete ",
+      "set of raster tiles with a reference row."
     )
   }
 

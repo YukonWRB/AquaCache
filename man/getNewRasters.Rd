@@ -22,9 +22,15 @@ getNewRasters(
 
 \item{active}{Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.}
 
-\item{start_datetime}{A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with \code{replace = TRUE}, could be used to replace rasters from a specific datetime to \code{end_datetime}. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!}
+\item{start_datetime}{A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with \code{replace = TRUE}, could be used to replace rasters from a specific datetime to \code{end_datetime}. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Existing forecast series continue from \code{last_issue}; this value is used only to initialize a forecast series that has no issue metadata yet.}
 
 \item{end_datetime}{An end datetime to fetch rasters to. By default, fetches to the current time, however this parameter is provided for flexibility. If combined with \code{replace = TRUE} (Warning! parameter not implemented yet), could be used to replace rasters from \code{start_datetime} to a specific datetime. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!}
+}
+\value{
+A character vector of raster series IDs that appended at least one
+raster. If individual rasters fail, processing continues, a detailed
+warning is emitted after all series have been processed, and the returned
+vector has an \code{append_errors} attribute containing the failure details.
 }
 \description{
 Retrieves rasters using the active assignment with the lowest fetch priority

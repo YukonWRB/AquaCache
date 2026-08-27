@@ -14,6 +14,12 @@
 #' `downloadAquarius` needs credentials in `.Renviron` or in that assignment's
 #' arguments; see [downloadAquarius()].
 #'
+#' Transmission adapters can attach operational import-run IDs to their result.
+#' After comparison and database writing, `synchronize_continuous()` finalizes
+#' those rows in `continuous.transmission_import_runs` with the number of
+#' measurements inserted or upserted. Stored-replay runs are retained for audit
+#' but do not advance a live retrieval cursor.
+#'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. If you wish to run this function in parallel you MUST leave this argument NULL. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all".
 #' @param start_datetime The datetime (as a POSIXct, Date, or character) from which to look for possible new data. You can specify a single start_datetime to apply to all `timeseries_id`, or one per element of `timeseries_id.`
@@ -24,6 +30,18 @@
 #' @param dbPort The port of the database. If left NULL, the function will use the default port from the .Renviron file as per [AquaConnect()].
 #' @param dbUser The username for the database. If left NULL, the function will use the default username from the .Renviron file as per [AquaConnect()].
 #' @param dbPass The password for the database. If left NULL, the function will use the default password from the .Renviron file as per [AquaConnect()].
+#' @param from_storage If `TRUE`, ask each selected source adapter to replay raw
+#'   transmissions from `continuous.transmission_payloads` instead of contacting
+#'   its provider. Every selected adapter must declare `from_storage` as a
+#'   managed runtime argument in `public.source_adapter_capabilities`, accept
+#'   the managed `end_datetime` argument, and implement archive retrieval and
+#'   parsing. `downloadNESDIS` currently supports this contract; future cellular
+#'   or other transmission adapters can use the same archive and opt in through
+#'   the registry. Replay uses each adapter's current parser and field mappings.
+#' @param end_datetime End of the archived-transmission replay window. Used only
+#'   when `from_storage = TRUE` and defaults to the current time. It is supplied
+#'   to every replay-capable adapter. Measurements after the last observation
+#'   parsed from the selected archive are not compared or removed.
 #'
 #' @return A data.frame showing the status of synchronization for each timeseries as well as the error or warning message, if any, plus updated entries in the hydro database.
 #' @export
@@ -41,12 +59,21 @@ synchronize_continuous <- function(
   dbHost = NULL,
   dbPort = NULL,
   dbUser = NULL,
-  dbPass = NULL
+  dbPass = NULL,
+  from_storage = FALSE,
+  end_datetime = Sys.time()
 ) {
   i <- NULL # to avoid R CMD check warnings
 
   if (!active %in% c('default', 'all')) {
     stop("Parameter 'active' must be either 'default' or 'all'.")
+  }
+  if (
+    !is.logical(from_storage) ||
+      length(from_storage) != 1L ||
+      is.na(from_storage)
+  ) {
+    stop("from_storage must be TRUE or FALSE.")
   }
 
   if (inherits(start_datetime, "Date")) {
@@ -55,6 +82,31 @@ synchronize_continuous <- function(
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
   } else if (!inherits(start_datetime, "POSIXct")) {
     stop("start_datetime must be a Date, character, or POSIXct object.")
+  }
+  start_datetime <- as.POSIXct(
+    as.numeric(start_datetime),
+    origin = "1970-01-01",
+    tz = "UTC"
+  )
+  if (from_storage) {
+    if (inherits(end_datetime, "Date")) {
+      end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
+    } else if (inherits(end_datetime, "character")) {
+      end_datetime <- as.POSIXct(end_datetime, tz = "UTC")
+    } else if (!inherits(end_datetime, "POSIXct")) {
+      stop("end_datetime must be a Date, character, or POSIXct object.")
+    }
+    end_datetime <- as.POSIXct(
+      as.numeric(end_datetime),
+      origin = "1970-01-01",
+      tz = "UTC"
+    )
+    if (is.na(end_datetime) || anyNA(start_datetime)) {
+      stop("Could not interpret the stored-transmission replay window.")
+    }
+    if (any(start_datetime >= end_datetime)) {
+      stop("Every start_datetime must precede end_datetime during replay.")
+    }
   }
 
   if (is.null(con)) {
@@ -256,6 +308,40 @@ synchronize_continuous <- function(
       paste(unregistered_sources, collapse = ", "),
       "."
     )
+  }
+  if (from_storage) {
+    selected_sources <- unique(all_timeseries$source_fx)
+    replay_support <- vapply(
+      selected_sources,
+      function(source_fx) {
+        matches <- adapter_capabilities[["source_fx"]] == source_fx
+        capability <- adapter_capabilities[
+          which(matches),
+          ,
+          drop = FALSE
+        ]
+        all(vapply(
+          c("from_storage", "end_datetime"),
+          function(argument_name) {
+            source_adapter_supports_runtime_argument(
+              capability,
+              argument_name
+            )
+          },
+          logical(1)
+        ))
+      },
+      logical(1)
+    )
+    if (any(!replay_support)) {
+      stop(
+        "synchronize_continuous: from_storage = TRUE is not supported by ",
+        "the selected source adapter(s): ",
+        paste(selected_sources[!replay_support], collapse = ", "),
+        ". Replay-capable adapters must register from_storage and ",
+        "end_datetime as runtime arguments."
+      )
+    }
   }
 
   grade_unknown <- DBI::dbGetQuery(
@@ -479,6 +565,8 @@ synchronize_continuous <- function(
     grade_unknown,
     qualifier_unknown,
     start_datetime,
+    from_storage,
+    end_datetime,
     parallel,
     con
   ) {
@@ -610,8 +698,55 @@ synchronize_continuous <- function(
       args_list <- args_list[names(args_list) != "timeseries_id"]
       args_list$timeseries_id <- tsid
     }
+    if (from_storage) {
+      args_list <- args_list[
+        !names(args_list) %in% c("from_storage", "end_datetime")
+      ]
+      args_list$from_storage <- TRUE
+      args_list$end_datetime <- end_datetime
+    }
 
     inRemote <- do.call(source_fx, args_list) # Get the data using the args_list
+    transmission_import_run_ids <- attr(
+      inRemote,
+      "transmission_import_run_ids",
+      exact = TRUE
+    )
+    transmission_runs_finalized <- length(transmission_import_run_ids) == 0L
+    on.exit(
+      {
+        if (!transmission_runs_finalized) {
+          try(
+            getFromNamespace(
+              "transmission_fail_import_runs",
+              "AquaCache"
+            )(
+              con = con,
+              transmission_import_run_ids = transmission_import_run_ids,
+              workflow = "synchronize_continuous"
+            ),
+            silent = TRUE
+          )
+        }
+      },
+      add = TRUE
+    )
+    finalize_transmission_runs <- function(measurements_inserted) {
+      if (length(transmission_import_run_ids) == 0L) {
+        transmission_runs_finalized <<- TRUE
+        return(invisible(0L))
+      }
+      getFromNamespace(
+        "transmission_finalize_import_runs",
+        "AquaCache"
+      )(
+        con = con,
+        transmission_import_run_ids = transmission_import_run_ids,
+        measurements_inserted = measurements_inserted,
+        workflow = "synchronize_continuous"
+      )
+      transmission_runs_finalized <<- TRUE
+    }
     inRemote <- inRemote[!is.na(inRemote$value), ]
 
     if (nrow(inRemote) == 0) {
@@ -628,6 +763,7 @@ synchronize_continuous <- function(
             ";"
           )
         )
+        finalize_transmission_runs(0L)
       })
       return()
     } else if (!all(c("value", "datetime") %in% names(inRemote))) {
@@ -637,6 +773,11 @@ synchronize_continuous <- function(
     }
 
     acquire_timeseries_lock()
+    replay_upper_bound <- if (from_storage) {
+      paste0(" AND datetime <= '", fmt(max(inRemote$datetime)), "'")
+    } else {
+      ""
+    }
     inDB <- DBI::dbGetQuery(
       con,
       paste0(
@@ -644,7 +785,9 @@ synchronize_continuous <- function(
         tsid,
         " AND datetime >= '",
         min(inRemote$datetime),
-        "';"
+        "'",
+        replay_upper_bound,
+        ";"
       )
     )
     # Set aside any rows where no_update == TRUE
@@ -881,6 +1024,7 @@ synchronize_continuous <- function(
             ";"
           )
         )
+        nrow(append_rows)
       }
       run_db_updates(function() {
         write_remote <- apply_remote_attributes(inRemote)
@@ -917,7 +1061,14 @@ synchronize_continuous <- function(
           write_remote$timeseries_id <- tsid
         }
 
-        commit_fx(con, tsid, write_remote, cutoff, inDB)
+        measurements_inserted <- commit_fx(
+          con,
+          tsid,
+          write_remote,
+          cutoff,
+          inDB
+        )
+        finalize_transmission_runs(measurements_inserted)
       })
     } else {
       # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
@@ -934,6 +1085,7 @@ synchronize_continuous <- function(
             ";"
           )
         )
+        finalize_transmission_runs(0L)
 
         # Bounds are maintained by database triggers.
       })
@@ -950,6 +1102,8 @@ synchronize_continuous <- function(
           grade_unknown,
           qualifier_unknown,
           start_datetime,
+          from_storage,
+          end_datetime,
           parallel = parallel,
           con = con
         )

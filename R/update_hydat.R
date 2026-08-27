@@ -28,7 +28,8 @@ update_hydat <- function(
     con,
     "SELECT value FROM information.internal_status WHERE event = 'HYDAT_version'"
   )[1, 1]
-  new_hydat <- is.na(DB_hydat) || !identical(as.character(DB_hydat), as.character(local_hydat))
+  new_hydat <- is.na(DB_hydat) ||
+    !identical(as.character(DB_hydat), as.character(local_hydat))
 
   if (!new_hydat && !force_update) {
     message(
@@ -120,11 +121,17 @@ update_hydat <- function(
   all_timeseries$location <- vapply(
     all_timeseries$source_fx_args,
     function(x) {
-      tryCatch(jsonlite::fromJSON(x)$location, error = function(e) NA_character_)
+      tryCatch(jsonlite::fromJSON(x)$location, error = function(e) {
+        NA_character_
+      })
     },
     character(1)
   )
-  all_timeseries <- all_timeseries[!is.na(all_timeseries$location), , drop = FALSE]
+  all_timeseries <- all_timeseries[
+    !is.na(all_timeseries$location),
+    ,
+    drop = FALSE
+  ]
 
   organization_id <- DBI::dbGetQuery(
     con,
@@ -156,7 +163,7 @@ update_hydat <- function(
   )[1, 1]
   if (is.na(approval_approved)) {
     stop(
-      "Approval type 'Approved' (column approval_type_description) not found in the database. Please add it before proceeding."
+      "Approval type code 'A' not found in the database. Please add it before proceeding."
     )
   }
 
@@ -217,7 +224,9 @@ update_hydat <- function(
         if (param_name == "water flow") {
           format_hydat_daily(as.data.frame(tidyhydat::hy_daily_flows(location)))
         } else {
-          format_hydat_daily(as.data.frame(tidyhydat::hy_daily_levels(location)))
+          format_hydat_daily(as.data.frame(tidyhydat::hy_daily_levels(
+            location
+          )))
         }
       },
       error = function(e) data.frame()
