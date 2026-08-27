@@ -26,6 +26,12 @@ getNewRasters(
 
 \item{end_datetime}{An end datetime to fetch rasters to. By default, fetches to the current time, however this parameter is provided for flexibility. If combined with \code{replace = TRUE} (Warning! parameter not implemented yet), could be used to replace rasters from \code{start_datetime} to a specific datetime. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!}
 }
+\value{
+A character vector of raster series IDs that appended at least one
+raster. If individual rasters fail, processing continues, a detailed
+warning is emitted after all series have been processed, and the returned
+vector has an \code{append_errors} attribute containing the failure details.
+}
 \description{
 Retrieves rasters using the active assignment with the lowest fetch priority
 in \code{spatial.raster_series_source_adapters} for each raster series. See

@@ -15,6 +15,10 @@
 #' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
 #' @param start_datetime A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with `replace = TRUE`, could be used to replace rasters from a specific datetime to `end_datetime`. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!
 #' @param end_datetime An end datetime to fetch rasters to. By default, fetches to the current time, however this parameter is provided for flexibility. If combined with `replace = TRUE` (Warning! parameter not implemented yet), could be used to replace rasters from `start_datetime` to a specific datetime. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!
+#' @return A character vector of raster series IDs that appended at least one
+#'   raster. If individual rasters fail, processing continues, a detailed
+#'   warning is emitted after all series have been processed, and the returned
+#'   vector has an `append_errors` attribute containing the failure details.
 #' @export
 
 getNewRasters <- function(
@@ -157,6 +161,7 @@ getNewRasters <- function(
   count <- 0 #counter for number of successful new pulls
   raster_count <- 0
   success <- character(0)
+  append_errors <- list()
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(meta_ids), style = 3)
   }
@@ -324,23 +329,23 @@ getNewRasters <- function(
                 next
               }
 
+              valid_from <- rast[["valid_from"]]
+              valid_to <- rast[["valid_to"]]
+              issued <- rast[["issued"]]
+              source <- rast[["source"]]
+              flag <- rast[["flag"]]
+              if (is.null(flag)) {
+                flag <- NA
+              }
+              units <- rast[["units"]]
+              model <- rast[["model"]]
+              rast <- rast[["rast"]]
+
               # Append rasters one by one in transactions
               tryCatch(
                 {
                   activeTrans <- dbTransBegin(con)
                   DBI::dbExecute(con, "SET LOCAL lock_timeout = '30s';")
-
-                  valid_from <- rast[["valid_from"]]
-                  valid_to <- rast[["valid_to"]]
-                  issued <- rast[["issued"]]
-                  source <- rast[["source"]]
-                  flag <- rast[["flag"]]
-                  if (is.null(flag)) {
-                    flag <- NA
-                  }
-                  units <- rast[["units"]]
-                  model <- rast[["model"]]
-                  rast <- rast[["rast"]]
                   # Check if the raster already exists. If it does but flag is PRELIMINARY AND the new one is not, delete the prelim one and replace.
                   exists <- DBI::dbGetQuery(
                     con,
@@ -419,14 +424,56 @@ getNewRasters <- function(
                   message("Success")
                 },
                 error = function(e) {
+                  append_error <- data.table::data.table(
+                    raster_series_id = as.integer(id),
+                    raster_index = as.integer(j),
+                    rasters_returned = as.integer(length(rasters)),
+                    valid_from = as.POSIXct(
+                      valid_from,
+                      origin = "1970-01-01",
+                      tz = "UTC"
+                    ),
+                    valid_to = as.POSIXct(
+                      valid_to,
+                      origin = "1970-01-01",
+                      tz = "UTC"
+                    ),
+                    source = if (is.null(source) || length(source) == 0L) {
+                      NA_character_
+                    } else {
+                      as.character(source[[1L]])
+                    },
+                    error = conditionMessage(e)
+                  )
+                  append_errors[[length(append_errors) + 1L]] <<- append_error
+
                   message(
-                    "getNewRasters: Failed to append a raster for raster_series_id ",
+                    "getNewRasters: Failed to append raster ",
+                    j,
+                    " of ",
+                    length(rasters),
+                    " for raster_series_id ",
                     id,
-                    " with error message: ",
-                    conditionMessage(e)
+                    " (valid_from ",
+                    format(valid_from, tz = "UTC", usetz = TRUE),
+                    ", valid_to ",
+                    format(valid_to, tz = "UTC", usetz = TRUE),
+                    ", source ",
+                    append_error$source,
+                    "): ",
+                    append_error$error
                   )
                   # On error, rollback the transaction
-                  DBI::dbExecute(con, "ROLLBACK")
+                  tryCatch(
+                    DBI::dbExecute(con, "ROLLBACK"),
+                    error = function(rollback_error) {
+                      message(
+                        "getNewRasters: Rollback after the failed raster append ",
+                        "also failed: ",
+                        conditionMessage(rollback_error)
+                      )
+                    }
+                  )
                 }
               )
             }
@@ -579,5 +626,41 @@ getNewRasters <- function(
     },
     silent = TRUE
   )
+
+  if (length(append_errors) > 0L) {
+    append_errors <- data.table::rbindlist(
+      append_errors,
+      use.names = TRUE
+    )
+    attr(success, "append_errors") <- append_errors
+
+    error_details <- paste0(
+      "  - raster_series_id ",
+      append_errors$raster_series_id,
+      ", raster ",
+      append_errors$raster_index,
+      " of ",
+      append_errors$rasters_returned,
+      ", valid_from ",
+      format(append_errors$valid_from, tz = "UTC", usetz = TRUE),
+      ", valid_to ",
+      format(append_errors$valid_to, tz = "UTC", usetz = TRUE),
+      ", source ",
+      append_errors$source,
+      ": ",
+      append_errors$error
+    )
+    warning(
+      "getNewRasters: ",
+      nrow(append_errors),
+      " raster append",
+      if (nrow(append_errors) == 1L) "" else "s",
+      " failed. Forecast retention/deletion followed the requested ",
+      "keep_forecasts policy. Failure details:\n",
+      paste(error_details, collapse = "\n"),
+      call. = FALSE
+    )
+  }
+
   return(success)
 }
