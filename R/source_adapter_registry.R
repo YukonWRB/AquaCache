@@ -142,6 +142,37 @@ getSourceAdapterCapabilities <- function(
   capabilities[]
 }
 
+#' Check whether a source adapter accepts a managed runtime argument
+#'
+#' @keywords internal
+#' @noRd
+source_adapter_supports_runtime_argument <- function(capability, name) {
+  if (
+    nrow(capability) != 1L ||
+      !"argument_schema" %in% names(capability) ||
+      !is.character(name) ||
+      length(name) != 1L ||
+      is.na(name) ||
+      !nzchar(name)
+  ) {
+    return(FALSE)
+  }
+
+  schema <- capability$argument_schema[[1L]]
+  arguments <- schema$arguments
+  if (is.null(arguments) || length(arguments) == 0L) {
+    return(FALSE)
+  }
+
+  any(vapply(
+    arguments,
+    function(argument) {
+      identical(argument$name, name) && identical(argument$source, "runtime")
+    },
+    logical(1)
+  ))
+}
+
 #' Describe one source-adapter argument
 #'
 #' Creates and validates one argument descriptor for the versioned schema stored

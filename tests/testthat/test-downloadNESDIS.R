@@ -543,6 +543,7 @@ test_that("downloadNESDIS passes route parser configuration to CSV", {
         last_query_until = as.POSIXct(character(), tz = "UTC")
       )
     },
+    nesdis_record_import_run = function(...) 5001,
     .package = "AquaCache"
   )
 
@@ -565,6 +566,7 @@ test_that("downloadNESDIS passes route parser configuration to CSV", {
 })
 
 test_that("timeseries adapter returns the standard source_fx contract", {
+  recorded <- NULL
   route <- data.table::data.table(
     transmission_route_id = 101L,
     transmission_setup_id = 11L,
@@ -611,7 +613,8 @@ test_that("timeseries adapter returns the standard source_fx contract", {
       )
     },
     nesdis_record_import_run = function(...) {
-      stop("adapter mode must not write import history")
+      recorded <<- list(...)
+      5002
     },
     .package = "AquaCache"
   )
@@ -632,12 +635,357 @@ test_that("timeseries adapter returns the standard source_fx contract", {
     result$datetime,
     as.POSIXct("2026-07-29 12:00:00", tz = "UTC")
   )
+  expect_equal(attr(result, "transmission_import_run_ids"), 5002)
+  expect_equal(recorded$status, "success")
+  expect_equal(recorded$measurements_parsed, 1L)
+  expect_equal(recorded$measurements_inserted, 0L)
+  expect_equal(recorded$source_metadata$retrieval_mode, "supplied")
+  expect_true(recorded$source_metadata$adapter_mode)
+  expect_equal(recorded$source_metadata$adapter_timeseries_id, 9001L)
+  expect_true(recorded$source_metadata$measurement_write_delegated)
+  expect_false(recorded$source_metadata$measurement_write_completed)
+})
+
+test_that("NESDIS cursor ignores stored and supplied replay runs", {
+  statement <- NULL
+  local_mocked_bindings(
+    dbGetQuery = function(con, sql, ...) {
+      statement <<- sql
+      data.frame(
+        transmission_route_id = 101L,
+        last_query_until = as.POSIXct("2026-08-20", tz = "UTC")
+      )
+    },
+    .package = "DBI"
+  )
+
+  result <- AquaCache:::nesdis_get_cursors(
+    structure(list(), class = "mock_con"),
+    101L
+  )
+
+  expect_equal(nrow(result), 1L)
+  expect_match(statement, "source_metadata ->> 'retrieval_mode'", fixed = TRUE)
+  expect_match(statement, "= 'live'", fixed = TRUE)
+})
+
+test_that("LRGS responses split into individually replayable transmissions", {
+  first <- make_lrgs_shef_line(
+    "47002136",
+    timestamp = "26190120000",
+    body = ":TA 0 I15 1.2"
+  )
+  second <- make_lrgs_shef_line(
+    "47002136",
+    timestamp = "26190130000",
+    body = ":TA 0 I15 1.3"
+  )
+
+  payloads <- AquaCache:::nesdis_split_stored_payloads(
+    paste(first, second, sep = "\n"),
+    "47002136"
+  )
+
+  expect_equal(nrow(payloads), 2L)
+  expect_equal(payloads$payload_text, c(first, second))
+  expect_equal(
+    payloads$transmission_datetime,
+    as.POSIXct(
+      c("2026-07-09 12:00:00", "2026-07-09 13:00:00"),
+      tz = "UTC"
+    )
+  )
+})
+
+test_that("payload storage batches transmissions and ignores prior copies", {
+  statements <- character()
+  parameters <- list()
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, params = NULL, ...) {
+      statements <<- c(statements, statement)
+      parameters[[length(parameters) + 1L]] <<- params
+      data.frame(transmission_payload_id = c(1L, 2L))
+    },
+    .package = "DBI"
+  )
+  message <- paste(
+    make_lrgs_shef_line("47002136", "26190120000", ":TA 0 I15 1.2"),
+    make_lrgs_shef_line("47002136", "26190130000", ":TA 0 I15 1.3"),
+    sep = "\n"
+  )
+
+  result <- AquaCache:::nesdis_store_payloads(
+    con = structure(list(), class = "mock_con"),
+    transmission_setup_ids = 11L,
+    dcp_address = "47002136",
+    message = message,
+    source_server = "test-server",
+    source_metadata = list(retrieval = "test")
+  )
+
+  expect_equal(result$transmissions_archived, 2L)
+  expect_equal(result$transmissions_inserted, 2L)
+  expect_match(statements, "jsonb_to_recordset", fixed = TRUE)
+  expect_match(statements, "DO NOTHING", fixed = TRUE)
+  stored_rows <- jsonlite::fromJSON(parameters[[1L]][[4L]])
+  expect_equal(nrow(stored_rows), 2L)
+  expect_equal(parameters[[1L]][[1L]], 11L)
+})
+
+test_that("stored payload retrieval rebuilds an ordered LRGS response", {
+  statement <- NULL
+  parameters <- NULL
+  payloads <- c(
+    make_lrgs_shef_line("47002136", "26190120000", ":TA 0 I15 1.2"),
+    make_lrgs_shef_line("47002136", "26190130000", ":TA 0 I15 1.3")
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(con, sql, params = NULL, ...) {
+      statement <<- sql
+      parameters <<- params
+      data.frame(
+        transmission_payload_id = c(1L, 2L),
+        transmission_datetime = as.POSIXct(
+          c("2026-07-09 12:00:00", "2026-07-09 13:00:00"),
+          tz = "UTC"
+        ),
+        payload_text = payloads
+      )
+    },
+    .package = "DBI"
+  )
+
+  result <- AquaCache:::nesdis_fetch_stored_payloads(
+    con = structure(list(), class = "mock_con"),
+    transmission_setup_ids = c(11L, 12L),
+    since = as.POSIXct("2026-07-01", tz = "UTC"),
+    until = as.POSIXct("2026-07-15", tz = "UTC"),
+    cache = FALSE
+  )
+
+  expect_equal(result$message, paste(payloads, collapse = "\n"))
+  expect_equal(result$source_metadata$stored_transmissions, 2L)
+  expect_match(statement, "IN (11, 12)", fixed = TRUE)
+  expect_equal(length(parameters), 2L)
+})
+
+test_that("stored payload replay cache avoids repeated database reads", {
+  cache_dir <- tempfile("downloadNESDIS-storage-cache-")
+  on.exit(unlink(cache_dir, recursive = TRUE, force = TRUE), add = TRUE)
+  query_count <- 0L
+  local_mocked_bindings(
+    nesdis_cache_dir = function() cache_dir,
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(...) {
+      query_count <<- query_count + 1L
+      data.frame(
+        transmission_payload_id = 1L,
+        transmission_datetime = as.POSIXct(
+          "2026-07-09 12:00:00",
+          tz = "UTC"
+        ),
+        payload_text = make_lrgs_shef_line(
+          "47002136",
+          "26190120000",
+          ":TA 0 I15 1.2"
+        )
+      )
+    },
+    .package = "DBI"
+  )
+  fetch <- function() {
+    AquaCache:::nesdis_fetch_stored_payloads(
+      con = structure(list(), class = "mock_con"),
+      transmission_setup_ids = 11L,
+      since = as.POSIXct("2026-07-01", tz = "UTC"),
+      until = as.POSIXct("2026-07-15", tz = "UTC"),
+      cache = TRUE
+    )
+  }
+
+  first <- fetch()
+  second <- fetch()
+
+  expect_equal(first$message, second$message)
+  expect_equal(query_count, 1L)
+  expect_true(second$source_metadata$cache_hit)
+})
+
+test_that("stored replay bypasses LRGS and keeps the latest repeated value", {
+  route <- data.table::data.table(
+    transmission_route_id = 101L,
+    transmission_setup_id = 11L,
+    message_format = "CUSTOM",
+    route_config = "{}",
+    route_name = "stored route",
+    platform_identifier = "47002136",
+    start_datetime_setup = as.POSIXct("2020-01-01", tz = "UTC"),
+    end_datetime_setup = as.POSIXct(NA, tz = "UTC"),
+    location_id = 1L
+  )
+  mapping <- data.table::data.table(
+    transmission_mapping_id = 1L,
+    transmission_route_id = 101L,
+    source_field = "TA",
+    timeseries_id = 9001L,
+    value_multiplier = 1,
+    value_offset = 0,
+    missing_values = "[]",
+    mapping_config = "{}"
+  )
+  fetched <- FALSE
+  replay_since <- as.POSIXct(NA, tz = "UTC")
+  custom <- function(message, dcp_address, message_format) {
+    data.frame(
+      source_field = c("TA", "TA"),
+      datetime = as.POSIXct(
+        c("2026-07-09 12:00:00", "2026-07-09 12:00:00"),
+        tz = "UTC"
+      ),
+      raw_value = c("1.2", "1.3"),
+      value = c(1.2, 1.3)
+    )
+  }
+  local_mocked_bindings(
+    nesdis_get_routes = function(...) route,
+    nesdis_get_mappings = function(...) mapping,
+    nesdis_get_cursors = function(...) {
+      data.table::data.table(
+        transmission_route_id = integer(),
+        last_query_until = as.POSIXct(character(), tz = "UTC")
+      )
+    },
+    nesdis_fetch_stored_payloads = function(
+      con,
+      transmission_setup_ids,
+      since,
+      until,
+      cache
+    ) {
+      fetched <<- TRUE
+      replay_since <<- since
+      list(
+        message = "stored transmissions",
+        server = "AquaCache storage",
+        source_metadata = list(stored_transmissions = 2L)
+      )
+    },
+    nesdis_fetch_cached = function(...) {
+      stop("LRGS must not be contacted during stored replay")
+    },
+    nesdis_record_import_run = function(...) 5003,
+    .package = "AquaCache"
+  )
+
+  result <- downloadNESDIS(
+    timeseries_id = 9001L,
+    start_datetime = as.POSIXct("2026-06-01 00:00:00", tz = "UTC"),
+    end_datetime = as.POSIXct("2026-07-10 00:00:00", tz = "UTC"),
+    con = structure(list(), class = "mock_con"),
+    from_storage = TRUE,
+    parser = custom
+  )
+
+  expect_true(fetched)
+  expect_equal(
+    replay_since,
+    as.POSIXct("2026-06-01 00:00:00", tz = "UTC")
+  )
+  expect_equal(nrow(result), 1L)
+  expect_equal(result$value, 1.3)
+})
+
+test_that("live transmissions are archived before parser errors", {
+  route <- data.table::data.table(
+    transmission_route_id = 101L,
+    transmission_setup_id = 11L,
+    message_format = "CUSTOM",
+    route_config = "{}",
+    route_name = "live route",
+    platform_identifier = "47002136",
+    start_datetime_setup = as.POSIXct("2020-01-01", tz = "UTC"),
+    end_datetime_setup = as.POSIXct(NA, tz = "UTC"),
+    location_id = 1L
+  )
+  mapping <- data.table::data.table(
+    transmission_mapping_id = 1L,
+    transmission_route_id = 101L,
+    source_field = "TA",
+    timeseries_id = 9001L,
+    value_multiplier = 1,
+    value_offset = 0,
+    missing_values = "[]",
+    mapping_config = "{}"
+  )
+  archived <- FALSE
+  local_mocked_bindings(
+    nesdis_get_routes = function(...) route,
+    nesdis_get_mappings = function(...) mapping,
+    nesdis_get_cursors = function(...) {
+      data.table::data.table(
+        transmission_route_id = integer(),
+        last_query_until = as.POSIXct(character(), tz = "UTC")
+      )
+    },
+    nesdis_fetch_cached = function(..., archive = NULL) {
+      result <- list(
+        message = make_lrgs_shef_line(
+          "47002136",
+          "26190120000",
+          ":TA 0 I15 1.2"
+        ),
+        server = "test-server",
+        source_metadata = list(retrieval = "test")
+      )
+      archive(result)
+    },
+    nesdis_store_payloads = function(...) {
+      archived <<- TRUE
+      list(transmissions_archived = 1L, transmissions_inserted = 1L)
+    },
+    nesdis_record_import_run = function(...) 5004,
+    .package = "AquaCache"
+  )
+
+  expect_error(
+    downloadNESDIS(
+      timeseries_id = 9001L,
+      start_datetime = as.POSIXct("2026-07-09 00:00:00", tz = "UTC"),
+      end_datetime = as.POSIXct("2026-07-10 00:00:00", tz = "UTC"),
+      con = structure(list(), class = "mock_con"),
+      parser = function(...) {
+        expect_true(archived)
+        stop("changed layout")
+      }
+    ),
+    "changed layout"
+  )
+  expect_true(archived)
+})
+
+test_that("stored replay cannot also receive raw_messages", {
+  expect_error(
+    downloadNESDIS(
+      con = structure(list(), class = "mock_con"),
+      raw_messages = "payload",
+      from_storage = TRUE
+    ),
+    "cannot be used together"
+  )
 })
 
 test_that("raw DCP cache reuses a covering payload", {
   cache_dir <- tempfile("downloadNESDIS-cache-")
   on.exit(unlink(cache_dir, recursive = TRUE, force = TRUE), add = TRUE)
   fetch_count <- 0L
+  archive_count <- 0L
+  archive <- function(result) {
+    archive_count <<- archive_count + 1L
+    result$source_metadata$archived <- TRUE
+    result
+  }
 
   local_mocked_bindings(
     nesdis_cache_dir = function() cache_dir,
@@ -663,7 +1011,8 @@ test_that("raw DCP cache reuses a covering payload", {
     port = 16003,
     timezone_offset = -8,
     timeout_seconds = 30,
-    cache = TRUE
+    cache = TRUE,
+    archive = archive
   )
   second <- AquaCache:::nesdis_fetch_cached(
     dcp_address = "47002136",
@@ -676,12 +1025,15 @@ test_that("raw DCP cache reuses a covering payload", {
     port = 16003,
     timezone_offset = -8,
     timeout_seconds = 30,
-    cache = TRUE
+    cache = TRUE,
+    archive = archive
   )
 
   expect_equal(first$message, "payload")
   expect_equal(second$message, "payload")
   expect_equal(fetch_count, 1L)
+  expect_equal(archive_count, 1L)
+  expect_true(second$source_metadata$archived)
   expect_true(second$source_metadata$cache_hit)
 })
 

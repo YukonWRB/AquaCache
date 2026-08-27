@@ -22,6 +22,10 @@
 #' timeseries sharing a DCP address reuse one raw transmission payload.
 #' Platform identifiers and field mappings remain database metadata; they do
 #' not need to be duplicated in each timeseries assignment's arguments.
+#' Transmission adapters can also attach operational import-run IDs to their
+#' result. After successfully appending measurements, `getNewContinuous()`
+#' finalizes those rows in `continuous.transmission_import_runs` with the actual
+#' number inserted by this workflow.
 #'
 #' Every assigned `source_fx` must have an enabled entry in
 #' `public.source_adapter_capabilities` for the continuous domain. This keeps
@@ -655,6 +659,36 @@ getNewContinuous <- function(
     }
 
     ts <- do.call(source_fx, args_list)
+    transmission_import_run_ids <- attr(
+      ts,
+      "transmission_import_run_ids",
+      exact = TRUE
+    )
+    transmission_runs_finalized <- length(transmission_import_run_ids) == 0L
+    on.exit(
+      {
+        if (!transmission_runs_finalized) {
+          try(
+            transmission_fail_import_runs(
+              con = con,
+              transmission_import_run_ids = transmission_import_run_ids,
+              workflow = "getNewContinuous"
+            ),
+            silent = TRUE
+          )
+        }
+      },
+      add = TRUE
+    )
+    finalize_transmission_runs <- function(measurements_inserted) {
+      transmission_finalize_import_runs(
+        con = con,
+        transmission_import_run_ids = transmission_import_run_ids,
+        measurements_inserted = measurements_inserted,
+        workflow = "getNewContinuous"
+      )
+      transmission_runs_finalized <<- TRUE
+    }
 
     # Make sure we've got at a data.frame or data.table
     if (
@@ -669,6 +703,7 @@ getNewContinuous <- function(
     }
     # Make that there are at least some rows (otherwise we might fail when checking for column names)
     if (nrow(ts) == 0) {
+      finalize_transmission_runs(0L)
       return(build_status_row(i, tsid, state = "no_new_data"))
     }
 
@@ -689,6 +724,7 @@ getNewContinuous <- function(
 
     # If there are no new data points after that, skip to the next timeseries.
     if (nrow(ts) == 0) {
+      finalize_transmission_runs(0L)
       return(build_status_row(i, tsid, state = "no_new_data"))
     }
 
@@ -826,6 +862,7 @@ getNewContinuous <- function(
     rows_added <- nrow(ts)
     run_db_updates(function() {
       commit_fx(con, ts, tsid)
+      finalize_transmission_runs(rows_added)
     })
 
     build_status_row(

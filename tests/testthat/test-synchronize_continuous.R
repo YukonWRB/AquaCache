@@ -67,9 +67,17 @@ mock_sync_db_get_query <- function(
         ),
         allow_empty_initial_fetch = c(FALSE, FALSE, TRUE, FALSE),
         transmission_method_codes_json = c("[]", "[]", '["GOES_DCS"]', "[]"),
-        argument_schema_json = rep(
+        argument_schema_json = c(
           '{"schema_version":1,"arguments":[]}',
-          4L
+          '{"schema_version":1,"arguments":[]}',
+          paste0(
+            '{"schema_version":1,"arguments":[',
+            '{"name":"from_storage","source":"runtime",',
+            '"help":"Replay archived transmissions."},',
+            '{"name":"end_datetime","source":"runtime",',
+            '"help":"End of the replay window."}]}'
+          ),
+          '{"schema_version":1,"arguments":[]}'
         ),
         ui_config_json = rep("{}", 4L),
         enabled = TRUE,
@@ -425,4 +433,144 @@ test_that("synchronize_continuous groups cache-sharing ECCC minute tasks in para
   expect_true(all(res$success))
   expect_equal(connect_calls, 3L)
   expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
+})
+
+test_that("synchronize_continuous injects a registered stored replay window", {
+  captured <- new.env(parent = emptyenv())
+  local_mocked_bindings(
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(...) TRUE,
+    downloadNESDIS = function(
+      start_datetime,
+      end_datetime,
+      con,
+      timeseries_id,
+      from_storage,
+      ...
+    ) {
+      captured$start_datetime <- start_datetime
+      captured$end_datetime <- end_datetime
+      captured$timeseries_id <- timeseries_id
+      captured$from_storage <- from_storage
+      data.frame(
+        datetime = as.POSIXct(character(), tz = "UTC"),
+        value = numeric()
+      )
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = mock_sync_db_get_query(1261L, "downloadNESDIS"),
+    dbExecute = function(con, statement, ...) 1L,
+    .package = "DBI"
+  )
+
+  result <- synchronize_continuous(
+    con = structure(list(), class = "mock_con"),
+    timeseries_id = 1261L,
+    start_datetime = "2026-07-01 00:00:00",
+    from_storage = TRUE,
+    end_datetime = "2026-07-15 00:00:00"
+  )
+
+  expect_true(result$success)
+  expect_true(captured$from_storage)
+  expect_equal(captured$timeseries_id, 1261L)
+  expect_equal(
+    captured$start_datetime,
+    as.POSIXct("2026-07-01 00:00:00", tz = "UTC")
+  )
+  expect_equal(
+    captured$end_datetime,
+    as.POSIXct("2026-07-15 00:00:00", tz = "UTC")
+  )
+})
+
+test_that("stored replay does not compare beyond its last parsed observation", {
+  measurement_query <- NULL
+  finalized <- NULL
+  base_query <- mock_sync_db_get_query(1261L, "downloadNESDIS")
+  observation_time <- as.POSIXct("2026-07-10 12:00:00", tz = "UTC")
+  local_mocked_bindings(
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(...) TRUE,
+    adjust_grade = function(...) invisible(TRUE),
+    adjust_approval = function(...) invisible(TRUE),
+    adjust_qualifier = function(...) invisible(TRUE),
+    adjust_owner = function(...) invisible(TRUE),
+    adjust_contributor = function(...) invisible(TRUE),
+    downloadNESDIS = function(from_storage, end_datetime, ...) {
+      result <- data.frame(datetime = observation_time, value = 1)
+      attr(result, "transmission_import_run_ids") <- 6101
+      result
+    },
+    transmission_finalize_import_runs = function(...) {
+      finalized <<- list(...)
+      invisible(1L)
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, ...) {
+      if (
+        grepl(
+          "FROM continuous.measurements_continuous",
+          statement,
+          fixed = TRUE
+        )
+      ) {
+        measurement_query <<- statement
+        return(data.frame(
+          no_update = FALSE,
+          datetime = observation_time,
+          value = 1,
+          period = "00:00:00",
+          imputed = FALSE
+        ))
+      }
+      base_query(con, statement, ...)
+    },
+    dbExecute = function(con, statement, ...) 1L,
+    .package = "DBI"
+  )
+
+  result <- synchronize_continuous(
+    con = structure(list(), class = "mock_con"),
+    timeseries_id = 1261L,
+    start_datetime = "2026-07-01 00:00:00",
+    from_storage = TRUE,
+    end_datetime = "2026-07-15 00:00:00"
+  )
+
+  expect_true(result$success)
+  expect_match(
+    measurement_query,
+    "datetime <= '2026-07-10 12:00:00'",
+    fixed = TRUE
+  )
+  expect_false(grepl("2026-07-15", measurement_query, fixed = TRUE))
+  expect_equal(finalized$transmission_import_run_ids, 6101)
+  expect_equal(finalized$measurements_inserted, 0L)
+  expect_equal(finalized$workflow, "synchronize_continuous")
+})
+
+test_that("stored replay rejects adapters that have not opted in", {
+  local_mocked_bindings(
+    dbGetQuery = mock_sync_db_get_query(1323L, "downloadRWIS"),
+    dbExecute = function(con, statement, ...) 1L,
+    .package = "DBI"
+  )
+
+  expect_error(
+    synchronize_continuous(
+      con = structure(list(), class = "mock_con"),
+      timeseries_id = 1323L,
+      start_datetime = "2026-07-01 00:00:00",
+      from_storage = TRUE,
+      end_datetime = "2026-07-15 00:00:00"
+    ),
+    "not supported by the selected source adapter.*downloadRWIS"
+  )
 })

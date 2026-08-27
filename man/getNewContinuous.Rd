@@ -61,6 +61,10 @@ automatic argument injection and cache-sharing groups. For example,
 timeseries sharing a DCP address reuse one raw transmission payload.
 Platform identifiers and field mappings remain database metadata; they do
 not need to be duplicated in each timeseries assignment's arguments.
+Transmission adapters can also attach operational import-run IDs to their
+result. After successfully appending measurements, \code{getNewContinuous()}
+finalizes those rows in \code{continuous.transmission_import_runs} with the actual
+number inserted by this workflow.
 
 Every assigned \code{source_fx} must have an enabled entry in
 \code{public.source_adapter_capabilities} for the continuous domain. This keeps

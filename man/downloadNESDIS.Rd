@@ -20,7 +20,8 @@ downloadNESDIS(
   raw_messages = NULL,
   payload_reference = NULL,
   parser = NULL,
-  cache = TRUE
+  cache = TRUE,
+  from_storage = FALSE
 )
 }
 \arguments{
@@ -30,8 +31,9 @@ enabled field mappings are imported.}
 
 \item{timeseries_id}{Optional basic timeseries ID. When supplied,
 \code{downloadNESDIS()} acts as a \code{source_fx} adapter and returns only the
-\code{datetime} and \code{value} columns for that timeseries. Measurements and
-import-run history are then left for \code{\link[=getNewContinuous]{getNewContinuous()}} to manage.}
+\code{datetime} and \code{value} columns for that timeseries. Measurements are then
+left for \code{\link[=getNewContinuous]{getNewContinuous()}} or \code{\link[=synchronize_continuous]{synchronize_continuous()}} to manage;
+live LRGS transmissions are still archived before parsing.}
 
 \item{start_datetime}{Optional start of the LRGS query window. When omitted,
 the latest successful route query is used with the configured overlap.}
@@ -64,7 +66,9 @@ precedence. The default is 16003.}
 scheduled imports; \code{"conflict"} can be used for a deliberate replay.}
 
 \item{write}{If \code{FALSE}, return normalized mapped observations without
-changing measurements or import history.}
+changing measurements. Explicit non-adapter calls do not write import
+history, while timeseries-adapter calls always record operational history
+for finalization by the calling AquaCache workflow.}
 
 \item{raw_messages}{Optional named character vector or list keyed by DCP
 address. This bypasses the LRGS client for replay and testing.}
@@ -79,16 +83,23 @@ also accept \code{route_config} or \code{...}. It must return a data.frame with
 \code{source_field}, \code{datetime}, \code{raw_value}, and \code{value}. Non-numeric payload
 values remain available in \code{raw_value} while \code{value} is \code{NA_real_}.}
 
-\item{cache}{If \code{TRUE}, reuse an LRGS payload already downloaded during the
-current R session when it covers the requested DCP and time window. The
-cache stores raw transmissions so each route can still use its own parser
-and mappings.}
+\item{cache}{If \code{TRUE}, reuse live or archived transmissions already fetched
+during the current R session for the same DCP or transmission setup and
+time window. The cache stores raw transmissions so each route can still
+use its own parser and mappings.}
+
+\item{from_storage}{If \code{TRUE}, retrieve previously archived transmissions
+from \code{continuous.transmission_payloads} instead of contacting an LRGS
+server. The selected \code{start_datetime} and \code{end_datetime} bound transmission
+times in the archive. This cannot be combined with \code{raw_messages}.}
 }
 \value{
 With \code{timeseries_id = NULL}, a list containing \code{summary}, with one
 row per route, and \code{data}, the normalized mapped observations considered
 during the run. With \code{timeseries_id} supplied, a data table containing
-\code{datetime} and \code{value}, suitable for use as a \code{source_fx}.
+\code{datetime} and \code{value}, suitable for use as a \code{source_fx}. Adapter results
+also carry internal transmission-import run IDs used by AquaCache to
+finalize measurement-write counts.
 }
 \description{
 Retrieves GOES Data Collection System messages through an installed OpenDCS
@@ -102,8 +113,21 @@ multiple locations or message layouts.
 Transmission setup and route metadata are stored in
 \verb{public.locations_metadata_transmission_*}. Field mappings and durable import
 history are stored in the provider-neutral tables added by database patch 56.
-LRGS credentials are read from environment variables by default and are
-never stored in the database.
+Database patch 59 adds the provider-neutral durable transmission archive
+\code{continuous.transmission_payloads}. This adapter separates each LRGS response
+into its individual transmissions and archives them before parsing, so a
+later parser or field-mapping correction can replay the original messages
+even after they are no longer available from an LRGS server. LRGS credentials
+are read from environment variables by default and are never stored in the
+database.
+
+Every route-oriented write and every timeseries-adapter invocation records an
+operational outcome in \code{continuous.transmission_import_runs}. Adapter mode
+delegates measurement writing to \code{\link[=getNewContinuous]{getNewContinuous()}} or
+\code{\link[=synchronize_continuous]{synchronize_continuous()}}; those workflows finalize the run with the number
+of rows they inserted or upserted. Live, stored-replay, and supplied-message
+runs are distinguished in \code{source_metadata}, and only successful live query
+windows advance the route's incremental retrieval cursor.
 \subsection{Route-configured payload formats}{
 
 SHEF routes need no parser settings. BLM and delimited routes store their

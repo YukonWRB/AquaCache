@@ -14,7 +14,9 @@ synchronize_continuous(
   dbHost = NULL,
   dbPort = NULL,
   dbUser = NULL,
-  dbPass = NULL
+  dbPass = NULL,
+  from_storage = FALSE,
+  end_datetime = Sys.time()
 )
 }
 \arguments{
@@ -37,6 +39,20 @@ synchronize_continuous(
 \item{dbUser}{The username for the database. If left NULL, the function will use the default username from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
 
 \item{dbPass}{The password for the database. If left NULL, the function will use the default password from the .Renviron file as per \code{\link[=AquaConnect]{AquaConnect()}}.}
+
+\item{from_storage}{If \code{TRUE}, ask each selected source adapter to replay raw
+transmissions from \code{continuous.transmission_payloads} instead of contacting
+its provider. Every selected adapter must declare \code{from_storage} as a
+managed runtime argument in \code{public.source_adapter_capabilities}, accept
+the managed \code{end_datetime} argument, and implement archive retrieval and
+parsing. \code{downloadNESDIS} currently supports this contract; future cellular
+or other transmission adapters can use the same archive and opt in through
+the registry. Replay uses each adapter's current parser and field mappings.}
+
+\item{end_datetime}{End of the archived-transmission replay window. Used only
+when \code{from_storage = TRUE} and defaults to the current time. It is supplied
+to every replay-capable adapter. Measurements after the last observation
+parsed from the selected archive are not compared or removed.}
 }
 \value{
 A data.frame showing the status of synchronization for each timeseries as well as the error or warning message, if any, plus updated entries in the hydro database.
@@ -53,4 +69,10 @@ NOTE that any data point labelled as imputed = TRUE is only replaced if a value 
 A timeseries whose selected synchronization assignment uses
 \code{downloadAquarius} needs credentials in \code{.Renviron} or in that assignment's
 arguments; see \code{\link[=downloadAquarius]{downloadAquarius()}}.
+
+Transmission adapters can attach operational import-run IDs to their result.
+After comparison and database writing, \code{synchronize_continuous()} finalizes
+those rows in \code{continuous.transmission_import_runs} with the number of
+measurements inserted or upserted. Stored-replay runs are retained for audit
+but do not advance a live retrieval cursor.
 }

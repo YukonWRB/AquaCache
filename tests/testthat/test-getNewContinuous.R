@@ -520,6 +520,7 @@ test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID
 
 test_that("getNewContinuous orders NESDIS cache groups in sequential mode", {
   captured_ids <- integer()
+  finalized <- list()
   timeseries_ids <- c(1323L, 2000L, 1322L)
   last_data_point <- as.POSIXct(
     c("2026-01-02 00:00:00", "2026-01-03 00:00:00", "2026-01-01 00:00:00"),
@@ -539,7 +540,22 @@ test_that("getNewContinuous orders NESDIS cache groups in sequential mode", {
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
     downloadNESDIS = function(start_datetime, con, timeseries_id, ...) {
       captured_ids <<- c(captured_ids, timeseries_id)
-      data.frame(datetime = start_datetime, value = 1)
+      result <- data.frame(datetime = start_datetime, value = 1)
+      attr(result, "transmission_import_run_ids") <- timeseries_id + 10000L
+      result
+    },
+    transmission_finalize_import_runs = function(
+      con,
+      transmission_import_run_ids,
+      measurements_inserted,
+      workflow
+    ) {
+      finalized[[length(finalized) + 1L]] <<- list(
+        run_id = transmission_import_run_ids,
+        measurements_inserted = measurements_inserted,
+        workflow = workflow
+      )
+      invisible(1L)
     },
     .package = "AquaCache"
   )
@@ -569,6 +585,74 @@ test_that("getNewContinuous orders NESDIS cache groups in sequential mode", {
 
   expect_equal(result$timeseries_id, timeseries_ids)
   expect_equal(captured_ids, c(1322L, 1323L, 2000L))
+  expect_equal(
+    vapply(finalized, `[[`, numeric(1), "run_id"),
+    c(11322, 11323, 12000)
+  )
+  expect_equal(
+    vapply(finalized, `[[`, integer(1), "measurements_inserted"),
+    rep(1L, 3L)
+  )
+  expect_true(all(vapply(
+    finalized,
+    function(x) x$workflow == "getNewContinuous",
+    logical(1)
+  )))
+})
+
+test_that("getNewContinuous fails unfinished transmission run history", {
+  failed <- NULL
+  tsid <- 1322L
+  last_data_point <- as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+
+  local_mocked_bindings(
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(con, silent = TRUE) TRUE,
+    adjust_grade = function(...) invisible(TRUE),
+    adjust_approval = function(...) invisible(TRUE),
+    adjust_qualifier = function(...) invisible(TRUE),
+    adjust_owner = function(...) invisible(TRUE),
+    adjust_contributor = function(...) invisible(TRUE),
+    adjust_data_sharing_agreement = function(...) invisible(TRUE),
+    dbAppendTableRLS = function(...) stop("simulated measurement write failure"),
+    downloadNESDIS = function(start_datetime, con, timeseries_id, ...) {
+      result <- data.frame(datetime = start_datetime, value = 1)
+      attr(result, "transmission_import_run_ids") <- 7201
+      result
+    },
+    transmission_finalize_import_runs = function(...) {
+      stop("a failed write must not be finalized as successful")
+    },
+    transmission_fail_import_runs = function(...) {
+      failed <<- list(...)
+      invisible(1L)
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = mock_getnew_db_get_query(
+      timeseries_ids = tsid,
+      source_fx_name = "downloadNESDIS",
+      last_data_point = last_data_point,
+      transmission_platform_identifier = "ABCDEF12"
+    ),
+    dbExecute = function(con, statement, ...) 1L,
+    .package = "DBI"
+  )
+
+  result <- getNewContinuous(
+    con = structure(list(), class = "mock_con"),
+    timeseries_id = tsid,
+    active = "all"
+  )
+
+  # getNewContinuous returns only successfully updated timeseries. The failed
+  # worker is reported through its summary message and therefore returns NULL
+  # when it is the only requested timeseries.
+  expect_null(result)
+  expect_equal(failed$transmission_import_run_ids, 7201)
+  expect_equal(failed$workflow, "getNewContinuous")
 })
 
 test_that("getNewContinuous applies registry behavior to another provider", {
