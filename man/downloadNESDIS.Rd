@@ -126,8 +126,9 @@ operational outcome in \code{continuous.transmission_import_runs}. Adapter mode
 delegates measurement writing to \code{\link[=getNewContinuous]{getNewContinuous()}} or
 \code{\link[=synchronize_continuous]{synchronize_continuous()}}; those workflows finalize the run with the number
 of rows they inserted or upserted. Live, stored-replay, and supplied-message
-runs are distinguished in \code{source_metadata}, and only successful live query
-windows advance the route's incremental retrieval cursor.
+runs are distinguished in \code{source_metadata}. Only successful live query
+windows whose delegated measurement write completed advance the route's
+incremental retrieval cursor.
 \subsection{Route-configured payload formats}{
 
 SHEF routes need no parser settings. BLM and delimited routes store their

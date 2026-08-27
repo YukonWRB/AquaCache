@@ -380,6 +380,13 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   expect_equal(connect_calls, 3L)
   expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
   expect_true("source_adapter_args_decode" %in% captured$cluster_exports)
+  expect_true(
+    "transmission_finalize_import_runs_worker" %in%
+      captured$cluster_exports
+  )
+  expect_true(
+    "transmission_fail_import_runs_worker" %in% captured$cluster_exports
+  )
   expect_true(all(vapply(
     captured$connect_args,
     function(args) identical(args, list(

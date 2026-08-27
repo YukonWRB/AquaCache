@@ -172,7 +172,7 @@ tryCatch(
     DBI::dbExecute(
       con,
       "COMMENT ON TABLE continuous.transmission_import_runs IS
-       'Provider-neutral operational history for transmission-adapter invocations and direct route imports. Each row records the query window, retrieval mode, parser outcome, counts, and errors for one route. Successful and no-data live query windows provide the incremental retrieval cursor; stored and supplied replay runs remain audit history but do not advance that cursor.'"
+       'Provider-neutral operational history for transmission-adapter invocations and direct route imports. Each row records the query window, retrieval mode, parser outcome, counts, and errors for one route. Successful and no-data live query windows provide the incremental retrieval cursor only after any delegated measurement write completes; stored and supplied replay runs remain audit history but do not advance that cursor.'"
     )
     DBI::dbExecute(
       con,

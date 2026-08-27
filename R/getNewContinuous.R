@@ -592,6 +592,18 @@ getNewContinuous <- function(
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_timeseries), style = 3)
   }
 
+  # These internal functions are copied into the getNewContinuous execution
+  # environment and exported explicitly below. Installed package namespaces do
+  # not attach internal functions to PSOCK workers merely because AquaCache is
+  # listed in foreach's .packages argument. Resolve them from the namespace so
+  # this also works when getNewContinuous.R is sourced by a deployment script.
+  transmission_finalize_import_runs_worker <-
+    getFromNamespace("transmission_finalize_import_runs", "AquaCache")
+  transmission_fail_import_runs_worker <- getFromNamespace(
+    "transmission_fail_import_runs",
+    "AquaCache"
+  )
+
   worker <- function(i, con, parallel) {
     tsid <- all_timeseries$timeseries_id[i]
     if (verbose && !parallel) {
@@ -669,7 +681,7 @@ getNewContinuous <- function(
       {
         if (!transmission_runs_finalized) {
           try(
-            transmission_fail_import_runs(
+            transmission_fail_import_runs_worker(
               con = con,
               transmission_import_run_ids = transmission_import_run_ids,
               workflow = "getNewContinuous"
@@ -681,7 +693,11 @@ getNewContinuous <- function(
       add = TRUE
     )
     finalize_transmission_runs <- function(measurements_inserted) {
-      transmission_finalize_import_runs(
+      if (length(transmission_import_run_ids) == 0L) {
+        transmission_runs_finalized <<- TRUE
+        return(invisible(0L))
+      }
+      transmission_finalize_import_runs_worker(
         con = con,
         transmission_import_run_ids = transmission_import_run_ids,
         measurements_inserted = measurements_inserted,
@@ -952,7 +968,9 @@ getNewContinuous <- function(
         "dbPort",
         "dbUser",
         "dbPass",
-        "source_adapter_args_decode"
+        "source_adapter_args_decode",
+        "transmission_finalize_import_runs_worker",
+        "transmission_fail_import_runs_worker"
       ),
       envir = environment()
     )

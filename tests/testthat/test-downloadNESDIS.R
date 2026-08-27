@@ -646,7 +646,7 @@ test_that("timeseries adapter returns the standard source_fx contract", {
   expect_false(recorded$source_metadata$measurement_write_completed)
 })
 
-test_that("NESDIS cursor ignores stored and supplied replay runs", {
+test_that("NESDIS cursor requires live completed measurement writes", {
   statement <- NULL
   local_mocked_bindings(
     dbGetQuery = function(con, sql, ...) {
@@ -667,6 +667,16 @@ test_that("NESDIS cursor ignores stored and supplied replay runs", {
   expect_equal(nrow(result), 1L)
   expect_match(statement, "source_metadata ->> 'retrieval_mode'", fixed = TRUE)
   expect_match(statement, "= 'live'", fixed = TRUE)
+  expect_match(
+    statement,
+    "source_metadata ->> 'measurement_write_delegated'",
+    fixed = TRUE
+  )
+  expect_match(
+    statement,
+    "source_metadata ->> 'measurement_write_completed'",
+    fixed = TRUE
+  )
 })
 
 test_that("LRGS responses split into individually replayable transmissions", {

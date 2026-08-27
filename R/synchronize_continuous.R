@@ -717,7 +717,10 @@ synchronize_continuous <- function(
       {
         if (!transmission_runs_finalized) {
           try(
-            transmission_fail_import_runs(
+            getFromNamespace(
+              "transmission_fail_import_runs",
+              "AquaCache"
+            )(
               con = con,
               transmission_import_run_ids = transmission_import_run_ids,
               workflow = "synchronize_continuous"
@@ -729,7 +732,14 @@ synchronize_continuous <- function(
       add = TRUE
     )
     finalize_transmission_runs <- function(measurements_inserted) {
-      transmission_finalize_import_runs(
+      if (length(transmission_import_run_ids) == 0L) {
+        transmission_runs_finalized <<- TRUE
+        return(invisible(0L))
+      }
+      getFromNamespace(
+        "transmission_finalize_import_runs",
+        "AquaCache"
+      )(
         con = con,
         transmission_import_run_ids = transmission_import_run_ids,
         measurements_inserted = measurements_inserted,

@@ -23,8 +23,9 @@
 #' delegates measurement writing to [getNewContinuous()] or
 #' [synchronize_continuous()]; those workflows finalize the run with the number
 #' of rows they inserted or upserted. Live, stored-replay, and supplied-message
-#' runs are distinguished in `source_metadata`, and only successful live query
-#' windows advance the route's incremental retrieval cursor.
+#' runs are distinguished in `source_metadata`. Only successful live query
+#' windows whose delegated measurement write completed advance the route's
+#' incremental retrieval cursor.
 #'
 #' ## Route-configured payload formats
 #'
@@ -742,6 +743,16 @@ nesdis_get_cursors <- function(con, route_ids) {
      WHERE importer = 'downloadNESDIS'
        AND COALESCE(source_metadata ->> 'retrieval_mode', 'live') = 'live'
        AND status IN ('success', 'no_data')
+       AND (
+         COALESCE(
+           (source_metadata ->> 'measurement_write_delegated')::boolean,
+           FALSE
+         ) = FALSE
+         OR COALESCE(
+           (source_metadata ->> 'measurement_write_completed')::boolean,
+           FALSE
+         ) = TRUE
+       )
        AND transmission_route_id IN (",
     paste(as.integer(route_ids), collapse = ", "),
     ")
