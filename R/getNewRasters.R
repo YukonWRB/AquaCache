@@ -77,7 +77,11 @@ getNewRasters <- function(
        source.source_fx,
        source.source_fx_args,
        source.fetch_priority,
-       COALESCE(p.param_name, CAST(rs.parameter_id AS TEXT)) AS parameter_name,
+       COALESCE(
+         p.param_name,
+         rs.parameter,
+         CAST(rs.parameter_id AS TEXT)
+       ) AS parameter_name,
        rs.active
      FROM spatial.raster_series_index rs
      JOIN spatial.raster_types rt ON rt.raster_type_id = rs.raster_type_id
@@ -308,6 +312,17 @@ getNewRasters <- function(
           }
           rasters[["forecast"]] <- NULL # Remove the list element to simplify code below
           rasters[["issued"]] <- NULL
+
+          null_rasters <- vapply(rasters, is.null, logical(1))
+          if (any(null_rasters)) {
+            message(
+              "getNewRasters: Ignoring ",
+              sum(null_rasters),
+              " unavailable raster candidate",
+              if (sum(null_rasters) == 1L) "." else "s."
+            )
+            rasters <- rasters[!null_rasters]
+          }
 
           if (length(rasters) > 0) {
             series_raster_count <- 0L

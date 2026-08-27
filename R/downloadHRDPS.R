@@ -165,15 +165,17 @@ downloadHRDPS <- function(
     }
 
     files <- list()
+    unavailable_count <- 0L
     clipped <- FALSE
     zero_time <- as.POSIXct(grib_link, format = "%Y%m%dT%H", tz = "UTC")
-    for (i in 1:length(all_links)) {
+    for (i in seq_along(all_links)) {
       # Wrap in try because not all parameters have a 000 issue
       file <- list()
       link <- all_links[i]
       # Quick check to ensure the file exists (it will not for 0 hour forecasts of some parameters)
       resp <- httr::HEAD(link, httr::timeout(10))
       if (httr::http_error(resp)) {
+        unavailable_count <- unavailable_count + 1L
         next
       }
 
@@ -191,13 +193,16 @@ downloadHRDPS <- function(
         rast <- terra::trim(rast) # Trims the NA values
       }
       file[["rast"]] <- rast
-      file[["valid_from"]] <- zero_time + (i - 1) * 3600
-      file[["valid_to"]] <- zero_time + i * 3600
+      forecast_hour <- as.integer(sub("/", "", hour_links[i], fixed = TRUE))
+      file[["valid_from"]] <- zero_time + forecast_hour * 3600
+      file[["valid_to"]] <- file[["valid_from"]] + 3600
       file[["flag"]] <- NA
       file[["source"]] <- link
       file[["issued"]] <- latest_issue$issue
       file[["model"]] <- "HRDPS"
-      files[[i]] <- file
+      # Append compactly. Assigning by candidate index leaves NULL holes when,
+      # for example, accumulated precipitation has no PT000H file.
+      files[[length(files) + 1L]] <- file
     }
     if (length(files) == 0) {
       message(
@@ -205,9 +210,27 @@ downloadHRDPS <- function(
       )
       return(NULL)
     }
+    raster_count <- length(files)
     files[["forecast"]] <- TRUE
     files[["issued"]] <- latest_issue$issue
-    message("downloadHRDPS: finished downloading new rasters.")
+    message(
+      "downloadHRDPS: finished downloading ",
+      raster_count,
+      " new rasters",
+      if (unavailable_count > 0L) {
+        paste0(
+          "; ",
+          unavailable_count,
+          " of ",
+          length(all_links),
+          " candidate files ",
+          if (unavailable_count == 1L) "was" else "were",
+          " unavailable."
+        )
+      } else {
+        "."
+      }
+    )
 
     return(files)
   }
