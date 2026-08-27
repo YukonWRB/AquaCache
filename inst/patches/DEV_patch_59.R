@@ -525,6 +525,37 @@ tryCatch(
       "UPDATE public.approval_types SET approval_type_description = 'Reviewed, final', approval_type_description_fr = 'Examiné, finales' WHERE approval_type_code = 'A'"
     )
 
+    # Add qualifier for instrument error
+    DBI::dbExecute(
+      con,
+      "INSERT INTO public.qualifier_types (qualifier_type_code, qualifier_type_description, qualifier_type_description_fr, color_code) VALUES ('ERROR', 'Instrument error', 'Erreur d''instrument', '#fe3200') ON CONFLICT (qualifier_type_code) DO UPDATE SET qualifier_type_code = 'ERROR', qualifier_type_description = 'Instrument error', qualifier_type_description_fr = 'Erreur d''instrument', color_code = '#fe3200'"
+    )
+
+    # Drop unique key on locations.name_fr, so that users who don't speak French can input nothing and 'Traduction requise!' gets input instead.
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations DROP CONSTRAINT IF EXISTS locations_name_fr_key"
+    )
+    # Set a default of 'Traduction requise!'
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.locations ALTER COLUMN name_fr SET DEFAULT 'Traduction requise!'"
+    )
+
+    # Add name constraints to sub_locations
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.sub_locations DROP CONSTRAINT IF EXISTS sub_locations_name_key"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.sub_locations ADD CONSTRAINT sub_locations_name_key UNIQUE (sub_location_name)"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.sub_locations ALTER COLUMN sub_location_name_fr SET DEFAULT 'Traduction requise!'"
+    )
+
     DBI::dbExecute(
       con,
       "UPDATE information.version_info SET version = '59'

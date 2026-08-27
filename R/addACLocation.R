@@ -4,7 +4,7 @@
 #'
 #' @param df A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
 #' @param name A character vector of the location name(s).
-#' @param name_fr A character vector of the location name(s) in French.
+#' @param name_fr A character vector of the location name(s) in French. You're highly encouraged to populate this field, but if left blank (or the corresponding column in `df` is missing or empty) it will be populated with 'Translation required!'.
 #' @param alias A character vector of the location alias(es). This is optional, leave NA if not needed.
 #' @param location_code A character vector of the location code(s). Note that in most cases this should be auto-generated when by adding a new location using the YGwater Shiny application!
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
@@ -98,7 +98,6 @@ addACLocation <- function(
       !all(
         c(
           "name",
-          "name_fr",
           "alias",
           "location_code",
           "latitude",
@@ -118,7 +117,6 @@ addACLocation <- function(
       missing <- setdiff(
         c(
           "name",
-          "name_fr",
           "alias",
           "location_code",
           "latitude",
@@ -144,6 +142,12 @@ addACLocation <- function(
     if (nrow(df) == 0) {
       stop("The data.frame provided is empty.")
     }
+    if (!'name_fr' %in% names(df)) {
+      df$name_fr <- NA
+      message(
+        "You did not provide a column for 'name_fr'. The corresponding database column will be populated with 'Traduction requise!'"
+      )
+    }
     # Assign each column of the data.frame to the corresponding function parameter
     name <- df$name
     name_fr <- df$name_fr
@@ -162,6 +166,8 @@ addACLocation <- function(
     network <- df$network
     project <- df$project
   }
+
+  name_fr[is.na(name_fr)] <- 'Traduction requise!'
 
   # Convert lat/long to numeric, which will result in NAs if the user provided invalid values
   latitude <- as.numeric(latitude)
@@ -247,7 +253,7 @@ addACLocation <- function(
     }
   }
 
-  # Check that the location name (name_fr later) does not already exist
+  # Check that the location name does not already exist. name_fr CAN already exist, useful if users input locations without a known French name.
   for (i in name) {
     exists <- DBI::dbGetQuery(
       con,
@@ -256,16 +262,6 @@ addACLocation <- function(
     )[1, 1]
     if (!is.na(exists)) {
       stop("There is already a location with the name ", i, ".")
-    }
-  }
-  for (i in name_fr) {
-    exists <- DBI::dbGetQuery(
-      con,
-      "SELECT location_id FROM public.locations WHERE LOWER(name_fr) = $1;",
-      params = list(tolower(i))
-    )[1, 1]
-    if (!is.na(exists)) {
-      stop("There is already a location with the French name ", i, ".")
     }
   }
 
