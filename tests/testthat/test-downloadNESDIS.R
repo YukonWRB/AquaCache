@@ -1042,7 +1042,7 @@ test_that("raw DCP cache reuses a covering payload", {
   expect_equal(first$message, "payload")
   expect_equal(second$message, "payload")
   expect_equal(fetch_count, 1L)
-  expect_equal(archive_count, 1L)
+  expect_equal(archive_count, 2L)
   expect_true(second$source_metadata$archived)
   expect_true(second$source_metadata$cache_hit)
 })

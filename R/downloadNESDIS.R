@@ -397,7 +397,7 @@ downloadNESDIS <- function(
               source_server = result$server,
               source_metadata = result$source_metadata %||% list()
             )
-            result$source_metadata <- c(
+            result$source_metadata <- utils::modifyList(
               result$source_metadata %||% list(),
               list(
                 transmissions_archived =
@@ -1137,6 +1137,10 @@ nesdis_fetch_cached <- function(
     tz = "UTC"
   )
 
+  if (!is.null(archive) && !is.function(archive)) {
+    stop("downloadNESDIS: archive must be NULL or a function.")
+  }
+
   if (cache) {
     cached <- nesdis_find_cached_payload(
       dcp_address,
@@ -1156,6 +1160,9 @@ nesdis_fetch_cached <- function(
           )
         )
       )
+      if (!is.null(archive)) {
+        result <- archive(result)
+      }
       return(result)
     }
   }
@@ -1173,9 +1180,6 @@ nesdis_fetch_cached <- function(
     timeout_seconds = timeout_seconds
   )
   if (!is.null(archive)) {
-    if (!is.function(archive)) {
-      stop("downloadNESDIS: archive must be NULL or a function.")
-    }
     result <- archive(result)
   }
   if (cache) {

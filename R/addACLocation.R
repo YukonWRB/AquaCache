@@ -168,6 +168,7 @@ addACLocation <- function(
   }
 
   name_fr[is.na(name_fr)] <- 'Traduction requise!'
+  name_fr[!nzchar(name_fr)] <- 'Traduction requise!'
 
   # Convert lat/long to numeric, which will result in NAs if the user provided invalid values
   latitude <- as.numeric(latitude)

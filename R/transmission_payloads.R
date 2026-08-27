@@ -339,11 +339,14 @@ transmission_finalize_import_runs <- function(
   }
   measurements_inserted <- suppressWarnings(as.integer(measurements_inserted))
   if (
-    length(measurements_inserted) != 1L ||
-      is.na(measurements_inserted) ||
-      measurements_inserted < 0L
+    length(measurements_inserted) != length(run_ids) ||
+      anyNA(measurements_inserted) ||
+      any(measurements_inserted < 0L)
   ) {
-    stop("measurements_inserted must be one non-negative integer.")
+    stop(
+      "measurements_inserted must contain one non-negative integer per ",
+      "transmission_import_run_id."
+    )
   }
   if (
     !is.character(workflow) ||
@@ -354,20 +357,45 @@ transmission_finalize_import_runs <- function(
     stop("workflow must be one non-blank character value.")
   }
 
+  value_placeholders <- paste0(
+    "($",
+    seq.int(1L, by = 2L, length.out = length(run_ids)),
+    "::bigint, $",
+    seq.int(2L, by = 2L, length.out = length(run_ids)),
+    "::integer)"
+  )
+  workflow_placeholder <- 2L * length(run_ids) + 1L
+  parameters <- unlist(
+    Map(
+      function(run_id, inserted) list(run_id, inserted),
+      run_ids,
+      measurements_inserted
+    ),
+    recursive = FALSE
+  )
+  parameters[[length(parameters) + 1L]] <- workflow
+
   updated <- DBI::dbExecute(
     con,
     paste0(
-      "UPDATE continuous.transmission_import_runs
-       SET measurements_inserted = $1,
-           source_metadata = source_metadata || jsonb_build_object(
-             'measurement_workflow', $2::text,
+      "UPDATE continuous.transmission_import_runs AS import_run
+       SET measurements_inserted = finalized.measurements_inserted,
+           source_metadata = import_run.source_metadata || jsonb_build_object(
+             'measurement_workflow', $",
+      workflow_placeholder,
+      "::text,
              'measurement_write_completed', TRUE
            )
-       WHERE transmission_import_run_id IN (",
-      paste(format(run_ids, scientific = FALSE, trim = TRUE), collapse = ", "),
-      ")"
+       FROM (VALUES ",
+      paste(value_placeholders, collapse = ", "),
+      ") AS finalized(
+         transmission_import_run_id,
+         measurements_inserted
+       )
+       WHERE import_run.transmission_import_run_id =
+         finalized.transmission_import_run_id"
     ),
-    params = list(measurements_inserted, workflow)
+    params = parameters
   )
   if (updated != length(run_ids)) {
     stop(

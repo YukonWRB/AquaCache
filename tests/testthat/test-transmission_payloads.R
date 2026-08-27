@@ -104,14 +104,35 @@ test_that("delegated transmission runs receive workflow write counts", {
   updated <- AquaCache:::transmission_finalize_import_runs(
     con = structure(list(), class = "mock_con"),
     transmission_import_run_ids = c(801, 802),
-    measurements_inserted = 4L,
+    measurements_inserted = c(4L, 7L),
     workflow = "synchronize_continuous"
   )
 
   expect_equal(updated, 2L)
-  expect_match(statement, "measurements_inserted = $1", fixed = TRUE)
-  expect_match(statement, "IN (801, 802)", fixed = TRUE)
-  expect_equal(parameters, list(4L, "synchronize_continuous"))
+  expect_match(
+    statement,
+    "SET measurements_inserted = finalized.measurements_inserted",
+    fixed = TRUE
+  )
+  expect_match(statement, "VALUES ($1::bigint, $2::integer)", fixed = TRUE)
+  expect_match(statement, "($3::bigint, $4::integer)", fixed = TRUE)
+  expect_equal(
+    parameters,
+    list(801, 4L, 802, 7L, "synchronize_continuous")
+  )
+})
+
+test_that("delegated run counts cannot be ambiguously recycled", {
+  expect_error(
+    AquaCache:::transmission_finalize_import_runs(
+      con = structure(list(), class = "mock_con"),
+      transmission_import_run_ids = c(801, 802),
+      measurements_inserted = 4L,
+      workflow = "synchronize_continuous"
+    ),
+    "one non-negative integer per transmission_import_run_id",
+    fixed = TRUE
+  )
 })
 
 test_that("incomplete delegated transmission writes are marked failed", {
