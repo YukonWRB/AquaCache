@@ -1,9 +1,9 @@
 #' Add new discrete sample data to the database
 #'
 #' @description
-#' Appends a discrete sample, its sample-group memberships, and its results to
-#' AquaCache inside one transaction, returning the created `sample_id`. The
-#' formats of the data frames are defined in the `details` section.
+#' Appends a discrete sample, its associations, canonical results, and optional
+#' component measurements to AquaCache inside one transaction, returning the
+#' created `sample_id`. The formats are defined in the `details` section.
 #'
 #' @details
 #' The 'sample' data.frame must contain the following columns:
@@ -24,7 +24,6 @@
 #' - 'contributor': the numeric organization ID that contributed the sample.
 #' - 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 #' - 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
-#' - 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 #'
 #'
 #' The 'results' data.frame should contain one row per result and must contain the following columns:
@@ -38,6 +37,33 @@
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 #'
+#' `sample_qualifiers` may be a vector of `qualifier_type_id` values or a data
+#' frame containing `qualifier_type_id` and optional `note`. `sample_observers`
+#' may be a vector of `observer_id` values or a data frame containing
+#' `observer_id` and optional `observer_role` and `note`.
+#'
+#' Component-built results use two data frames. `result_aggregations` has one
+#' row per aggregated result, with `result_row` (the one-based row in `results`)
+#' and exactly one of `aggregation_type` or `result_aggregation_type_id`.
+#' Supported type codes are `mean`, `median`, `min`, `max`, `sum`, and
+#' `weighted_mean`. Optional columns are `calculation_version` (default 1),
+#' `calculation_arguments` (a JSON object or named-list column), and `note`.
+#'
+#' Version 1 calculation arguments support `missing_values` (`ignore`,
+#' `propagate`, or `error`), `non_detects` (`exclude`, `zero`,
+#' `condition_value`, `half_condition_value`, or `error`), numeric `multiplier`,
+#' and integer `rounding_digits`. Multiplication and rounding happen after the
+#' aggregation, with rounding last.
+#'
+#' `result_components` has required `result_row`, `observation_number`, and
+#' `result` columns; `result` may be `NA` when a condition or missing observation
+#' is stored. Optional columns are `observation_datetime`, `result_condition`,
+#' `result_condition_value`, `included_in_aggregate` (default `TRUE`), `weight`,
+#' and `note`. Excluded observations require a note. Each configured aggregation
+#' requires at least one component. The database calculates the canonical
+#' `results.result`, including a real `NULL` when the calculation yields no
+#' value.
+#'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param sample A data.frame containing the sample metadata for a single discrete sample. Should contain a single row for a single sample.
 #' @param results A data.frame containing the results corresponding to the sample. Should contain one row per result.
@@ -47,11 +73,26 @@
 #'   used by [createSampleGroup()]. Optional membership columns are
 #'   `sequence_in_group` and `member_note`. Groups with the same owner, type,
 #'   and code are reused.
+#' @param sample_qualifiers Optional sample-level qualifier associations.
+#' @param sample_observers Optional sample-level observer associations.
+#' @param result_aggregations Optional aggregation configurations linked to rows
+#'   in `results`.
+#' @param result_components Optional observations used by the configured result
+#'   aggregations.
 #'
 #' @return The database sample_id for the inserted sample.
 #' @export
 
-addNewDiscrete <- function(con, sample, results, sample_groups = NULL) {
+addNewDiscrete <- function(
+  con,
+  sample,
+  results,
+  sample_groups = NULL,
+  sample_qualifiers = NULL,
+  sample_observers = NULL,
+  result_aggregations = NULL,
+  result_components = NULL
+) {
   # Ensure the sample df has only one row
   if (nrow(sample) != 1) {
     stop("The 'sample' data.frame must have exactly one row.")
@@ -59,6 +100,24 @@ addNewDiscrete <- function(con, sample, results, sample_groups = NULL) {
 
   if (nrow(results) < 1) {
     stop("The 'results' data.frame must have at least one row.")
+  }
+  missing_result_columns <- setdiff(
+    c("parameter_id", "result", "result_type"),
+    names(results)
+  )
+  if (length(missing_result_columns)) {
+    stop(
+      "The 'results' data.frame is missing required columns: ",
+      paste(missing_result_columns, collapse = ", "),
+      "."
+    )
+  }
+
+  if ("sample_qualifier" %in% names(sample)) {
+    stop(
+      "sample must not contain sample_qualifier. Supply all sample qualifiers ",
+      "through sample_qualifiers."
+    )
   }
 
   required_sample_columns <- c(
@@ -143,8 +202,78 @@ addNewDiscrete <- function(con, sample, results, sample_groups = NULL) {
     )
   }
 
+  # Normalize a compact ID vector or association data frame. This local helper
+  # is intentionally nested because it is specific to the two association
+  # arguments accepted here. It retains only the ID and allowed optional
+  # columns, coerces IDs to integer, and rejects missing or duplicate links.
+  normalize_association <- function(x, id_column, optional_columns) {
+    if (is.null(x)) {
+      return(NULL)
+    }
+    if (!inherits(x, "data.frame")) {
+      x <- data.frame(value = x)
+      names(x) <- id_column
+    }
+    if (!id_column %in% names(x)) {
+      stop(id_column, " is required in its association input.")
+    }
+    x <- x[, intersect(c(id_column, optional_columns), names(x)), drop = FALSE]
+    if (nrow(x) && any(is.na(x[[id_column]]))) {
+      stop(id_column, " cannot contain missing values.")
+    }
+    x[[id_column]] <- as.integer(x[[id_column]])
+    if (anyDuplicated(x[, setdiff(names(x), "note"), drop = FALSE])) {
+      stop("Duplicate ", id_column, " association rows are not allowed.")
+    }
+    x
+  }
+
+  sample_qualifiers <- normalize_association(
+    sample_qualifiers,
+    "qualifier_type_id",
+    "note"
+  )
+  sample_observers <- normalize_association(
+    sample_observers,
+    "observer_id",
+    c("observer_role", "note")
+  )
+  if (!is.null(sample_observers)) {
+    if (!"observer_role" %in% names(sample_observers)) {
+      sample_observers$observer_role <- "sampler"
+    }
+    sample_observers$observer_role <- trimws(
+      as.character(sample_observers$observer_role)
+    )
+    if (any(is.na(sample_observers$observer_role)) ||
+        any(!nzchar(sample_observers$observer_role))) {
+      stop("sample_observers$observer_role must be non-missing and nonblank.")
+    }
+    if (anyDuplicated(sample_observers[c("observer_id", "observer_role")])) {
+      stop("Duplicate observer_id and observer_role associations are not allowed.")
+    }
+  }
+
+  normalized_aggregations <- normalize_discrete_result_aggregations(
+    results = results,
+    result_aggregations = result_aggregations,
+    result_components = result_components
+  )
+  results <- normalized_aggregations$results
+  result_aggregations <- normalized_aggregations$result_aggregations
+  result_components <- normalized_aggregations$result_components
+
   # Define a commit function that will be run within a transaction
-  commit_fx <- function(con, sample, results, sample_groups) {
+  commit_fx <- function(
+    con,
+    sample,
+    results,
+    sample_groups,
+    sample_qualifiers,
+    sample_observers,
+    result_aggregations,
+    result_components
+  ) {
     # Insert the sample data
     if ("sample_id" %in% names(sample)) {
       stop("sample must not supply sample_id; it is generated by the database.")
@@ -170,6 +299,15 @@ addNewDiscrete <- function(con, sample, results, sample_groups = NULL) {
       }
     )
 
+    if (!is.null(sample_qualifiers) && nrow(sample_qualifiers)) {
+      sample_qualifiers$sample_id <- sample_id
+      dbAppendTableRLS(con, "discrete.sample_qualifiers", sample_qualifiers)
+    }
+    if (!is.null(sample_observers) && nrow(sample_observers)) {
+      sample_observers$sample_id <- sample_id
+      dbAppendTableRLS(con, "discrete.sample_observers", sample_observers)
+    }
+
     # Insert the results data
     results$sample_id <- sample_id
     results <- normalize_discrete_result_matrix_states(
@@ -177,7 +315,23 @@ addNewDiscrete <- function(con, sample, results, sample_groups = NULL) {
       sample_media_id = sample$media_id[1],
       results = results
     )
+    result_ids <- DBI::dbGetQuery(
+      con,
+      "SELECT nextval(
+         pg_get_serial_sequence('discrete.results', 'result_id')
+       )::integer AS result_id
+       FROM generate_series(1, $1)",
+      params = list(nrow(results))
+    )$result_id
+    results$result_id <- result_ids
     dbAppendTableRLS(con, "discrete.results", results)
+
+    append_discrete_result_aggregations(
+      con = con,
+      result_ids = result_ids,
+      result_aggregations = result_aggregations,
+      result_components = result_components
+    )
 
     return(sample_id)
   }
@@ -191,7 +345,11 @@ addNewDiscrete <- function(con, sample, results, sample_groups = NULL) {
           con,
           sample,
           results,
-          sample_groups
+          sample_groups,
+          sample_qualifiers,
+          sample_observers,
+          result_aggregations,
+          result_components
         )
         DBI::dbExecute(con, "COMMIT;")
         committed_sample_id
@@ -203,7 +361,16 @@ addNewDiscrete <- function(con, sample, results, sample_groups = NULL) {
     )
   } else {
     # we're already in a transaction
-    sample_id <- commit_fx(con, sample, results, sample_groups)
+    sample_id <- commit_fx(
+      con,
+      sample,
+      results,
+      sample_groups,
+      sample_qualifiers,
+      sample_observers,
+      result_aggregations,
+      result_components
+    )
   }
 
   return(sample_id)

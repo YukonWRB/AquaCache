@@ -52,6 +52,9 @@
 #' `group_type`, `owner`, and `group_code` for related samples; the group will
 #' be created once and reused. A locationless sample, or a sample type whose
 #' `requires_sample_group` flag is true, must provide at least one group.
+#' The optional `sample_qualifiers`, `sample_observers`, `result_aggregations`,
+#' and `result_components` elements use the formats documented by
+#' [addNewDiscrete()].
 #'
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 #' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
@@ -66,8 +69,7 @@
 #' @return A data.table with one row per inserted or previously imported sample
 #'   and columns
 #'   `sample_series_id`, `sample_id`, `action`, and list-columns containing the
-#'   normalized `sample`, `results`, and `sample_groups` input. An empty result
-#'   has the same columns.
+#'   normalized source inputs. An empty result has the same columns.
 #' @export
 
 getNewDiscrete <- function(
@@ -325,7 +327,7 @@ getNewDiscrete <- function(
           last_data_point <- last_data_point + 1
         }
 
-        if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
+        if (source_fx == "downloadSnowCourseYG" & is.null(snowCon)) {
           # Try with the same host and port as the AquaCache connection
           dets <- DBI::dbGetQuery(
             con,
@@ -356,7 +358,7 @@ getNewDiscrete <- function(
             args_list[["EQpath"]]
           )
         }
-        if (source_fx == "downloadSnowCourse") {
+        if (source_fx == "downloadSnowCourseYG") {
           args_list[["snowCon"]] <- snowCon
         }
 
@@ -405,11 +407,26 @@ getNewDiscrete <- function(
           ## Checks on sample metadata ###########
           # Ensure the sample data has required minimum columns
           sample <- data[[j]][["sample"]]
+          if ("sample_qualifier" %in% names(sample)) {
+            warning(
+              "For sample_series_id ",
+              sid,
+              " element ",
+              j,
+              " returned sample_qualifier. Return sample_qualifiers as a ",
+              "separate element instead. Skipping this source record."
+            )
+            next
+          }
           sample_groups <- if ("sample_groups" %in% names(data[[j]])) {
             data[[j]][["sample_groups"]]
           } else {
             NULL
           }
+          sample_qualifiers <- data[[j]][["sample_qualifiers"]]
+          sample_observers <- data[[j]][["sample_observers"]]
+          result_aggregations <- data[[j]][["result_aggregations"]]
+          result_components <- data[[j]][["result_components"]]
 
           # Functions may pass the location code instead of location_id, change it
           # Also possible that the function did not pass 'location_id' at all, if so fill it in using 'loc_id'
@@ -540,7 +557,17 @@ getNewDiscrete <- function(
 
           # More complex checks if 'result' is NA
           # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
-          if (any(is.na(results$result))) {
+          aggregated_result_rows <- if (
+            !is.null(result_aggregations) &&
+              "result_row" %in% names(result_aggregations)
+          ) {
+            unique(as.integer(result_aggregations$result_row))
+          } else {
+            integer()
+          }
+          direct_missing_result <- is.na(results$result) &
+            !seq_len(nrow(results)) %in% aggregated_result_rows
+          if (any(direct_missing_result)) {
             if (!("result_condition" %in% names_res)) {
               warning(
                 "For sample_series_id ",
@@ -554,7 +581,7 @@ getNewDiscrete <- function(
               next
             } else {
               # Check that each NA in 'result' has a corresponding entry in 'result_condition'
-              sub.results <- results[is.na(results$result), ]
+              sub.results <- results[direct_missing_result, ]
               check_result_condition <- FALSE # prevents repeatedly checking for the same thing
 
               next_flag <- FALSE
@@ -732,9 +759,7 @@ getNewDiscrete <- function(
                 sample_id = existing_sample$sample_id[[1]],
                 sample_groups = sample_groups,
                 default_owner = sample$owner[[1]],
-                default_contributor = if (
-                  "contributor" %in% names(sample)
-                ) {
+                default_contributor = if ("contributor" %in% names(sample)) {
                   sample$contributor[[1]]
                 } else {
                   NA_integer_
@@ -747,7 +772,11 @@ getNewDiscrete <- function(
                   action = "existing",
                   sample = sample,
                   results = results,
-                  sample_groups = sample_groups
+                  sample_groups = sample_groups,
+                  sample_qualifiers = sample_qualifiers,
+                  sample_observers = sample_observers,
+                  result_aggregations = result_aggregations,
+                  result_components = result_components
                 )
               next
             }
@@ -762,11 +791,17 @@ getNewDiscrete <- function(
                 con = con,
                 sample = sample,
                 results = results,
-                sample_groups = sample_groups
+                sample_groups = sample_groups,
+                sample_qualifiers = sample_qualifiers,
+                sample_observers = sample_observers,
+                result_aggregations = result_aggregations,
+                result_components = result_components
               )
             },
             error = function(e) {
-              if (is.na(suppressWarnings(as.integer(sample$location_id[[1]])))) {
+              if (
+                is.na(suppressWarnings(as.integer(sample$location_id[[1]])))
+              ) {
                 existing_sample <- find_locationless_import_sample(
                   con = con,
                   import_source = source_fx,
@@ -802,7 +837,9 @@ getNewDiscrete <- function(
             }
           )
           if (!is.na(sample_id)) {
-            if (sample_action == "inserted") count <- count + 1
+            if (sample_action == "inserted") {
+              count <- count + 1
+            }
             import_records[[length(import_records) + 1L]] <-
               new_discrete_import_record(
                 sample_series_id = sid,
@@ -810,7 +847,11 @@ getNewDiscrete <- function(
                 action = sample_action,
                 sample = sample,
                 results = results,
-                sample_groups = sample_groups
+                sample_groups = sample_groups,
+                sample_qualifiers = sample_qualifiers,
+                sample_observers = sample_observers,
+                result_aggregations = result_aggregations,
+                result_components = result_components
               )
           }
         } # End of looping over each list element (sample) for a sample_series_id

@@ -184,8 +184,9 @@ createSampleGroup <- function(
 #' @return A data.table ordered by `sort_order` and `group_type`.
 #' @export
 getSampleGroupTypes <- function(con, active_only = TRUE) {
-  if (!is.logical(active_only) || length(active_only) != 1L ||
-      is.na(active_only)) {
+  if (
+    !is.logical(active_only) || length(active_only) != 1L || is.na(active_only)
+  ) {
     stop("active_only must be TRUE or FALSE.")
   }
   sql <- "SELECT
@@ -197,7 +198,9 @@ getSampleGroupTypes <- function(con, active_only = TRUE) {
             sort_order,
             active
           FROM discrete.sample_group_types"
-  if (active_only) sql <- paste0(sql, " WHERE active")
+  if (active_only) {
+    sql <- paste0(sql, " WHERE active")
+  }
   data.table::as.data.table(DBI::dbGetQuery(
     con,
     paste0(sql, " ORDER BY sort_order, group_type")
@@ -232,8 +235,12 @@ assignSamplesToGroup <- function(
 ) {
   existing <- match.arg(existing)
   lengths <- c(length(sample_id), length(sample_group_id))
-  if (!is.null(sequence_in_group)) lengths <- c(lengths, length(sequence_in_group))
-  if (!is.null(note)) lengths <- c(lengths, length(note))
+  if (!is.null(sequence_in_group)) {
+    lengths <- c(lengths, length(sequence_in_group))
+  }
+  if (!is.null(note)) {
+    lengths <- c(lengths, length(note))
+  }
   n <- max(lengths)
   if (n == 0L || any(!lengths %in% c(1L, n))) {
     stop("Membership arguments must have length one or a common length.")
@@ -290,7 +297,35 @@ assignSamplesToGroup <- function(
 }
 
 
-# Resolve source-adapter group specifications and assign them to one sample.
+#' Resolve and assign sample-group specifications during import
+#'
+#' Resolves the group specifications returned by a discrete source adapter and
+#' assigns the resulting groups to one sample. A specification may identify an
+#' existing group by `sample_group_id`, or provide the fields needed by
+#' [createSampleGroup()]. Group creation is idempotent for specifications with
+#' an owner, type, and code.
+#'
+#' The operation participates in the caller's transaction when one is already
+#' active. Otherwise, it opens a transaction so that group creation and sample
+#' membership assignment succeed or fail together.
+#'
+#' @param con An open DBI connection to an AquaCache database.
+#' @param sample_id The integer ID of the sample to assign.
+#' @param sample_groups Either a numeric vector of existing sample-group IDs or
+#'   a data frame with one group specification per row. Data-frame rows may use
+#'   `sample_group_id` directly, or provide `group_type` plus the arguments
+#'   accepted by [createSampleGroup()]. Optional `sequence_in_group` and
+#'   `member_note` columns describe the resulting membership.
+#' @param default_owner Organization ID used when a specification does not
+#'   provide `owner`.
+#' @param default_contributor Organization ID used when a specification does
+#'   not provide `contributor`.
+#'
+#' @return An integer vector of resolved `sample_group_id` values. An empty
+#'   integer vector is returned when no groups are supplied.
+#'
+#' @keywords internal
+#' @noRd
 link_discrete_sample_groups <- function(
   con,
   sample_id,
@@ -305,14 +340,18 @@ link_discrete_sample_groups <- function(
     sample_groups <- data.frame(sample_group_id = sample_groups)
   }
   if (!inherits(sample_groups, "data.frame")) {
-    stop("sample_groups must be a data.frame or a vector of sample_group_id values.")
+    stop(
+      "sample_groups must be a data.frame or a vector of sample_group_id values."
+    )
   }
   if (nrow(sample_groups) == 0L) {
     return(integer())
   }
 
   value_at <- function(column, i, default = NULL) {
-    if (!column %in% names(sample_groups)) return(default)
+    if (!column %in% names(sample_groups)) {
+      return(default)
+    }
     value <- sample_groups[[column]]
     if (is.list(value)) value[[i]] else value[i]
   }
@@ -341,7 +380,8 @@ link_discrete_sample_groups <- function(
 
         group_owner <- value_at("owner", i, default_owner)
         if (
-          is.null(group_owner) || length(group_owner) == 0L ||
+          is.null(group_owner) ||
+            length(group_owner) == 0L ||
             is.na(group_owner)
         ) {
           group_owner <- default_owner
@@ -352,7 +392,8 @@ link_discrete_sample_groups <- function(
           default_contributor
         )
         if (
-          is.null(group_contributor) || length(group_contributor) == 0L ||
+          is.null(group_contributor) ||
+            length(group_contributor) == 0L ||
             is.na(group_contributor)
         ) {
           group_contributor <- default_contributor
@@ -378,9 +419,7 @@ link_discrete_sample_groups <- function(
         con = con,
         sample_id = sample_id,
         sample_group_id = group_ids,
-        sequence_in_group = if (
-          "sequence_in_group" %in% names(sample_groups)
-        ) {
+        sequence_in_group = if ("sequence_in_group" %in% names(sample_groups)) {
           sample_groups$sequence_in_group
         } else {
           NULL
@@ -392,7 +431,9 @@ link_discrete_sample_groups <- function(
         },
         existing = "nothing"
       )
-      if (active_trans) DBI::dbExecute(con, "COMMIT;")
+      if (active_trans) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
       transaction_finished <- TRUE
       group_ids
     },
@@ -407,9 +448,33 @@ link_discrete_sample_groups <- function(
 }
 
 
-find_locationless_import_sample <- function(con, import_source, import_source_id) {
+#' Find an existing imported sample without a location
+#'
+#' Looks up a locationless discrete sample by the stable source identity used
+#' during synchronization. This supports idempotent updates to field blanks and
+#' other samples whose context is represented by sample groups rather than a
+#' monitoring location.
+#'
+#' @param con An open DBI connection to an AquaCache database.
+#' @param import_source The source-adapter or import-source name stored on the
+#'   sample.
+#' @param import_source_id The source system's sample identifier. A missing or
+#'   empty value disables the lookup.
+#'
+#' @return A data frame containing at most one matching row from
+#'   `discrete.samples`. An empty data frame is returned when no usable source
+#'   ID is supplied or no visible row matches.
+#'
+#' @keywords internal
+#' @noRd
+find_locationless_import_sample <- function(
+  con,
+  import_source,
+  import_source_id
+) {
   if (
-    is.null(import_source_id) || length(import_source_id) == 0L ||
+    is.null(import_source_id) ||
+      length(import_source_id) == 0L ||
       is.na(import_source_id[[1]])
   ) {
     return(data.frame())
@@ -427,13 +492,41 @@ find_locationless_import_sample <- function(con, import_source, import_source_id
 }
 
 
+#' Construct one discrete-import result record
+#'
+#' Packages the outcome of one sample import into the list-column structure
+#' returned by discrete source-adapter ingestion and consumed by
+#' synchronization. Related sample groups, qualifiers, observers, aggregation
+#' metadata, and component observations remain attached to the same record.
+#'
+#' @param sample_series_id Integer ID of the source sample series.
+#' @param sample_id Integer database ID of the affected sample.
+#' @param action Character value describing the import outcome, such as an
+#'   insertion, update, or skip.
+#' @param sample The sample data associated with the outcome.
+#' @param results The result data associated with the sample.
+#' @param sample_groups Optional sample-group specifications or memberships.
+#' @param sample_qualifiers Optional normalized sample-qualifier rows.
+#' @param sample_observers Optional normalized sample-observer rows.
+#' @param result_aggregations Optional normalized result-aggregation rows.
+#' @param result_components Optional normalized result-component rows.
+#'
+#' @return A one-row data.table with scalar import identifiers and list columns
+#'   holding the sample and all related records.
+#'
+#' @keywords internal
+#' @noRd
 new_discrete_import_record <- function(
   sample_series_id,
   sample_id,
   action,
   sample,
   results,
-  sample_groups = NULL
+  sample_groups = NULL,
+  sample_qualifiers = NULL,
+  sample_observers = NULL,
+  result_aggregations = NULL,
+  result_components = NULL
 ) {
   data.table::data.table(
     sample_series_id = as.integer(sample_series_id),
@@ -441,11 +534,30 @@ new_discrete_import_record <- function(
     action = as.character(action),
     sample = list(sample),
     results = list(results),
-    sample_groups = list(sample_groups)
+    sample_groups = list(sample_groups),
+    sample_qualifiers = list(sample_qualifiers),
+    sample_observers = list(sample_observers),
+    result_aggregations = list(result_aggregations),
+    result_components = list(result_components)
   )
 }
 
 
+#' Combine discrete-import result records
+#'
+#' Combines the one-row records produced by `new_discrete_import_record()]` (internal function). into
+#' one consistently shaped data.table. The empty-input path returns the same
+#' schema, including every relationship list column, so callers do not need a
+#' special case when no samples were processed.
+#'
+#' @param records A list of data.tables returned by
+#'   `new_discrete_import_record()]` (internal function).
+#'
+#' @return A data.table containing all supplied import records, or a zero-row
+#'   data.table with the standard import-record columns.
+#'
+#' @keywords internal
+#' @noRd
 bind_discrete_import_records <- function(records) {
   if (length(records) == 0L) {
     return(data.table::data.table(
@@ -454,7 +566,11 @@ bind_discrete_import_records <- function(records) {
       action = character(),
       sample = list(),
       results = list(),
-      sample_groups = list()
+      sample_groups = list(),
+      sample_qualifiers = list(),
+      sample_observers = list(),
+      result_aggregations = list(),
+      result_components = list()
     ))
   }
   data.table::rbindlist(records, use.names = TRUE, fill = TRUE)

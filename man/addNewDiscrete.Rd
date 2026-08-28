@@ -4,7 +4,16 @@
 \alias{addNewDiscrete}
 \title{Add new discrete sample data to the database}
 \usage{
-addNewDiscrete(con, sample, results, sample_groups = NULL)
+addNewDiscrete(
+  con,
+  sample,
+  results,
+  sample_groups = NULL,
+  sample_qualifiers = NULL,
+  sample_observers = NULL,
+  result_aggregations = NULL,
+  result_components = NULL
+)
 }
 \arguments{
 \item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}.}
@@ -19,14 +28,24 @@ per group. A data-frame row can contain \code{sample_group_id}, or the arguments
 used by \code{\link[=createSampleGroup]{createSampleGroup()}}. Optional membership columns are
 \code{sequence_in_group} and \code{member_note}. Groups with the same owner, type,
 and code are reused.}
+
+\item{sample_qualifiers}{Optional sample-level qualifier associations.}
+
+\item{sample_observers}{Optional sample-level observer associations.}
+
+\item{result_aggregations}{Optional aggregation configurations linked to rows
+in \code{results}.}
+
+\item{result_components}{Optional observations used by the configured result
+aggregations.}
 }
 \value{
 The database sample_id for the inserted sample.
 }
 \description{
-Appends a discrete sample, its sample-group memberships, and its results to
-AquaCache inside one transaction, returning the created \code{sample_id}. The
-formats of the data frames are defined in the \code{details} section.
+Appends a discrete sample, its associations, canonical results, and optional
+component measurements to AquaCache inside one transaction, returning the
+created \code{sample_id}. The formats are defined in the \code{details} section.
 }
 \details{
 The 'sample' data.frame must contain the following columns:
@@ -48,7 +67,6 @@ samples may omit both fields.
 \item 'contributor': the numeric organization ID that contributed the sample.
 \item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 \item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
-\item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 }
 
 The 'results' data.frame should contain one row per result and must contain the following columns:
@@ -63,4 +81,31 @@ Additionally, the following columns may need to be included:
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 \item 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 }
+
+\code{sample_qualifiers} may be a vector of \code{qualifier_type_id} values or a data
+frame containing \code{qualifier_type_id} and optional \code{note}. \code{sample_observers}
+may be a vector of \code{observer_id} values or a data frame containing
+\code{observer_id} and optional \code{observer_role} and \code{note}.
+
+Component-built results use two data frames. \code{result_aggregations} has one
+row per aggregated result, with \code{result_row} (the one-based row in \code{results})
+and exactly one of \code{aggregation_type} or \code{result_aggregation_type_id}.
+Supported type codes are \code{mean}, \code{median}, \code{min}, \code{max}, \code{sum}, and
+\code{weighted_mean}. Optional columns are \code{calculation_version} (default 1),
+\code{calculation_arguments} (a JSON object or named-list column), and \code{note}.
+
+Version 1 calculation arguments support \code{missing_values} (\code{ignore},
+\code{propagate}, or \code{error}), \code{non_detects} (\code{exclude}, \code{zero},
+\code{condition_value}, \code{half_condition_value}, or \code{error}), numeric \code{multiplier},
+and integer \code{rounding_digits}. Multiplication and rounding happen after the
+aggregation, with rounding last.
+
+\code{result_components} has required \code{result_row}, \code{observation_number}, and
+\code{result} columns; \code{result} may be \code{NA} when a condition or missing observation
+is stored. Optional columns are \code{observation_datetime}, \code{result_condition},
+\code{result_condition_value}, \code{included_in_aggregate} (default \code{TRUE}), \code{weight},
+and \code{note}. Excluded observations require a note. Each configured aggregation
+requires at least one component. The database calculates the canonical
+\code{results.result}, including a real \code{NULL} when the calculation yields no
+value.
 }

@@ -30,8 +30,7 @@ getNewDiscrete(
 A data.table with one row per inserted or previously imported sample
 and columns
 \code{sample_series_id}, \code{sample_id}, \code{action}, and list-columns containing the
-normalized \code{sample}, \code{results}, and \code{sample_groups} input. An empty result
-has the same columns.
+normalized source inputs. An empty result has the same columns.
 }
 \description{
 Retrieves new discrete data starting from the last local sample. The active
@@ -88,6 +87,9 @@ accepted by \code{\link[=addNewDiscrete]{addNewDiscrete()}}. Source adapters sho
 \code{group_type}, \code{owner}, and \code{group_code} for related samples; the group will
 be created once and reused. A locationless sample, or a sample type whose
 \code{requires_sample_group} flag is true, must provide at least one group.
+The optional \code{sample_qualifiers}, \code{sample_observers}, \code{result_aggregations},
+and \code{result_components} elements use the formats documented by
+\code{\link[=addNewDiscrete]{addNewDiscrete()}}.
 
 Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.

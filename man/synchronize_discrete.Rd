@@ -36,7 +36,7 @@ series. If FALSE, no data are deleted.}
 \value{
 A data.table with one row per inserted or matched remote sample and
 columns \code{sample_series_id}, \code{sample_id}, \code{action}, and list-columns
-containing the normalized \code{sample}, \code{results}, and \code{sample_groups} input.
+containing the normalized source inputs.
 }
 \description{
 This synchronize function pulls and replaces data referenced in table 'sample_series' if and when a discrepancy is observed between the remote repository and the local data store, with the remote taking precedence.
@@ -50,10 +50,15 @@ protecting records imported through another route.
 Every source function must have an enabled discrete-domain entry in
 \code{public.source_adapter_capabilities}.
 
-Source functions use the same \code{sample}, \code{results}, and optional
-\code{sample_groups} return contract documented by \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Existing
+Source functions use the same \code{sample}, \code{results}, and optional association
+and result-aggregation return contract documented by \code{\link[=getNewDiscrete]{getNewDiscrete()}}. Existing
 group memberships are not removed when \code{sample_groups} is omitted, and
 source-provided groups are added without replacing unrelated memberships.
+For a matched sample, supplied qualifier and observer collections replace
+their respective associations; omission preserves the database values.
+Supplied aggregation configurations and components replace that detail for
+matched canonical results; two supplied empty data frames explicitly remove
+existing aggregation detail, while omission preserves it.
 Locationless remote samples are matched by their database-enforced
 \code{import_source} and \code{import_source_id} identity. Located samples retain
 location and collection-context matching because source IDs may legitimately
