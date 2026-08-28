@@ -1,8 +1,8 @@
-#' Bring snow course data into the aquacache database
+#' Bring Yukon Government snow course data into the aquacache database
 #'
 #' @description
 #'
-#' Brings in pared-down snow course data to the database. Can automatically calculate an offset value where locations have operated in parallel in anticipation of replacing the old location with a nearby new one, updating the calculation with each new data point (see parameter old_loc).
+#' Brings in pared-down snow course data from the Yukon Government's snow survey database to the aquacache database. Can automatically calculate an offset value where locations have operated in parallel in anticipation of replacing the old location with a nearby new one, updating the calculation with each new data point (see parameter old_loc).
 #'
 #' @param location The location code associated with the snow course in the snow database,  should match locations.location_code in the aquacache database (locations.alias is checked as a fallback).
 #' @param start_datetime Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
@@ -12,12 +12,12 @@
 #' @param adjust_end The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.
 #' @param share_with Which user groups to share the data with. Default is 'yg_reader_group'; set to 'public_reader' to share publicly. This does not affect samples which already exist and are being refreshed/replaced. For multiple groups, specify as a character vector, e.g. c('yg_reader_group', 'public_reader').
 #' @param con A connection to the aquacache database. a connection will be attempted using AquaConnect().
-#' @param snowCon A connection to the snow database.
+#' @param snowCon A connection to the YG snow database.
 #'
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
 
-downloadSnowCourse <- function(
+downloadSnowCourseYG <- function(
   location,
   start_datetime,
   end_datetime = Sys.time(),
@@ -358,7 +358,7 @@ downloadSnowCourse <- function(
             contributor = sample_contributor,
             collection_method = sample_collect_method,
             media_id = media_id,
-            import_source = "downloadSnowCourse",
+            import_source = "downloadSnowCourseYG",
             share_with = paste0("{", paste(share_with, collapse = ","), "}")
           )
           dbAppendTableRLS(con, "discrete.samples", df)
@@ -392,7 +392,7 @@ downloadSnowCourse <- function(
               ),
               "', import_source_id = '",
               old_meas[old_meas$datetime == j, "survey_id"][1],
-              "', import_source = 'downloadSnowCourse' WHERE sample_id = ",
+              "', import_source = 'downloadSnowCourseYG' WHERE sample_id = ",
               adj_sample_id,
               ";"
             )
@@ -507,7 +507,7 @@ downloadSnowCourse <- function(
              SELECT 1
              FROM discrete.sample_series_source_adapters ssa
              WHERE ssa.sample_series_id = sample_series.sample_series_id
-               AND ssa.source_fx = 'downloadSnowCourse'
+               AND ssa.source_fx = 'downloadSnowCourseYG'
                AND ssa.active
            );"
         )
@@ -543,7 +543,7 @@ downloadSnowCourse <- function(
             contributor = sample_contributor,
             collection_method = sample_collect_method,
             media_id = media_id,
-            import_source = "downloadSnowCourse"
+            import_source = "downloadSnowCourseYG"
           )
           dbAppendTableRLS(con, "discrete.samples", df)
 
@@ -571,7 +571,7 @@ downloadSnowCourse <- function(
               ),
               "', import_source_id = '",
               old_meas[old_meas$datetime == j, "survey_id"][1],
-              "', import_source = 'downloadSnowCourse' WHERE sample_id = ",
+              "', import_source = 'downloadSnowCourseYG' WHERE sample_id = ",
               adj_sample_id,
               ";"
             )
