@@ -336,7 +336,7 @@ tryCatch(
          modified TIMESTAMPTZ,
          CONSTRAINT result_aggregation_types_code_not_blank CHECK (
            btrim(aggregation_type) <> ''
-         )
+         ),
          CONSTRAINT result_aggregation_type_lower CHECK (
             aggregation_type = lower(btrim(aggregation_type))
             AND aggregation_type ~ '^[a-z][a-z0-9_]*$'
@@ -1775,7 +1775,7 @@ tryCatch(
       con,
       "UPDATE public.source_adapter_capabilities SET
          source_fx ='downloadSnowCourseYG',
-         note = 'Retrieves snow-course observations from the Yukon Government's Postgresql snow database.'
+         note = 'Retrieves snow-course observations from the Yukon Government''s Postgresql snow database.'
        WHERE source_fx = 'downloadSnowCourse'
        AND data_domain = 'discrete'
       "
