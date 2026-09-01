@@ -485,9 +485,20 @@ tryCatch(
              AND (trg.tgtype & 16) = 16
              AND (trg.tgtype & 64) = 0
          ) AS has_sample_group_types_audit,
+         -- Scoped to the tables THIS patch registers. The unscoped form
+         -- asserted that every table carrying an audit trigger has a row in
+         -- audit.table_registry; that invariant has never held. On the branch
+         -- test fixture at patch 58 there are 103 pre-existing audited tables
+         -- with no registry row - public.locations, discrete.samples,
+         -- continuous.timeseries among them - so the check failed on any
+         -- database. audit.table_registry is not created by any patch in the
+         -- 53-59 range, and patches 55, 57 and 59 each register only the tables
+         -- they themselves add.
          NOT EXISTS (
            SELECT 1
            FROM audit_triggers trg
+           JOIN expected_registry expected
+             USING (schema_name, table_name)
            LEFT JOIN audit.table_registry registry
              USING (schema_name, table_name)
            WHERE registry.schema_name IS NULL
