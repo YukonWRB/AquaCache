@@ -10,3 +10,5 @@ Rprof.out
 .secret
 .venv
 .conda
+.RDataTmp
+.RDataTmp1
