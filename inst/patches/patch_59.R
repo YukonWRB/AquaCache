@@ -505,7 +505,9 @@ tryCatch(
          ) AS all_audit_triggers_registered,
          NOT EXISTS (
            SELECT 1
-           FROM audit.table_registry registry
+           FROM expected_registry expected
+           JOIN audit.table_registry registry
+             USING (schema_name, table_name)
            LEFT JOIN audit_triggers trg
              USING (schema_name, table_name)
            WHERE registry.capture_mode NOT LIKE 'excluded_%'
@@ -513,7 +515,14 @@ tryCatch(
          ) AS all_registered_audits_have_triggers"
     )
     if (!all(unlist(audit_verification[1, ], use.names = FALSE))) {
-      stop("Patch 59 audit registry verification failed.")
+      failed_audit_checks <- names(audit_verification)[
+        !vapply(audit_verification[1, ], isTRUE, logical(1))
+      ]
+      stop(
+        "Patch 59 audit registry verification failed: ",
+        paste(failed_audit_checks, collapse = ", "),
+        "."
+      )
     }
 
     # raster_series_index datetime metadata is derived from
