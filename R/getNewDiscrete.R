@@ -56,6 +56,12 @@
 #' and `result_components` elements use the formats documented by
 #' [addNewDiscrete()].
 #'
+#' `getNewDiscrete()` is insertion-only. If a source record has already been
+#' imported, the function reports that sample with `action = "existing"` but
+#' does not update its sample row, group memberships, qualifiers, observers,
+#' results, aggregation configuration, or components. Use
+#' [synchronize_discrete()] when existing source records must be reconciled.
+#'
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 #' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 #'
@@ -754,17 +760,8 @@ getNewDiscrete <- function(
               import_source_id = sample$import_source_id
             )
             if (nrow(existing_sample) == 1L) {
-              link_discrete_sample_groups(
-                con = con,
-                sample_id = existing_sample$sample_id[[1]],
-                sample_groups = sample_groups,
-                default_owner = sample$owner[[1]],
-                default_contributor = if ("contributor" %in% names(sample)) {
-                  sample$contributor[[1]]
-                } else {
-                  NA_integer_
-                }
-              )
+              # This importer is deliberately insertion-only. Return the
+              # existing identity without reconciling any parent or child data.
               import_records[[length(import_records) + 1L]] <-
                 new_discrete_import_record(
                   sample_series_id = sid,
@@ -808,19 +805,8 @@ getNewDiscrete <- function(
                   import_source_id = sample$import_source_id
                 )
                 if (nrow(existing_sample) == 1L) {
-                  link_discrete_sample_groups(
-                    con = con,
-                    sample_id = existing_sample$sample_id[[1]],
-                    sample_groups = sample_groups,
-                    default_owner = sample$owner[[1]],
-                    default_contributor = if (
-                      "contributor" %in% names(sample)
-                    ) {
-                      sample$contributor[[1]]
-                    } else {
-                      NA_integer_
-                    }
-                  )
+                  # A concurrent importer won the insert race. Preserve its
+                  # stored detail; synchronization owns all update semantics.
                   sample_action <<- "existing"
                   return(existing_sample$sample_id[[1]])
                 }

@@ -91,6 +91,12 @@ The optional \code{sample_qualifiers}, \code{sample_observers}, \code{result_agg
 and \code{result_components} elements use the formats documented by
 \code{\link[=addNewDiscrete]{addNewDiscrete()}}.
 
+\code{getNewDiscrete()} is insertion-only. If a source record has already been
+imported, the function reports that sample with \code{action = "existing"} but
+does not update its sample row, group memberships, qualifiers, observers,
+results, aggregation configuration, or components. Use
+\code{\link[=synchronize_discrete]{synchronize_discrete()}} when existing source records must be reconciled.
+
 Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 }
