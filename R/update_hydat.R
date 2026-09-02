@@ -357,7 +357,8 @@ update_hydat <- function(
       con,
       "SELECT
          (mc.datetime + make_interval(hours => $2))::date AS date,
-         mc.value
+         mc.value,
+         mc.no_source_update
        FROM continuous.measurements_continuous mc
        WHERE mc.timeseries_id = $1
          AND mc.datetime >= $3
@@ -370,16 +371,17 @@ update_hydat <- function(
       params = list(tsid, as.integer(offset), start_ts, end_ts)
     )
     existing_daily$date <- as.Date(existing_daily$date)
+    protected_dates <- existing_daily$date[existing_daily$no_source_update]
 
     compare <- merge(
       data[, c("date", "value")],
-      existing_daily,
+      existing_daily[, c("date", "value")],
       by = "date",
       all.x = TRUE,
       suffixes = c("_hydat", "_db")
     )
     compare <- compare[
-      !(compare$date %in% high_frequency_dates),
+      !(compare$date %in% c(high_frequency_dates, protected_dates)),
       ,
       drop = FALSE
     ]
@@ -397,8 +399,13 @@ update_hydat <- function(
 
     start_update <- min(mismatch$date)
     data <- data[data$date >= start_update, , drop = FALSE]
-    to_write <- data[
+    attribute_write <- data[
       !(data$date %in% high_frequency_dates),
+      ,
+      drop = FALSE
+    ]
+    to_write <- data[
+      !(data$date %in% c(high_frequency_dates, protected_dates)),
       ,
       drop = FALSE
     ]
@@ -415,6 +422,7 @@ update_hydat <- function(
            WHERE mc.timeseries_id = $1
              AND mc.datetime >= $2
              AND mc.datetime < $3
+             AND mc.no_source_update IS FALSE
              AND mc.period = interval '1 day'
              AND mc.datetime = continuous.local_noon_to_utc(
                (mc.datetime + make_interval(hours => $4))::date,
@@ -435,31 +443,36 @@ update_hydat <- function(
               "imputed"
             )]
           )
+        }
 
+        if (nrow(attribute_write) > 0) {
           adjust_approval(
             con,
             tsid,
-            to_write[, c("datetime", "approval")]
+            attribute_write[, c("datetime", "approval")],
+            source_update = TRUE
           )
           adjust_qualifier(
             con,
             tsid,
-            to_write[, c("datetime", "qualifier")]
+            attribute_write[, c("datetime", "qualifier")],
+            source_update = TRUE
           )
           adjust_owner(
             con,
             tsid,
-            to_write[, c("datetime", "owner")]
+            attribute_write[, c("datetime", "owner")]
           )
           adjust_grade(
             con,
             tsid,
-            to_write[, c("datetime", "grade")]
+            attribute_write[, c("datetime", "grade")],
+            source_update = TRUE
           )
           adjust_contributor(
             con,
             tsid,
-            to_write[, c("datetime", "contributor")]
+            attribute_write[, c("datetime", "contributor")]
           )
         }
 

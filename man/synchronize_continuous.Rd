@@ -64,7 +64,7 @@ If you leave the 'con' object as NULL the function will try to run in parallel, 
 
 In addition, grades, qualifiers, and approvals are always updated as it's computationally cheaper to do so than to check if they need updating.
 
-NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote exactly matching the datetime of the imputed entry, and any data point labelled as no_update = TRUE is not replaced by the remote dat (imputed or not).
+NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote exactly matching the datetime of the imputed entry, and any data point labelled as no_source_update = TRUE is not replaced by the remote data (imputed or not). Grade, approval, and qualifier intervals carrying the same flag are also preserved.
 
 A timeseries whose selected synchronization assignment uses
 \code{downloadAquarius} needs credentials in \code{.Renviron} or in that assignment's

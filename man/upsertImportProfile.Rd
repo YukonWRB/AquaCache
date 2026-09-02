@@ -83,7 +83,9 @@ columns.}
 
 \item{wide_config}{Named list describing wide-format result columns.}
 
-\item{defaults}{Named list of profile-level defaults.}
+\item{defaults}{Named list of profile-level defaults. Use
+\code{no_source_update}, not the pre-Patch-60 \code{no_update}, for sample or result
+source-protection defaults.}
 
 \item{sample_identity}{Character vector naming fields that identify a sample.}
 

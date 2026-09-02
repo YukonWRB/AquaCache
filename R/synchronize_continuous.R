@@ -8,7 +8,7 @@
 #'
 #' In addition, grades, qualifiers, and approvals are always updated as it's computationally cheaper to do so than to check if they need updating.
 #'
-#' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote exactly matching the datetime of the imputed entry, and any data point labelled as no_update = TRUE is not replaced by the remote dat (imputed or not).
+#' NOTE that any data point labelled as imputed = TRUE is only replaced if a value is found in the remote exactly matching the datetime of the imputed entry, and any data point labelled as no_source_update = TRUE is not replaced by the remote data (imputed or not). Grade, approval, and qualifier intervals carrying the same flag are also preserved.
 #'
 #' A timeseries whose selected synchronization assignment uses
 #' `downloadAquarius` needs credentials in `.Renviron` or in that assignment's
@@ -661,7 +661,8 @@ synchronize_continuous <- function(
           con,
           tsid,
           write_remote[, c("datetime", "grade")],
-          delete = TRUE
+          delete = TRUE,
+          source_update = TRUE
         )
         write_remote$grade <- NULL
       }
@@ -670,7 +671,8 @@ synchronize_continuous <- function(
           con,
           tsid,
           write_remote[, c("datetime", "approval")],
-          delete = TRUE
+          delete = TRUE,
+          source_update = TRUE
         )
         write_remote$approval <- NULL
       }
@@ -679,7 +681,8 @@ synchronize_continuous <- function(
           con,
           tsid,
           write_remote[, c("datetime", "qualifier")],
-          delete = TRUE
+          delete = TRUE,
+          source_update = TRUE
         )
         write_remote$qualifier <- NULL
       }
@@ -781,7 +784,7 @@ synchronize_continuous <- function(
     inDB <- DBI::dbGetQuery(
       con,
       paste0(
-        "SELECT no_update, datetime, value, period, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
+        "SELECT no_source_update, datetime, value, period, imputed FROM continuous.measurements_continuous WHERE timeseries_id = ",
         tsid,
         " AND datetime >= '",
         min(inRemote$datetime),
@@ -790,12 +793,11 @@ synchronize_continuous <- function(
         ";"
       )
     )
-    # Set aside any rows where no_update == TRUE
-    no_update <- inDB[inDB$no_update, ]
-    inDB <- inDB[!inDB$no_update, ]
-    # Drop no_update columns
-    inDB$no_update <- NULL
-    no_update$no_update <- NULL
+    # Set aside rows protected from source updates.
+    source_protected <- inDB[inDB$no_source_update, ]
+    inDB <- inDB[!inDB$no_source_update, ]
+    inDB$no_source_update <- NULL
+    source_protected$no_source_update <- NULL
     # Check if any imputed data points are present in the new data; replace the imputed value if TRUE and a non-imputed value now exists
     imputed <- inDB[inDB$imputed, ]
     imputed.remains <- data.frame()
@@ -805,7 +807,7 @@ synchronize_continuous <- function(
         ,
         drop = FALSE
       ]
-      no_update <- rbind(no_update, imputed_remains)
+      source_protected <- rbind(source_protected, imputed_remains)
     }
 
     # Adjust parameters
@@ -823,6 +825,35 @@ synchronize_continuous <- function(
       if (!("owner" %in% names(inRemote))) {
         inRemote$owner <- owner
       }
+    }
+
+    attribute_remote <- inRemote
+    # Measurement protection is independent from grade, approval, and
+    # qualifier protection, so retain the full remote frame for interval
+    # adjustment while removing protected timestamps from value comparison.
+    if (nrow(source_protected) > 0) {
+      inRemote <- inRemote[
+        !(inRemote$datetime %in% source_protected$datetime),
+        ,
+        drop = FALSE
+      ]
+    }
+    if (nrow(inRemote) == 0) {
+      run_db_updates(function() {
+        apply_remote_attributes(attribute_remote)
+        DBI::dbExecute(
+          con,
+          paste0(
+            "UPDATE continuous.timeseries SET last_synchronize = '",
+            .POSIXct(Sys.time(), "UTC"),
+            "' WHERE timeseries_id = ",
+            tsid,
+            ";"
+          )
+        )
+        finalize_transmission_runs(0L)
+      })
+      return()
     }
 
     if (nrow(inDB) > 0) {
@@ -844,12 +875,6 @@ synchronize_continuous <- function(
         inRemote <- inRemote[order(inRemote$datetime), ]
 
         # Create a unique datetime key for both data frames
-        # Check if there is remote data that completely overlaps with rows in no_update. If so, remove those rows from inRemote.
-        if (nrow(no_update) > 0) {
-          inRemote <- inRemote[!(inRemote$datetime %in% no_update$datetime), ]
-          inDB <- inDB[!(inDB$datetime %in% no_update$datetime), ]
-        }
-
         # Make keys
         inRemote$key <- paste(
           substr(as.character(inRemote$datetime), 1, 22),
@@ -1027,7 +1052,10 @@ synchronize_continuous <- function(
         nrow(append_rows)
       }
       run_db_updates(function() {
-        write_remote <- apply_remote_attributes(inRemote)
+        apply_remote_attributes(
+          attribute_remote[attribute_remote$datetime >= cutoff, , drop = FALSE]
+        )
+        write_remote <- inRemote
         write_remote <- write_remote[write_remote$datetime >= cutoff, ]
         if (nrow(write_remote) > 0) {
           #assign a period to the data
@@ -1073,7 +1101,7 @@ synchronize_continuous <- function(
     } else {
       # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
       run_db_updates(function() {
-        write_remote <- apply_remote_attributes(inRemote)
+        apply_remote_attributes(attribute_remote)
 
         DBI::dbExecute(
           con,
