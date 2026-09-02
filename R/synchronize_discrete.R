@@ -202,6 +202,9 @@ synchronize_discrete_sample_detail <- function(
   )
   tryCatch(
     {
+      if (!is.null(result_aggregations)) {
+        set_result_aggregation_constraints(con, "deferred")
+      }
       if (length(pending_results)) {
         dbAppendTableRLS(
           con,
@@ -306,7 +309,7 @@ synchronize_discrete_sample_detail <- function(
           protected_results <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT result_id FROM discrete.results WHERE no_update AND result_id IN (",
+              "SELECT result_id FROM discrete.results WHERE no_source_update AND result_id IN (",
               paste(placeholders, collapse = ", "),
               ")"
             ),
@@ -314,7 +317,7 @@ synchronize_discrete_sample_detail <- function(
           )$result_id
           if (length(protected_results)) {
             stop(
-              "Cannot replace aggregation detail for no_update result_id(s): ",
+              "Cannot replace aggregation detail for no_source_update result_id(s): ",
               paste(protected_results, collapse = ", "),
               "."
             )
@@ -381,6 +384,10 @@ synchronize_discrete_sample_detail <- function(
           result_aggregations = result_aggregations,
           result_components = result_components
         )
+      }
+
+      if (!is.null(result_aggregations)) {
+        set_result_aggregation_constraints(con, "immediate")
       }
 
       if (active_trans) {
@@ -861,7 +868,7 @@ synchronize_discrete <- function(
                       inRemote_sample$collection_method,
                       " AND import_source = '",
                       source_fx,
-                      "' AND no_update IS FALSE;"
+                      "' AND no_source_update IS FALSE;"
                     )
                   )
                 } else if (j == length(inRemote) && delete_has_prev) {
@@ -894,7 +901,7 @@ synchronize_discrete <- function(
                       inRemote_sample$collection_method,
                       " AND import_source = '",
                       source_fx,
-                      "' AND no_update IS FALSE;"
+                      "' AND no_source_update IS FALSE;"
                     )
                   )
                 } else if (delete_has_prev) {
@@ -927,7 +934,7 @@ synchronize_discrete <- function(
                       inRemote_sample$collection_method,
                       " AND import_source = '",
                       source_fx,
-                      "' AND no_update IS FALSE;"
+                      "' AND no_source_update IS FALSE;"
                     )
                   )
                 }
@@ -1061,8 +1068,8 @@ synchronize_discrete <- function(
             # If changes are detected, update the sample metadata
             if (nrow(inDB_sample) > 0) {
               # Check existing DB sample and results. If no sample is found, add the sample and corresponding results in else section
-              if (inDB_sample$no_update) {
-                # If no_update is TRUE, skip to the next sample
+              if (inDB_sample$no_source_update) {
+                # If no_source_update is TRUE, skip to the next sample
                 next
               }
               # Check existing DB sample and results ##################
@@ -1369,10 +1376,10 @@ synchronize_discrete <- function(
                   new_results <- new_results + 1
                 } else if (nrow(inDB_sub) == 1) {
                   remote_result_ids[[k]] <- inDB_sub$result_id[[1]]
-                  if (isTRUE(inDB_sub$no_update[[1]])) {
+                  if (isTRUE(inDB_sub$no_source_update[[1]])) {
                     if (is_remote_aggregated) {
                       stop(
-                        "Cannot synchronize component values for no_update ",
+                        "Cannot synchronize component values for no_source_update ",
                         "result_id ",
                         inDB_sub$result_id[[1]],
                         "."
@@ -1472,7 +1479,7 @@ synchronize_discrete <- function(
               # Remove from the database any results that were not checked if delete is TRUE
               if (delete) {
                 to_delete <- inDB_results[
-                  !inDB_results$checked & !inDB_results$no_update,
+                  !inDB_results$checked & !inDB_results$no_source_update,
                   "result_id"
                 ]
                 if (length(to_delete) > 0) {
@@ -1481,7 +1488,7 @@ synchronize_discrete <- function(
                     paste0(
                       "DELETE FROM discrete.results WHERE result_id IN (",
                       paste(to_delete, collapse = ", "),
-                      ") AND no_update IS FALSE;"
+                      ") AND no_source_update IS FALSE;"
                     )
                   )
                 }

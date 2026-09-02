@@ -24,7 +24,9 @@
 #' @param result_aggregations An optional data frame with one row per
 #'   component-built result. It must contain `result_row` and exactly one of
 #'   `aggregation_type` or `result_aggregation_type_id`. Optional columns are
-#'   `calculation_version`, `calculation_arguments`, and `note`.
+#'   `calculation_version`, `calculation_arguments`, `expected_count`, and
+#'   `note`. `expected_count` is a positive integer when the protocol has a
+#'   fixed number of observations and `NA` otherwise.
 #'   `calculation_arguments` may contain JSON object strings or named lists.
 #' @param result_components An optional data frame of component observations.
 #'   Required columns are `result_row`, `observation_number`, and `result`.
@@ -94,6 +96,7 @@ normalize_discrete_result_aggregations <- function(
     type_columns,
     "calculation_version",
     "calculation_arguments",
+    "expected_count",
     "note"
   )
   result_aggregations <- result_aggregations[,
@@ -185,6 +188,23 @@ normalize_discrete_result_aggregations <- function(
     }
     result_aggregations$calculation_arguments <- arguments
   }
+  if (!"expected_count" %in% names(result_aggregations)) {
+    result_aggregations$expected_count <- NA_integer_
+  } else {
+    raw_expected_count <- result_aggregations$expected_count
+    expected_count <- suppressWarnings(as.numeric(
+      as.character(raw_expected_count)
+    ))
+    invalid_expected_count <- !is.na(raw_expected_count) & (
+      is.na(expected_count) |
+        expected_count <= 0 |
+        expected_count != trunc(expected_count)
+    )
+    if (any(invalid_expected_count)) {
+      stop("expected_count must contain positive integers or missing values.")
+    }
+    result_aggregations$expected_count <- as.integer(expected_count)
+  }
 
   required_component_columns <- c("result_row", "observation_number", "result")
   missing_component_columns <- setdiff(
@@ -270,6 +290,12 @@ normalize_discrete_result_aggregations <- function(
   if (any(invalid_condition_value)) {
     stop("result_condition_value is only valid for conditions 1 and 2.")
   }
+  missing_condition_value <- result_components$result_condition %in% c(1L, 2L) &
+    is.na(result_components$result_condition_value)
+  missing_condition_value[is.na(missing_condition_value)] <- FALSE
+  if (any(missing_condition_value)) {
+    stop("Conditions 1 and 2 require result_condition_value.")
+  }
   if (!"included_in_aggregate" %in% names(result_components)) {
     result_components$included_in_aggregate <- TRUE
   }
@@ -330,16 +356,56 @@ normalize_discrete_result_aggregations <- function(
 }
 
 
+#' Set component-result validation timing in the current transaction
+#'
+#' Switches the three Patch 60 constraint triggers together. Composite-result
+#' writers defer them before inserting a temporary `NULL` parent result and set
+#' them back to immediate after the final batch refresh. Setting them to
+#' immediate also evaluates all outstanding component-result checks, so callers
+#' receive a validation error before attempting to commit.
+#'
+#' @param con An open DBI connection with an active transaction.
+#' @param mode Either `"deferred"` or `"immediate"`.
+#'
+#' @return The affected-row count returned by [DBI::dbExecute()], invisibly.
+#'
+#' @keywords internal
+#' @noRd
+set_result_aggregation_constraints <- function(
+  con,
+  mode = c("deferred", "immediate")
+) {
+  mode <- match.arg(mode)
+  statement <- if (identical(mode, "deferred")) {
+    "SET CONSTRAINTS
+       discrete.validate_result_aggregation_result_trigger,
+       discrete.validate_result_aggregation_config_trigger,
+       discrete.validate_result_aggregation_components_trigger
+     DEFERRED"
+  } else {
+    "SET CONSTRAINTS
+       discrete.validate_result_aggregation_result_trigger,
+       discrete.validate_result_aggregation_config_trigger,
+       discrete.validate_result_aggregation_components_trigger
+     IMMEDIATE"
+  }
+  invisible(DBI::dbExecute(con, statement))
+}
+
+
 #' Insert aggregation metadata and component observations
 #'
 #' Converts temporary `result_row` references to the database-generated
 #' `result_id` values for their parent results, resolves textual aggregation
 #' types against active rows in `discrete.result_aggregation_types`, and
 #' appends the aggregation and component rows to their discrete-schema tables.
+#' Per-row refresh is disabled locally during the append, after which one
+#' parameterized batch refresh calculates every affected canonical result.
 #'
 #' The parent rows in `discrete.results` must already exist. This helper does
 #' not open a transaction; callers are responsible for inserting parent
-#' results, aggregation metadata, and components in one transaction so that a
+#' results, aggregation metadata, and components in one transaction and must
+#' use `set_result_aggregation_constraints()` around this helper so that a
 #' partially constructed composite result cannot be committed.
 #'
 #' @param con An open DBI connection to an AquaCache database.
@@ -392,11 +458,44 @@ append_discrete_result_aggregations <- function(
   }
   aggregations$result_id <- result_ids[aggregations$result_row]
   aggregations$result_row <- NULL
+  DBI::dbExecute(
+    con,
+    "SET LOCAL aquacache.defer_result_aggregation_refresh = 'on'"
+  )
   dbAppendTableRLS(con, "discrete.result_aggregations", aggregations)
 
   components <- result_components
   components$result_id <- result_ids[components$result_row]
   components$result_row <- NULL
   dbAppendTableRLS(con, "discrete.result_components", components)
+  result_id_array <- paste0(
+    "{",
+    paste(sort(unique(aggregations$result_id)), collapse = ","),
+    "}"
+  )
+  refreshed <- DBI::dbGetQuery(
+    con,
+    "SELECT discrete.refresh_result_aggregations(
+       $1::integer[]
+     ) AS updated_count",
+    params = list(result_id_array)
+  )$updated_count
+  if (
+    length(refreshed) != 1L ||
+      is.na(refreshed[[1]]) ||
+      refreshed[[1]] != nrow(aggregations)
+  ) {
+    stop(
+      "Batch result-aggregation refresh updated ",
+      if (length(refreshed)) refreshed[[1]] else 0L,
+      " parent result(s); expected ",
+      nrow(aggregations),
+      "."
+    )
+  }
+  DBI::dbExecute(
+    con,
+    "SET LOCAL aquacache.defer_result_aggregation_refresh = 'off'"
+  )
   invisible(NULL)
 }

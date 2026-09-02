@@ -21,6 +21,8 @@
 #'   samples may omit both fields.
 #' - 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
 #' - 'note': a character string with a note about the data point(s).
+#' - 'no_source_update': logical; `TRUE` preserves the sample from later
+#'   source-adapter synchronization while still allowing direct user edits.
 #' - 'contributor': the numeric organization ID that contributed the sample.
 #' - 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 #' - 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
@@ -36,6 +38,8 @@
 #' - 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+#' - 'no_source_update': logical; `TRUE` preserves that result from later
+#'   source-adapter synchronization while still allowing direct user edits.
 #'
 #' `sample_qualifiers` may be a vector of `qualifier_type_id` values or a data
 #' frame containing `qualifier_type_id` and optional `note`. `sample_observers`
@@ -47,7 +51,8 @@
 #' and exactly one of `aggregation_type` or `result_aggregation_type_id`.
 #' Supported type codes are `mean`, `median`, `min`, `max`, `sum`, and
 #' `weighted_mean`. Optional columns are `calculation_version` (default 1),
-#' `calculation_arguments` (a JSON object or named-list column), and `note`.
+#' `calculation_arguments` (a JSON object or named-list column), positive integer
+#' `expected_count` (or `NA` when the protocol has no fixed count), and `note`.
 #'
 #' Version 1 calculation arguments support `missing_values` (`ignore`,
 #' `propagate`, or `error`), `non_detects` (`exclude`, `zero`,
@@ -61,8 +66,8 @@
 #' `result_condition_value`, `included_in_aggregate` (default `TRUE`), `weight`,
 #' and `note`. Excluded observations require a note. Each configured aggregation
 #' requires at least one component. The database calculates the canonical
-#' `results.result`, including a real `NULL` when the calculation yields no
-#' value.
+#' `results.result`; a temporary `NULL` used during assembly cannot commit, and
+#' an aggregation with no calculable included value is rejected.
 #'
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()].
 #' @param sample A data.frame containing the sample metadata for a single discrete sample. Should contain a single row for a single sample.
@@ -101,6 +106,15 @@ addNewDiscrete <- function(
   if (nrow(results) < 1) {
     stop("The 'results' data.frame must have at least one row.")
   }
+  if (!("no_source_update" %in% names(sample))) {
+    sample$no_source_update <- FALSE
+  }
+  sample$no_source_update[is.na(sample$no_source_update)] <- FALSE
+  if (!("no_source_update" %in% names(results))) {
+    results$no_source_update <- FALSE
+  }
+  results$no_source_update[is.na(results$no_source_update)] <- FALSE
+
   missing_result_columns <- setdiff(
     c("parameter_id", "result", "result_type"),
     names(results)
@@ -338,9 +352,14 @@ addNewDiscrete <- function(
 
   # Append values in a transaction block ##########
   activeTrans <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
+  has_result_aggregations <- !is.null(result_aggregations) &&
+    nrow(result_aggregations) > 0L
   if (activeTrans) {
     sample_id <- tryCatch(
       {
+        if (has_result_aggregations) {
+          set_result_aggregation_constraints(con, "deferred")
+        }
         committed_sample_id <- commit_fx(
           con,
           sample,
@@ -351,6 +370,9 @@ addNewDiscrete <- function(
           result_aggregations,
           result_components
         )
+        if (has_result_aggregations) {
+          set_result_aggregation_constraints(con, "immediate")
+        }
         DBI::dbExecute(con, "COMMIT;")
         committed_sample_id
       },
@@ -361,6 +383,9 @@ addNewDiscrete <- function(
     )
   } else {
     # we're already in a transaction
+    if (has_result_aggregations) {
+      set_result_aggregation_constraints(con, "deferred")
+    }
     sample_id <- commit_fx(
       con,
       sample,
@@ -371,6 +396,9 @@ addNewDiscrete <- function(
       result_aggregations,
       result_components
     )
+    if (has_result_aggregations) {
+      set_result_aggregation_constraints(con, "immediate")
+    }
   }
 
   return(sample_id)

@@ -1,5 +1,6 @@
 # Patch 60 adds generic component-based discrete results, supports multiple
-# qualifiers and observers for one sample, and hardens observer identity.
+# qualifiers and observers for one sample, hardens observer identity, and
+# standardizes source-update protection across continuous and discrete data.
 # discrete.results remains the canonical reportable result; result components
 # and their versioned calculation configuration are normalized in child
 # tables below it.
@@ -8,8 +9,9 @@
 # 1. Support component-built results for any parameter and aggregation type,
 #    initially mean, median, min, max, sum, and weighted mean.
 # 2. Keep one canonical discrete.results row per reportable parameter and have
-#    PostgreSQL maintain it (not R!) from included result components. A canonical result
-#    may be NULL while it is assembled and when calculation yields no value.
+#    PostgreSQL maintain it (not R!) from included result components. A canonical
+#    result may be NULL only while an aggregation-aware transaction assembles it;
+#    commit-time validation requires a calculable, non-NULL value.
 # 3. Normalize sample qualifiers and observers as many-to-many associations;
 #    migrate and then remove discrete.samples.sample_qualifier.
 # 4. Make calculation choices explicit and reproducible with a calculation
@@ -18,51 +20,28 @@
 # 5. Preserve AquaCache audit, RLS, metadata-view, and privilege conventions,
 #    and expose the new contract through discrete ingestion functions. Add new
 #    tables to audit tracking
+# 6. Rename source-update protection consistently, remove the obsolete derived
+#    daily flag, and add independent protection to continuous QC intervals.
 #
 # -------------------------------------------------------------------------------
 # Still missing or to do:
 # 0. Rename this file to 'patch_60.R' once finalized so it gets read by AquaConnect()!
-# 1. Check/ensure that result calculation/recalculation from components isn't too
-#    costly, as I think it will run on every insert/update of new components.
-#    Every recalculation will also trigger a new entry to the 'audit' table as it's
-#    an UPDATE. That will quickly baloon the audit table, so has to be addressed!
-#    Since composite results are derived from a table that's also audited, perhaps
-#    composite results simply get excluded from auditing? That would require computation,
-#    and adds complications to point in time reconstruction, however.
-# 2. result updates/recalculations should probably be conditional: right now, even
-#    a change to a component note, modified, or modified_by would trigger a recalculation.
-# 3. Calculation versions can be kept in this construct - is that necessary, given
-#    the audit tables? Also right now the trigger rejects any version other than 1 I think?
-# 4. Update YGwater application pieces (when this is totally finalized). Consumption-only
+# 1. Update YGwater application pieces (when this is totally finalized). Consumption-only
 #    modules/functions require a change to 'plotDiscrete.R' and to Shiny app module
 #    'discreteData.R', while the 'admin' side of the application (add/edit samples/results)
 #    will require updates to at least the editSamples.R module.
-# 5. Update 'downloadSnowCourseYG' so it can be used to fetch composite results from
+# 2. Update 'downloadSnowCourseYG' so it can be used to fetch composite results from
 #    the YG snow survey database. This will be the first step to deprecating that database.
-# 6. Re-create the 'testdb' fixture when this patch is finally applied; also update
+# 3. Re-create the 'testdb' fixture when this patch is finally applied; also update
 #    the test fixture in the 'YGwater' package.
-# 7. This file currently adds observers to the view tables. Observers should not be in
-#    public-facing views to preserve privacy and need to be removed.
-# 8. A final check should be made to ensure that cluster roles get the right permissions
-#    on the new tables. Permissions should match those of table 'discrete.results'.
-#    The discovery and application of permissions should work regardless of the cluster
-#    on which this patch is being run on, i.e. no hard coding of roles.
-# 9. A final check is necessary to ensure that RLS policies are properly applied. The
-#   same policies as on discrete.results should be used, which should be restricting
-#   visibility based on visibility of samples (themselves restricted based on location
-#   visibility AND the share_with column of discrete.samples table)
-# 10. Should 'result_aggregations' contain a column 'expected_count'? Take the example
-#    of a 10 point survey where only 9 results are used. Having that column would make it
-#    explicit that 1 result was either not collected or was excluded. If that's useful
-#    let's add the column and add something to the views
-# 11. Deleting a result_aggregations row cascades to result_components, but does nothing
+# 4. Decide and implement the authorized aggregate-to-direct conversion path before
+#    restricting direct DELETE on result_aggregations. Deleting that row cascades to
+#    result_components, but does nothing
 #    to results on deletion to result_aggregations. It's therefore possible to delete
 #    result components completely and remove a result aggregation entry while retaining a
-#    result. Since almost evrything else in the DB is coded to ON DELETE CASCADE, this is
-#    risky. We either document it properly (e.g. deleting a result_aggregation row will
-#    essentially convert an aggregate result to a simple result) or revoke direct deleve
-#    on result_aggregations, forcing deletes of an aggregation to happen via deletion of
-#    the result in discrete.results.
+#    result. synchronize_discrete_sample_detail() currently uses that behaviour during
+#    replacement, so a delete guard cannot be added until synchronization uses an explicit
+#    conversion operation.
 
 # Later stuff:
 # 1. snow survey workbook creation and ingestion functions (in this package and
@@ -100,12 +79,18 @@ tryCatch(
       "SELECT
          to_regclass('discrete.samples') IS NOT NULL AS has_samples,
          to_regclass('discrete.results') IS NOT NULL AS has_results,
+         to_regclass('discrete.import_profiles') IS NOT NULL AS has_import_profiles,
          to_regclass('public.qualifier_types') IS NOT NULL AS has_qualifier_types,
          to_regclass('instruments.observers') IS NOT NULL AS has_observers,
          to_regclass('discrete.samples_metadata_en') IS NOT NULL AS has_samples_metadata_en,
          to_regclass('discrete.samples_metadata_fr') IS NOT NULL AS has_samples_metadata_fr,
          to_regclass('discrete.results_metadata_en') IS NOT NULL AS has_results_metadata_en,
          to_regclass('discrete.results_metadata_fr') IS NOT NULL AS has_results_metadata_fr,
+         to_regclass('continuous.measurements_continuous') IS NOT NULL AS has_measurements_continuous,
+         to_regclass('continuous.measurements_calculated_daily') IS NOT NULL AS has_measurements_calculated_daily,
+         to_regclass('continuous.grades') IS NOT NULL AS has_grades,
+         to_regclass('continuous.approvals') IS NOT NULL AS has_approvals,
+         to_regclass('continuous.qualifiers') IS NOT NULL AS has_continuous_qualifiers,
          to_regclass('audit.table_registry') IS NOT NULL AS has_audit_registry,
          to_regprocedure('audit.if_modified_func()') IS NOT NULL AS has_audit_function,
          to_regprocedure('public.update_modified()') IS NOT NULL AS has_modified_function,
@@ -114,7 +99,7 @@ tryCatch(
     )
     if (!all(unlist(required[1, ], use.names = FALSE))) {
       stop(
-        "Patch 60 requires the discrete sample/result schema, qualifier and observer catalogues, metadata views, audit framework, timestamp/user triggers, and version table created by earlier patches."
+        "Patch 60 requires the continuous measurement and quality-control schema, discrete sample/result schema, qualifier and observer catalogues, metadata views, audit framework, timestamp/user triggers, and version table created by earlier patches."
       )
     }
 
@@ -142,6 +127,51 @@ tryCatch(
       )
     }
 
+    legacy_no_update_columns <- DBI::dbGetQuery(
+      con,
+      "SELECT count(*) = 4 AS available
+       FROM information_schema.columns
+       WHERE (table_schema, table_name, column_name) IN (
+         ('continuous', 'measurements_continuous', 'no_update'),
+         ('continuous', 'measurements_calculated_daily', 'no_update'),
+         ('discrete', 'samples', 'no_update'),
+         ('discrete', 'results', 'no_update')
+       )"
+    )$available[[1]]
+    if (!isTRUE(legacy_no_update_columns)) {
+      stop(
+        "Patch 60 requires the four legacy no_update columns so three can be renamed to no_source_update and the obsolete calculated-daily column can be removed."
+      )
+    }
+
+    invalid_result_conditions <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         count(*) FILTER (
+           WHERE result IS NULL AND result_condition IS NULL
+         )::integer AS unexplained_null_results,
+         count(*) FILTER (
+           WHERE result_condition IN (1, 2)
+             AND result_condition_value IS NULL
+         )::integer AS missing_condition_values,
+         count(*) FILTER (
+           WHERE (result_condition IS NULL OR result_condition NOT IN (1, 2))
+             AND result_condition_value IS NOT NULL
+         )::integer AS unexpected_condition_values
+       FROM discrete.results"
+    )
+    if (any(unlist(invalid_result_conditions[1, ], use.names = FALSE) > 0L)) {
+      invalid_counts <- paste(
+        paste0(names(invalid_result_conditions), "=", invalid_result_conditions[1, ]),
+        collapse = ", "
+      )
+      stop(
+        "Patch 60 cannot enforce the canonical result invariant until existing results are repaired: ",
+        invalid_counts,
+        "."
+      )
+    }
+
     target_state <- DBI::dbGetQuery(
       con,
       "SELECT
@@ -151,13 +181,39 @@ tryCatch(
          to_regclass('discrete.result_aggregations') IS NOT NULL AS has_result_aggregations,
          to_regclass('discrete.result_components') IS NOT NULL AS has_result_components,
          to_regclass('discrete.result_aggregation_summary') IS NOT NULL AS has_result_aggregation_summary,
-         to_regprocedure('discrete.calculate_result_aggregation(integer)') IS NOT NULL AS has_calculation_function"
+         to_regclass('discrete.stale_result_aggregations') IS NOT NULL AS has_stale_result_aggregations,
+         to_regprocedure('discrete.calculate_result_aggregation(integer)') IS NOT NULL AS has_calculation_function,
+         EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE column_name = 'no_source_update'
+             AND (
+               (table_schema = 'continuous' AND table_name IN (
+                 'measurements_continuous',
+                 'measurements_calculated_daily',
+                 'grades',
+                 'approvals',
+                 'qualifiers'
+               ))
+               OR (table_schema = 'discrete' AND table_name IN (
+                 'samples',
+                 'results'
+               ))
+             )
+         ) AS has_source_update_columns"
     )
     if (any(unlist(target_state[1, ], use.names = FALSE))) {
       stop(
         "Patch 60 found one or more target tables or columns already present. Investigate the partial migration before applying this patch."
       )
     }
+
+    # The new relations and functions are owned by admin. Their foreign-key and
+    # calculation paths reference these schemas while running with owner rights.
+    DBI::dbExecute(
+      con,
+      "GRANT USAGE ON SCHEMA discrete, instruments, public TO admin"
+    )
 
     observer_duplicate <- DBI::dbGetQuery(
       con,
@@ -201,6 +257,12 @@ tryCatch(
       ),
       metadata_view_names
     )
+    metadata_view_definitions <- gsub(
+      "no_update",
+      "no_source_update",
+      metadata_view_definitions,
+      fixed = TRUE
+    )
     metadata_view_privileges <- DBI::dbGetQuery(
       con,
       "SELECT table_name, grantee, privilege_type
@@ -229,6 +291,21 @@ tryCatch(
          observer_last,
          organization
        )"
+    )
+
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE discrete.results
+         DROP CONSTRAINT chk_result_condition_value,
+         ADD CONSTRAINT chk_result_condition_value CHECK (
+           (
+             result_condition IN (1, 2)
+             AND result_condition_value IS NOT NULL
+           ) OR (
+             (result_condition IS NULL OR result_condition NOT IN (1, 2))
+             AND result_condition_value IS NULL
+           )
+         )"
     )
     DBI::dbExecute(
       con,
@@ -377,9 +454,10 @@ tryCatch(
            REFERENCES discrete.result_aggregation_types(
              result_aggregation_type_id
            ) ON DELETE RESTRICT ON UPDATE CASCADE,
-         calculation_version INTEGER NOT NULL DEFAULT 1,
-         calculation_arguments JSONB NOT NULL DEFAULT '{}'::jsonb,
-         note TEXT,
+          calculation_version INTEGER NOT NULL DEFAULT 1,
+          calculation_arguments JSONB NOT NULL DEFAULT '{}'::jsonb,
+          expected_count INTEGER,
+          note TEXT,
          created_by TEXT NOT NULL DEFAULT CURRENT_USER,
          modified_by TEXT,
          created TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -387,9 +465,12 @@ tryCatch(
          CONSTRAINT result_aggregations_version_positive CHECK (
            calculation_version > 0
          ),
-         CONSTRAINT result_aggregations_arguments_object CHECK (
-           jsonb_typeof(calculation_arguments) = 'object'
-         )
+          CONSTRAINT result_aggregations_arguments_object CHECK (
+            jsonb_typeof(calculation_arguments) = 'object'
+          ),
+          CONSTRAINT result_aggregations_expected_count_positive CHECK (
+            expected_count > 0
+          )
        )"
     )
     DBI::dbExecute(
@@ -407,12 +488,17 @@ tryCatch(
     DBI::dbExecute(
       con,
       "COMMENT ON TABLE discrete.result_aggregations IS
-       'One row marks a canonical discrete result as component-built and records its aggregation algorithm, implementation version, and validated calculation arguments.'"
+       'One row marks a canonical discrete result as component-built and records its aggregation algorithm, implementation version, validated calculation arguments, and optional expected observation count. Direct writers must insert the parent result, aggregation configuration, and components in one transaction after explicitly deferring the three validate_result_aggregation constraint triggers, refresh the canonical value, and set those constraints to IMMEDIATE before commit.'"
     )
     DBI::dbExecute(
       con,
       "COMMENT ON COLUMN discrete.result_aggregations.calculation_arguments IS
        'Version 1 accepts missing_values (ignore, propagate, error), non_detects (exclude, zero, condition_value, half_condition_value, error), multiplier (number), and rounding_digits (integer, applied last). Unknown keys are rejected.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN discrete.result_aggregations.expected_count IS
+       'Optional number of component observations expected by the result protocol. NULL means the protocol has no fixed expected count. This is independent of whether recorded components are included in the aggregate.'"
     )
 
     DBI::dbExecute(
@@ -443,10 +529,15 @@ tryCatch(
          CONSTRAINT result_components_result_condition CHECK (
            result_condition IS NULL OR result IS NULL
          ),
-         CONSTRAINT result_components_condition_value CHECK (
-           result_condition_value IS NULL
-           OR result_condition IN (1, 2)
-         ),
+          CONSTRAINT result_components_condition_value CHECK (
+            (
+              result_condition IN (1, 2)
+              AND result_condition_value IS NOT NULL
+            ) OR (
+              (result_condition IS NULL OR result_condition NOT IN (1, 2))
+              AND result_condition_value IS NULL
+            )
+          ),
          CONSTRAINT result_components_weight_positive CHECK (
            weight IS NULL OR weight > 0
          ),
@@ -766,14 +857,68 @@ tryCatch(
            RETURN;
          END IF;
 
-         calculated_value := discrete.calculate_result_aggregation(
-           target_result_id
-         );
-         UPDATE discrete.results
-         SET result = calculated_value,
-             result_condition = NULL,
-             result_condition_value = NULL
-         WHERE result_id = target_result_id;
+          calculated_value := discrete.calculate_result_aggregation(
+            target_result_id
+          );
+          UPDATE discrete.results
+          SET result = calculated_value,
+              result_condition = NULL,
+              result_condition_value = NULL
+          WHERE result_id = target_result_id
+            AND (
+              result IS DISTINCT FROM calculated_value
+              OR result_condition IS NOT NULL
+              OR result_condition_value IS NOT NULL
+            );
+        END;
+        $$"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION discrete.refresh_result_aggregations(
+         target_result_ids INTEGER[] DEFAULT NULL
+       )
+       RETURNS INTEGER
+       LANGUAGE plpgsql
+       AS $$
+       DECLARE
+         updated_count INTEGER;
+       BEGIN
+         PERFORM 1
+         FROM discrete.results r
+         JOIN discrete.result_aggregations ra USING (result_id)
+         WHERE target_result_ids IS NULL
+            OR r.result_id = ANY(target_result_ids)
+         ORDER BY r.result_id
+         FOR UPDATE OF r;
+
+         WITH calculated AS (
+           SELECT
+             ra.result_id,
+             discrete.calculate_result_aggregation(ra.result_id)
+               AS calculated_value
+           FROM discrete.result_aggregations ra
+           WHERE target_result_ids IS NULL
+              OR ra.result_id = ANY(target_result_ids)
+         ), updated AS (
+           UPDATE discrete.results r
+           SET result = calculated.calculated_value,
+               result_condition = NULL,
+               result_condition_value = NULL
+           FROM calculated
+           WHERE r.result_id = calculated.result_id
+             AND (
+               r.result IS DISTINCT FROM calculated.calculated_value
+               OR r.result_condition IS NOT NULL
+               OR r.result_condition_value IS NOT NULL
+             )
+           RETURNING r.result_id
+         )
+         SELECT count(*)::integer
+         INTO updated_count
+         FROM updated;
+         RETURN updated_count;
        END;
        $$"
     )
@@ -785,6 +930,18 @@ tryCatch(
        LANGUAGE plpgsql
        AS $$
        BEGIN
+         IF COALESCE(
+           NULLIF(
+             current_setting(
+               'aquacache.defer_result_aggregation_refresh',
+               TRUE
+             ),
+             ''
+           ),
+           'off'
+         ) = 'on' THEN
+           RETURN NULL;
+         END IF;
          IF TG_OP = 'DELETE' THEN
            IF TG_TABLE_NAME = 'result_components' THEN
              PERFORM discrete.refresh_result_aggregation(OLD.result_id);
@@ -803,18 +960,66 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "CREATE TRIGGER refresh_result_aggregation_config_trigger
-       AFTER INSERT OR UPDATE OR DELETE
+      "COMMENT ON FUNCTION discrete.refresh_result_aggregations(integer[]) IS
+       'Locks the requested parent results in result_id order, recalculates them in one set-based operation, updates only changed canonical values, and returns the number updated. A NULL array refreshes all configured results.'"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER refresh_result_aggregation_config_insert_trigger
+       AFTER INSERT
        ON discrete.result_aggregations
        FOR EACH ROW
        EXECUTE FUNCTION discrete.refresh_result_aggregation_trigger()"
     )
     DBI::dbExecute(
       con,
-      "CREATE TRIGGER refresh_result_aggregation_components_trigger
-       AFTER INSERT OR UPDATE OR DELETE
+      "CREATE TRIGGER refresh_result_aggregation_config_update_trigger
+       AFTER UPDATE OF
+         result_id,
+         result_aggregation_type_id,
+         calculation_version,
+         calculation_arguments
+       ON discrete.result_aggregations
+       FOR EACH ROW
+       WHEN (
+         OLD.result_id IS DISTINCT FROM NEW.result_id
+         OR OLD.result_aggregation_type_id IS DISTINCT FROM
+           NEW.result_aggregation_type_id
+         OR OLD.calculation_version IS DISTINCT FROM NEW.calculation_version
+         OR OLD.calculation_arguments IS DISTINCT FROM NEW.calculation_arguments
+       )
+       EXECUTE FUNCTION discrete.refresh_result_aggregation_trigger()"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER refresh_result_aggregation_components_change_trigger
+       AFTER INSERT OR DELETE
        ON discrete.result_components
        FOR EACH ROW
+       EXECUTE FUNCTION discrete.refresh_result_aggregation_trigger()"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER refresh_result_aggregation_components_update_trigger
+       AFTER UPDATE OF
+         result_id,
+         result,
+         result_condition,
+         result_condition_value,
+         included_in_aggregate,
+         weight
+       ON discrete.result_components
+       FOR EACH ROW
+       WHEN (
+         OLD.result_id IS DISTINCT FROM NEW.result_id
+         OR OLD.result IS DISTINCT FROM NEW.result
+         OR OLD.result_condition IS DISTINCT FROM NEW.result_condition
+         OR OLD.result_condition_value IS DISTINCT FROM
+           NEW.result_condition_value
+         OR OLD.included_in_aggregate IS DISTINCT FROM
+           NEW.included_in_aggregate
+         OR OLD.weight IS DISTINCT FROM NEW.weight
+       )
        EXECUTE FUNCTION discrete.refresh_result_aggregation_trigger()"
     )
 
@@ -828,21 +1033,20 @@ tryCatch(
          target_result_id INTEGER;
          stored_result NUMERIC;
          stored_condition INTEGER;
-         stored_condition_value NUMERIC;
-         component_count INTEGER;
-         expected_result NUMERIC;
-       BEGIN
+          stored_condition_value NUMERIC;
+          component_count INTEGER;
+          expected_result NUMERIC;
+          is_aggregated BOOLEAN;
+        BEGIN
          target_result_id := CASE
            WHEN TG_OP = 'DELETE' THEN OLD.result_id
            ELSE NEW.result_id
          END;
-         IF NOT EXISTS (
+         SELECT EXISTS (
            SELECT 1
            FROM discrete.result_aggregations
            WHERE result_id = target_result_id
-         ) THEN
-           RETURN NULL;
-         END IF;
+         ) INTO is_aggregated;
 
          SELECT result, result_condition, result_condition_value
          INTO stored_result, stored_condition, stored_condition_value
@@ -851,6 +1055,15 @@ tryCatch(
          IF NOT FOUND THEN
            RETURN NULL;
          END IF;
+         IF NOT is_aggregated THEN
+           IF (stored_result IS NULL) = (stored_condition IS NULL) THEN
+             RAISE EXCEPTION
+               'Direct result % must have exactly one of result or result_condition.',
+               target_result_id;
+           END IF;
+           RETURN NULL;
+         END IF;
+
          SELECT count(*)::integer
          INTO component_count
          FROM discrete.result_components
@@ -869,6 +1082,11 @@ tryCatch(
          expected_result := discrete.calculate_result_aggregation(
            target_result_id
          );
+         IF expected_result IS NULL THEN
+           RAISE EXCEPTION
+             'Aggregated result % must calculate to a non-NULL value.',
+             target_result_id;
+         END IF;
          IF stored_result IS DISTINCT FROM expected_result THEN
            RAISE EXCEPTION
              'Aggregated result % is %, but its components calculate to %.',
@@ -885,7 +1103,7 @@ tryCatch(
       "CREATE CONSTRAINT TRIGGER validate_result_aggregation_result_trigger
        AFTER INSERT OR UPDATE
        ON discrete.results
-       DEFERRABLE INITIALLY DEFERRED
+       DEFERRABLE INITIALLY IMMEDIATE
        FOR EACH ROW
        EXECUTE FUNCTION discrete.validate_result_aggregation()"
     )
@@ -894,7 +1112,7 @@ tryCatch(
       "CREATE CONSTRAINT TRIGGER validate_result_aggregation_config_trigger
        AFTER INSERT OR UPDATE OR DELETE
        ON discrete.result_aggregations
-       DEFERRABLE INITIALLY DEFERRED
+       DEFERRABLE INITIALLY IMMEDIATE
        FOR EACH ROW
        EXECUTE FUNCTION discrete.validate_result_aggregation()"
     )
@@ -903,7 +1121,7 @@ tryCatch(
       "CREATE CONSTRAINT TRIGGER validate_result_aggregation_components_trigger
        AFTER INSERT OR UPDATE OR DELETE
        ON discrete.result_components
-       DEFERRABLE INITIALLY DEFERRED
+       DEFERRABLE INITIALLY IMMEDIATE
        FOR EACH ROW
        EXECUTE FUNCTION discrete.validate_result_aggregation()"
     )
@@ -913,6 +1131,7 @@ tryCatch(
       "result_component_numeric_value(numeric,integer,numeric,jsonb)",
       "calculate_result_aggregation(integer)",
       "refresh_result_aggregation(integer)",
+      "refresh_result_aggregations(integer[])",
       "refresh_result_aggregation_trigger()",
       "validate_result_aggregation()"
     )
@@ -1111,6 +1330,33 @@ tryCatch(
        )"
     )
 
+    # Apply the same owner-enforced visibility chain used by locations and
+    # continuous timeseries throughout the application-facing discrete model.
+    # A hidden location therefore hides its samples; a hidden sample hides its
+    # results and normalized associations; and a hidden result hides its
+    # aggregation configuration and components. FORCE also prevents an ordinary
+    # non-bypass table owner from skipping these policies. Roles explicitly
+    # granted PostgreSQL's BYPASSRLS attribute remain administrative exceptions.
+    for (table_name in c(
+      "samples",
+      "results",
+      "sample_documents",
+      "sample_groups",
+      "sample_group_members",
+      "sample_qualifiers",
+      "sample_observers",
+      "result_aggregations",
+      "result_components"
+    )) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER TABLE discrete.%s FORCE ROW LEVEL SECURITY",
+          table_name
+        )
+      )
+    }
+
     DBI::dbExecute(
       con,
       "REVOKE ALL ON TABLE
@@ -1154,6 +1400,11 @@ tryCatch(
          WHERE table_schema = 'discrete'
            AND table_name = $1
            AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+           AND grantee <> (
+             SELECT tableowner
+             FROM pg_tables
+             WHERE schemaname = 'discrete' AND tablename = $1
+           )
          GROUP BY grantee
          ORDER BY grantee",
         params = list(source_table)
@@ -1220,7 +1471,10 @@ tryCatch(
         sprintf(
           paste0(
             "GRANT EXECUTE ON FUNCTION ",
-            "discrete.refresh_result_aggregation(integer) TO %s"
+            "discrete.result_component_numeric_value(numeric,integer,numeric,jsonb), ",
+            "discrete.calculate_result_aggregation(integer), ",
+            "discrete.refresh_result_aggregation(integer), ",
+            "discrete.refresh_result_aggregations(integer[]) TO %s"
           ),
           quote_grantee(role_name)
         )
@@ -1243,8 +1497,162 @@ tryCatch(
       )
     }
 
+    # New child tables inherit the explicit DML grants of their parent table.
+    # Verify exact set equality so this patch cannot silently omit or broaden a
+    # cluster-specific role grant.
+    table_privilege_differences <- function(source_table, target_table) {
+      DBI::dbGetQuery(
+        con,
+        "WITH source_privileges AS (
+           SELECT grantee, privilege_type
+           FROM information_schema.role_table_grants
+           WHERE table_schema = 'discrete'
+             AND table_name = $1
+             AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+             AND grantee <> (
+               SELECT tableowner
+               FROM pg_tables
+               WHERE schemaname = 'discrete' AND tablename = $1
+             )
+         ), target_privileges AS (
+           SELECT grantee, privilege_type
+           FROM information_schema.role_table_grants
+           WHERE table_schema = 'discrete'
+             AND table_name = $2
+             AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+             AND grantee <> (
+               SELECT tableowner
+               FROM pg_tables
+               WHERE schemaname = 'discrete' AND tablename = $2
+             )
+         )
+         SELECT 'missing' AS difference, missing.*
+         FROM (
+           SELECT * FROM source_privileges
+           EXCEPT
+           SELECT * FROM target_privileges
+         ) missing
+         UNION ALL
+         SELECT 'unexpected' AS difference, unexpected.*
+         FROM (
+           SELECT * FROM target_privileges
+           EXCEPT
+           SELECT * FROM source_privileges
+         ) unexpected
+         ORDER BY difference, grantee, privilege_type",
+        params = list(source_table, target_table)
+      )
+    }
+    privilege_differences <- list(
+      sample_qualifiers = table_privilege_differences(
+        "samples",
+        "sample_qualifiers"
+      ),
+      sample_observers = table_privilege_differences(
+        "samples",
+        "sample_observers"
+      ),
+      result_aggregations = table_privilege_differences(
+        "results",
+        "result_aggregations"
+      ),
+      result_components = table_privilege_differences(
+        "results",
+        "result_components"
+      )
+    )
+    privilege_checks <- !vapply(
+      privilege_differences,
+      nrow,
+      integer(1)
+    )
+    if (!all(privilege_checks)) {
+      failed_privileges <- do.call(
+        rbind,
+        lapply(
+          names(privilege_differences)[!privilege_checks],
+          function(table_name) {
+            cbind(
+              table_name = table_name,
+              privilege_differences[[table_name]]
+            )
+          }
+        )
+      )
+      stop(
+        "Patch 60 table privilege verification failed:\n",
+        paste(capture.output(print(failed_privileges, row.names = FALSE)), collapse = "\n"),
+        "."
+      )
+    }
+    roles_have_function <- function(role_names, function_signatures) {
+      all(vapply(
+        role_names,
+        function(role_name) {
+          all(vapply(
+            function_signatures,
+            function(function_signature) {
+              isTRUE(DBI::dbGetQuery(
+                con,
+                "SELECT has_function_privilege($1, $2, 'EXECUTE') AS allowed",
+                params = list(role_name, function_signature)
+              )$allowed[[1]])
+            },
+            logical(1)
+          ))
+        },
+        logical(1)
+      ))
+    }
+    result_reader_functions <- c(
+      "discrete.result_component_numeric_value(numeric,integer,numeric,jsonb)",
+      "discrete.calculate_result_aggregation(integer)"
+    )
+    result_mutation_functions <- c(
+      result_reader_functions,
+      "discrete.refresh_result_aggregation(integer)",
+      "discrete.refresh_result_aggregations(integer[])"
+    )
+    function_privilege_checks <- c(
+      result_readers = roles_have_function(
+        unique(result_select_roles),
+        result_reader_functions
+      ),
+      result_mutators = roles_have_function(
+        unique(component_mutation_roles),
+        result_mutation_functions
+      ),
+      component_sequence = all(vapply(
+        insert_roles,
+        function(role_name) {
+          isTRUE(DBI::dbGetQuery(
+            con,
+            "SELECT
+               has_sequence_privilege($1, $2, 'USAGE')
+               AND has_sequence_privilege($1, $2, 'SELECT')
+               AND has_sequence_privilege($1, $2, 'UPDATE') AS allowed",
+            params = list(
+              role_name,
+              "discrete.result_components_result_component_id_seq"
+            )
+          )$allowed[[1]])
+        },
+        logical(1)
+      ))
+    )
+    if (!all(function_privilege_checks)) {
+      stop(
+        "Patch 60 function or sequence privilege verification failed: ",
+        paste(
+          names(function_privilege_checks)[!function_privilege_checks],
+          collapse = ", "
+        ),
+        "."
+      )
+    }
+
     # Rewrite a pg_get_viewdef() sample-metadata definition: remove the former
-    # scalar qualifier join, add qualifier/observer arrays, and preserve the
+    # scalar qualifier join, add qualifier arrays, and preserve the
     # language-specific qualifier description. Post-transform checks below
     # reject unexpected source-view shapes before any view is replaced.
     transform_sample_metadata_view <- function(view_definition, french) {
@@ -1257,22 +1665,12 @@ tryCatch(
     qualifier_metadata.sample_qualifier_codes,
     qualifier_metadata.sample_qualifier_descriptions_fr,
     qualifier_metadata.sample_qualifier_notes,
-    observer_metadata.observer_ids,
-    observer_metadata.observer_names,
-    observer_metadata.observer_organizations,
-    observer_metadata.observer_roles,
-    observer_metadata.sample_observer_notes,
     s.owner AS owner_id,"
       } else {
         "qualifier_metadata.sample_qualifier_ids,
     qualifier_metadata.sample_qualifier_codes,
     qualifier_metadata.sample_qualifier_descriptions,
     qualifier_metadata.sample_qualifier_notes,
-    observer_metadata.observer_ids,
-    observer_metadata.observer_names,
-    observer_metadata.observer_organizations,
-    observer_metadata.observer_roles,
-    observer_metadata.sample_observer_notes,
     s.owner AS owner_id,"
       }
       updated_definition <- sub(
@@ -1329,45 +1727,18 @@ tryCatch(
              sq.note ORDER BY sq.qualifier_type_id
            ) AS sample_qualifier_notes",
         "
-         FROM discrete.sample_qualifiers sq
-         JOIN public.qualifier_types qt2
-           ON qt2.qualifier_type_id = sq.qualifier_type_id
-         WHERE sq.sample_id = s.sample_id
-       ) qualifier_metadata ON TRUE
-       LEFT JOIN LATERAL (
-         SELECT
-           array_agg(
-             so.observer_id
-             ORDER BY so.observer_role, so.observer_id
-           ) AS observer_ids,
-           array_agg(
-             concat_ws(' ', obs.observer_first, obs.observer_last)
-             ORDER BY so.observer_role, so.observer_id
-           ) AS observer_names,
-           array_agg(
-             obs.organization
-             ORDER BY so.observer_role, so.observer_id
-           ) AS observer_organizations,
-           array_agg(
-             so.observer_role
-             ORDER BY so.observer_role, so.observer_id
-           ) AS observer_roles,
-           array_agg(
-             so.note
-             ORDER BY so.observer_role, so.observer_id
-           ) AS sample_observer_notes
-         FROM discrete.sample_observers so
-         JOIN instruments.observers obs
-           ON obs.observer_id = so.observer_id
-         WHERE so.sample_id = s.sample_id
-       ) observer_metadata ON TRUE"
+          FROM discrete.sample_qualifiers sq
+          JOIN public.qualifier_types qt2
+            ON qt2.qualifier_type_id = sq.qualifier_type_id
+          WHERE sq.sample_id = s.sample_id
+       ) qualifier_metadata ON TRUE"
       )
     }
 
     # Extend a pg_get_viewdef() result-metadata definition with the normalized
     # sample associations and result-aggregation contract. This deliberately
     # builds on the transformed sample view so both metadata layers expose the
-    # same qualifier and observer representation.
+    # same qualifier representation without exposing observer identities.
     transform_result_metadata_view <- function(view_definition, french) {
       qualifier_pattern <- paste0(
         "(?s)sm\\.sample_qualifier_id,.*?",
@@ -1378,22 +1749,12 @@ tryCatch(
     sm.sample_qualifier_codes,
     sm.sample_qualifier_descriptions_fr,
     sm.sample_qualifier_notes,
-    sm.observer_ids,
-    sm.observer_names,
-    sm.observer_organizations,
-    sm.observer_roles,
-    sm.sample_observer_notes,
     sm.owner_id AS sample_owner_id,"
       } else {
         "sm.sample_qualifier_ids,
     sm.sample_qualifier_codes,
     sm.sample_qualifier_descriptions,
     sm.sample_qualifier_notes,
-    sm.observer_ids,
-    sm.observer_names,
-    sm.observer_organizations,
-    sm.observer_roles,
-    sm.sample_observer_notes,
     sm.owner_id AS sample_owner_id,"
       }
       updated_definition <- sub(
@@ -1409,7 +1770,8 @@ tryCatch(
           "    aggregation_metadata.result_aggregation_type_id,\n",
           "    aggregation_metadata.aggregation_type,\n",
           "    aggregation_metadata.calculation_version,\n",
-          "    aggregation_metadata.calculation_arguments,"
+          "    aggregation_metadata.calculation_arguments,\n",
+          "    aggregation_metadata.expected_count,"
         ),
         updated_definition,
         perl = TRUE
@@ -1424,10 +1786,11 @@ tryCatch(
         "
        LEFT JOIN LATERAL (
          SELECT
-           ra.result_aggregation_type_id,
-           rat.aggregation_type,
-           ra.calculation_version,
-           ra.calculation_arguments
+            ra.result_aggregation_type_id,
+            rat.aggregation_type,
+            ra.calculation_version,
+            ra.calculation_arguments,
+            ra.expected_count
          FROM discrete.result_aggregations ra
          JOIN discrete.result_aggregation_types rat
            USING (result_aggregation_type_id)
@@ -1462,15 +1825,17 @@ tryCatch(
       function(view_name) {
         view_definition <- metadata_view_definitions[[view_name]]
         !grepl("\\bsample_qualifier_id\\b", view_definition, perl = TRUE) &&
+          !grepl("no_update", view_definition, fixed = TRUE) &&
+          grepl("no_source_update", view_definition, fixed = TRUE) &&
           grepl("sample_qualifier_ids", view_definition, fixed = TRUE) &&
-          grepl("observer_ids", view_definition, fixed = TRUE) &&
+          !grepl("observer_", view_definition, fixed = TRUE) &&
           (!startsWith(view_name, "results_") ||
             (grepl("aggregation_type", view_definition, fixed = TRUE) &&
               grepl(
                 "calculation_arguments",
                 view_definition,
                 fixed = TRUE
-              )))
+              ) && grepl("expected_count", view_definition, fixed = TRUE)))
       },
       logical(1)
     )
@@ -1490,6 +1855,83 @@ tryCatch(
          discrete.results_metadata_fr,
          discrete.samples_metadata_en,
          discrete.samples_metadata_fr"
+    )
+    source_protection_schema <- c(
+      "ALTER TABLE continuous.measurements_continuous
+         RENAME COLUMN no_update TO no_source_update",
+      "ALTER TABLE continuous.measurements_calculated_daily
+         DROP COLUMN no_update",
+      "ALTER TABLE discrete.samples
+         RENAME COLUMN no_update TO no_source_update",
+      "ALTER TABLE discrete.results
+         RENAME COLUMN no_update TO no_source_update",
+      "UPDATE continuous.measurements_continuous
+       SET no_source_update = FALSE
+       WHERE no_source_update IS NULL",
+      "UPDATE discrete.samples
+       SET no_source_update = FALSE
+       WHERE no_source_update IS NULL",
+      "UPDATE discrete.results
+       SET no_source_update = FALSE
+       WHERE no_source_update IS NULL",
+      "ALTER TABLE continuous.measurements_continuous
+         ALTER COLUMN no_source_update SET DEFAULT FALSE,
+         ALTER COLUMN no_source_update SET NOT NULL",
+      "ALTER TABLE discrete.samples
+         ALTER COLUMN no_source_update SET DEFAULT FALSE,
+         ALTER COLUMN no_source_update SET NOT NULL",
+      "ALTER TABLE discrete.results
+         ALTER COLUMN no_source_update SET DEFAULT FALSE,
+         ALTER COLUMN no_source_update SET NOT NULL",
+      "ALTER TABLE continuous.grades
+         ADD COLUMN no_source_update BOOLEAN NOT NULL DEFAULT FALSE",
+      "ALTER TABLE continuous.approvals
+         ADD COLUMN no_source_update BOOLEAN NOT NULL DEFAULT FALSE",
+      "ALTER TABLE continuous.qualifiers
+         ADD COLUMN no_source_update BOOLEAN NOT NULL DEFAULT FALSE",
+      "UPDATE discrete.import_profiles
+       SET column_map = jsonb_set(
+         column_map - 'no_update',
+         '{no_source_update}',
+         COALESCE(column_map -> 'no_source_update', column_map -> 'no_update'),
+         TRUE
+       )
+       WHERE column_map ? 'no_update'",
+      "UPDATE discrete.import_profiles
+       SET defaults = jsonb_set(
+         defaults - 'no_update',
+         '{no_source_update}',
+         COALESCE(defaults -> 'no_source_update', defaults -> 'no_update'),
+         TRUE
+       )
+       WHERE defaults ? 'no_update'"
+    )
+    for (statement in source_protection_schema) {
+      DBI::dbExecute(con, statement)
+    }
+
+    source_protection_comments <- c(
+      "continuous.measurements_continuous" = "TRUE prevents source-adapter and source-synchronization workflows from replacing this measurement; direct user edits remain allowed.",
+      "continuous.grades" = "TRUE prevents source-adapter and source-synchronization workflows from modifying or deleting this grade interval; direct user edits remain allowed.",
+      "continuous.approvals" = "TRUE prevents source-adapter and source-synchronization workflows from modifying or deleting this approval interval; direct user edits remain allowed.",
+      "continuous.qualifiers" = "TRUE prevents source-adapter and source-synchronization workflows from modifying or deleting this qualifier interval; direct user edits remain allowed.",
+      "discrete.samples" = "TRUE prevents source-adapter and source-synchronization workflows from replacing this sample; direct user edits remain allowed.",
+      "discrete.results" = "TRUE prevents source-adapter and source-synchronization workflows from replacing this result; direct user edits remain allowed."
+    )
+    for (table_name in names(source_protection_comments)) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "COMMENT ON COLUMN %s.no_source_update IS %s",
+          table_name,
+          DBI::dbQuoteString(con, source_protection_comments[[table_name]])
+        )
+      )
+    }
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN discrete.import_profiles.defaults IS
+       'JSON object of profile-level defaults such as media_id, collection_method, sample_type, owner, contributor, laboratory, result_type, matrix_state_id, and no_source_update.'"
     )
     DBI::dbExecute(
       con,
@@ -1520,12 +1962,12 @@ tryCatch(
     DBI::dbExecute(
       con,
       "COMMENT ON VIEW discrete.samples_metadata_en IS
-       'English-language view that flattens key discrete sample metadata, including all qualifier and observer associations.'"
+       'English-language view that flattens key discrete sample metadata, including all qualifier associations. Observer identities are deliberately excluded.'"
     )
     DBI::dbExecute(
       con,
       "COMMENT ON VIEW discrete.samples_metadata_fr IS
-       'French-language view that flattens key discrete sample metadata, including all qualifier and observer associations.'"
+       'French-language view that flattens key discrete sample metadata, including all qualifier associations. Observer identities are deliberately excluded.'"
     )
     DBI::dbExecute(
       con,
@@ -1563,14 +2005,26 @@ tryCatch(
          r.result_speciation_id,
          ra.result_aggregation_type_id,
          rat.aggregation_type,
-         ra.calculation_version,
-         ra.calculation_arguments,
-         r.result AS stored_result,
-         calculation.calculated_result,
-         r.result IS NOT DISTINCT FROM
-           calculation.calculated_result
-           AS result_is_current,
-         count(rc.result_component_id)::integer AS component_count,
+          ra.calculation_version,
+          ra.calculation_arguments,
+          ra.expected_count,
+          r.result AS stored_result,
+          calculation.calculated_result,
+          calculation.calculated_result IS NOT NULL
+            AND r.result IS NOT DISTINCT FROM calculation.calculated_result
+            AS result_is_current,
+          count(rc.result_component_id)::integer AS component_count,
+          CASE
+            WHEN ra.expected_count IS NULL THEN NULL
+            ELSE GREATEST(
+              ra.expected_count - count(rc.result_component_id)::integer,
+              0
+            )
+          END AS missing_component_count,
+          CASE
+            WHEN ra.expected_count IS NULL THEN NULL
+            ELSE count(rc.result_component_id) < ra.expected_count
+          END AS has_component_shortfall,
          count(rc.result_component_id) FILTER (
            WHERE rc.included_in_aggregate
          )::integer AS included_component_count,
@@ -1639,9 +2093,10 @@ tryCatch(
          r.result_speciation_id,
          ra.result_aggregation_type_id,
          rat.aggregation_type,
-         ra.calculation_version,
-         ra.calculation_arguments,
-         calculation.calculated_result"
+          ra.calculation_version,
+          ra.calculation_arguments,
+          ra.expected_count,
+          calculation.calculated_result"
     )
     DBI::dbExecute(
       con,
@@ -1650,7 +2105,25 @@ tryCatch(
     DBI::dbExecute(
       con,
       "COMMENT ON VIEW discrete.result_aggregation_summary IS
-       'One row per component-built result with its calculation contract, stored/calculated agreement, inclusion and contribution counts, weights, and raw descriptive statistics.'"
+       'One row per component-built result with its calculation contract, expected and observed component counts, collection shortfall, stored/calculated agreement, inclusion and contribution counts, weights, and raw descriptive statistics.'"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE VIEW discrete.stale_result_aggregations
+       WITH (security_invoker = true, security_barrier = true)
+       AS
+       SELECT *
+       FROM discrete.result_aggregation_summary
+       WHERE NOT result_is_current"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER VIEW discrete.stale_result_aggregations OWNER TO admin"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON VIEW discrete.stale_result_aggregations IS
+       'Component-built results whose stored canonical value is NULL, uncalculable, or different from the current calculation. Committed rows should never appear here.'"
     )
     select_roles <- unique(c(
       sample_privileges$grantee[
@@ -1665,6 +2138,13 @@ tryCatch(
         con,
         sprintf(
           "GRANT SELECT ON discrete.result_aggregation_summary TO %s",
+          quote_grantee(role_name)
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "GRANT SELECT ON discrete.stale_result_aggregations TO %s",
           quote_grantee(role_name)
         )
       )
@@ -1685,6 +2165,14 @@ tryCatch(
            AS has_result_components,
          to_regclass('discrete.result_aggregation_summary') IS NOT NULL
            AS has_result_aggregation_summary,
+         to_regclass('discrete.stale_result_aggregations') IS NOT NULL
+           AS has_stale_result_aggregations,
+         to_regprocedure('discrete.refresh_result_aggregations(integer[])')
+           IS NOT NULL AS has_batch_refresh_function,
+         has_schema_privilege('admin', 'discrete', 'USAGE')
+           AND has_schema_privilege('admin', 'instruments', 'USAGE')
+           AND has_schema_privilege('admin', 'public', 'USAGE')
+           AS admin_has_required_schema_usage,
          NOT EXISTS (
            SELECT 1
            FROM information_schema.columns
@@ -1694,23 +2182,175 @@ tryCatch(
          ) AS removed_scalar_sample_qualifier,
          (
            SELECT count(*)
+           FROM information_schema.columns
+           WHERE column_name = 'no_source_update'
+             AND is_nullable = 'NO'
+             AND (
+               (table_schema = 'continuous' AND table_name IN (
+                 'measurements_continuous',
+                 'grades',
+                 'approvals',
+                 'qualifiers'
+               ))
+               OR (table_schema = 'discrete' AND table_name IN (
+                 'samples',
+                 'results'
+               ))
+             )
+         ) = 6 AS all_source_update_columns_available,
+         NOT EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE column_name = 'no_update'
+             AND (
+               (table_schema = 'continuous' AND table_name IN (
+                 'measurements_continuous',
+                 'measurements_calculated_daily',
+                 'grades',
+                 'approvals',
+                 'qualifiers'
+               ))
+               OR (table_schema = 'discrete' AND table_name IN (
+                 'samples',
+                 'results'
+               ))
+             )
+         ) AS removed_legacy_no_update_columns,
+         NOT EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'discrete'
+             AND table_name IN (
+               'samples_metadata_en',
+               'samples_metadata_fr',
+               'results_metadata_en',
+               'results_metadata_fr'
+             )
+             AND column_name LIKE '%no_update%'
+         ) AS metadata_views_removed_legacy_no_update_names,
+         (
+           SELECT count(*)
+           FROM information_schema.columns
+           WHERE table_schema = 'discrete'
+             AND table_name IN (
+               'samples_metadata_en',
+               'samples_metadata_fr',
+               'results_metadata_en',
+               'results_metadata_fr'
+             )
+             AND column_name LIKE '%no_source_update%'
+         ) = 6 AS metadata_views_have_source_update_names,
+         NOT EXISTS (
+           SELECT 1
+           FROM discrete.import_profiles
+           WHERE column_map ? 'no_update'
+              OR defaults ? 'no_update'
+         ) AS import_profiles_removed_legacy_no_update_keys,
+         (
+           SELECT count(*)
            FROM discrete.result_aggregation_types
            WHERE aggregation_type IN (
              'mean', 'median', 'min', 'max', 'sum', 'weighted_mean'
            )
          ) = 6 AS all_initial_aggregation_types_available,
+         NOT EXISTS (
+           SELECT 1
+           FROM (
+             VALUES
+               ('sample_qualifiers', 'audit_sample_qualifiers_trigger'),
+               ('sample_observers', 'audit_sample_observers_trigger'),
+               ('result_aggregation_types', 'audit_result_aggregation_types_trigger'),
+               ('result_aggregations', 'audit_result_aggregations_trigger'),
+               ('result_components', 'audit_result_components_trigger')
+           ) expected(table_name, trigger_name)
+           LEFT JOIN audit.table_registry registry
+             ON registry.schema_name = 'discrete'
+            AND registry.table_name = expected.table_name
+            AND registry.capture_mode = 'generic_insert_update_delete'
+           LEFT JOIN pg_namespace namespace
+             ON namespace.nspname = 'discrete'
+           LEFT JOIN pg_class relation
+             ON relation.relnamespace = namespace.oid
+            AND relation.relname = expected.table_name
+           LEFT JOIN pg_trigger trigger_definition
+             ON trigger_definition.tgrelid = relation.oid
+            AND trigger_definition.tgname = expected.trigger_name
+            AND NOT trigger_definition.tgisinternal
+           WHERE registry.table_name IS NULL
+              OR trigger_definition.oid IS NULL
+         ) AS all_audit_configuration_available,
          (
            SELECT count(*)
-           FROM audit.table_registry
-           WHERE schema_name = 'discrete'
-             AND table_name IN (
-                'sample_qualifiers',
-                'sample_observers',
-                'result_aggregation_types',
-                'result_aggregations',
-                'result_components'
-              )
-         ) = 5 AS all_tables_registered_for_audit,
+           FROM pg_class relation
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'discrete'
+             AND relation.relname IN (
+               'sample_qualifiers',
+               'sample_observers',
+               'result_aggregations',
+               'result_components'
+             )
+             AND relation.relrowsecurity
+         ) = 4 AS all_parent_scoped_tables_use_rls,
+         (
+           SELECT count(*)
+           FROM pg_class relation
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'discrete'
+             AND relation.relname IN (
+               'samples',
+               'results',
+               'sample_documents',
+               'sample_groups',
+               'sample_group_members',
+               'sample_qualifiers',
+               'sample_observers',
+               'result_aggregations',
+               'result_components'
+             )
+             AND relation.relrowsecurity
+             AND relation.relforcerowsecurity
+         ) = 9 AS discrete_visibility_hierarchy_forces_rls,
+         (
+           SELECT count(*)
+           FROM pg_policies
+           WHERE schemaname = 'discrete'
+             AND policyname IN (
+               'sample_qualifiers_parent_sample_access',
+               'sample_observers_parent_sample_access',
+               'result_aggregations_parent_access',
+               'result_components_parent_access'
+             )
+             AND cmd = 'ALL'
+             AND qual IS NOT NULL
+             AND with_check IS NOT NULL
+         ) = 4 AS all_parent_access_policies_available,
+         (
+           SELECT count(*)
+           FROM pg_trigger trigger_definition
+           JOIN pg_class relation
+             ON relation.oid = trigger_definition.tgrelid
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'discrete'
+             AND trigger_definition.tgname IN (
+               'validate_result_aggregation_result_trigger',
+               'validate_result_aggregation_config_trigger',
+               'validate_result_aggregation_components_trigger'
+             )
+             AND trigger_definition.tgdeferrable
+             AND NOT trigger_definition.tginitdeferred
+         ) = 3 AS aggregation_constraints_initially_immediate,
+         EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'discrete'
+             AND table_name = 'result_aggregations'
+             AND column_name = 'expected_count'
+             AND is_nullable = 'YES'
+         ) AS result_aggregations_has_expected_count,
          (
            SELECT count(*)
            FROM information_schema.views v
@@ -1725,8 +2365,8 @@ tryCatch(
              )
              AND c.column_name = 'sample_qualifier_ids'
          ) = 4 AS all_metadata_views_have_qualifier_arrays,
-         (
-           SELECT count(*)
+         NOT EXISTS (
+           SELECT 1
            FROM information_schema.views v
            JOIN information_schema.columns c
              USING (table_schema, table_name)
@@ -1737,8 +2377,11 @@ tryCatch(
                'results_metadata_en',
                'results_metadata_fr'
              )
-             AND c.column_name = 'observer_ids'
-         ) = 4 AS all_metadata_views_have_observer_arrays,
+             AND (
+               c.column_name LIKE 'observer_%'
+               OR c.column_name LIKE 'sample_observer_%'
+             )
+         ) AS metadata_views_exclude_observers,
          (
            SELECT count(*)
            FROM information_schema.views v
@@ -1750,13 +2393,35 @@ tryCatch(
                'results_metadata_fr'
              )
               AND c.column_name IN (
-                'aggregation_type',
-                'calculation_arguments'
-              )
-         ) = 4 AS result_metadata_views_have_aggregation_contract"
+               'aggregation_type',
+                 'calculation_arguments',
+                 'expected_count'
+               )
+         ) = 6 AS result_metadata_views_have_aggregation_contract,
+         (
+           SELECT count(*)
+           FROM information_schema.columns
+           WHERE table_schema = 'discrete'
+             AND table_name = 'result_aggregation_summary'
+             AND column_name IN (
+               'expected_count',
+               'missing_component_count',
+               'has_component_shortfall'
+             )
+         ) = 3 AS aggregation_summary_has_expected_count_status,
+         NOT EXISTS (
+           SELECT 1 FROM discrete.stale_result_aggregations
+         ) AS no_stale_result_aggregations"
     )
     if (!all(unlist(verification[1, ], use.names = FALSE))) {
-      stop("Patch 60 schema verification failed.")
+      failed_verification <- names(verification)[
+        !vapply(verification[1, ], isTRUE, logical(1))
+      ]
+      stop(
+        "Patch 60 schema verification failed: ",
+        paste(failed_verification, collapse = ", "),
+        "."
+      )
     }
 
     migrated_sample_qualifier_count <- DBI::dbGetQuery(
@@ -1807,7 +2472,7 @@ tryCatch(
     DBI::dbExecute(con, "COMMIT")
     active <- FALSE
     message(
-      "Patch 60 applied successfully. Generic result aggregations, result components, multi-valued qualifiers, and sample observers are ready."
+      "Patch 60 applied successfully. Generic result aggregations, result components, multi-valued qualifiers, sample observers, and source-update protection are ready."
     )
   },
   error = function(e) {

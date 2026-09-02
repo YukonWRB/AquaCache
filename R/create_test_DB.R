@@ -911,7 +911,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -934,7 +934,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -957,7 +957,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -980,7 +980,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1004,7 +1004,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1024,7 +1024,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1044,7 +1044,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1067,7 +1067,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1226,7 +1226,7 @@ create_test_db <- function(
          target_datetime, collection_method, sample_type, sample_volume_ml,
          sample_grade, sample_approval, owner,
          contributor, sampling_org, share_with, import_source,
-         no_update, note, import_source_id
+         no_source_update, note, import_source_id
        ) VALUES
          (1, %d, %d, %d, 0.5, '2023-01-01 12:00+00',
           '2023-01-01 12:00+00', %d, %d, 250, %d, %d,
@@ -1281,7 +1281,7 @@ create_test_db <- function(
          sample_volume_ml, purge_volume_l, purge_time_min, flow_rate_l_min,
          sample_grade, sample_approval, owner,
          contributor, sampling_org, share_with, import_source,
-         no_update, note, import_source_id
+         no_source_update, note, import_source_id
        ) VALUES
          (4, %d, %d, %d, 0.5, '2023-04-01 12:00+00',
           '2023-04-01 12:00+00', %d, %d, NULL,
@@ -1425,7 +1425,7 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
          result_id, sample_id, result_type, parameter_id, sample_fraction_id,
          result, result_condition, result_condition_value,
-         result_value_type, analysis_datetime, share_with, no_update,
+         result_value_type, analysis_datetime, share_with, no_source_update,
          matrix_state_id
        ) VALUES
          (1, 1, %d, %d, %d, 6.7, NULL, NULL, %d,
@@ -1475,7 +1475,7 @@ create_test_db <- function(
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
        result_value_type, result_speciation_id, protocol_method,
-       laboratory, analysis_datetime, share_with, no_update,
+       laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
        (6, 4, %d, %d, NULL, 7.1, NULL, NULL, %d, NULL, NULL, NULL,
@@ -1563,7 +1563,7 @@ create_test_db <- function(
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
        result_value_type, result_speciation_id, protocol_method,
-       laboratory, analysis_datetime, share_with, no_update,
+       laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
        (16, 6, %d, %d, %d, NULL, %d, 0.02, %d, NULL, %d, %d,
@@ -1672,7 +1672,7 @@ create_test_db <- function(
              sample_id, location_id, sub_location_id, media_id, datetime,
              target_datetime, collection_method, sample_type, sample_grade,
              sample_approval, owner, contributor, sampling_org, share_with,
-             import_source, no_update, note, import_source_id
+             import_source, no_source_update, note, import_source_id
            ) VALUES (
              9, %d, %d, %d, '2023-03-15 15:00+00',
              '2023-03-15 15:00+00', %d, %d, %d,
@@ -1694,9 +1694,14 @@ create_test_db <- function(
         )
       )
 
-      # A composite result is created with a NULL canonical value. Component
-      # triggers calculate and maintain the value after the aggregation row
-      # and its observations have been inserted.
+      # Composite writers explicitly defer commit-time validation while the
+      # parent has its temporary NULL and defer row-by-row refresh until all
+      # components have been inserted.
+      set_result_aggregation_constraints(test_con, "deferred")
+      DBI::dbExecute(
+        test_con,
+        "SET LOCAL aquacache.defer_result_aggregation_refresh = 'on'"
+      )
       DBI::dbExecute(
         test_con,
         sprintf(
@@ -1704,7 +1709,7 @@ create_test_db <- function(
              result_id, sample_id, result_type, parameter_id,
              sample_fraction_id, result, result_condition,
              result_condition_value, result_value_type, analysis_datetime,
-             share_with, no_update, matrix_state_id
+             share_with, no_source_update, matrix_state_id
            ) VALUES (
              27, 9, %d, %d, %d, NULL, NULL, NULL, %d,
              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d
@@ -1721,11 +1726,12 @@ create_test_db <- function(
         sprintf(
           "INSERT INTO discrete.result_aggregations (
              result_id, result_aggregation_type_id, calculation_arguments,
-             note
+             expected_count, note
            ) VALUES (
-             27, %d,
-             '{\"missing_values\":\"ignore\",\"non_detects\":\"exclude\",\"rounding_digits\":1}'::jsonb,
-             'Arithmetic mean of included SWE observations.'
+              27, %d,
+              '{\"missing_values\":\"ignore\",\"non_detects\":\"exclude\",\"rounding_digits\":1}'::jsonb,
+              10,
+              'Arithmetic mean of included SWE observations.'
            )",
           result_aggregation_mean
         )
@@ -1749,14 +1755,32 @@ create_test_db <- function(
             'Excluded synthetic outlier caused by poor core quality.')"
       )
 
+      refreshed_count <- DBI::dbGetQuery(
+        test_con,
+        "SELECT discrete.refresh_result_aggregations(
+           ARRAY[27]::integer[]
+         ) AS updated_count"
+      )$updated_count
+      if (length(refreshed_count) != 1L || refreshed_count[[1]] != 1L) {
+        stop("Composite fixture batch refresh did not update exactly one result.")
+      }
+      DBI::dbExecute(
+        test_con,
+        "SET LOCAL aquacache.defer_result_aggregation_refresh = 'off'"
+      )
+      set_result_aggregation_constraints(test_con, "immediate")
+
       composite_fixture_valid <- DBI::dbGetQuery(
         test_con,
         "SELECT
            aggregation_type = 'mean'
              AND stored_result = 100
              AND result_is_current
-             AND component_count = 10
-             AND included_component_count = 9
+              AND component_count = 10
+              AND expected_count = 10
+              AND missing_component_count = 0
+              AND NOT has_component_shortfall
+              AND included_component_count = 9
              AND excluded_component_count = 1
              AND excluded_observation_numbers = ARRAY[10]
              AS valid

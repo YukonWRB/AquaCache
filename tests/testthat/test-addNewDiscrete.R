@@ -101,7 +101,7 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     con,
     "SELECT observer_id FROM instruments.observers LIMIT 1"
   )
-  if (!nrow(sample) || !nrow(results) || !nrow(qualifier) || !nrow(observer)) {
+  if (!nrow(sample) || !nrow(results) || !nrow(qualifier)) {
     testthat::skip("Composite sample reference data are unavailable.")
   }
 
@@ -123,10 +123,11 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     sample = sample,
     results = results,
     sample_qualifiers = qualifier$qualifier_type_id,
-    sample_observers = observer$observer_id,
+    sample_observers = if (nrow(observer)) observer$observer_id else NULL,
     result_aggregations = data.frame(
       result_row = 1L,
-      aggregation_type = "mean"
+      aggregation_type = "mean",
+      expected_count = 3L
     ),
     result_components = component_values
   )
@@ -134,7 +135,7 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
 
   canonical <- DBI::dbGetQuery(
     con,
-    "SELECT r.result_id, r.result, rat.aggregation_type
+    "SELECT r.result_id, r.result, rat.aggregation_type, ra.expected_count
      FROM discrete.results r
      JOIN discrete.result_aggregations ra USING (result_id)
      JOIN discrete.result_aggregation_types rat
@@ -144,12 +145,42 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
   )
   expect_equal(canonical$result[[1]], 9)
   expect_identical(canonical$aggregation_type[[1]], "mean")
+  expect_equal(canonical$expected_count[[1]], 3L)
+  canonical_update_count <- DBI::dbGetQuery(
+    con,
+    "SELECT count(*)::integer AS n
+     FROM audit.general_log
+     WHERE schema_name = 'discrete'
+       AND table_name = 'results'
+       AND action = 'UPDATE'
+       AND (new_data ->> 'result_id')::integer = $1",
+    params = list(canonical$result_id[[1]])
+  )$n[[1]]
+  expect_equal(canonical_update_count, 1L)
   expect_equal(DBI::dbGetQuery(
     con,
     "SELECT count(*) FROM discrete.result_components
      WHERE result_id = $1",
     params = list(canonical$result_id[[1]])
   )[[1]], 3)
+  DBI::dbExecute(
+    con,
+    "UPDATE discrete.result_aggregations
+     SET expected_count = 4
+     WHERE result_id = $1",
+    params = list(canonical$result_id[[1]])
+  )
+  shortfall <- DBI::dbGetQuery(
+    con,
+    "SELECT expected_count, component_count, missing_component_count,
+            has_component_shortfall
+     FROM discrete.result_aggregation_summary
+     WHERE result_id = $1",
+    params = list(canonical$result_id[[1]])
+  )
+  expect_equal(shortfall$expected_count[[1]], 4L)
+  expect_equal(shortfall$missing_component_count[[1]], 1L)
+  expect_true(shortfall$has_component_shortfall[[1]])
 
   expected_by_type <- c(
     mean = 9,
@@ -179,19 +210,46 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     )
   }
 
-  DBI::dbExecute(
-    con,
-    "UPDATE discrete.result_components
-     SET included_in_aggregate = FALSE,
-         note = COALESCE(note, 'Excluded for test')
-     WHERE result_id = $1",
-    params = list(canonical$result_id[[1]])
+  DBI::dbExecute(con, "SAVEPOINT reject_uncalculable_aggregate")
+  expect_error(
+    DBI::dbExecute(
+      con,
+      "UPDATE discrete.result_components
+       SET included_in_aggregate = FALSE,
+           note = COALESCE(note, 'Excluded for test')
+       WHERE result_id = $1",
+      params = list(canonical$result_id[[1]])
+    ),
+    "must calculate to a non-NULL value"
   )
-  expect_true(is.na(DBI::dbGetQuery(
+  suppressWarnings(DBI::dbExecute(
+    con,
+    "ROLLBACK TO SAVEPOINT reject_uncalculable_aggregate"
+  ))
+  DBI::dbExecute(con, "RELEASE SAVEPOINT reject_uncalculable_aggregate")
+  expect_equal(DBI::dbGetQuery(
     con,
     "SELECT result FROM discrete.results WHERE result_id = $1",
     params = list(canonical$result_id[[1]])
-  )$result[[1]]))
+  )$result[[1]], 18)
+
+  parent_modified <- DBI::dbGetQuery(
+    con,
+    "SELECT modified FROM discrete.results WHERE result_id = $1",
+    params = list(canonical$result_id[[1]])
+  )$modified[[1]]
+  DBI::dbExecute(
+    con,
+    "UPDATE discrete.result_components
+     SET note = COALESCE(note, 'Component note') || ' revised'
+     WHERE result_id = $1 AND observation_number = 1",
+    params = list(canonical$result_id[[1]])
+  )
+  expect_identical(DBI::dbGetQuery(
+    con,
+    "SELECT modified FROM discrete.results WHERE result_id = $1",
+    params = list(canonical$result_id[[1]])
+  )$modified[[1]], parent_modified)
 
   DBI::dbExecute(
     con,
@@ -234,6 +292,7 @@ test_that("result aggregation inputs normalize calculation arguments", {
     result_aggregations = data.frame(
       result_row = 1L,
       aggregation_type = "mean",
+      expected_count = 2L,
       calculation_arguments = I(list(list(
         missing_values = "ignore",
         rounding_digits = 1L
@@ -251,6 +310,39 @@ test_that("result aggregation inputs normalize calculation arguments", {
     "{\"missing_values\":\"ignore\",\"rounding_digits\":1}"
   )
   expect_true(all(is.na(normalized$results$result)))
+  expect_equal(normalized$result_aggregations$expected_count, 2L)
+  expect_error(
+    normalize_discrete_result_aggregations(
+      results = normalized$results,
+      result_aggregations = data.frame(
+        result_row = 1L,
+        aggregation_type = "mean",
+        expected_count = 0L
+      ),
+      result_components = data.frame(
+        result_row = 1L,
+        observation_number = 1L,
+        result = 8
+      )
+    ),
+    "expected_count must contain positive integers"
+  )
+  expect_error(
+    normalize_discrete_result_aggregations(
+      results = normalized$results,
+      result_aggregations = data.frame(
+        result_row = 1L,
+        aggregation_type = "mean"
+      ),
+      result_components = data.frame(
+        result_row = 1L,
+        observation_number = 1L,
+        result = NA_real_,
+        result_condition = 1L
+      )
+    ),
+    "Conditions 1 and 2 require result_condition_value"
+  )
   expect_error(
     normalize_discrete_result_aggregations(
       results = normalized$results,
@@ -267,6 +359,291 @@ test_that("result aggregation inputs normalize calculation arguments", {
     ),
     "needs a nonblank note"
   )
+})
+
+
+test_that("result aggregation constraints fail at the responsible statement", {
+  testthat::skip_on_cran()
+
+  con <- connect_test()
+  on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
+  if (!DBI::dbExistsTable(
+    con,
+    DBI::Id(schema = "discrete", table = "result_aggregations")
+  )) {
+    testthat::skip("The test database has not applied patch 60.")
+  }
+
+  dbTransBegin(con)
+  on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
+  direct_result <- DBI::dbGetQuery(
+    con,
+    "SELECT r.result_id
+     FROM discrete.results r
+     LEFT JOIN discrete.result_aggregations ra USING (result_id)
+     WHERE r.result IS NOT NULL AND ra.result_id IS NULL
+     LIMIT 1"
+  )$result_id[[1]]
+  mean_type <- DBI::dbGetQuery(
+    con,
+    "SELECT result_aggregation_type_id
+     FROM discrete.result_aggregation_types
+     WHERE aggregation_type = 'mean'"
+  )$result_aggregation_type_id[[1]]
+
+  trigger_timing <- DBI::dbGetQuery(
+    con,
+    "SELECT tgdeferrable, tginitdeferred
+     FROM pg_trigger
+     WHERE tgname IN (
+       'validate_result_aggregation_result_trigger',
+       'validate_result_aggregation_config_trigger',
+       'validate_result_aggregation_components_trigger'
+     )"
+  )
+  expect_equal(nrow(trigger_timing), 3L)
+  expect_true(all(trigger_timing$tgdeferrable))
+  expect_false(any(trigger_timing$tginitdeferred))
+
+  DBI::dbExecute(con, "SAVEPOINT reject_empty_aggregation")
+  expect_error(
+    suppressWarnings(DBI::dbExecute(
+      con,
+      "INSERT INTO discrete.result_aggregations (
+         result_id, result_aggregation_type_id
+       ) VALUES ($1, $2)",
+      params = list(direct_result, mean_type)
+    )),
+    "must have at least one result component"
+  )
+  suppressWarnings(DBI::dbExecute(
+    con,
+    "ROLLBACK TO SAVEPOINT reject_empty_aggregation"
+  ))
+  DBI::dbExecute(con, "RELEASE SAVEPOINT reject_empty_aggregation")
+
+  DBI::dbExecute(con, "SAVEPOINT reject_unexplained_null")
+  expect_error(
+    suppressWarnings(DBI::dbExecute(
+      con,
+      "UPDATE discrete.results
+       SET result = NULL, result_condition = NULL
+       WHERE result_id = $1",
+      params = list(direct_result)
+    )),
+    "must have exactly one of result or result_condition"
+  )
+  suppressWarnings(DBI::dbExecute(
+    con,
+    "ROLLBACK TO SAVEPOINT reject_unexplained_null"
+  ))
+  DBI::dbExecute(con, "RELEASE SAVEPOINT reject_unexplained_null")
+})
+
+
+test_that("discrete visibility inherits from location through composite results", {
+  testthat::skip_on_cran()
+
+  con <- connect_test()
+  on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
+  if (!DBI::dbExistsTable(
+    con,
+    DBI::Id(schema = "discrete", table = "result_aggregations")
+  )) {
+    testthat::skip("The test database has not applied patch 60.")
+  }
+
+  forced_tables <- DBI::dbGetQuery(
+    con,
+    "SELECT relation.relname
+     FROM pg_class relation
+     JOIN pg_namespace namespace
+       ON namespace.oid = relation.relnamespace
+     WHERE namespace.nspname = 'discrete'
+       AND relation.relname IN (
+         'samples',
+         'results',
+         'sample_documents',
+         'sample_groups',
+         'sample_group_members',
+         'sample_qualifiers',
+         'sample_observers',
+         'result_aggregations',
+         'result_components'
+       )
+       AND relation.relrowsecurity
+       AND relation.relforcerowsecurity"
+  )$relname
+  expect_setequal(
+    forced_tables,
+    c(
+      "samples",
+      "results",
+      "sample_documents",
+      "sample_groups",
+      "sample_group_members",
+      "sample_qualifiers",
+      "sample_observers",
+      "result_aggregations",
+      "result_components"
+    )
+  )
+
+  required_rls_tables <- c(
+    "public.locations",
+    "discrete.samples",
+    "discrete.results",
+    "discrete.result_aggregations",
+    "discrete.result_components"
+  )
+  role_can_select <- function(role_name) {
+    vapply(required_rls_tables, function(table_name) {
+      DBI::dbGetQuery(
+        con,
+        "SELECT has_table_privilege($1, $2, 'SELECT') AS allowed",
+        params = list(role_name, table_name)
+      )$allowed[[1]]
+    }, logical(1))
+  }
+  if (!all(role_can_select("tester")) || !all(role_can_select("public_reader"))) {
+    testthat::skip("The RLS test roles lack required SELECT grants.")
+  }
+
+  target <- DBI::dbGetQuery(
+    con,
+    "SELECT
+       result.result_id,
+       result.result,
+       result.sample_id,
+       sample.location_id
+     FROM discrete.results result
+     JOIN discrete.samples sample USING (sample_id)
+     LEFT JOIN discrete.result_aggregations aggregation USING (result_id)
+     WHERE result.result IS NOT NULL
+       AND sample.location_id IS NOT NULL
+       AND aggregation.result_id IS NULL
+     LIMIT 1"
+  )
+  if (!nrow(target)) {
+    testthat::skip("No located direct result is available for the RLS test.")
+  }
+
+  dbTransBegin(con)
+  on.exit(
+    {
+      suppressWarnings(try(DBI::dbExecute(con, "RESET ROLE"), silent = TRUE))
+      suppressWarnings(try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE))
+    },
+    add = TRUE,
+    after = FALSE
+  )
+
+  visibility_role <- paste0(
+    "patch60_rls_test_",
+    DBI::dbGetQuery(con, "SELECT pg_backend_pid()")[[1]]
+  )
+  quoted_visibility_role <- DBI::dbQuoteIdentifier(con, visibility_role)
+  DBI::dbExecute(
+    con,
+    sprintf("CREATE ROLE %s NOLOGIN", quoted_visibility_role)
+  )
+  DBI::dbExecute(
+    con,
+    sprintf("GRANT %s TO tester", quoted_visibility_role)
+  )
+  if (isTRUE(DBI::dbGetQuery(
+    con,
+    "SELECT pg_has_role('public_reader', $1, 'member') AS is_member",
+    params = list(visibility_role)
+  )$is_member[[1]])) {
+    testthat::skip("public_reader unexpectedly inherits the test sharing role.")
+  }
+  visibility_array <- paste0("{", visibility_role, "}")
+
+  mean_type <- DBI::dbGetQuery(
+    con,
+    "SELECT result_aggregation_type_id
+     FROM discrete.result_aggregation_types
+     WHERE aggregation_type = 'mean'"
+  )$result_aggregation_type_id[[1]]
+  set_result_aggregation_constraints(con, "deferred")
+  DBI::dbExecute(
+    con,
+    "UPDATE discrete.results
+     SET result = NULL,
+         result_condition = NULL,
+         result_condition_value = NULL,
+         share_with = $2::text[]
+     WHERE result_id = $1",
+    params = list(target$result_id[[1]], visibility_array)
+  )
+  DBI::dbExecute(
+    con,
+    "INSERT INTO discrete.result_aggregations (
+       result_id, result_aggregation_type_id
+     ) VALUES ($1, $2)",
+    params = list(target$result_id[[1]], mean_type)
+  )
+  DBI::dbExecute(
+    con,
+    "INSERT INTO discrete.result_components (
+       result_id, observation_number, result
+     ) VALUES ($1, 1, $2)",
+    params = list(target$result_id[[1]], target$result[[1]])
+  )
+  set_result_aggregation_constraints(con, "immediate")
+  DBI::dbExecute(
+    con,
+    "UPDATE discrete.samples
+     SET share_with = $2::text[]
+     WHERE sample_id = $1",
+    params = list(target$sample_id[[1]], visibility_array)
+  )
+  DBI::dbExecute(
+    con,
+    "UPDATE public.locations
+     SET share_with = $2::text[]
+     WHERE location_id = $1",
+    params = list(target$location_id[[1]], visibility_array)
+  )
+
+  row_counts <- function() {
+    c(
+      location = DBI::dbGetQuery(
+        con,
+        "SELECT count(*) FROM public.locations WHERE location_id = $1",
+        params = list(target$location_id[[1]])
+      )[[1]],
+      sample = DBI::dbGetQuery(
+        con,
+        "SELECT count(*) FROM discrete.samples WHERE sample_id = $1",
+        params = list(target$sample_id[[1]])
+      )[[1]],
+      result = DBI::dbGetQuery(
+        con,
+        "SELECT count(*) FROM discrete.results WHERE result_id = $1",
+        params = list(target$result_id[[1]])
+      )[[1]],
+      aggregation = DBI::dbGetQuery(
+        con,
+        "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
+        params = list(target$result_id[[1]])
+      )[[1]],
+      component = DBI::dbGetQuery(
+        con,
+        "SELECT count(*) FROM discrete.result_components WHERE result_id = $1",
+        params = list(target$result_id[[1]])
+      )[[1]]
+    )
+  }
+
+  DBI::dbExecute(con, "SET LOCAL ROLE public_reader")
+  expect_equal(unname(row_counts()), rep(0, 5))
+  DBI::dbExecute(con, "RESET ROLE")
+
+  DBI::dbExecute(con, "SET LOCAL ROLE tester")
+  expect_equal(unname(row_counts()), rep(1, 5))
+  DBI::dbExecute(con, "RESET ROLE")
 })
 
 

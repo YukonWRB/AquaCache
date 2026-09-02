@@ -221,7 +221,9 @@ upsertImportParameterMappings <- function(
 #' @param column_map Named list mapping AquaCache staging fields to source
 #'   columns.
 #' @param wide_config Named list describing wide-format result columns.
-#' @param defaults Named list of profile-level defaults.
+#' @param defaults Named list of profile-level defaults. Use
+#' `no_source_update`, not the pre-Patch-60 `no_update`, for sample or result
+#' source-protection defaults.
 #' @param sample_identity Character vector naming fields that identify a sample.
 #' @param result_identity Character vector naming fields that identify a result.
 #' @param validation_rules Named list of extra validation rules for the UI or

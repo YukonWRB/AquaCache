@@ -64,6 +64,8 @@ imports across runs. It must be supplied with \code{import_source}; manual
 samples may omit both fields.
 \item 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
 \item 'note': a character string with a note about the data point(s).
+\item 'no_source_update': logical; \code{TRUE} preserves the sample from later
+source-adapter synchronization while still allowing direct user edits.
 \item 'contributor': the numeric organization ID that contributed the sample.
 \item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 \item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
@@ -80,6 +82,8 @@ Additionally, the following columns may need to be included:
 \item 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 \item 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+\item 'no_source_update': logical; \code{TRUE} preserves that result from later
+source-adapter synchronization while still allowing direct user edits.
 }
 
 \code{sample_qualifiers} may be a vector of \code{qualifier_type_id} values or a data
@@ -92,7 +96,8 @@ row per aggregated result, with \code{result_row} (the one-based row in \code{re
 and exactly one of \code{aggregation_type} or \code{result_aggregation_type_id}.
 Supported type codes are \code{mean}, \code{median}, \code{min}, \code{max}, \code{sum}, and
 \code{weighted_mean}. Optional columns are \code{calculation_version} (default 1),
-\code{calculation_arguments} (a JSON object or named-list column), and \code{note}.
+\code{calculation_arguments} (a JSON object or named-list column), positive integer
+\code{expected_count} (or \code{NA} when the protocol has no fixed count), and \code{note}.
 
 Version 1 calculation arguments support \code{missing_values} (\code{ignore},
 \code{propagate}, or \code{error}), \code{non_detects} (\code{exclude}, \code{zero},
@@ -106,6 +111,6 @@ is stored. Optional columns are \code{observation_datetime}, \code{result_condit
 \code{result_condition_value}, \code{included_in_aggregate} (default \code{TRUE}), \code{weight},
 and \code{note}. Excluded observations require a note. Each configured aggregation
 requires at least one component. The database calculates the canonical
-\code{results.result}, including a real \code{NULL} when the calculation yields no
-value.
+\code{results.result}; a temporary \code{NULL} used during assembly cannot commit, and
+an aggregation with no calculable included value is rejected.
 }

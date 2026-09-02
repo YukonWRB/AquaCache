@@ -545,13 +545,14 @@ new_discrete_import_record <- function(
 
 #' Combine discrete-import result records
 #'
-#' Combines the one-row records produced by `new_discrete_import_record()]` (internal function). into
+#' Combines the one-row records produced by
+#' `new_discrete_import_record()` (an internal function) into
 #' one consistently shaped data.table. The empty-input path returns the same
 #' schema, including every relationship list column, so callers do not need a
 #' special case when no samples were processed.
 #'
 #' @param records A list of data.tables returned by
-#'   `new_discrete_import_record()]` (internal function).
+#'   `new_discrete_import_record()`.
 #'
 #' @return A data.table containing all supplied import records, or a zero-row
 #'   data.table with the standard import-record columns.
