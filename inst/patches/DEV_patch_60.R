@@ -25,23 +25,40 @@
 #
 # -------------------------------------------------------------------------------
 # Still missing or to do:
-# 0. Rename this file to 'patch_60.R' once finalized so it gets read by AquaConnect()!
-# 1. Update YGwater application pieces (when this is totally finalized). Consumption-only
+# 1. Rename this file to 'patch_60.R' once finalized so it gets read by AquaConnect()!
+# 2. Update YGwater application pieces (when this is totally finalized). Consumption-only
 #    modules/functions require a change to 'plotDiscrete.R' and to Shiny app module
 #    'discreteData.R', while the 'admin' side of the application (add/edit samples/results)
 #    will require updates to at least the editSamples.R module.
-# 2. Update 'downloadSnowCourseYG' so it can be used to fetch composite results from
-#    the YG snow survey database. This will be the first step to deprecating that database.
 # 3. Re-create the 'testdb' fixture when this patch is finally applied; also update
 #    the test fixture in the 'YGwater' package.
-# 4. Decide and implement the authorized aggregate-to-direct conversion path before
+# 4. Decide on and implement the aggregate-to-direct conversion path before
 #    restricting direct DELETE on result_aggregations. Deleting that row cascades to
 #    result_components, but does nothing
 #    to results on deletion to result_aggregations. It's therefore possible to delete
 #    result components completely and remove a result aggregation entry while retaining a
 #    result. synchronize_discrete_sample_detail() currently uses that behaviour during
 #    replacement, so a delete guard cannot be added until synchronization uses an explicit
-#    conversion operation.
+#    conversion operation. Perhaps a better way is to have a database function, such as
+# discrete.convert_result_aggregation_to_direct(
+#   result_id,
+#   conversion_mode,
+#   result,
+#   result_condition,
+#   result_condition_value,
+#   reason
+# )
+# conversion_mode should require one of:
+# - preserve_calculated: retain the current database-calculated value as the new direct result.
+# - replace: require an explicitly supplied result or result condition.
+# The function should:
+# 1. Lock the result and aggregation rows.
+# 2. Verify that the caller can update the result.
+# 3. Defer the aggregation constraints.
+# 4. Validate and assign the new direct-result state.
+# 5. Delete the aggregation, cascading to its components.
+# 6. Restore immediate constraints before returning.
+# 7. Require a nonblank reason, preserving it in the audit trail.
 
 # Later stuff:
 # 1. snow survey workbook creation and ingestion functions (in this package and
@@ -51,6 +68,8 @@
 # 2. Point-in-time reconstruction using audit tables is currently implemented in
 #    continuous plots (YGwater package). Let's implement that for discrete plots as
 #    well when we're fairly certain that the schema won't change further.
+# 3. Update 'downloadSnowCourseYG' so it can be used to fetch composite results from
+#    the YG snow survey database. This will be the first step to deprecating that database.
 #
 # -------------------------------------------------------------------------------
 
@@ -162,7 +181,11 @@ tryCatch(
     )
     if (any(unlist(invalid_result_conditions[1, ], use.names = FALSE) > 0L)) {
       invalid_counts <- paste(
-        paste0(names(invalid_result_conditions), "=", invalid_result_conditions[1, ]),
+        paste0(
+          names(invalid_result_conditions),
+          "=",
+          invalid_result_conditions[1, ]
+        ),
         collapse = ", "
       )
       stop(
@@ -1581,7 +1604,10 @@ tryCatch(
       )
       stop(
         "Patch 60 table privilege verification failed:\n",
-        paste(capture.output(print(failed_privileges, row.names = FALSE)), collapse = "\n"),
+        paste(
+          capture.output(print(failed_privileges, row.names = FALSE)),
+          collapse = "\n"
+        ),
         "."
       )
     }
@@ -1835,7 +1861,8 @@ tryCatch(
                 "calculation_arguments",
                 view_definition,
                 fixed = TRUE
-              ) && grepl("expected_count", view_definition, fixed = TRUE)))
+              ) &&
+              grepl("expected_count", view_definition, fixed = TRUE)))
       },
       logical(1)
     )
