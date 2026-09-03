@@ -1407,6 +1407,43 @@ tryCatch(
       as.character(DBI::dbQuoteIdentifier(con, role_name))
     }
 
+    # CREATE TABLE can apply cluster-specific default privileges. Clear those
+    # from the new child tables before copying the explicit grants from their
+    # parents; otherwise a local default grant can broaden access and make the
+    # exact-inheritance verification below fail.
+    new_child_tables <- c(
+      "sample_qualifiers",
+      "sample_observers",
+      "result_aggregations",
+      "result_components"
+    )
+    inherited_default_grantees <- DBI::dbGetQuery(
+      con,
+      "SELECT DISTINCT grants.grantee
+       FROM information_schema.role_table_grants grants
+       JOIN pg_tables tables
+         ON tables.schemaname = grants.table_schema
+        AND tables.tablename = grants.table_name
+       WHERE grants.table_schema = 'discrete'
+         AND grants.table_name = ANY($1::text[])
+         AND grants.grantee <> tables.tableowner",
+      params = list(paste0("{", paste(new_child_tables, collapse = ","), "}"))
+    )$grantee
+    for (role_name in inherited_default_grantees) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "REVOKE ALL ON TABLE %s FROM %s",
+          paste0(
+            "discrete.",
+            new_child_tables,
+            collapse = ", "
+          ),
+          quote_grantee(role_name)
+        )
+      )
+    }
+
     # Copy the discrete source table's explicit DML grants to each new related
     # table. Returning the grant inventory also lets the sequence-grant logic
     # below derive which roles can insert rows.
@@ -2465,12 +2502,46 @@ tryCatch(
     # Rename the function 'downloadSnowCourse' in the database's source adapter registry to remove ambiguity with NWT's snow course download/fetch function
     DBI::dbExecute(
       con,
-      "UPDATE public.source_adapter_capabilities SET
-         source_fx ='downloadSnowCourseYG',
-         note = 'Retrieves snow-course observations from the Yukon Government''s Postgresql snow database.'
+      "INSERT INTO public.source_adapter_capabilities (
+         source_fx,
+         data_domain,
+         adapter_kind,
+         requires_transmission_mapping,
+         inject_timeseries_id,
+         parallel_group_strategy,
+         parallel_group_args,
+         allow_empty_initial_fetch,
+         transmission_method_codes,
+         argument_schema,
+         ui_config,
+         enabled,
+         note,
+         created_by,
+         modified_by,
+         created,
+         modified
+       )
+       SELECT
+         'downloadSnowCourseYG',
+         data_domain,
+         adapter_kind,
+         requires_transmission_mapping,
+         inject_timeseries_id,
+         parallel_group_strategy,
+         parallel_group_args,
+         allow_empty_initial_fetch,
+         transmission_method_codes,
+         argument_schema,
+         ui_config,
+         enabled,
+         'Retrieves snow-course observations from the Yukon Government''s PostgreSQL snow database.',
+         created_by,
+         modified_by,
+         created,
+         modified
+       FROM public.source_adapter_capabilities
        WHERE source_fx = 'downloadSnowCourse'
-       AND data_domain = 'discrete'
-      "
+         AND data_domain = 'discrete'"
     )
     DBI::dbExecute(
       con,
@@ -2480,6 +2551,12 @@ tryCatch(
     DBI::dbExecute(
       con,
       "UPDATE discrete.samples SET import_source = 'downloadSnowCourseYG' WHERE import_source = 'downloadSnowCourse'"
+    )
+    DBI::dbExecute(
+      con,
+      "DELETE FROM public.source_adapter_capabilities
+       WHERE source_fx = 'downloadSnowCourse'
+         AND data_domain = 'discrete'"
     )
 
     # Set the patch version in the database and commit.
