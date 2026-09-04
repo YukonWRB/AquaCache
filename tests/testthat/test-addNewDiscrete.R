@@ -362,6 +362,32 @@ test_that("result aggregation inputs normalize calculation arguments", {
 })
 
 
+test_that("result aggregation inputs accept data.table objects", {
+  normalized <- normalize_discrete_result_aggregations(
+    results = data.table::data.table(
+      parameter_id = 1L,
+      result = 9,
+      result_type = 1L
+    ),
+    result_aggregations = data.table::data.table(
+      result_row = 1L,
+      aggregation_type = "mean"
+    ),
+    result_components = data.table::data.table(
+      result_row = 1L,
+      observation_number = 1:2,
+      result = c(8, 10)
+    )
+  )
+
+  expect_s3_class(normalized$result_aggregations, "data.frame")
+  expect_s3_class(normalized$result_components, "data.frame")
+  expect_equal(normalized$result_aggregations$result_row, 1L)
+  expect_equal(normalized$result_components$result, c(8, 10))
+  expect_true(is.na(normalized$results$result[[1]]))
+})
+
+
 test_that("result aggregation constraints fail at the responsible statement", {
   testthat::skip_on_cran()
 
