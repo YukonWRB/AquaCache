@@ -7,28 +7,33 @@
 downloadERA5(
   start_datetime,
   end_datetime = .POSIXct(Sys.time(), tz = "UTC"),
-  clip = "YT",
+  clip = NULL,
   param,
-  user,
-  key,
+  user = "ecmwfr",
+  key = Sys.getenv("ecmwfr_PAT"),
   hrs = c(0),
   batch = TRUE
 )
 }
 \arguments{
-\item{start_datetime}{The datetime from which to start looking for new rasters. This date does not need to align with the first day of a month. Portions of the first and last months are downloaded day by day while any complete months in between are requested in a single call .Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone.}
+\item{start_datetime}{The datetime from which to start looking for new rasters. This date does not need to align with the first day of a month. Required timestamps are grouped by month and hour for efficient CDS requests. Specify as POSIXct or something coercible to POSIXct; coercion will be done to UTC time zone.}
 
-\item{end_datetime}{The datetime until which to look for new rasters. If NULL, the current datetime is used. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone.}
+\item{end_datetime}{The datetime until which to look for new rasters. If NULL, the current datetime is used. Specify as POSIXct or something coercible to POSIXct; coercion will be done to UTC time zone.}
 
-\item{clip}{The two-digit abbreviation(s) as per \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census} for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.}
+\item{clip}{The two-letter abbreviation(s) as per the \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census} for the province(s) with which to clip ERA5-Land rasters. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.}
 
-\item{param}{The parameter for which to get new rasters. Currently only "APCP_Sfc" is supported.}
+\item{param}{The ERA5-Land variable name used by the CDS API, such as
+\code{"total_precipitation"} or \code{"snow_depth"}.}
 
-\item{user}{The username to use for ECMWF authentication.}
+\item{user}{A label for the ECMWF credentials, retained for compatibility with
+\code{ecmwfr}. Current CDS personal access tokens do not require a username.}
 
-\item{key}{The key to use for EMCWF authentication.}
+\item{key}{The ECMWF CDS personal access token. By default, this is read from
+the \code{ecmwfr}-standard \code{ecmwfr_PAT} environment variable. A token passed
+explicitly is made available to \code{ecmwfr} only for the duration of this
+call, bypassing platform-specific keyrings.}
 
-\item{hrs}{ERA5 data is provided in hourly chunks. Specify a vector of hours from 0 to 23 specifying the hourly rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at 00:00 UTC.}
+\item{hrs}{ERA5 data is provided in hourly chunks. Specify a vector of hours from 0 to 23 specifying the hourly rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, or each day at 00:00 UTC.}
 
 \item{batch}{Should a batch request be used or should downloads be sequential? Batch request can be much quicker but will fail if any of the requests fail. Sequential runs each request one by one from the earliest possible raster so that if one fails rasters are returned up to the last successful download.}
 }
@@ -36,5 +41,5 @@ downloadERA5(
 A list of lists, where each element consists of the target raster as well as associated attributes.
 }
 \description{
-Interfaces with the ecmwfr package to download ERA5-Land reanalysis data from the ECMWF Copernicus Climate Data Store (CDS). The function downloads the data in netCDF format and returns a list of rasters with associated metadata. Data are downloaded sequentially starting from the earliest requested timestamp. If a download fails, the function returns the rasters that were successfully downloaded up to that point. Rasters are returned in the geographic coordinate reference system (EPSG:4326).
+Interfaces with the ecmwfr package to download ERA5-Land reanalysis data from the ECMWF Copernicus Climate Data Store (CDS). The function downloads the data in netCDF format and returns a list of rasters with associated metadata. ERA5-Land forecast accumulations are converted to one-hour values by subtracting the preceding forecast step; required predecessor hours are requested automatically. Data are downloaded sequentially starting from the earliest requested timestamp. If a download fails, the function returns the rasters that were successfully downloaded up to that point. Rasters are returned in the geographic coordinate reference system (EPSG:4326).
 }

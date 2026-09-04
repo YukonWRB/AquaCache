@@ -1,3 +1,31 @@
+#' Synchronize mutable metadata for one discrete sample
+#'
+#' Adds any source-provided sample-group memberships and updates mutable sample
+#' columns whose remote values differ from the database. Local visibility and
+#' source ownership are protected: `share_with` and `import_source` are never
+#' changed by this helper.
+#'
+#' The operation participates in an existing transaction or opens and manages
+#' one when called outside a transaction. Group membership and sample metadata
+#' therefore succeed or fail together.
+#'
+#' @param con An open DBI connection to an AquaCache database.
+#' @param database_sample A one-row data frame containing the current
+#'   `discrete.samples` row.
+#' @param remote_sample A one-row data frame containing the normalized remote
+#'   sample values.
+#' @param valid_sample_names Character vector of sample columns eligible for
+#'   synchronization.
+#' @param sample_groups Optional source-provided sample-group specifications.
+#' @param default_owner Organization ID used for groups that omit `owner`.
+#' @param default_contributor Organization ID used for groups that omit
+#'   `contributor`.
+#'
+#' @return `TRUE` when at least one sample column was updated, otherwise
+#'   `FALSE`. Group-membership changes do not affect the returned value.
+#'
+#' @keywords internal
+#' @noRd
 synchronize_discrete_sample_metadata <- function(
   con,
   database_sample,
@@ -103,6 +131,282 @@ synchronize_discrete_sample_metadata <- function(
 }
 
 
+#' Synchronize associations and aggregation detail for one sample
+#'
+#' Applies source-provided sample qualifiers, observers, result aggregations,
+#' and component observations after canonical result rows have been matched.
+#' Omitted collections are preserved. Supplied qualifier or observer
+#' collections replace their corresponding sample associations. Supplied
+#' aggregation data replaces aggregation detail for the affected canonical
+#' results and restores ordinary result values when a previously aggregated
+#' result becomes direct.
+#'
+#' Parent result rows required by a new aggregation are inserted before its
+#' aggregation metadata and components. The helper participates in the caller's
+#' transaction or creates one so replacement cannot be partially committed.
+#'
+#' @param con An open DBI connection to an AquaCache database.
+#' @param sample_id Integer ID of the sample being synchronized.
+#' @param remote_results Normalized remote result rows. Row positions correspond
+#'   to `result_ids` and to `result_row` in aggregation inputs.
+#' @param result_ids Integer vector mapping each remote result row to its
+#'   canonical database `result_id`.
+#' @param pending_results List of new parent result rows that must be inserted
+#'   before aggregation detail.
+#' @param sample_qualifiers Optional replacement qualifier associations. `NULL`
+#'   preserves existing rows; a supplied empty data frame removes them.
+#' @param sample_observers Optional replacement observer associations. `NULL`
+#'   preserves existing rows; a supplied empty data frame removes them.
+#' @param result_aggregations Optional normalized aggregation configurations.
+#'   `NULL` preserves existing aggregation detail.
+#' @param result_components Optional normalized component observations paired
+#'   with `result_aggregations`.
+#'
+#' @return `NULL`, invisibly. The function is called for its database effects.
+#'
+#' @keywords internal
+#' @noRd
+synchronize_discrete_sample_detail <- function(
+  con,
+  sample_id,
+  remote_results,
+  result_ids,
+  pending_results,
+  sample_qualifiers,
+  sample_observers,
+  result_aggregations,
+  result_components
+) {
+  if (
+    all(vapply(
+      list(
+        sample_qualifiers,
+        sample_observers,
+        result_aggregations,
+        result_components
+      ),
+      is.null,
+      logical(1)
+    ))
+  ) {
+    return(invisible(NULL))
+  }
+
+  active_trans <- dbTransBegin(con)
+  transaction_finished <- FALSE
+  on.exit(
+    if (active_trans && !transaction_finished) {
+      try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
+    },
+    add = TRUE
+  )
+  tryCatch(
+    {
+      if (!is.null(result_aggregations)) {
+        set_result_aggregation_constraints(con, "deferred")
+      }
+      if (length(pending_results)) {
+        dbAppendTableRLS(
+          con,
+          "discrete.results",
+          data.table::rbindlist(
+            pending_results,
+            use.names = TRUE,
+            fill = TRUE
+          )
+        )
+      }
+
+      if (!is.null(sample_qualifiers)) {
+        DBI::dbExecute(
+          con,
+          "DELETE FROM discrete.sample_qualifiers WHERE sample_id = $1",
+          params = list(sample_id)
+        )
+        if (!inherits(sample_qualifiers, "data.frame")) {
+          sample_qualifiers <- data.frame(
+            qualifier_type_id = as.integer(sample_qualifiers)
+          )
+        }
+        sample_qualifiers <- sample_qualifiers[,
+          intersect(c("qualifier_type_id", "note"), names(sample_qualifiers)),
+          drop = FALSE
+        ]
+        if (!"qualifier_type_id" %in% names(sample_qualifiers)) {
+          stop("sample_qualifiers must contain qualifier_type_id.")
+        }
+        if (nrow(sample_qualifiers)) {
+          sample_qualifiers$sample_id <- sample_id
+          dbAppendTableRLS(
+            con,
+            "discrete.sample_qualifiers",
+            sample_qualifiers
+          )
+        }
+      }
+
+      if (!is.null(sample_observers)) {
+        DBI::dbExecute(
+          con,
+          "DELETE FROM discrete.sample_observers WHERE sample_id = $1",
+          params = list(sample_id)
+        )
+        if (!inherits(sample_observers, "data.frame")) {
+          sample_observers <- data.frame(
+            observer_id = as.integer(sample_observers)
+          )
+        }
+        sample_observers <- sample_observers[,
+          intersect(
+            c("observer_id", "observer_role", "note"),
+            names(sample_observers)
+          ),
+          drop = FALSE
+        ]
+        if (!"observer_id" %in% names(sample_observers)) {
+          stop("sample_observers must contain observer_id.")
+        }
+        if (!"observer_role" %in% names(sample_observers)) {
+          sample_observers$observer_role <- "sampler"
+        }
+        if (nrow(sample_observers)) {
+          sample_observers$sample_id <- sample_id
+          dbAppendTableRLS(
+            con,
+            "discrete.sample_observers",
+            sample_observers
+          )
+        }
+      }
+
+      if (!is.null(result_aggregations)) {
+        target_rows <- sort(unique(result_aggregations$result_row))
+        target_result_ids <- result_ids[target_rows]
+        if (any(is.na(target_result_ids))) {
+          stop(
+            "A result aggregation could not be matched to a canonical result."
+          )
+        }
+
+        database_aggregations <- DBI::dbGetQuery(
+          con,
+          "SELECT ra.result_id
+           FROM discrete.result_aggregations ra
+           JOIN discrete.results r USING (result_id)
+           WHERE r.sample_id = $1",
+          params = list(sample_id)
+        )
+        previously_aggregated <- intersect(
+          result_ids[!is.na(result_ids)],
+          database_aggregations$result_id
+        )
+        affected_result_ids <- unique(c(
+          target_result_ids,
+          previously_aggregated
+        ))
+        if (length(affected_result_ids)) {
+          placeholders <- paste0("$", seq_along(affected_result_ids))
+          protected_results <- DBI::dbGetQuery(
+            con,
+            paste0(
+              "SELECT result_id FROM discrete.results WHERE no_source_update AND result_id IN (",
+              paste(placeholders, collapse = ", "),
+              ")"
+            ),
+            params = as.list(as.integer(affected_result_ids))
+          )$result_id
+          if (length(protected_results)) {
+            stop(
+              "Cannot replace aggregation detail for no_source_update result_id(s): ",
+              paste(protected_results, collapse = ", "),
+              "."
+            )
+          }
+          DBI::dbExecute(
+            con,
+            paste0(
+              "DELETE FROM discrete.result_aggregations WHERE result_id IN (",
+              paste(placeholders, collapse = ", "),
+              ")"
+            ),
+            params = as.list(as.integer(affected_result_ids))
+          )
+        }
+
+        direct_rows <- which(
+          result_ids %in% setdiff(previously_aggregated, target_result_ids)
+        )
+        for (result_row in direct_rows) {
+          result_condition <- if (
+            "result_condition" %in% names(remote_results)
+          ) {
+            remote_results$result_condition[[result_row]]
+          } else {
+            NA_integer_
+          }
+          result_condition_value <- if (
+            "result_condition_value" %in% names(remote_results)
+          ) {
+            remote_results$result_condition_value[[result_row]]
+          } else {
+            NA_real_
+          }
+          DBI::dbExecute(
+            con,
+            "UPDATE discrete.results
+             SET result = $1,
+                 result_condition = $2,
+                 result_condition_value = $3
+             WHERE result_id = $4",
+            params = list(
+              remote_results$result[[result_row]],
+              result_condition,
+              result_condition_value,
+              result_ids[[result_row]]
+            )
+          )
+        }
+
+        for (result_row in target_rows) {
+          DBI::dbExecute(
+            con,
+            "UPDATE discrete.results
+             SET result = NULL,
+                 result_condition = NULL,
+                 result_condition_value = NULL
+             WHERE result_id = $1",
+            params = list(result_ids[[result_row]])
+          )
+        }
+        append_discrete_result_aggregations(
+          con = con,
+          result_ids = result_ids,
+          result_aggregations = result_aggregations,
+          result_components = result_components
+        )
+      }
+
+      if (!is.null(result_aggregations)) {
+        set_result_aggregation_constraints(con, "immediate")
+      }
+
+      if (active_trans) {
+        DBI::dbExecute(con, "COMMIT")
+      }
+      transaction_finished <- TRUE
+      invisible(NULL)
+    },
+    error = function(e) {
+      if (active_trans) {
+        try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
+        transaction_finished <<- TRUE
+      }
+      stop(e)
+    }
+  )
+}
+
+
 #' Synchronize hydro DB with remote sources
 #'
 #' @description
@@ -118,10 +422,15 @@ synchronize_discrete_sample_metadata <- function(
 #' Every source function must have an enabled discrete-domain entry in
 #' `public.source_adapter_capabilities`.
 #'
-#' Source functions use the same `sample`, `results`, and optional
-#' `sample_groups` return contract documented by [getNewDiscrete()]. Existing
+#' Source functions use the same `sample`, `results`, and optional association
+#' and result-aggregation return contract documented by [getNewDiscrete()]. Existing
 #' group memberships are not removed when `sample_groups` is omitted, and
 #' source-provided groups are added without replacing unrelated memberships.
+#' For a matched sample, supplied qualifier and observer collections replace
+#' their respective associations; omission preserves the database values.
+#' Supplied aggregation configurations and components replace that detail for
+#' matched canonical results; two supplied empty data frames explicitly remove
+#' existing aggregation detail, while omission preserves it.
 #' Locationless remote samples are matched by their database-enforced
 #' `import_source` and `import_source_id` identity. Located samples retain
 #' location and collection-context matching because source IDs may legitimately
@@ -141,7 +450,7 @@ synchronize_discrete_sample_metadata <- function(
 #'
 #' @return A data.table with one row per inserted or matched remote sample and
 #'   columns `sample_series_id`, `sample_id`, `action`, and list-columns
-#'   containing the normalized `sample`, `results`, and `sample_groups` input.
+#'   containing the normalized source inputs.
 #' @export
 #'
 
@@ -355,7 +664,7 @@ synchronize_discrete <- function(
         }
         end_i <- if (!is.na(synch_to)) synch_to else Sys.time()
 
-        if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
+        if (source_fx == "downloadSnowCourseYG" & is.null(snowCon)) {
           # Try with the same host and port as the AquaCache connection
           dets <- DBI::dbGetQuery(
             con,
@@ -386,7 +695,7 @@ synchronize_discrete <- function(
             args_list[["EQpath"]]
           )
         }
-        if (source_fx == "downloadSnowCourse") {
+        if (source_fx == "downloadSnowCourseYG") {
           args_list[["snowCon"]] <- snowCon
         }
 
@@ -462,11 +771,26 @@ synchronize_discrete <- function(
 
             inRemote_sample <- inRemote[[j]][["sample"]]
             inRemote_results <- inRemote[[j]][["results"]]
+            if ("sample_qualifier" %in% names(inRemote_sample)) {
+              warning(
+                "For sample_series_id ",
+                sid,
+                " element ",
+                j,
+                " returned sample_qualifier. Return sample_qualifiers as a ",
+                "separate element instead. Skipping this source record."
+              )
+              next
+            }
             sample_groups <- if ("sample_groups" %in% names(inRemote[[j]])) {
               inRemote[[j]][["sample_groups"]]
             } else {
               NULL
             }
+            sample_qualifiers <- inRemote[[j]][["sample_qualifiers"]]
+            sample_observers <- inRemote[[j]][["sample_observers"]]
+            result_aggregations <- inRemote[[j]][["result_aggregations"]]
+            result_components <- inRemote[[j]][["result_components"]]
             names_inRemote_samp <- names(inRemote_sample)
 
             # Normalize adapter location aliases before matching. An explicit
@@ -544,7 +868,7 @@ synchronize_discrete <- function(
                       inRemote_sample$collection_method,
                       " AND import_source = '",
                       source_fx,
-                      "' AND no_update IS FALSE;"
+                      "' AND no_source_update IS FALSE;"
                     )
                   )
                 } else if (j == length(inRemote) && delete_has_prev) {
@@ -577,7 +901,7 @@ synchronize_discrete <- function(
                       inRemote_sample$collection_method,
                       " AND import_source = '",
                       source_fx,
-                      "' AND no_update IS FALSE;"
+                      "' AND no_source_update IS FALSE;"
                     )
                   )
                 } else if (delete_has_prev) {
@@ -610,7 +934,7 @@ synchronize_discrete <- function(
                       inRemote_sample$collection_method,
                       " AND import_source = '",
                       source_fx,
-                      "' AND no_update IS FALSE;"
+                      "' AND no_source_update IS FALSE;"
                     )
                   )
                 }
@@ -646,6 +970,20 @@ synchronize_discrete <- function(
             )
             if (is.null(inRemote_results)) {
               next
+            }
+            normalized_aggregations <- normalize_discrete_result_aggregations(
+              results = inRemote_results,
+              result_aggregations = result_aggregations,
+              result_components = result_components
+            )
+            inRemote_results <- normalized_aggregations$results
+            result_aggregations <-
+              normalized_aggregations$result_aggregations
+            result_components <- normalized_aggregations$result_components
+            aggregated_result_rows <- if (!is.null(result_aggregations)) {
+              sort(unique(result_aggregations$result_row))
+            } else {
+              integer()
             }
             names_inRemote_res <- names(inRemote_results)
 
@@ -730,8 +1068,8 @@ synchronize_discrete <- function(
             # If changes are detected, update the sample metadata
             if (nrow(inDB_sample) > 0) {
               # Check existing DB sample and results. If no sample is found, add the sample and corresponding results in else section
-              if (inDB_sample$no_update) {
-                # If no_update is TRUE, skip to the next sample
+              if (inDB_sample$no_source_update) {
+                # If no_source_update is TRUE, skip to the next sample
                 next
               }
               # Check existing DB sample and results ##################
@@ -753,17 +1091,23 @@ synchronize_discrete <- function(
               inDB_results <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT * FROM discrete.results WHERE sample_id = ",
+                  "SELECT r.*, (ra.result_id IS NOT NULL) AS is_aggregated
+                   FROM discrete.results r
+                   LEFT JOIN discrete.result_aggregations ra USING (result_id)
+                   WHERE r.sample_id = ",
                   inDB_sample$sample_id,
                   ";"
                 )
               )
 
               inDB_results$checked <- FALSE # This will be used to track which rows have been checked
+              remote_result_ids <- rep(NA_integer_, nrow(inRemote_results))
+              pending_aggregated_results <- list()
 
               for (k in seq_len(nrow(inRemote_results))) {
                 sub <- inRemote_results[k, ]
                 names_inRemote_sub <- names(sub)
+                is_remote_aggregated <- k %in% aggregated_result_rows
                 resolved_sub_matrix_state_id <- sub$matrix_state_id
                 # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, matrix_state_id, sample_fraction_id, result_value_type, result_speciation_id, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
 
@@ -863,7 +1207,7 @@ synchronize_discrete <- function(
 
                   # More complex checks if 'result' is NA
                   # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
-                  if (is.na(sub$result)) {
+                  if (is.na(sub$result) && !is_remote_aggregated) {
                     if (!("result_condition" %in% names_inRemote_sub)) {
                       warning(
                         "On sample_series_id ",
@@ -1006,13 +1350,41 @@ synchronize_discrete <- function(
                   }
 
                   # Append new values
+                  sub$result_id <- DBI::dbGetQuery(
+                    con,
+                    "SELECT nextval(
+                       pg_get_serial_sequence(
+                         'discrete.results',
+                         'result_id'
+                       )
+                     )::integer AS result_id"
+                  )$result_id[[1]]
+                  remote_result_ids[[k]] <- sub$result_id
                   sub$sample_id <- inDB_sample$sample_id
                   sub$matrix_state_id <- resolved_sub_matrix_state_id
-                  dbAppendTableRLS(con, "discrete.results", sub)
+                  if (is_remote_aggregated) {
+                    pending_aggregated_results[[
+                      length(
+                        pending_aggregated_results
+                      ) +
+                        1L
+                    ]] <- sub
+                  } else {
+                    dbAppendTableRLS(con, "discrete.results", sub)
+                  }
 
                   new_results <- new_results + 1
                 } else if (nrow(inDB_sub) == 1) {
-                  if (isTRUE(inDB_sub$no_update[[1]])) {
+                  remote_result_ids[[k]] <- inDB_sub$result_id[[1]]
+                  if (isTRUE(inDB_sub$no_source_update[[1]])) {
+                    if (is_remote_aggregated) {
+                      stop(
+                        "Cannot synchronize component values for no_source_update ",
+                        "result_id ",
+                        inDB_sub$result_id[[1]],
+                        "."
+                      )
+                    }
                     inDB_results[
                       inDB_results$result_id == inDB_sub$result_id,
                       "checked"
@@ -1024,6 +1396,18 @@ synchronize_discrete <- function(
                   updated_results_flag <- FALSE
                   for (l in names_inRemote_sub) {
                     if (l %in% valid_result_names) {
+                      if (
+                        l %in%
+                          c(
+                            "result",
+                            "result_condition",
+                            "result_condition_value"
+                          ) &&
+                          (is_remote_aggregated ||
+                            isTRUE(inDB_sub$is_aggregated[[1]]))
+                      ) {
+                        next
+                      }
                       inDB_l <- inDB_sub[[l]]
                       sub_l <- sub[[l]]
                       # If the relevant columns in the two data.frames are all numbers, convert to numeric
@@ -1081,10 +1465,21 @@ synchronize_discrete <- function(
                   ] <- TRUE # result entry will not be deleted
                 }
               }
+              synchronize_discrete_sample_detail(
+                con = con,
+                sample_id = inDB_sample$sample_id[[1]],
+                remote_results = inRemote_results,
+                result_ids = remote_result_ids,
+                pending_results = pending_aggregated_results,
+                sample_qualifiers = sample_qualifiers,
+                sample_observers = sample_observers,
+                result_aggregations = result_aggregations,
+                result_components = result_components
+              )
               # Remove from the database any results that were not checked if delete is TRUE
               if (delete) {
                 to_delete <- inDB_results[
-                  !inDB_results$checked & !inDB_results$no_update,
+                  !inDB_results$checked & !inDB_results$no_source_update,
                   "result_id"
                 ]
                 if (length(to_delete) > 0) {
@@ -1093,7 +1488,7 @@ synchronize_discrete <- function(
                     paste0(
                       "DELETE FROM discrete.results WHERE result_id IN (",
                       paste(to_delete, collapse = ", "),
-                      ") AND no_update IS FALSE;"
+                      ") AND no_source_update IS FALSE;"
                     )
                   )
                 }
@@ -1105,7 +1500,11 @@ synchronize_discrete <- function(
                   action = "synchronized",
                   sample = inRemote_sample,
                   results = inRemote_results,
-                  sample_groups = sample_groups
+                  sample_groups = sample_groups,
+                  sample_qualifiers = sample_qualifiers,
+                  sample_observers = sample_observers,
+                  result_aggregations = result_aggregations,
+                  result_components = result_components
                 )
 
               # Inserting a new sample #########
@@ -1222,7 +1621,9 @@ synchronize_discrete <- function(
 
               # More complex checks if 'result' is NA
               # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
-              if (any(is.na(inRemote_results$result))) {
+              direct_missing_result <- is.na(inRemote_results$result) &
+                !seq_len(nrow(inRemote_results)) %in% aggregated_result_rows
+              if (any(direct_missing_result)) {
                 if (!("result_condition" %in% names_inRemote_res)) {
                   warning(
                     "For sample_series_id ",
@@ -1236,9 +1637,7 @@ synchronize_discrete <- function(
                   next
                 } else {
                   # Check that each NA in 'result' has a corresponding entry in 'result_condition'
-                  sub.results <- inRemote_results[
-                    is.na(inRemote_results$result),
-                  ]
+                  sub.results <- inRemote_results[direct_missing_result, ]
                   check_result_condition <- FALSE # prevents repeatedly checking for the same thing
 
                   next_flag <- FALSE
@@ -1403,7 +1802,11 @@ synchronize_discrete <- function(
                     con = con,
                     sample = inRemote_sample,
                     results = inRemote_results,
-                    sample_groups = sample_groups
+                    sample_groups = sample_groups,
+                    sample_qualifiers = sample_qualifiers,
+                    sample_observers = sample_observers,
+                    result_aggregations = result_aggregations,
+                    result_components = result_components
                   )
                 },
                 error = function(e) {
@@ -1453,7 +1856,11 @@ synchronize_discrete <- function(
                     action = sample_action,
                     sample = inRemote_sample,
                     results = inRemote_results,
-                    sample_groups = sample_groups
+                    sample_groups = sample_groups,
+                    sample_qualifiers = sample_qualifiers,
+                    sample_observers = sample_observers,
+                    result_aggregations = result_aggregations,
+                    result_components = result_components
                   )
               }
             } # End of if no sample is found (making a new one)

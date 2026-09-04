@@ -1,6 +1,6 @@
 #' Create a small test or seed database
 #'
-#' This function uses the `pg_dump` utility to create a dump of the schema and reference table data, and adds deterministic synthetic fixture data in an aquacache PostgreSQL database. The schema dump is saved to an SQL file in the specified output path and can be restored with [restore_seed_db()]. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `aquacache`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. Audit history starts at the completion of the deterministic initial snapshot rather than inheriting the source database's history dates. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
+#' This function uses the `pg_dump` utility to create a dump of the schema and reference table data, and adds deterministic synthetic fixture data in an aquacache PostgreSQL database. The fixtures include a snow-survey sample with multiple qualifiers and observers, an SWE result calculated as the mean of nine included observations plus one excluded observation, and a weighted snow-depth result containing a conditioned component. The schema dump is saved to an SQL file in the specified output path and can be restored with [restore_seed_db()]. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `aquacache`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. Audit history starts at the completion of the deterministic initial snapshot rather than inheriting the source database's history dates. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
 #'
 #' @param name Target database name (i.e. the one to be dumped). By default, it is set to "aquacache". If you want to dump a different database, specify its name here.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost="hostname".
@@ -309,6 +309,7 @@ create_test_db <- function(
     "discrete.sample_types",
     "discrete.sample_group_types",
     "discrete.laboratories",
+    "discrete.result_aggregation_types",
     "files.document_types",
     "files.image_types",
     "information.internal_status",
@@ -427,6 +428,19 @@ create_test_db <- function(
   owner_org <- fake_organization_id
   contributor_org <- fake_organization_id
 
+  DBI::dbExecute(
+    test_con,
+    sprintf(
+      "INSERT INTO instruments.observers (
+         observer_id, observer_first, observer_last, organization
+       ) VALUES
+         (1, 'Alex', 'Sampler', %d),
+         (2, 'Robin', 'Recorder', %d)",
+      owner_org,
+      owner_org
+    )
+  )
+
   location_type_id <- first_id(
     "SELECT type_id FROM public.location_types ORDER BY type_id LIMIT 1",
     "location type"
@@ -459,6 +473,10 @@ create_test_db <- function(
     "SELECT matrix_state_id FROM public.matrix_states WHERE matrix_state_code = 'liquid' LIMIT 1",
     "liquid matrix"
   )
+  matrix_solid <- first_id(
+    "SELECT matrix_state_id FROM public.matrix_states WHERE matrix_state_code = 'solid' LIMIT 1",
+    "solid matrix"
+  )
   matrix_gas <- first_id(
     "SELECT matrix_state_id FROM public.matrix_states WHERE matrix_state_code = 'gas' LIMIT 1",
     "gas matrix"
@@ -474,6 +492,14 @@ create_test_db <- function(
   agg_sum <- first_id(
     "SELECT aggregation_type_id FROM continuous.aggregation_types WHERE aggregation_type = 'sum' LIMIT 1",
     "sum aggregation"
+  )
+  result_aggregation_mean <- first_id(
+    "SELECT result_aggregation_type_id FROM discrete.result_aggregation_types WHERE aggregation_type = 'mean' LIMIT 1",
+    "mean discrete result aggregation"
+  )
+  result_aggregation_weighted_mean <- first_id(
+    "SELECT result_aggregation_type_id FROM discrete.result_aggregation_types WHERE aggregation_type = 'weighted_mean' LIMIT 1",
+    "weighted-mean discrete result aggregation"
   )
   water_level_param <- parameter_id(
     "water level",
@@ -497,6 +523,10 @@ create_test_db <- function(
   )
   swe_param <- parameter_id(
     "snow water equivalent",
+    "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
+  )
+  snow_depth_param <- parameter_id(
+    "snow depth",
     "SELECT parameter_id FROM public.parameters ORDER BY parameter_id LIMIT 1"
   )
   conductance_param <- parameter_id(
@@ -550,6 +580,10 @@ create_test_db <- function(
   qualifier_ice <- first_id(
     "SELECT qualifier_type_id FROM public.qualifier_types ORDER BY qualifier_type_id LIMIT 1",
     "qualifier"
+  )
+  qualifier_estimated <- first_id(
+    "SELECT qualifier_type_id FROM public.qualifier_types WHERE qualifier_type_code = 'EST' LIMIT 1",
+    "estimated qualifier"
   )
   correction_offset <- first_id(
     "SELECT correction_type_id FROM continuous.correction_types WHERE correction_type = 'offset linear' LIMIT 1",
@@ -906,7 +940,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -929,7 +963,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -952,7 +986,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -975,7 +1009,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -999,7 +1033,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1019,7 +1053,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1039,7 +1073,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1062,7 +1096,7 @@ create_test_db <- function(
   DBI::dbExecute(
     test_con,
     "INSERT INTO continuous.measurements_continuous (
-       timeseries_id, datetime, value, period, imputed, no_update,
+       timeseries_id, datetime, value, period, imputed, no_source_update,
        measurement_row_id
      )
      SELECT
@@ -1219,20 +1253,20 @@ create_test_db <- function(
           "INSERT INTO discrete.samples (
          sample_id, location_id, sub_location_id, media_id, z, datetime,
          target_datetime, collection_method, sample_type, sample_volume_ml,
-         sample_grade, sample_approval, sample_qualifier, owner,
+         sample_grade, sample_approval, owner,
          contributor, sampling_org, share_with, import_source,
-         no_update, note, import_source_id
+         no_source_update, note, import_source_id
        ) VALUES
          (1, %d, %d, %d, 0.5, '2023-01-01 12:00+00',
-          '2023-01-01 12:00+00', %d, %d, 250, %d, %d, %d,
+          '2023-01-01 12:00+00', %d, %d, 250, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Synthetic water quality sample 1.', 'SYN-S1'),
          (2, %d, %d, %d, 0.5, '2023-02-01 12:00+00',
-          '2023-02-01 12:00+00', %d, %d, 250, %d, %d, NULL,
+          '2023-02-01 12:00+00', %d, %d, 250, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Synthetic water quality sample 2.', 'SYN-S2'),
          (3, %d, %d, %d, 0.5, '2023-03-01 12:00+00',
-          '2023-03-01 12:00+00', %d, %d, 500, %d, %d, NULL,
+          '2023-03-01 12:00+00', %d, %d, 500, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Synthetic water quality sample 3.', 'SYN-S3')",
           fake_location_id,
@@ -1242,7 +1276,6 @@ create_test_db <- function(
           sample_type_id,
           grade_a,
           approval_a,
-          qualifier_ice,
           owner_org,
           contributor_org,
           owner_org,
@@ -1275,33 +1308,33 @@ create_test_db <- function(
          sample_id, location_id, sub_location_id, media_id, z, datetime,
          target_datetime, collection_method, sample_type, linked_with,
          sample_volume_ml, purge_volume_l, purge_time_min, flow_rate_l_min,
-         sample_grade, sample_approval, sample_qualifier, owner,
+         sample_grade, sample_approval, owner,
          contributor, sampling_org, share_with, import_source,
-         no_update, note, import_source_id
+         no_source_update, note, import_source_id
        ) VALUES
          (4, %d, %d, %d, 0.5, '2023-04-01 12:00+00',
           '2023-04-01 12:00+00', %d, %d, NULL,
-          1000, NULL, NULL, NULL, %d, %d, NULL,
+          1000, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Routine spring freshet surface-water chemistry sample.', 'SYN-S4'),
          (5, %d, %d, %d, 0.5, '2023-04-01 12:05+00',
           '2023-04-01 12:00+00', %d, %d, 4,
-          1000, NULL, NULL, NULL, %d, %d, NULL,
+          1000, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Field replicate paired with SYN-S4.', 'SYN-S5'),
          (6, NULL, NULL, %d, 0.5, '2023-04-01 12:10+00',
           '2023-04-01 12:00+00', %d, %d, NULL,
-          500, NULL, NULL, NULL, %d, %d, NULL,
+          500, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           true, %s, 'SYN-S6'),
          (7, %d, %d, %d, -4.2, '2023-05-15 18:00+00',
           '2023-05-15 18:00+00', %d, %d, NULL,
-          1000, 18.5, 21, 0.9, %d, %d, NULL,
+          1000, 18.5, 21, 0.9, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Pumped groundwater chemistry sample with purge metadata.', 'SYN-S7'),
          (8, %d, %d, %d, NULL, '2023-06-01 09:00+00',
           '2023-06-01 09:00+00', %d, %d, NULL,
-          750, NULL, NULL, NULL, %d, %d, NULL,
+          750, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
           false, 'Rain-water grab sample after a synthetic storm event.', 'SYN-S8')",
           fake_location_id,
@@ -1353,6 +1386,16 @@ create_test_db <- function(
           owner_org,
           contributor_org,
           owner_org
+        )
+      )
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.sample_qualifiers (
+             sample_id,
+             qualifier_type_id
+           ) VALUES (1, %d)",
+          qualifier_ice
         )
       )
 
@@ -1411,7 +1454,7 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
          result_id, sample_id, result_type, parameter_id, sample_fraction_id,
          result, result_condition, result_condition_value,
-         result_value_type, analysis_datetime, share_with, no_update,
+         result_value_type, analysis_datetime, share_with, no_source_update,
          matrix_state_id
        ) VALUES
          (1, 1, %d, %d, %d, 6.7, NULL, NULL, %d,
@@ -1461,7 +1504,7 @@ create_test_db <- function(
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
        result_value_type, result_speciation_id, protocol_method,
-       laboratory, analysis_datetime, share_with, no_update,
+       laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
        (6, 4, %d, %d, NULL, 7.1, NULL, NULL, %d, NULL, NULL, NULL,
@@ -1549,7 +1592,7 @@ create_test_db <- function(
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
        result_value_type, result_speciation_id, protocol_method,
-       laboratory, analysis_datetime, share_with, no_update,
+       laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
        (16, 6, %d, %d, %d, NULL, %d, 0.02, %d, NULL, %d, %d,
@@ -1645,6 +1688,227 @@ create_test_db <- function(
       laboratory_id,
       matrix_liquid
     )
+  )
+
+  message("Inserting composite discrete result fixture...")
+  DBI::dbWithTransaction(
+    test_con,
+    {
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.samples (
+             sample_id, location_id, sub_location_id, media_id, datetime,
+             target_datetime, collection_method, sample_type, sample_grade,
+             sample_approval, owner, contributor, sampling_org, share_with,
+             import_source, no_source_update, note, import_source_id
+           ) VALUES (
+             9, %d, %d, %d, '2023-03-15 15:00+00',
+             '2023-03-15 15:00+00', %d, %d, %d,
+             %d, %d, %d, %d, ARRAY['public_reader'],
+             'synthetic_fixture', false,
+             'Synthetic snow survey with ten SWE component observations.',
+             'SYN-S9'
+           )",
+          fake_location_id,
+          fake_sub_location_id,
+          media_snow,
+          collection_method_id,
+          sample_type_routine,
+          grade_a,
+          approval_a,
+          owner_org,
+          contributor_org,
+          owner_org
+        )
+      )
+
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.sample_qualifiers (
+             sample_id, qualifier_type_id, note
+           ) VALUES
+             (9, %d, 'Snow and ice conditions affected field collection.'),
+             (9, %d, 'Survey contains an estimated component value.')",
+          qualifier_ice,
+          qualifier_estimated
+        )
+      )
+      DBI::dbExecute(
+        test_con,
+        "INSERT INTO discrete.sample_observers (
+           sample_id, observer_id, observer_role, note
+         ) VALUES
+           (9, 1, 'sampler', 'Collected the snow cores.'),
+           (9, 2, 'recorder', 'Recorded component measurements in the field.')"
+      )
+
+      # Composite writers explicitly defer commit-time validation while the
+      # parent has its temporary NULL and defer row-by-row refresh until all
+      # components have been inserted.
+      set_result_aggregation_constraints(test_con, "deferred")
+      DBI::dbExecute(
+        test_con,
+        "SET LOCAL aquacache.defer_result_aggregation_refresh = 'on'"
+      )
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.results (
+             result_id, sample_id, result_type, parameter_id,
+             sample_fraction_id, result, result_condition,
+             result_condition_value, result_value_type, analysis_datetime,
+             share_with, no_source_update, matrix_state_id
+           ) VALUES
+             (27, 9, %d, %d, %d, NULL, NULL, NULL, %d,
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d),
+             (28, 9, %d, %d, %d, NULL, NULL, NULL, %d,
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d)",
+           result_type_field,
+           swe_param,
+           sample_fraction_total,
+           result_value_calculated,
+           matrix_solid,
+           result_type_field,
+           snow_depth_param,
+           sample_fraction_total,
+           result_value_calculated,
+           matrix_solid
+         )
+       )
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.result_aggregations (
+             result_id, result_aggregation_type_id, calculation_arguments,
+             expected_count, note
+           ) VALUES
+             (27, %d,
+              '{\"missing_values\":\"ignore\",\"non_detects\":\"exclude\",\"rounding_digits\":1}'::jsonb,
+              10, 'Arithmetic mean of included SWE observations.'),
+             (28, %d,
+              '{\"missing_values\":\"ignore\",\"non_detects\":\"half_condition_value\",\"multiplier\":10,\"rounding_digits\":1}'::jsonb,
+              4, 'Weighted mean demonstrating weights, a non-detect policy, and an expected-count shortfall.')",
+          result_aggregation_mean,
+          result_aggregation_weighted_mean
+        )
+      )
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.result_components (
+             result_id, observation_number, observation_datetime, result,
+             result_condition, result_condition_value,
+             included_in_aggregate, weight, note
+           ) VALUES
+             (27, 1, '2023-03-15 15:00+00', 90, NULL, NULL, true, NULL, NULL),
+             (27, 2, '2023-03-15 15:02+00', 95, NULL, NULL, true, NULL, NULL),
+             (27, 3, '2023-03-15 15:04+00', 100, NULL, NULL, true, NULL, NULL),
+             (27, 4, '2023-03-15 15:06+00', 105, NULL, NULL, true, NULL, NULL),
+             (27, 5, '2023-03-15 15:08+00', 110, NULL, NULL, true, NULL, NULL),
+             (27, 6, '2023-03-15 15:10+00', 92, NULL, NULL, true, NULL, NULL),
+             (27, 7, '2023-03-15 15:12+00', 98, NULL, NULL, true, NULL, NULL),
+             (27, 8, '2023-03-15 15:14+00', 102, NULL, NULL, true, NULL, NULL),
+             (27, 9, '2023-03-15 15:16+00', 108, NULL, NULL, true, NULL, NULL),
+             (27, 10, '2023-03-15 15:18+00', 350, NULL, NULL, false, NULL,
+              'Excluded synthetic outlier caused by poor core quality.'),
+             (28, 1, '2023-03-15 15:00+00', 9, NULL, NULL, true, 1, NULL),
+             (28, 2, NULL, 11, NULL, NULL, true, 2, NULL),
+             (28, 3, '2023-03-15 15:04+00', NULL, %d, 20, true, 1,
+              'Below detection; half the condition value contributes.')",
+          result_condition_id
+        )
+      )
+
+      refreshed_count <- DBI::dbGetQuery(
+        test_con,
+        "SELECT discrete.refresh_result_aggregations(
+           ARRAY[27, 28]::integer[]
+         ) AS updated_count"
+      )$updated_count
+      if (length(refreshed_count) != 1L || refreshed_count[[1]] != 2L) {
+        stop("Composite fixture batch refresh did not update exactly two results.")
+      }
+      DBI::dbExecute(
+        test_con,
+        "SET LOCAL aquacache.defer_result_aggregation_refresh = 'off'"
+      )
+      set_result_aggregation_constraints(test_con, "immediate")
+
+      composite_fixture_valid <- DBI::dbGetQuery(
+        test_con,
+        "SELECT count(*) = 2 AND bool_and(valid) AS valid
+         FROM (
+           SELECT CASE result_id
+             WHEN 27 THEN
+               aggregation_type = 'mean'
+                 AND stored_result = 100
+                 AND result_is_current
+                 AND component_count = 10
+                 AND expected_count = 10
+                 AND missing_component_count = 0
+                 AND NOT has_component_shortfall
+                 AND included_component_count = 9
+                 AND excluded_component_count = 1
+                 AND excluded_observation_numbers = ARRAY[10]
+             WHEN 28 THEN
+               aggregation_type = 'weighted_mean'
+                 AND stored_result = 102.5
+                 AND result_is_current
+                 AND component_count = 3
+                 AND expected_count = 4
+                 AND missing_component_count = 1
+                 AND has_component_shortfall
+                 AND included_component_count = 3
+                 AND excluded_component_count = 0
+                 AND missing_or_conditioned_component_count = 1
+                 AND non_detect_component_count = 1
+                 AND included_weight_sum = 4
+                 AND contributing_component_count = 3
+             ELSE false
+           END AS valid
+           FROM discrete.result_aggregation_summary
+           WHERE result_id IN (27, 28)
+         ) fixture_results"
+      )$valid
+      if (
+        length(composite_fixture_valid) != 1L ||
+          !isTRUE(composite_fixture_valid[[1]])
+      ) {
+        stop("Failed to create the composite discrete result fixture.")
+      }
+
+      composite_associations_valid <- DBI::dbGetQuery(
+        test_con,
+        "SELECT
+           (SELECT count(*) = 2
+            FROM discrete.sample_qualifiers
+            WHERE sample_id = 9) AND
+           (SELECT array_agg(observer_role ORDER BY observer_role) =
+                     ARRAY['recorder', 'sampler']
+            FROM discrete.sample_observers
+            WHERE sample_id = 9) AND
+           (SELECT count(*) = 1
+            FROM discrete.samples_metadata_en
+            WHERE sample_id = 9
+              AND cardinality(sample_qualifier_ids) = 2) AND
+           (SELECT count(*) = 2
+            FROM discrete.results_metadata_en
+            WHERE sample_id = 9
+              AND result_id IN (27, 28)
+              AND aggregation_type IS NOT NULL)
+             AS valid"
+      )$valid
+      if (
+        length(composite_associations_valid) != 1L ||
+          !isTRUE(composite_associations_valid[[1]])
+      ) {
+        stop(
+          "Failed to create or expose the composite sample associations."
+        )
+      }
+    }
   )
 
   message("Inserting sample spatial data...")
@@ -1805,7 +2069,7 @@ create_test_db <- function(
     "UPDATE audit.table_registry
      SET history_started_at = CASE
            WHEN capture_mode LIKE 'excluded_%' THEN NULL
-           ELSE $1
+           ELSE $1::timestamp with time zone
          END,
          updated_at = clock_timestamp()",
     params = list(test_history_started_at)

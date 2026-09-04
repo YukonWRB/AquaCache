@@ -11,6 +11,7 @@
 #' @param id_col The name of the column containing the unique identifier for segments.
 #' @param timeseries_id The timeseries_id to assign to the final segments.
 #' @param bridge_latest_extension Logical. If TRUE, if the latest existing segment ends before the earliest new segment starts and they have the same value, treat the existing segment as continuing through the start of the new segment instead of creating a brand-new trailing segment.
+#' @param protection_col Optional logical column that distinguishes source-protected and source-managed segments. Segments are only collapsed when both their value and protection state match.
 #' @return A data.frame of segments with columns for id, timeseries_id, value, start_dt, and end_dt, where consecutive segments with the same value have been collapsed and the new segments have been integrated with the existing segments.
 #' @noRd
 #' @keywords internal
@@ -21,7 +22,8 @@ collapse_segments_with_split <- function(
   value_col,
   id_col,
   timeseries_id,
-  bridge_latest_extension = FALSE
+  bridge_latest_extension = FALSE,
+  protection_col = NULL
 ) {
   if (nrow(new_segments) == 0) {
     return(exist)
@@ -33,6 +35,19 @@ collapse_segments_with_split <- function(
     ,
     drop = FALSE
   ]
+
+  if (!is.null(protection_col)) {
+    if (!(protection_col %in% names(exist))) {
+      exist[[protection_col]] <- FALSE
+    }
+    if (!(protection_col %in% names(new_segments))) {
+      new_segments[[protection_col]] <- FALSE
+    }
+    exist[[protection_col]][is.na(exist[[protection_col]])] <- FALSE
+    new_segments[[protection_col]][
+      is.na(new_segments[[protection_col]])
+    ] <- FALSE
+  }
 
   if (bridge_latest_extension && nrow(exist) > 0) {
     latest_existing_idx <- which.max(exist$end_dt)
@@ -46,6 +61,13 @@ collapse_segments_with_split <- function(
         identical(
           exist[[value_col]][latest_existing_idx],
           new_segments[[value_col]][first_new_idx]
+        ) &&
+        (
+          is.null(protection_col) ||
+            identical(
+              exist[[protection_col]][latest_existing_idx],
+              new_segments[[protection_col]][first_new_idx]
+            )
         )
     ) {
       # When appending new data with the same qualifying value, treat the
@@ -66,6 +88,7 @@ collapse_segments_with_split <- function(
     start_dt = as.POSIXct(character()),
     end_dt = as.POSIXct(character()),
     value = numeric(),
+    protected = logical(),
     stringsAsFactors = FALSE
   )
 
@@ -82,6 +105,11 @@ collapse_segments_with_split <- function(
       )
       if (length(new_match) > 0) {
         value_i <- new_segments[[value_col]][new_match[1]]
+        protected_i <- if (is.null(protection_col)) {
+          FALSE
+        } else {
+          new_segments[[protection_col]][new_match[1]]
+        }
       } else {
         old_match <- which(exist$start_dt <= start_i & exist$end_dt >= end_i)
         value_i <- if (length(old_match) > 0) {
@@ -89,12 +117,22 @@ collapse_segments_with_split <- function(
         } else {
           NA
         }
+        protected_i <- if (is.null(protection_col) || length(old_match) == 0) {
+          FALSE
+        } else {
+          exist[[protection_col]][old_match[1]]
+        }
       }
 
       if (!is.na(value_i)) {
         rebuilt <- rbind(
           rebuilt,
-          data.frame(start_dt = start_i, end_dt = end_i, value = value_i)
+          data.frame(
+            start_dt = start_i,
+            end_dt = end_i,
+            value = value_i,
+            protected = protected_i
+          )
         )
       }
     }
@@ -104,7 +142,12 @@ collapse_segments_with_split <- function(
     rebuilt <- data.frame(
       start_dt = new_segments$start_dt,
       end_dt = new_segments$end_dt,
-      value = new_segments[[value_col]]
+      value = new_segments[[value_col]],
+      protected = if (is.null(protection_col)) {
+        FALSE
+      } else {
+        new_segments[[protection_col]]
+      }
     )
   }
 
@@ -112,8 +155,12 @@ collapse_segments_with_split <- function(
   if (nrow(rebuilt) > 1) {
     for (i in 2:nrow(rebuilt)) {
       same_value <- identical(merged$value[nrow(merged)], rebuilt$value[i])
+      same_protection <- identical(
+        merged$protected[nrow(merged)],
+        rebuilt$protected[i]
+      )
       contiguous <- identical(merged$end_dt[nrow(merged)], rebuilt$start_dt[i])
-      if (same_value && contiguous) {
+      if (same_value && same_protection && contiguous) {
         merged$end_dt[nrow(merged)] <- rebuilt$end_dt[i]
       } else {
         merged <- rbind(merged, rebuilt[i, , drop = FALSE])
@@ -130,22 +177,165 @@ collapse_segments_with_split <- function(
   )
 
   names(final) <- c(id_col, "timeseries_id", value_col, "start_dt", "end_dt")
-
-  keep <- min(nrow(exist), nrow(final))
-  if (keep > 0) {
-    final[[id_col]][seq_len(keep)] <- exist[[id_col]][seq_len(keep)]
+  if (!is.null(protection_col)) {
+    final[[protection_col]] <- merged$protected
   }
 
-  if (nrow(exist) > nrow(final)) {
-    remove_rows <- exist[
-      (nrow(final) + 1):nrow(exist),
-      c(id_col, "timeseries_id", value_col, "start_dt", "end_dt")
+  state_cols <- c(value_col, "start_dt", "end_dt")
+  if (!is.null(protection_col)) {
+    state_cols <- c(state_cols, protection_col)
+  }
+  used_ids <- integer()
+
+  # Exact matches are aligned first so immutable source-protected intervals
+  # retain their IDs even when new segments are inserted before them.
+  for (i in seq_len(nrow(final))) {
+    exact <- !is.na(exist[[id_col]])
+    for (state_col in state_cols) {
+      exact <- exact & exist[[state_col]] == final[[state_col]][i]
+    }
+    exact <- which(exact & !(exist[[id_col]] %in% used_ids))
+    if (length(exact) > 0) {
+      final[[id_col]][i] <- exist[[id_col]][exact[1]]
+      used_ids <- c(used_ids, final[[id_col]][i])
+    }
+  }
+
+  unused_ids <- exist[[id_col]][
+    !is.na(exist[[id_col]]) & !(exist[[id_col]] %in% used_ids)
+  ]
+  for (i in which(is.na(final[[id_col]]))) {
+    if (length(unused_ids) == 0) {
+      break
+    }
+    final[[id_col]][i] <- unused_ids[1]
+    used_ids <- c(used_ids, unused_ids[1])
+    unused_ids <- unused_ids[-1]
+  }
+
+  remove_rows <- exist[
+    !is.na(exist[[id_col]]) & !(exist[[id_col]] %in% used_ids),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(remove_rows) > 0) {
+    remove_rows <- remove_rows[
+      ,
+      c(id_col, "timeseries_id", value_col, "start_dt", "end_dt", protection_col),
+      drop = FALSE
     ]
     remove_rows$timeseries_id <- -1
     final <- rbind(final, remove_rows)
   }
 
   final
+}
+
+#' @title Build interval segments from point attributes
+#' @description Collapse ordered point attributes into segments, retaining
+#' source-protection boundaries even when the attribute value is unchanged.
+#' @param data A data.frame containing `datetime`, a value column, and optional
+#' `no_source_update`.
+#' @param value_col Attribute value column.
+#' @param id_col Segment ID column to create.
+#' @param timeseries_id Target time series.
+#' @return A data.frame of interval segments.
+#' @noRd
+#' @keywords internal
+build_attribute_segments <- function(data, value_col, id_col, timeseries_id) {
+  data <- data[order(data$datetime), , drop = FALSE]
+  if (!("no_source_update" %in% names(data))) {
+    data$no_source_update <- FALSE
+  }
+  data$no_source_update[is.na(data$no_source_update)] <- FALSE
+
+  new_run <- c(
+    TRUE,
+    data[[value_col]][-1] != utils::head(data[[value_col]], -1) |
+      data$no_source_update[-1] != utils::head(data$no_source_update, -1)
+  )
+  run_id <- cumsum(new_run)
+  starts <- match(unique(run_id), run_id)
+  ends <- vapply(unique(run_id), function(x) max(which(run_id == x)), integer(1))
+
+  segments <- data.frame(
+    id = NA_integer_,
+    timeseries_id = timeseries_id,
+    value = data[[value_col]][starts],
+    start_dt = data$datetime[starts],
+    end_dt = data$datetime[ends],
+    no_source_update = data$no_source_update[starts],
+    stringsAsFactors = FALSE
+  )
+  names(segments)[names(segments) == "id"] <- id_col
+  names(segments)[names(segments) == "value"] <- value_col
+  segments
+}
+
+#' @title Clip source-managed segments around protected intervals
+#' @description Subtract immutable source-protected intervals from proposed
+#' source-managed segments. Intervals use the database's half-open `[)`
+#' semantics.
+#' @param segments Proposed segments.
+#' @param protected Existing protected segments.
+#' @return Proposed segments that do not overlap protected intervals.
+#' @noRd
+#' @keywords internal
+clip_segments_around_protected <- function(segments, protected) {
+  if (nrow(segments) == 0 || nrow(protected) == 0) {
+    return(segments)
+  }
+
+  result <- vector("list", nrow(segments))
+  result_count <- 0L
+  for (i in seq_len(nrow(segments))) {
+    pieces <- segments[i, , drop = FALSE]
+    for (j in seq_len(nrow(protected))) {
+      if (nrow(pieces) == 0 || protected$start_dt[j] >= protected$end_dt[j]) {
+        next
+      }
+      next_pieces <- vector("list", nrow(pieces) * 2L)
+      next_count <- 0L
+      for (k in seq_len(nrow(pieces))) {
+        piece <- pieces[k, , drop = FALSE]
+        overlaps <- piece$start_dt < protected$end_dt[j] &&
+          piece$end_dt > protected$start_dt[j]
+        if (!overlaps) {
+          next_count <- next_count + 1L
+          next_pieces[[next_count]] <- piece
+          next
+        }
+        if (piece$start_dt < protected$start_dt[j]) {
+          left <- piece
+          left$end_dt <- protected$start_dt[j]
+          next_count <- next_count + 1L
+          next_pieces[[next_count]] <- left
+        }
+        if (piece$end_dt > protected$end_dt[j]) {
+          right <- piece
+          right$start_dt <- protected$end_dt[j]
+          next_count <- next_count + 1L
+          next_pieces[[next_count]] <- right
+        }
+      }
+      pieces <- if (next_count == 0) {
+        pieces[FALSE, , drop = FALSE]
+      } else {
+        do.call(rbind, next_pieces[seq_len(next_count)])
+      }
+    }
+    if (nrow(pieces) > 0) {
+      result_count <- result_count + 1L
+      result[[result_count]] <- pieces
+    }
+  }
+
+  if (result_count == 0) {
+    return(segments[FALSE, , drop = FALSE])
+  }
+  result <- do.call(rbind, result[seq_len(result_count)])
+  rownames(result) <- NULL
+  result
 }
 
 #' @title Merge overlapping segments with the same value
@@ -156,13 +346,16 @@ collapse_segments_with_split <- function(
 #' @param segments A data.frame of proposed segments.
 #' @param value_col The name of the value column used to group segments.
 #' @param id_col The name of the segment ID column.
+#' @param protection_col Optional logical column that must also match before
+#' segments are merged.
 #' @return A list containing the merged `segments` and redundant `delete_ids`.
 #' @noRd
 #' @keywords internal
 merge_overlapping_same_value_segments <- function(
   segments,
   value_col,
-  id_col
+  id_col,
+  protection_col = NULL
 ) {
   if (nrow(segments) == 0) {
     return(list(segments = segments, delete_ids = integer()))
@@ -185,23 +378,40 @@ merge_overlapping_same_value_segments <- function(
     ))
   }
 
-  segments <- segments[
-    order(
-      segments[[value_col]],
-      segments$start_dt,
-      segments$end_dt,
-      is.na(segments[[id_col]])
-    ),
-    ,
-    drop = FALSE
-  ]
+  if (!is.null(protection_col) && !(protection_col %in% names(segments))) {
+    segments[[protection_col]] <- FALSE
+  }
+  protection_values <- if (is.null(protection_col)) {
+    rep(FALSE, nrow(segments))
+  } else {
+    segments[[protection_col]]
+  }
+  order_args <- list(
+    segments[[value_col]],
+    protection_values,
+    segments$start_dt,
+    segments$end_dt,
+    is.na(segments[[id_col]])
+  )
+  segments <- segments[do.call(order, order_args), , drop = FALSE]
+  protection_values <- if (is.null(protection_col)) {
+    rep(FALSE, nrow(segments))
+  } else {
+    segments[[protection_col]]
+  }
 
   merged <- vector("list", nrow(segments))
   merged_count <- 0L
 
-  for (value in unique(segments[[value_col]])) {
+  group_key <- interaction(
+    segments[[value_col]],
+    protection_values,
+    drop = TRUE,
+    lex.order = TRUE
+  )
+  for (group in unique(group_key)) {
     value_segments <- segments[
-      segments[[value_col]] == value,
+      group_key == group,
       ,
       drop = FALSE
     ]
@@ -262,13 +472,17 @@ segment_state_key <- function(data, id_col, value_col) {
     return(character())
   }
 
+  state_cols <- c(id_col, "timeseries_id", value_col, "start_dt", "end_dt")
+  if ("no_source_update" %in% names(data)) {
+    state_cols <- c(state_cols, "no_source_update")
+  }
   data <- data[
     order(data$start_dt, data$end_dt),
-    c(id_col, "timeseries_id", value_col, "start_dt", "end_dt"),
+    state_cols,
     drop = FALSE
   ]
 
-  paste(
+  key <- paste(
     ifelse(is.na(data[[id_col]]), "NA", as.character(data[[id_col]])),
     ifelse(
       is.na(data$timeseries_id),
@@ -284,6 +498,10 @@ segment_state_key <- function(data, id_col, value_col) {
     fmt(data$end_dt),
     sep = "|"
   )
+  if ("no_source_update" %in% names(data)) {
+    key <- paste(key, data$no_source_update, sep = "|")
+  }
+  key
 }
 
 #' @title Segment state identical
@@ -309,6 +527,8 @@ segments_identical <- function(current, proposed, id_col, value_col) {
 #' @param id_col The name of the column containing the unique identifier for segments in the specified table.
 #' @param timeseries_id The timeseries_id for which to retrieve segment IDs.
 #' @param min_datetime The minimum datetime threshold; segments with a start_dt greater than or equal to this value will be considered for deletion.
+#' @param protect_source_updates If TRUE, exclude rows marked
+#' `no_source_update` from deletion candidates.
 #' @return An integer vector of segment IDs that should be deleted to synchronize with the remote data store. If no segments meet the criteria, an empty integer vector is returned.
 #' @noRd
 #' @keywords internal
@@ -317,14 +537,21 @@ get_sync_delete_ids <- function(
   table_name,
   id_col,
   timeseries_id,
-  min_datetime
+  min_datetime,
+  protect_source_updates = FALSE
 ) {
+  protection_sql <- if (protect_source_updates) {
+    " AND no_source_update IS FALSE"
+  } else {
+    ""
+  }
   ids <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT %s FROM %s WHERE timeseries_id = $1 AND start_dt >= $2;",
+      "SELECT %s FROM %s WHERE timeseries_id = $1 AND start_dt >= $2%s;",
       id_col,
-      table_name
+      table_name,
+      protection_sql
     ),
     params = list(timeseries_id, min_datetime)
   )
@@ -346,6 +573,10 @@ get_sync_delete_ids <- function(
 #' @param existing_state A data.frame representing the existing state of segments, with columns for id, timeseries_id, value, start_dt, and end_dt.
 #' @param proposed_state A data.frame representing the proposed state of segments, with columns for id, timeseries_id, value, start_dt, and end_dt.
 #' @param delete_ids An integer vector of segment IDs that should be deleted as part of the reconciliation process, in addition to any deletions determined by comparing the existing and proposed states.
+#' @param protection_col Optional source-protection column persisted with each
+#' segment.
+#' @param source_update If TRUE, database-level delete and update safeguards
+#' prevent changes to protected rows.
 #' @return TRUE if any changes were made to the database, FALSE if the existing state and proposed state are identical and no changes were necessary. The function performs the necessary deletions, updates, and insertions in the database to align with the proposed state.
 #' @noRd
 #' @keywords internal
@@ -357,7 +588,9 @@ reconcile_segment_changes <- function(
   db_value_col,
   existing_state,
   proposed_state,
-  delete_ids = integer()
+  delete_ids = integer(),
+  protection_col = NULL,
+  source_update = FALSE
 ) {
   proposed_delete_ids <- proposed_state[
     proposed_state$timeseries_id == -1,
@@ -393,6 +626,11 @@ reconcile_segment_changes <- function(
   }
 
   if (length(delete_ids) > 0) {
+    protection_sql <- if (source_update && !is.null(protection_col)) {
+      paste0(" AND ", protection_col, " IS FALSE")
+    } else {
+      ""
+    }
     DBI::dbExecute(
       con,
       paste0(
@@ -402,7 +640,9 @@ reconcile_segment_changes <- function(
         id_col,
         " IN (",
         paste(delete_ids, collapse = ", "),
-        ");"
+        ")",
+        protection_sql,
+        ";"
       )
     )
   }
@@ -422,36 +662,71 @@ reconcile_segment_changes <- function(
         next
       }
 
-      DBI::dbExecute(
-        con,
-        sprintf(
+      if (is.null(protection_col)) {
+        update_sql <- sprintf(
           "UPDATE %s SET %s = $1, start_dt = $2, end_dt = $3 WHERE %s = $4;",
           table_name,
           db_value_col,
           id_col
-        ),
-        params = list(
+        )
+        update_params <- list(
           proposed_row[[value_col]][1],
           proposed_row$start_dt[1],
           proposed_row$end_dt[1],
           proposed_row[[id_col]][1]
         )
-      )
+      } else {
+        protection_sql <- if (source_update) {
+          paste0(" AND ", protection_col, " IS FALSE")
+        } else {
+          ""
+        }
+        update_sql <- sprintf(
+          "UPDATE %s SET %s = $1, start_dt = $2, end_dt = $3, %s = $4 WHERE %s = $5%s;",
+          table_name,
+          db_value_col,
+          protection_col,
+          id_col,
+          protection_sql
+        )
+        update_params <- list(
+          proposed_row[[value_col]][1],
+          proposed_row$start_dt[1],
+          proposed_row$end_dt[1],
+          proposed_row[[protection_col]][1],
+          proposed_row[[id_col]][1]
+        )
+      }
+      DBI::dbExecute(con, update_sql, params = update_params)
     } else {
-      DBI::dbExecute(
-        con,
-        sprintf(
+      if (is.null(protection_col)) {
+        insert_sql <- sprintf(
           "INSERT INTO %s (timeseries_id, %s, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
           table_name,
           db_value_col
-        ),
-        params = list(
+        )
+        insert_params <- list(
           proposed_row$timeseries_id[1],
           proposed_row[[value_col]][1],
           proposed_row$start_dt[1],
           proposed_row$end_dt[1]
         )
-      )
+      } else {
+        insert_sql <- sprintf(
+          "INSERT INTO %s (timeseries_id, %s, start_dt, end_dt, %s) VALUES ($1, $2, $3, $4, $5);",
+          table_name,
+          db_value_col,
+          protection_col
+        )
+        insert_params <- list(
+          proposed_row$timeseries_id[1],
+          proposed_row[[value_col]][1],
+          proposed_row$start_dt[1],
+          proposed_row$end_dt[1],
+          proposed_row[[protection_col]][1]
+        )
+      }
+      DBI::dbExecute(con, insert_sql, params = insert_params)
     }
   }
 
@@ -464,12 +739,22 @@ reconcile_segment_changes <- function(
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'grade'. 'datetime' should be POSIXct and 'grade' should either character (in which case it must refer to entries in column 'grade_type_code' of table 'grade_types' or integer/numeric, in which case it must refer to column 'grade_type_id' of the same table.
 #' @param delete Logical. If TRUE, the function will delete grades which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
+#' @param source_update Logical. Set TRUE when `data` came from a source
+#' adapter or synchronization workflow. Existing intervals marked
+#' `no_source_update` are then immutable. Direct/manual calls leave this FALSE
+#' and may set `data$no_source_update` explicitly.
 #'
 #' @return Modifies the 'grades' table in the database.
 #' @export
 #'
 
-adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
+adjust_grade <- function(
+  con,
+  timeseries_id,
+  data,
+  delete = FALSE,
+  source_update = FALSE
+) {
   active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
 
   tryCatch(
@@ -482,6 +767,13 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
       # Ensure that 'datetime' is POSIXct
       if (!inherits(data$datetime[1], "POSIXct")) {
         stop("Column 'datetime' must be of class POSIXct.")
+      }
+      if (!("no_source_update" %in% names(data))) {
+        data$no_source_update <- FALSE
+      }
+      data$no_source_update[is.na(data$no_source_update)] <- FALSE
+      if (source_update) {
+        data$no_source_update <- FALSE
       }
 
       grade_table <- DBI::dbGetQuery(
@@ -526,7 +818,8 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
           "continuous.grades",
           "grade_id",
           timeseries_id,
-          min(data$datetime)
+          min(data$datetime),
+          protect_source_updates = source_update
         )
       }
 
@@ -539,7 +832,8 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         con,
         sprintf(
           "WITH matched AS (
-          SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
+          SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt,
+                 no_source_update
             FROM continuous.grades
           WHERE timeseries_id = %s
             AND (
@@ -548,7 +842,8 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
             OR (start_dt <= '%s' AND end_dt >= '%s')
             )
           ), fallback AS (
-              SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt
+              SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt,
+                     no_source_update
                 FROM continuous.grades
               WHERE timeseries_id = %s
               ORDER BY end_dt DESC
@@ -577,22 +872,23 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
           timeseries_id = timeseries_id,
           grade_type_id = data$grade[1],
           start_dt = data$datetime[1],
-          end_dt = data$datetime[1]
+          end_dt = data$datetime[1],
+          no_source_update = FALSE
         )
       }
-      # Collapse consecutive rows with the same grade using run-length encoding
-      data <- data[order(data$datetime), ]
-      runs <- rle(data$grade)
-      ends <- cumsum(runs$lengths)
-      starts <- c(1, utils::head(ends, -1) + 1)
-      new_segments <- data.frame(
-        grade_id = NA,
-        timeseries_id = timeseries_id,
-        grade_type_id = runs$values,
-        start_dt = data$datetime[starts],
-        end_dt = data$datetime[ends],
-        stringsAsFactors = FALSE
+      new_segments <- build_attribute_segments(
+        data,
+        value_col = "grade",
+        id_col = "grade_id",
+        timeseries_id = timeseries_id
       )
+      names(new_segments)[names(new_segments) == "grade"] <- "grade_type_id"
+      if (source_update) {
+        new_segments <- clip_segments_around_protected(
+          new_segments,
+          exist[exist$no_source_update, , drop = FALSE]
+        )
+      }
 
       exist <- collapse_segments_with_split(
         exist = exist,
@@ -600,7 +896,8 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
         value_col = "grade_type_id",
         id_col = "grade_id",
         timeseries_id = timeseries_id,
-        bridge_latest_extension = TRUE
+        bridge_latest_extension = TRUE,
+        protection_col = "no_source_update"
       )
 
       # Now commit the changes to the database
@@ -613,7 +910,9 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
           db_value_col = "grade_type_id",
           existing_state = existing_state,
           proposed_state = exist,
-          delete_ids = sync_delete_ids
+          delete_ids = sync_delete_ids,
+          protection_col = "no_source_update",
+          source_update = source_update
         )
       }
 
@@ -642,11 +941,21 @@ adjust_grade <- function(con, timeseries_id, data, delete = FALSE) {
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'qualifier'. 'datetime' should be POSIXct and 'qualifier' should either character (in which case it must refer to entries in column 'qualifier_type_code' of table 'qualifiers' or integer/numeric, in which case it must refer to column 'qualifier_type_id' of the same table.
 #' @param delete Logical. If TRUE, the function will delete qualifiers which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
+#' @param source_update Logical. Set TRUE when `data` came from a source
+#' adapter or synchronization workflow. Existing intervals marked
+#' `no_source_update` are then immutable. Direct/manual calls leave this FALSE
+#' and may set `data$no_source_update` explicitly.
 #'
 #' @return Modifies the 'qualifiers' table in the database.
 #' @export
 
-adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
+adjust_qualifier <- function(
+  con,
+  timeseries_id,
+  data,
+  delete = FALSE,
+  source_update = FALSE
+) {
   active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
 
   tryCatch(
@@ -659,6 +968,13 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
       # Ensure that 'datetime' is POSIXct
       if (!inherits(data$datetime[1], "POSIXct")) {
         stop("Column 'datetime' must be of class POSIXct.")
+      }
+      if (!("no_source_update" %in% names(data))) {
+        data$no_source_update <- FALSE
+      }
+      data$no_source_update[is.na(data$no_source_update)] <- FALSE
+      if (source_update) {
+        data$no_source_update <- FALSE
       }
 
       qualifier_table <- DBI::dbGetQuery(
@@ -690,6 +1006,10 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         datetime = rep(data$datetime, lengths(data$qualifier)),
         qualifier = unlist(data$qualifier),
         rank = unlist(data$rank),
+        no_source_update = rep(
+          data$no_source_update,
+          lengths(data$qualifier)
+        ),
         stringsAsFactors = FALSE
       )
 
@@ -719,7 +1039,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           "continuous.qualifiers",
           "qualifier_id",
           timeseries_id,
-          min(data$datetime)
+          min(data$datetime),
+          protect_source_updates = source_update
         )
       }
 
@@ -728,7 +1049,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         timeseries_id = integer(),
         qualifier_type_id = integer(),
         start_dt = as.POSIXct(character(), tz = "UTC"),
-        end_dt = as.POSIXct(character(), tz = "UTC")
+        end_dt = as.POSIXct(character(), tz = "UTC"),
+        no_source_update = logical()
       )
       proposed_state_all <- existing_state_all
 
@@ -749,7 +1071,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           con,
           sprintf(
             "WITH matched AS (
-    SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt
+    SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt,
+           no_source_update
       FROM continuous.qualifiers
      WHERE timeseries_id = %s
        AND (
@@ -759,7 +1082,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
        )
        AND qualifier_type_id = %s
     ), fallback AS (
-        SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt
+        SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt,
+               no_source_update
           FROM continuous.qualifiers
          WHERE timeseries_id = %s
            AND qualifier_type_id = %s
@@ -791,22 +1115,25 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
             timeseries_id = timeseries_id,
             qualifier_type_id = data$qualifier[1],
             start_dt = data$datetime[1],
-            end_dt = data$datetime[1]
+            end_dt = data$datetime[1],
+            no_source_update = FALSE
           )
         }
-        # Collapse consecutive rows with the same qualifier using run-length encoding
-        data <- data[order(data$datetime), ]
-        runs <- rle(data$qualifier)
-        ends <- cumsum(runs$lengths)
-        starts <- c(1, utils::head(ends, -1) + 1)
-        new_segments <- data.frame(
-          qualifier_id = NA,
-          timeseries_id = timeseries_id,
-          qualifier_type_id = runs$values,
-          start_dt = data$datetime[starts],
-          end_dt = data$datetime[ends],
-          stringsAsFactors = FALSE
+        new_segments <- build_attribute_segments(
+          data,
+          value_col = "qualifier",
+          id_col = "qualifier_id",
+          timeseries_id = timeseries_id
         )
+        names(new_segments)[
+          names(new_segments) == "qualifier"
+        ] <- "qualifier_type_id"
+        if (source_update) {
+          new_segments <- clip_segments_around_protected(
+            new_segments,
+            exist[exist$no_source_update, , drop = FALSE]
+          )
+        }
 
         exist <- collapse_segments_with_split(
           exist = exist,
@@ -814,7 +1141,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           value_col = "qualifier_type_id",
           id_col = "qualifier_id",
           timeseries_id = timeseries_id,
-          bridge_latest_extension = TRUE
+          bridge_latest_extension = TRUE,
+          protection_col = "no_source_update"
         )
 
         proposed_state_all <- rbind(proposed_state_all, exist)
@@ -841,7 +1169,7 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
           con,
           paste0(
             "SELECT qualifier_id, timeseries_id, qualifier_type_id,
-                    start_dt, end_dt
+                    start_dt, end_dt, no_source_update
                FROM continuous.qualifiers
               WHERE timeseries_id = $1
                 AND qualifier_type_id IN (",
@@ -886,7 +1214,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
       merged_qualifiers <- merge_overlapping_same_value_segments(
         segments = proposed_state_all,
         value_col = "qualifier_type_id",
-        id_col = "qualifier_id"
+        id_col = "qualifier_id",
+        protection_col = "no_source_update"
       )
       proposed_state_all <- merged_qualifiers$segments
       sync_delete_ids <- unique(c(
@@ -911,6 +1240,8 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
               proposed_state_all$qualifier_type_id[i] &
               existing_state_all$start_dt == proposed_state_all$start_dt[i] &
               existing_state_all$end_dt == proposed_state_all$end_dt[i] &
+              existing_state_all$no_source_update ==
+                proposed_state_all$no_source_update[i] &
               !(existing_state_all$qualifier_id %in% used_ids)
           )
           if (length(exact_match) > 0) {
@@ -927,7 +1258,9 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
               any(
                 existing_state_all$qualifier_id == candidate_id &
                   existing_state_all$qualifier_type_id ==
-                    proposed_state_all$qualifier_type_id[i]
+                    proposed_state_all$qualifier_type_id[i] &
+                  existing_state_all$no_source_update ==
+                    proposed_state_all$no_source_update[i]
               )
           ) {
             aligned_ids[i] <- candidate_id
@@ -946,7 +1279,9 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
         db_value_col = "qualifier_type_id",
         existing_state = existing_state_all,
         proposed_state = proposed_state_all,
-        delete_ids = sync_delete_ids
+        delete_ids = sync_delete_ids,
+        protection_col = "no_source_update",
+        source_update = source_update
       )
 
       if (active) {
@@ -972,11 +1307,21 @@ adjust_qualifier <- function(con, timeseries_id, data, delete = FALSE) {
 #' @param timeseries_id The target timeseries_id
 #' @param data A data.frame with columns for 'datetime' and 'approval'. 'datetime' should be POSIXct and 'approval' should either character (in which case it must refer to entries in column 'approval_type_code' of table 'approval_types' or integer/numeric, in which case it must refer to column 'approval_type_id' of the same table.
 #' @param delete Logical. If TRUE, the function will delete approvals which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.
+#' @param source_update Logical. Set TRUE when `data` came from a source
+#' adapter or synchronization workflow. Existing intervals marked
+#' `no_source_update` are then immutable. Direct/manual calls leave this FALSE
+#' and may set `data$no_source_update` explicitly.
 #'
 #' @return Modifies the 'approvals' table in the database.
 #' @export
 
-adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
+adjust_approval <- function(
+  con,
+  timeseries_id,
+  data,
+  delete = FALSE,
+  source_update = FALSE
+) {
   active <- dbTransBegin(con) # returns TRUE if a transaction is not already in progress and was set up, otherwise commit will happen in the original calling function.
 
   tryCatch(
@@ -989,6 +1334,13 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
       # Ensure that 'datetime' is POSIXct
       if (!inherits(data$datetime[1], "POSIXct")) {
         stop("Column 'datetime' must be of class POSIXct.")
+      }
+      if (!("no_source_update" %in% names(data))) {
+        data$no_source_update <- FALSE
+      }
+      data$no_source_update[is.na(data$no_source_update)] <- FALSE
+      if (source_update) {
+        data$no_source_update <- FALSE
       }
 
       approval_table <- DBI::dbGetQuery(
@@ -1033,7 +1385,8 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
           "continuous.approvals",
           "approval_id",
           timeseries_id,
-          min(data$datetime)
+          min(data$datetime),
+          protect_source_updates = source_update
         )
       }
 
@@ -1046,7 +1399,8 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         con,
         sprintf(
           "WITH matched AS (
-    SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt
+    SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt,
+           no_source_update
       FROM continuous.approvals
      WHERE timeseries_id = %s
        AND (
@@ -1055,7 +1409,8 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
       OR (start_dt <= '%s' AND end_dt >= '%s')
        )
     ), fallback AS (
-        SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt
+        SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt,
+               no_source_update
           FROM continuous.approvals
          WHERE timeseries_id = %s
          ORDER BY end_dt DESC
@@ -1084,23 +1439,26 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
           timeseries_id = timeseries_id,
           approval_type_id = data$approval[1],
           start_dt = data$datetime[1],
-          end_dt = data$datetime[1]
+          end_dt = data$datetime[1],
+          no_source_update = FALSE
         )
       }
 
-      # Collapse consecutive rows with the same approval using run-length encoding
-      data <- data[order(data$datetime), ]
-      runs <- rle(data$approval)
-      ends <- cumsum(runs$lengths)
-      starts <- c(1, utils::head(ends, -1) + 1)
-      new_segments <- data.frame(
-        approval_id = NA,
-        timeseries_id = timeseries_id,
-        approval_type_id = runs$values,
-        start_dt = data$datetime[starts],
-        end_dt = data$datetime[ends],
-        stringsAsFactors = FALSE
+      new_segments <- build_attribute_segments(
+        data,
+        value_col = "approval",
+        id_col = "approval_id",
+        timeseries_id = timeseries_id
       )
+      names(new_segments)[
+        names(new_segments) == "approval"
+      ] <- "approval_type_id"
+      if (source_update) {
+        new_segments <- clip_segments_around_protected(
+          new_segments,
+          exist[exist$no_source_update, , drop = FALSE]
+        )
+      }
 
       exist <- collapse_segments_with_split(
         exist = exist,
@@ -1108,7 +1466,8 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
         value_col = "approval_type_id",
         id_col = "approval_id",
         timeseries_id = timeseries_id,
-        bridge_latest_extension = TRUE
+        bridge_latest_extension = TRUE,
+        protection_col = "no_source_update"
       )
 
       # Now commit the changes to the database
@@ -1121,7 +1480,9 @@ adjust_approval <- function(con, timeseries_id, data, delete = FALSE) {
           db_value_col = "approval_type_id",
           existing_state = existing_state,
           proposed_state = exist,
-          delete_ids = sync_delete_ids
+          delete_ids = sync_delete_ids,
+          protection_col = "no_source_update",
+          source_update = source_update
         )
       }
 
