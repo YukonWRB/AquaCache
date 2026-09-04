@@ -64,6 +64,11 @@ normalize_discrete_result_aggregations <- function(
   ) {
     stop("Result aggregation inputs must be data frames.")
   }
+  # Use base data-frame subsetting below. A data.table otherwise interprets
+  # the character column vector as an expression and returns that vector,
+  # rather than the requested columns.
+  result_aggregations <- as.data.frame(result_aggregations)
+  result_components <- as.data.frame(result_components)
   if (!nrow(result_aggregations) && !nrow(result_components)) {
     return(list(
       results = results,
