@@ -2559,6 +2559,14 @@ tryCatch(
          AND data_domain = 'discrete'"
     )
 
+    # Add two columns to discrete.results for lab IDs
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE discrete.results
+         ADD COLUMN IF NOT EXISTS lab_report_no TEXT,
+         ADD COLUMN IF NOT EXISTS lab_sample_no TEXT"
+    )
+
     # Set the patch version in the database and commit.
     DBI::dbExecute(
       con,
