@@ -1,0 +1,251 @@
+{
+  "contract": "urn:aquacache:report-recipe:2",
+  "metadata": {
+    "title": "Hydrometric situational awareness",
+    "example_only": true,
+    "description": "Illustrative level and precipitation sections; not an exact recreation of the workbook or its historical calculations. Parameter 1165 follows the current YGwater level query and must be resolved in the target database."
+  },
+  "inputs": [
+    {
+      "id": "as_of",
+      "type": "datetime",
+      "required": true
+    },
+    {
+      "id": "locations",
+      "type": "string_array",
+      "required": true
+    }
+  ],
+  "datasets": [
+    {
+      "id": "observations",
+      "source": {
+        "code": "aquacache.continuous",
+        "version": 1
+      },
+      "selection": {
+        "mode": "input",
+        "input": "locations",
+        "input_field": "locations",
+        "parameter_ids": [
+          1165
+        ]
+      },
+      "period": {
+        "anchor": {
+          "input": "as_of"
+        },
+        "start_offset_seconds": -2419200,
+        "end_offset_seconds": 0
+      },
+      "quality": {
+        "missing": "retain",
+        "censored": "retain",
+        "approval": "any",
+        "qualifiers": "retain"
+      },
+      "options": {
+        "series_policy": "single_or_fail"
+      }
+    },
+    {
+      "id": "precipitation",
+      "source": {
+        "code": "aquacache.raster",
+        "version": 1
+      },
+      "selection": {
+        "mode": "input",
+        "input": "locations",
+        "input_field": "locations"
+      },
+      "period": {
+        "anchor": {
+          "input": "as_of"
+        },
+        "start_offset_seconds": -2419200,
+        "end_offset_seconds": 172800
+      },
+      "quality": {
+        "missing": "retain",
+        "censored": "retain",
+        "approval": "any",
+        "qualifiers": "retain"
+      },
+      "options": {
+        "past_product": "HRDPA",
+        "forecast_product": "HRDPS"
+      }
+    },
+    {
+      "id": "baseline",
+      "source": {
+        "code": "aquacache.continuous",
+        "version": 1
+      },
+      "selection": {
+        "mode": "input",
+        "input": "locations",
+        "input_field": "locations",
+        "parameter_ids": [
+          1165
+        ]
+      },
+      "period": {
+        "start": "1991-01-01T00:00:00-07:00",
+        "end": "2021-01-01T00:00:00-07:00"
+      },
+      "quality": {
+        "missing": "retain",
+        "censored": "retain",
+        "approval": "any",
+        "qualifiers": "retain"
+      },
+      "options": {
+        "series_policy": "single_or_fail"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "conditions",
+      "operation": {
+        "code": "aquacache.conditions",
+        "version": 1
+      },
+      "inputs": [
+        "observations",
+        "baseline"
+      ],
+      "options": {
+        "lags_seconds": [
+          86400,
+          172800,
+          259200,
+          604800,
+          1209600,
+          1814400,
+          2419200
+        ],
+        "baseline_start_year": 1991,
+        "baseline_end_year": 2020,
+        "minimum_years": 10,
+        "lag_tolerance_seconds": 3600,
+        "stale_after_seconds": 21600,
+        "historical_method": "same_calendar_day",
+        "zero_denominator": "null",
+        "leap_day": "omit"
+      }
+    },
+    {
+      "id": "basin_precip",
+      "operation": {
+        "code": "aquacache.basin_precipitation",
+        "version": 1
+      },
+      "inputs": [
+        "precipitation"
+      ],
+      "options": {
+        "past_hours": [
+          24,
+          48,
+          72,
+          168
+        ],
+        "forecast_hours": [
+          24,
+          48
+        ],
+        "forecast_cycle": "latest_at_or_before_as_of",
+        "spatial_weighting": "area",
+        "minimum_coverage": 0.95
+      }
+    }
+  ],
+  "criteria": [],
+  "sections": [
+    {
+      "id": "levels",
+      "type": {
+        "code": "table",
+        "version": 1
+      },
+      "title": "Levels",
+      "datasets": [
+        "conditions"
+      ],
+      "columns": [
+        {
+          "field": "location",
+          "label": "Location"
+        },
+        {
+          "field": "value",
+          "label": "Level (m)"
+        },
+        {
+          "field": "change_86400",
+          "label": "24 hour change"
+        },
+        {
+          "field": "historical_range_percent",
+          "label": "% historical range"
+        },
+        {
+          "field": "data_age_hours",
+          "label": "Data age (hours)"
+        }
+      ]
+    },
+    {
+      "id": "precipitation",
+      "type": {
+        "code": "table",
+        "version": 1
+      },
+      "title": "Precipitation",
+      "datasets": [
+        "basin_precip"
+      ],
+      "columns": [
+        {
+          "field": "location",
+          "label": "Location"
+        },
+        {
+          "field": "past_24",
+          "label": "Past 24 hours (mm)"
+        },
+        {
+          "field": "next_24",
+          "label": "Next 24 hours (mm)"
+        }
+      ]
+    }
+  ],
+  "annotations": [
+    {
+      "id": "general",
+      "scope": "report",
+      "carry_forward": true,
+      "label": "General comment"
+    },
+    {
+      "id": "station",
+      "scope": "entity",
+      "section": "levels",
+      "carry_forward": true,
+      "label": "Location comment"
+    }
+  ],
+  "output": {
+    "formats": [
+      "xlsx",
+      "html"
+    ],
+    "locale": "en-CA",
+    "timezone": "America/Whitehorse"
+  }
+}

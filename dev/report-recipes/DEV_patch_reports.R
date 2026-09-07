@@ -12,8 +12,31 @@
 # recipe. Relational tables retain identity, ownership, sharing, immutable
 # revision history, execution provenance, and output locations.
 #
+# See inst/report-recipes/README.md for the portable contract, limitations,
+# example recipes and validation instructions. Companion files ship with this patch.
+#
 # Set DEV_patch_reports_dry_run <- TRUE before sourcing to build and verify the
 # complete schema inside a transaction and then roll it back.
+
+# Companion files are part of this development patch; never load a potentially
+# stale installed-package copy when applying a checkout patch. sys.source callers
+# can set DEV_patch_reports_contract_dir explicitly.
+report_contract_dir <- if (exists("DEV_patch_reports_contract_dir", inherits = TRUE)) {
+  get("DEV_patch_reports_contract_dir", inherits = TRUE)
+} else {
+  source_files <- Filter(Negate(is.null), lapply(sys.frames(), function(frame) frame$ofile))
+  if (!length(source_files)) {
+    stop("Set DEV_patch_reports_contract_dir to the checkout inst/report-recipes directory.")
+  }
+  file.path(dirname(tail(source_files, 1L)[[1L]]), "..", "report-recipes")
+}
+contract_files <- file.path(report_contract_dir, c(
+  "schema-v2.json", "validate-json.sql", "validate-v2.sql", "annotations.sql"
+))
+if (!all(file.exists(contract_files))) {
+  stop("The reporting patch requires its companion inst/report-recipes files.")
+}
+report_schema_v2 <- readChar(contract_files[[1L]], file.info(contract_files[[1L]])$size)
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 if (check$session_user != "postgres") {
@@ -79,6 +102,7 @@ tryCatch(
            OR to_regclass('application.report_recipe_revisions') IS NOT NULL
            OR to_regclass('application.report_runs') IS NOT NULL
            OR to_regclass('application.report_run_outputs') IS NOT NULL
+           OR to_regclass('application.report_run_annotations') IS NOT NULL
            OR to_regprocedure(
              'application.can_manage_report_role(text)'
            ) IS NOT NULL
@@ -209,6 +233,8 @@ tryCatch(
              report_recipe_revision_id
            )
            ON UPDATE CASCADE ON DELETE RESTRICT,
+         previous_run_id INTEGER REFERENCES application.report_runs(report_run_id)
+           ON DELETE RESTRICT,
          requested_by_role TEXT NOT NULL DEFAULT CURRENT_USER,
          status TEXT NOT NULL DEFAULT 'queued',
          runtime_arguments JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -223,6 +249,10 @@ tryCatch(
          modified_by TEXT,
          created TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
          modified TIMESTAMPTZ,
+         CONSTRAINT report_runs_time_order CHECK (
+           (started_at IS NULL OR started_at >= requested_at)
+           AND (completed_at IS NULL OR completed_at >= requested_at)
+         ),
          CONSTRAINT report_runs_status_check CHECK (
            status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')
          ),
@@ -283,6 +313,8 @@ tryCatch(
            REFERENCES application.report_runs(report_run_id)
            ON UPDATE CASCADE ON DELETE RESTRICT,
          output_name TEXT NOT NULL,
+         artifact_role TEXT NOT NULL DEFAULT 'report'
+           CHECK (artifact_role IN ('report', 'input_snapshot', 'supporting')),
          output_format TEXT NOT NULL,
          media_type TEXT,
          storage_kind TEXT NOT NULL,
@@ -472,7 +504,10 @@ tryCatch(
            current_user = 'admin'
            OR pg_has_role(current_user, 'admin', 'member')
            OR current_user = p_owner_role
-           OR pg_has_role(current_user, p_owner_role, 'member')
+           OR EXISTS (
+             SELECT 1 FROM pg_roles r WHERE r.rolname = p_owner_role
+               AND pg_has_role(current_user, r.oid, 'member')
+           )
        $function$"
     )
     DBI::dbExecute(
@@ -495,8 +530,9 @@ tryCatch(
            )
            OR EXISTS (
              SELECT 1
-             FROM unnest(COALESCE(p_share_with, ARRAY[]::TEXT[])) role(role_name)
-             WHERE pg_has_role(current_user, role.role_name, 'member')
+             FROM pg_roles role
+             WHERE role.rolname = ANY(COALESCE(p_share_with, ARRAY[]::TEXT[]))
+               AND pg_has_role(current_user, role.oid, 'member')
            )
        $function$"
     )
@@ -523,9 +559,10 @@ tryCatch(
              USING ERRCODE = '23514';
          END IF;
 
-         IF NOT (NEW.schema_document ? '$schema')
+         IF jsonb_typeof(NEW.schema_document -> '$schema') IS DISTINCT FROM 'string'
+            OR btrim(NEW.schema_document ->> '$schema') = ''
             OR NOT (NEW.schema_document ? 'type')
-            OR NEW.schema_document ->> 'type' <> 'object'
+            OR NEW.schema_document ->> 'type' IS DISTINCT FROM 'object'
          THEN
            RAISE EXCEPTION
              'schema_document must identify its JSON Schema dialect and describe an object.'
@@ -598,6 +635,12 @@ tryCatch(
        $function$"
     )
 
+    for (sql_file in contract_files[2:3]) {
+      DBI::dbExecute(
+        con, readChar(sql_file, file.info(sql_file)$size), immediate = TRUE
+      )
+    }
+
     DBI::dbExecute(
       con,
       "CREATE FUNCTION application.validate_report_recipe_revision()
@@ -610,6 +653,7 @@ tryCatch(
          expected_number INTEGER;
          selected_schema_code TEXT;
          selected_schema_version INTEGER;
+         selected_schema_document JSONB;
          invalid_dataset JSONB;
          invalid_section JSONB;
        BEGIN
@@ -640,8 +684,9 @@ tryCatch(
          END IF;
 
          SELECT schema_definition.schema_code,
-                schema_definition.schema_version
-         INTO selected_schema_code, selected_schema_version
+                schema_definition.schema_version,
+                schema_definition.schema_document
+         INTO selected_schema_code, selected_schema_version, selected_schema_document
          FROM application.report_recipe_schemas schema_definition
          WHERE schema_definition.report_recipe_schema_id =
            NEW.report_recipe_schema_id
@@ -652,6 +697,10 @@ tryCatch(
              'Report recipe schema % is not available for new revisions.',
              NEW.report_recipe_schema_id
              USING ERRCODE = '23514';
+         END IF;
+
+         IF selected_schema_code = 'aquacache-report' AND selected_schema_version = 2 THEN
+           PERFORM application.validate_report_recipe_v2(NEW.recipe, selected_schema_document);
          END IF;
 
          IF selected_schema_code = 'aquacache-report'
@@ -722,7 +771,7 @@ tryCatch(
               OR jsonb_typeof(dataset -> 'id') <> 'string'
               OR btrim(dataset ->> 'id') = ''
               OR NOT (dataset ? 'source')
-              OR dataset ->> 'source' NOT IN ('discrete', 'continuous')
+              OR COALESCE(dataset ->> 'source', '') NOT IN ('discrete', 'continuous')
               OR NOT (dataset ? 'selection')
               OR jsonb_typeof(dataset -> 'selection') <> 'object'
            LIMIT 1;
@@ -830,6 +879,7 @@ tryCatch(
        AS $function$
        BEGIN
          NEW.created_by := CURRENT_USER;
+         NEW.created := clock_timestamp();
          RETURN NEW;
        END;
        $function$"
@@ -844,6 +894,10 @@ tryCatch(
        AS $function$
        DECLARE
          old_status TEXT;
+         recipe_doc JSONB;
+         schema_doc JSONB;
+         param JSONB;
+         arg_key TEXT;
        BEGIN
          NEW.requested_by_role := btrim(NEW.requested_by_role);
 
@@ -857,12 +911,81 @@ tryCatch(
          END IF;
 
          IF TG_OP = 'INSERT' THEN
+           NEW.requested_at := clock_timestamp();
+           IF NEW.status <> 'queued' THEN
+             RAISE EXCEPTION 'New report runs must start queued.' USING ERRCODE = '23514';
+           END IF;
+           IF NEW.requested_by_role IN ('public', 'public_reader') OR NEW.requested_by_role ~ '^pg_' THEN
+             RAISE EXCEPTION 'Run requester must be an eligible login or group.' USING ERRCODE = '23514';
+           END IF;
+           SELECT revision.recipe, schema_definition.schema_document
+           INTO recipe_doc, schema_doc
+           FROM application.report_recipe_revisions revision
+           JOIN application.report_recipe_schemas schema_definition USING (report_recipe_schema_id)
+           JOIN application.report_recipes recipe USING (report_recipe_id)
+           WHERE revision.report_recipe_revision_id = NEW.report_recipe_revision_id
+             AND recipe.active;
+           IF NOT FOUND THEN
+             RAISE EXCEPTION 'Recipe is inactive or unavailable.' USING ERRCODE = '42501';
+           END IF;
+           IF recipe_doc ->> 'contract' = 'urn:aquacache:report-recipe:2' THEN
+             IF jsonb_typeof(NEW.runtime_arguments) IS DISTINCT FROM 'object' THEN
+               RAISE EXCEPTION 'Runtime arguments must be an object.' USING ERRCODE = '23514';
+             END IF;
+             FOR arg_key IN SELECT jsonb_object_keys(NEW.runtime_arguments) LOOP
+               IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(recipe_doc -> 'inputs') e
+                 WHERE e ->> 'id' = arg_key) THEN
+                 RAISE EXCEPTION 'Unknown runtime input %.', arg_key USING ERRCODE = '23514';
+               END IF;
+             END LOOP;
+             FOR param IN SELECT * FROM jsonb_array_elements(recipe_doc -> 'inputs') LOOP
+               arg_key := param ->> 'id';
+               IF NOT (NEW.runtime_arguments ? arg_key) AND param ? 'default' THEN
+                 NEW.runtime_arguments := NEW.runtime_arguments || jsonb_build_object(arg_key, param -> 'default');
+               END IF;
+               IF NOT (NEW.runtime_arguments ? arg_key) THEN
+                 IF param ->> 'required' = 'true' THEN
+                   RAISE EXCEPTION 'Missing runtime input %.', arg_key USING ERRCODE = '23514';
+                 END IF;
+               ELSIF NOT application.report_json_matches(NEW.runtime_arguments -> arg_key,
+                 schema_doc #> ARRAY['$defs', 'value_' || (param ->> 'type')], schema_doc) THEN
+                 RAISE EXCEPTION 'Invalid runtime input %.', arg_key USING ERRCODE = '23514';
+               END IF;
+               IF NEW.runtime_arguments ? arg_key AND param ->> 'type' IN ('date', 'datetime') THEN
+                 BEGIN
+                   IF param ->> 'type' = 'date' THEN
+                     PERFORM (NEW.runtime_arguments ->> arg_key)::DATE;
+                   ELSE
+                     PERFORM (NEW.runtime_arguments ->> arg_key)::TIMESTAMPTZ;
+                   END IF;
+                 EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow THEN
+                   RAISE EXCEPTION 'Invalid calendar value for input %.', arg_key USING ERRCODE = '23514';
+                 END;
+               END IF;
+             END LOOP;
+           END IF;
+           IF NEW.previous_run_id IS NOT NULL AND NOT EXISTS (
+             SELECT 1 FROM application.report_runs previous
+             JOIN application.report_recipe_revisions prev_revision
+               ON prev_revision.report_recipe_revision_id = previous.report_recipe_revision_id
+             JOIN application.report_recipe_revisions this_revision
+               ON this_revision.report_recipe_id = prev_revision.report_recipe_id
+             WHERE previous.report_run_id = NEW.previous_run_id
+               AND previous.report_run_id < NEW.report_run_id
+               AND previous.status = 'succeeded'
+               AND this_revision.report_recipe_revision_id = NEW.report_recipe_revision_id
+           ) THEN
+             RAISE EXCEPTION 'Previous run must be a visible earlier successful run of this recipe.' USING ERRCODE = '23514';
+           END IF;
            SELECT version
            INTO NEW.database_patch
            FROM information.version_info
            WHERE item = 'Last patch number';
          ELSE
-           IF NEW.report_recipe_revision_id IS DISTINCT FROM
+           IF NEW.report_run_id IS DISTINCT FROM OLD.report_run_id
+              OR NEW.previous_run_id IS DISTINCT FROM OLD.previous_run_id
+              OR (OLD.started_at IS NOT NULL AND NEW.started_at IS DISTINCT FROM OLD.started_at)
+              OR NEW.report_recipe_revision_id IS DISTINCT FROM
                 OLD.report_recipe_revision_id
               OR NEW.requested_by_role IS DISTINCT FROM OLD.requested_by_role
               OR NEW.runtime_arguments IS DISTINCT FROM OLD.runtime_arguments
@@ -876,6 +999,17 @@ tryCatch(
                USING ERRCODE = '23514';
            END IF;
 
+           IF NEW.status = 'succeeded' AND (
+             NOT EXISTS (SELECT 1 FROM application.report_run_outputs o
+               WHERE o.report_run_id = NEW.report_run_id AND o.artifact_role = 'report')
+             OR jsonb_typeof(NEW.executor -> 'name') IS DISTINCT FROM 'string'
+             OR COALESCE(btrim(NEW.executor ->> 'name'), '') = ''
+             OR jsonb_typeof(NEW.executor -> 'version') IS DISTINCT FROM 'string'
+             OR COALESCE(btrim(NEW.executor ->> 'version'), '') = ''
+             OR NEW.resolved_inputs = '{}'::JSONB
+           ) THEN
+             RAISE EXCEPTION 'Success requires a report artifact, executor name/version, and resolved inputs.' USING ERRCODE = '23514';
+           END IF;
            old_status := OLD.status;
            IF old_status IN ('succeeded', 'failed', 'cancelled') THEN
              RAISE EXCEPTION
@@ -912,15 +1046,13 @@ tryCatch(
        SET search_path = pg_catalog, application
        AS $function$
        BEGIN
-         IF NOT EXISTS (
-           SELECT 1
-           FROM application.report_runs run
-           WHERE run.report_run_id = NEW.report_run_id
-             AND run.status IN ('running', 'succeeded')
-             AND application.can_manage_report_role(run.requested_by_role)
-         ) THEN
+         PERFORM 1 FROM application.report_runs run
+         WHERE run.report_run_id = NEW.report_run_id AND run.status = 'running'
+           AND application.can_manage_report_role(run.requested_by_role)
+         FOR UPDATE;
+         IF NOT FOUND THEN
            RAISE EXCEPTION
-             'Report run % is not manageable or is not running/succeeded.',
+             'Report run % is not manageable or is not running.',
              NEW.report_run_id
              USING ERRCODE = '23514';
          END IF;
@@ -985,6 +1117,12 @@ tryCatch(
        BEFORE INSERT OR UPDATE ON application.report_runs
        FOR EACH ROW
        EXECUTE FUNCTION application.validate_report_run()"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER prevent_report_run_delete_trigger
+       BEFORE DELETE ON application.report_runs
+       FOR EACH ROW EXECUTE FUNCTION application.prevent_report_history_change()"
     )
     DBI::dbExecute(
       con,
@@ -1279,6 +1417,8 @@ tryCatch(
     )
 
     function_signatures <- c(
+      "report_json_matches(jsonb,jsonb,jsonb)",
+      "validate_report_recipe_v2(jsonb,jsonb)",
       "can_manage_report_role(text)",
       "can_view_report(text,text[])",
       "validate_report_recipe_schema()",
@@ -1309,15 +1449,13 @@ tryCatch(
     DBI::dbExecute(
       con,
       "GRANT EXECUTE ON FUNCTION
+         application.report_json_matches(JSONB, JSONB, JSONB),
+         application.validate_report_recipe_v2(JSONB, JSONB),
          application.can_manage_report_role(TEXT),
          application.can_view_report(TEXT, TEXT[])
        TO PUBLIC"
     )
 
-    DBI::dbExecute(
-      con,
-      "GRANT USAGE ON SCHEMA application TO PUBLIC"
-    )
     DBI::dbExecute(
       con,
       "REVOKE ALL ON TABLE
@@ -1445,9 +1583,26 @@ tryCatch(
            },
            \"additionalProperties\": true
          }'::JSONB,
-         'active'
+         'deprecated'
        )"
     )
+
+    DBI::dbExecute(
+      con,
+      "INSERT INTO application.report_recipe_schemas
+         (schema_code, schema_version, schema_name, description, schema_document, status)
+       VALUES ('aquacache-report', 2, 'AquaCache portable report recipe v2',
+         'Typed inputs, versioned capabilities, ordered processing, criteria, presentation and commentary.',
+         $1::JSONB, 'active')",
+      params = list(report_schema_v2)
+    )
+    DBI::dbExecute(
+      con, readChar(contract_files[[4L]], file.info(contract_files[[4L]])$size),
+      immediate = TRUE
+    )
+    DBI::dbExecute(con,
+      "CREATE INDEX report_runs_previous_run_idx ON application.report_runs(previous_run_id)
+       WHERE previous_run_id IS NOT NULL")
 
     verification <- DBI::dbGetQuery(
       con,
@@ -1517,7 +1672,7 @@ tryCatch(
            SELECT count(*)
            FROM application.report_recipe_schemas
            WHERE schema_code = 'aquacache-report'
-             AND schema_version = 1
+             AND schema_version = 2
              AND status = 'active'
              AND schema_document ->> 'type' = 'object'
          ) = 1 AS portable_recipe_schema_available,
@@ -1584,6 +1739,11 @@ tryCatch(
              AND trigger_definition.tgname LIKE 'audit_%_trigger'
              AND NOT trigger_definition.tgisinternal
          ) = 5 AS all_reporting_audit_triggers_available,
+         to_regclass('application.report_run_annotations') IS NOT NULL
+           AND EXISTS (SELECT 1 FROM pg_class WHERE oid =
+             'application.report_run_annotations'::REGCLASS AND relrowsecurity AND relforcerowsecurity)
+           AND EXISTS (SELECT 1 FROM audit.table_registry WHERE schema_name = 'application'
+             AND table_name = 'report_run_annotations') AS annotations_available_and_audited,
          to_regprocedure(
            'application.can_manage_report_role(text)'
          ) IS NOT NULL AS has_manage_role_function,
