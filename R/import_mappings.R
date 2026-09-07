@@ -1315,3 +1315,40 @@ import_mapping_resolve_match <- function(mappings, source_match) {
 
   matched[1]
 }
+
+import_mapping_match_status <- function(mappings, source_match) {
+  tryCatch(
+    {
+      mapping <- import_mapping_resolve_match(mappings, source_match)
+      if (is.null(mapping)) {
+        return(list(
+          status = "no_mapping",
+          message = NA_character_,
+          mapping = NULL
+        ))
+      }
+      if (
+        !("parameter_id" %in% names(mapping)) ||
+          is.na(mapping$parameter_id[[1]])
+      ) {
+        return(list(
+          status = "missing_parameter_id",
+          message = NA_character_,
+          mapping = mapping
+        ))
+      }
+      list(
+        status = "mapped",
+        message = NA_character_,
+        mapping = mapping
+      )
+    },
+    error = function(e) {
+      list(
+        status = "mapping_error",
+        message = conditionMessage(e),
+        mapping = NULL
+      )
+    }
+  )
+}
