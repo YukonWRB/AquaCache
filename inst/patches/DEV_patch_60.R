@@ -1839,28 +1839,34 @@ tryCatch(
     table_privilege_differences <- function(source_table, target_table) {
       DBI::dbGetQuery(
         con,
-        "WITH source_privileges AS (
+        # Owners are excluded because an owner holds its privileges implicitly
+        # and never needs an explicit grant. Both owners are excluded from BOTH
+        # sides: a per-side exclusion is only sound when parent and child share
+        # an owner. They frequently do not - this patch creates its tables OWNER
+        # TO admin, while tables inherited from an older restore are owned by
+        # postgres with admin holding an explicit grant. A per-side filter then
+        # drops admin from the target set only and reports its parent grant as
+        # missing, even though admin owns the child outright.
+        "WITH excluded_owners AS (
+           SELECT tableowner
+           FROM pg_tables
+           WHERE schemaname = 'discrete'
+             AND tablename IN ($1, $2)
+             AND tableowner IS NOT NULL
+         ), source_privileges AS (
            SELECT grantee, privilege_type
            FROM information_schema.role_table_grants
            WHERE table_schema = 'discrete'
              AND table_name = $1
              AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
-             AND grantee <> (
-               SELECT tableowner
-               FROM pg_tables
-               WHERE schemaname = 'discrete' AND tablename = $1
-             )
+             AND grantee NOT IN (SELECT tableowner FROM excluded_owners)
          ), target_privileges AS (
            SELECT grantee, privilege_type
            FROM information_schema.role_table_grants
            WHERE table_schema = 'discrete'
              AND table_name = $2
              AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
-             AND grantee <> (
-               SELECT tableowner
-               FROM pg_tables
-               WHERE schemaname = 'discrete' AND tablename = $2
-             )
+             AND grantee NOT IN (SELECT tableowner FROM excluded_owners)
          )
          SELECT 'missing' AS difference, missing.*
          FROM (
