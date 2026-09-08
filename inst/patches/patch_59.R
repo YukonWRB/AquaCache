@@ -569,7 +569,7 @@ tryCatch(
     )
     DBI::dbExecute(
       con,
-      "ALTER TABLE public.sub_locations ADD CONSTRAINT sub_locations_name_key UNIQUE (sub_location_name)"
+      "ALTER TABLE public.sub_locations ADD CONSTRAINT sub_locations_name_key UNIQUE (location_id, sub_location_name)"
     )
     DBI::dbExecute(
       con,
