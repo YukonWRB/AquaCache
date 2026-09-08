@@ -32,7 +32,24 @@
 #    will require updates to at least the editSamples.R module.
 # 3. Re-create the 'testdb' fixture when this patch is finally applied; also update
 #    the test fixture in the 'YGwater' package.
-# 4. Decide on and implement the aggregate-to-direct conversion path before
+# 4. DONE (NWT, September 4 2026). Added discrete.convert_result_aggregation_to_direct()
+#    with modes preserve_calculated and replace, and re-added the delete guard it makes
+#    safe as forbid_result_aggregation_delete_trigger. Sanctioned deletes announce
+#    themselves with transaction-local aquacache.allow_result_aggregation_delete - the
+#    same idiom as aquacache.defer_result_aggregation_refresh and aquacache.audit_user.
+#    The cascade from discrete.results is still permitted, as it was before. The reason
+#    is preserved in the audit trail by writing it onto result_aggregations.note
+#    immediately before the delete, so the existing generic audit trigger captures it
+#    in new_data of the UPDATE and original_data of the DELETE - no change to
+#    audit.if_modified_func(). synchronize_discrete_sample_detail() converts through the
+#    function and brackets its in-place rebuild deletes with the guard variable.
+#    The function is safe to call partway through a deferred batch: it leaves the
+#    constraint mode alone when set_result_aggregation_constraints() has already
+#    deferred it, because SET CONSTRAINTS ... IMMEDIATE fires every outstanding
+#    check in the transaction and not only this function's.
+#    The original note follows.
+#
+#    Decide on and implement the aggregate-to-direct conversion path before
 #    restricting direct DELETE on result_aggregations. Deleting that row cascades to
 #    result_components, but does nothing
 #    to results on deletion to result_aggregations. It's therefore possible to delete
@@ -1149,6 +1166,263 @@ tryCatch(
        EXECUTE FUNCTION discrete.validate_result_aggregation()"
     )
 
+    # ---------------------------------------------------------------------
+    # TODO ITEM 4: the aggregate-to-direct conversion path, and the delete
+    # guard that it makes safe.
+    #
+    # Deleting a result_aggregations row cascades to its components but leaves
+    # discrete.results untouched, so it is possible to strip a calculated
+    # result of its inputs while keeping the derived value - a result that
+    # presents as measured when it was calculated from evidence that no longer
+    # exists. Guarding the delete on its own is not enough, because
+    # synchronize_discrete_sample_detail() legitimately has to remove an
+    # aggregation: when incoming detail no longer aggregates a result, that
+    # result must become a direct one.
+    #
+    # So the conversion is made explicit first, and only then is the raw delete
+    # closed off. Sanctioned deletes announce themselves through a
+    # transaction-local guard variable - the same idiom already used above by
+    # aquacache.defer_result_aggregation_refresh, and by aquacache.audit_user
+    # since patch 37.
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION discrete.forbid_result_aggregation_delete()
+       RETURNS TRIGGER
+       LANGUAGE plpgsql
+       AS $$
+       BEGIN
+         -- A sanctioned operation is in progress. Set transaction-locally by
+         -- discrete.convert_result_aggregation_to_direct(), and by callers that
+         -- are rebuilding an aggregation in place rather than converting it.
+         IF COALESCE(
+           NULLIF(
+             current_setting(
+               'aquacache.allow_result_aggregation_delete',
+               TRUE
+             ),
+             ''
+           ),
+           'off'
+         ) = 'on' THEN
+           RETURN OLD;
+         END IF;
+         -- Permitted as part of the cascade from discrete.results, which is in
+         -- progress when the parent result has already gone.
+         IF EXISTS (
+           SELECT 1 FROM discrete.results WHERE result_id = OLD.result_id
+         ) THEN
+           RAISE EXCEPTION
+             'Cannot delete the result_aggregations row for result % directly, because that would leave a calculated result with no components. Delete the result itself, exclude components with included_in_aggregate = FALSE, or convert the result with discrete.convert_result_aggregation_to_direct().',
+             OLD.result_id;
+         END IF;
+         RETURN OLD;
+       END;
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER forbid_result_aggregation_delete_trigger
+       BEFORE DELETE
+       ON discrete.result_aggregations
+       FOR EACH ROW
+       EXECUTE FUNCTION discrete.forbid_result_aggregation_delete()"
+    )
+
+    # The explicit conversion. SECURITY INVOKER deliberately: the caller's own
+    # privileges and row-level security decide what may be converted, so the
+    # function cannot be used to reach a result the caller could not otherwise
+    # update.
+    #
+    # The reason is preserved in the audit trail without touching the shared
+    # audit function: it is written onto the aggregation row immediately before
+    # the delete, so audit_result_aggregations_trigger captures it in new_data
+    # of the UPDATE and again in original_data of the DELETE.
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION discrete.convert_result_aggregation_to_direct(
+         result_id INTEGER,
+         conversion_mode TEXT,
+         result NUMERIC DEFAULT NULL,
+         result_condition INTEGER DEFAULT NULL,
+         result_condition_value NUMERIC DEFAULT NULL,
+         reason TEXT DEFAULT NULL
+       )
+       RETURNS VOID
+       LANGUAGE plpgsql
+       SECURITY INVOKER
+       AS $$
+       DECLARE
+         v_result_id INTEGER :=
+           convert_result_aggregation_to_direct.result_id;
+         v_mode TEXT := lower(btrim(coalesce(
+           convert_result_aggregation_to_direct.conversion_mode, '')));
+         v_reason TEXT := btrim(coalesce(
+           convert_result_aggregation_to_direct.reason, ''));
+         v_result NUMERIC := convert_result_aggregation_to_direct.result;
+         v_condition INTEGER :=
+           convert_result_aggregation_to_direct.result_condition;
+         v_condition_value NUMERIC :=
+           convert_result_aggregation_to_direct.result_condition_value;
+         v_calculated NUMERIC;
+         v_calculated_condition INTEGER;
+         v_calculated_condition_value NUMERIC;
+         v_caller_deferred BOOLEAN;
+       BEGIN
+         -- 7. A nonblank reason is mandatory.
+         IF v_reason = '' THEN
+           RAISE EXCEPTION
+             'A nonblank reason is required to convert result % from an aggregate to a direct result.',
+             v_result_id;
+         END IF;
+
+         IF v_mode NOT IN ('preserve_calculated', 'replace') THEN
+           RAISE EXCEPTION
+             'conversion_mode must be preserve_calculated or replace, not %.',
+             coalesce(convert_result_aggregation_to_direct.conversion_mode,
+                      '<NULL>');
+         END IF;
+
+         -- 2. Verify the caller may make this change. Row visibility is left to
+         -- row-level security on the SELECT below.
+         IF NOT has_table_privilege(
+                  current_user, 'discrete.results', 'UPDATE')
+            OR NOT has_table_privilege(
+                  current_user, 'discrete.result_aggregations', 'DELETE') THEN
+           RAISE EXCEPTION
+             'Role % may not convert result aggregations: UPDATE on discrete.results and DELETE on discrete.result_aggregations are both required.',
+             current_user;
+         END IF;
+
+         -- 1. Lock the result and its aggregation row, in that order.
+         SELECT r.result, r.result_condition, r.result_condition_value
+           INTO v_calculated, v_calculated_condition,
+                v_calculated_condition_value
+           FROM discrete.results r
+          WHERE r.result_id = v_result_id
+            FOR UPDATE;
+         IF NOT FOUND THEN
+           RAISE EXCEPTION
+             'Result % does not exist, or is not visible to role %.',
+             v_result_id, current_user;
+         END IF;
+
+         PERFORM 1
+           FROM discrete.result_aggregations ra
+          WHERE ra.result_id = v_result_id
+            FOR UPDATE;
+         IF NOT FOUND THEN
+           RAISE EXCEPTION
+             'Result % has no aggregation to convert; it is already a direct result.',
+             v_result_id;
+         END IF;
+
+         -- 4. Validate and assign the new direct-result state.
+         IF v_mode = 'preserve_calculated' THEN
+           IF convert_result_aggregation_to_direct.result IS NOT NULL
+              OR convert_result_aggregation_to_direct.result_condition
+                   IS NOT NULL
+              OR convert_result_aggregation_to_direct.result_condition_value
+                   IS NOT NULL THEN
+             RAISE EXCEPTION
+               'conversion_mode preserve_calculated keeps the calculated value and does not accept a supplied result for result %. Use replace instead.',
+               v_result_id;
+           END IF;
+           IF v_calculated IS NULL AND v_calculated_condition IS NULL THEN
+             RAISE EXCEPTION
+               'Result % has no calculated value to preserve. Refresh it first, or use conversion_mode replace with an explicit value.',
+               v_result_id;
+           END IF;
+           v_result := v_calculated;
+           v_condition := v_calculated_condition;
+           v_condition_value := v_calculated_condition_value;
+         ELSE
+           IF v_result IS NULL AND v_condition IS NULL THEN
+             RAISE EXCEPTION
+               'conversion_mode replace requires an explicit result or result_condition for result %.',
+               v_result_id;
+           END IF;
+         END IF;
+
+         -- 7 (continued). Record the reason on the aggregation row before it is
+         -- deleted, so both audit rows carry it.
+         UPDATE discrete.result_aggregations ra
+            SET note = concat_ws(
+                  chr(10),
+                  NULLIF(btrim(ra.note), ''),
+                  format(
+                    'Converted to a direct result (%s) by %s: %s',
+                    v_mode, current_user, v_reason
+                  )
+                )
+          WHERE ra.result_id = v_result_id;
+
+         -- 3. Defer the aggregation constraints: between the assignment and the
+         -- delete the row is briefly both aggregate and direct.
+         --
+         -- A caller that has already deferred them owns the constraint mode for
+         -- the whole transaction and may have other rows mid-flight - a newly
+         -- inserted aggregate parent whose components are not written yet, for
+         -- instance - that would fail if checked now. Setting IMMEDIATE fires
+         -- every outstanding check, not only this function's, so when a caller
+         -- has deferred, leave the mode alone and let it restore IMMEDIATE when
+         -- its own work is complete. set_result_aggregation_constraints()
+         -- records the mode it set.
+         v_caller_deferred := COALESCE(
+           NULLIF(
+             current_setting(
+               'aquacache.result_aggregation_constraints',
+               TRUE
+             ),
+             ''
+           ),
+           'immediate'
+         ) = 'deferred';
+
+         IF NOT v_caller_deferred THEN
+           SET CONSTRAINTS
+             discrete.validate_result_aggregation_result_trigger,
+             discrete.validate_result_aggregation_config_trigger,
+             discrete.validate_result_aggregation_components_trigger
+           DEFERRED;
+         END IF;
+
+         UPDATE discrete.results r
+            SET result = v_result,
+                result_condition = v_condition,
+                result_condition_value = v_condition_value
+          WHERE r.result_id = v_result_id;
+
+         -- 5. Delete the aggregation, cascading to its components.
+         PERFORM set_config(
+           'aquacache.allow_result_aggregation_delete', 'on', TRUE);
+         DELETE FROM discrete.result_aggregations ra
+          WHERE ra.result_id = v_result_id;
+         PERFORM set_config(
+           'aquacache.allow_result_aggregation_delete', 'off', TRUE);
+
+         -- 6. Restore immediate constraints, which also validates the result
+         -- now rather than deferring the failure to COMMIT. Only when this
+         -- function deferred them itself - see the note at step 3. A caller
+         -- that deferred them gets its conversion validated at its own
+         -- restore, or failing that at COMMIT.
+         IF NOT v_caller_deferred THEN
+           SET CONSTRAINTS
+             discrete.validate_result_aggregation_result_trigger,
+             discrete.validate_result_aggregation_config_trigger,
+             discrete.validate_result_aggregation_components_trigger
+           IMMEDIATE;
+         END IF;
+       END;
+       $$"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON FUNCTION discrete.convert_result_aggregation_to_direct(
+         INTEGER, TEXT, NUMERIC, INTEGER, NUMERIC, TEXT
+       ) IS
+       'Converts a component-built result into a direct result, deleting its aggregation and components. preserve_calculated keeps the value the database calculated; replace requires an explicitly supplied result or result condition. A nonblank reason is required and is preserved in the audit trail on discrete.result_aggregations. This is the only sanctioned way to remove an aggregation while keeping its result; a direct DELETE is refused by forbid_result_aggregation_delete_trigger.'"
+    )
+
     component_function_signatures <- c(
       "validate_result_aggregation_arguments()",
       "result_component_numeric_value(numeric,integer,numeric,jsonb)",
@@ -1156,7 +1430,9 @@ tryCatch(
       "refresh_result_aggregation(integer)",
       "refresh_result_aggregations(integer[])",
       "refresh_result_aggregation_trigger()",
-      "validate_result_aggregation()"
+      "validate_result_aggregation()",
+      "forbid_result_aggregation_delete()",
+      "convert_result_aggregation_to_direct(integer,text,numeric,integer,numeric,text)"
     )
     for (function_signature in component_function_signatures) {
       DBI::dbExecute(

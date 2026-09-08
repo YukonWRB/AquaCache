@@ -369,6 +369,13 @@ normalize_discrete_result_aggregations <- function(
 #' immediate also evaluates all outstanding component-result checks, so callers
 #' receive a validation error before attempting to commit.
 #'
+#' The mode is also recorded transaction-locally in
+#' `aquacache.result_aggregation_constraints`, so that a function called partway
+#' through a deferred batch can tell that a caller already owns the constraint
+#' mode. `discrete.convert_result_aggregation_to_direct()` reads it and leaves
+#' the mode alone rather than restoring immediate on a batch that is still
+#' mid-flight.
+#'
 #' @param con An open DBI connection with an active transaction.
 #' @param mode Either `"deferred"` or `"immediate"`.
 #'
@@ -394,7 +401,17 @@ set_result_aggregation_constraints <- function(
        discrete.validate_result_aggregation_components_trigger
      IMMEDIATE"
   }
-  invisible(DBI::dbExecute(con, statement))
+  affected <- DBI::dbExecute(con, statement)
+  # SET CONSTRAINTS is transaction-scoped, so the record of it is set with
+  # is_local = TRUE to match: both reset together at COMMIT or ROLLBACK.
+  DBI::dbExecute(
+    con,
+    "SELECT set_config(
+       'aquacache.result_aggregation_constraints', $1, TRUE
+     )",
+    params = list(mode)
+  )
+  invisible(affected)
 }
 
 

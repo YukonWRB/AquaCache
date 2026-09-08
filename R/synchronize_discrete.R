@@ -322,49 +322,105 @@ synchronize_discrete_sample_detail <- function(
               "."
             )
           }
-          DBI::dbExecute(
-            con,
-            paste0(
-              "DELETE FROM discrete.result_aggregations WHERE result_id IN (",
-              paste(placeholders, collapse = ", "),
-              ")"
-            ),
-            params = as.list(as.integer(affected_result_ids))
-          )
-        }
-
-        direct_rows <- which(
-          result_ids %in% setdiff(previously_aggregated, target_result_ids)
-        )
-        for (result_row in direct_rows) {
-          result_condition <- if (
-            "result_condition" %in% names(remote_results)
-          ) {
-            remote_results$result_condition[[result_row]]
-          } else {
-            NA_integer_
-          }
-          result_condition_value <- if (
-            "result_condition_value" %in% names(remote_results)
-          ) {
-            remote_results$result_condition_value[[result_row]]
-          } else {
-            NA_real_
-          }
-          DBI::dbExecute(
-            con,
-            "UPDATE discrete.results
-             SET result = $1,
-                 result_condition = $2,
-                 result_condition_value = $3
-             WHERE result_id = $4",
-            params = list(
-              remote_results$result[[result_row]],
-              result_condition,
-              result_condition_value,
-              result_ids[[result_row]]
+          # Results that are no longer aggregated become direct results through
+          # the explicit conversion operation, which deletes the aggregation,
+          # assigns the new direct state, and preserves a reason in the audit
+          # trail. A raw DELETE here is refused by
+          # forbid_result_aggregation_delete_trigger.
+          converting_ids <- setdiff(previously_aggregated, target_result_ids)
+          for (converting_id in converting_ids) {
+            result_row <- which(result_ids == converting_id)[[1]]
+            result_condition <- if (
+              "result_condition" %in% names(remote_results)
+            ) {
+              remote_results$result_condition[[result_row]]
+            } else {
+              NA_integer_
+            }
+            result_condition_value <- if (
+              "result_condition_value" %in% names(remote_results)
+            ) {
+              remote_results$result_condition_value[[result_row]]
+            } else {
+              NA_real_
+            }
+            incoming_result <- remote_results$result[[result_row]]
+            # With nothing to assign there is no replacement value, so the
+            # calculated value stands as the new direct one.
+            conversion_mode <- if (
+              is.na(incoming_result) && is.na(result_condition)
+            ) {
+              "preserve_calculated"
+            } else {
+              "replace"
+            }
+            DBI::dbExecute(
+              con,
+              "SELECT discrete.convert_result_aggregation_to_direct(
+                 $1, $2, $3, $4, $5, $6
+               )",
+              params = list(
+                as.integer(converting_id),
+                conversion_mode,
+                if (identical(conversion_mode, "preserve_calculated")) {
+                  NA_real_
+                } else {
+                  incoming_result
+                },
+                if (identical(conversion_mode, "preserve_calculated")) {
+                  NA_integer_
+                } else {
+                  result_condition
+                },
+                if (identical(conversion_mode, "preserve_calculated")) {
+                  NA_real_
+                } else {
+                  result_condition_value
+                },
+                paste0(
+                  "Incoming sample detail no longer aggregates this result ",
+                  "(synchronize_discrete_sample_detail, import_source ",
+                  "sample_id ",
+                  sample_id,
+                  ")."
+                )
+              )
             )
+          }
+          # Targets keep their aggregate identity and are rebuilt below. Their
+          # existing aggregation rows are removed in place, which is a
+          # sanctioned delete rather than a conversion.
+          rebuilding_ids <- intersect(
+            target_result_ids,
+            database_aggregations$result_id
           )
+          if (length(rebuilding_ids)) {
+            DBI::dbExecute(
+              con,
+              "SELECT set_config(
+                 'aquacache.allow_result_aggregation_delete', 'on', TRUE
+               )"
+            )
+            # No on.exit reset is needed: the guard is transaction-local, so a
+            # failure between here and the reset below rolls it back with the
+            # rest of the transaction.
+            rebuild_placeholders <- paste0("$", seq_along(rebuilding_ids))
+            DBI::dbExecute(
+              con,
+              paste0(
+                "DELETE FROM discrete.result_aggregations WHERE result_id IN (",
+                paste(rebuild_placeholders, collapse = ", "),
+                ")"
+              ),
+              params = as.list(as.integer(rebuilding_ids))
+            )
+            DBI::dbExecute(
+              con,
+              "SELECT set_config(
+                 'aquacache.allow_result_aggregation_delete', 'off', TRUE
+               )"
+            )
+          }
         }
 
         for (result_row in target_rows) {
