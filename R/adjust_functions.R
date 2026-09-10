@@ -1505,6 +1505,291 @@ adjust_approval <- function(
 } # End of adjust_approval function
 
 
+#' Adjust time-ranged notes for a timeseries
+#'
+#' Inserts or updates free-text notes that apply to explicit datetime ranges.
+#' Different notes may overlap. Rows with a `note_id` update that note. Rows
+#' without one reuse an exact existing note or are inserted. When
+#' `delete = TRUE`, stored notes beginning at or after the earliest supplied
+#' `start_dt` are removed unless they are included in `data`, matching the
+#' synchronization boundary used by the other `adjust_*()` helpers.
+#'
+#' @param con A connection to the AquaCache database with write privileges on
+#'   `continuous.notes`.
+#' @param timeseries_id A single integer timeseries identifier.
+#' @param data A data frame with `note`, `start_dt`, and `end_dt` columns.
+#'   `start_datetime`/`end_datetime` are accepted aliases. An optional
+#'   `note_id` updates an existing row, and optional `no_source_update` values
+#'   control protection from source synchronization.
+#' @param delete Logical. If `TRUE`, remove stored notes beginning at or after
+#'   the earliest supplied start datetime when they are not represented in
+#'   `data`.
+#' @param source_update Logical. Set `TRUE` for source-adapter or
+#'   synchronization input. Protected stored rows are then left unchanged, and
+#'   incoming rows cannot set `no_source_update`.
+#'
+#' @return Invisibly returns the integer `note_id` values of the adjusted rows.
+#' @export
+#'
+adjust_note <- function(
+  con,
+  timeseries_id,
+  data,
+  delete = FALSE,
+  source_update = FALSE
+) {
+  if (
+    length(timeseries_id) != 1L ||
+      is.na(timeseries_id) ||
+      as.integer(timeseries_id) != timeseries_id
+  ) {
+    stop("`timeseries_id` must be one non-missing integer.")
+  }
+  timeseries_id <- as.integer(timeseries_id)
+
+  if (!is.data.frame(data)) {
+    stop("`data` must be a data frame.")
+  }
+  if (nrow(data) == 0L) {
+    return(invisible(integer()))
+  }
+
+  data <- data.table::as.data.table(data.table::copy(data))
+  aliases <- c(
+    start_datetime = "start_dt",
+    end_datetime = "end_dt"
+  )
+  for (alias in names(aliases)) {
+    target <- aliases[[alias]]
+    if (alias %in% names(data) && !(target %in% names(data))) {
+      data.table::setnames(data, alias, target)
+    }
+  }
+
+  required_columns <- c("note", "start_dt", "end_dt")
+  missing_columns <- setdiff(required_columns, names(data))
+  if (length(missing_columns) > 0L) {
+    stop(
+      "`data` is missing required column(s): ",
+      paste(missing_columns, collapse = ", "),
+      "."
+    )
+  }
+
+  if (!("note_id" %in% names(data))) {
+    data[, note_id := NA_integer_]
+  }
+  if (!("no_source_update" %in% names(data))) {
+    data[, no_source_update := FALSE]
+  }
+
+  data[, note := as.character(note)]
+  if (any(is.na(data$note) | !nzchar(trimws(data$note)))) {
+    stop("Every `note` must contain non-blank text.")
+  }
+  if (!inherits(data$start_dt, "POSIXt")) {
+    data[, start_dt := as.POSIXct(start_dt, tz = "UTC")]
+  }
+  if (!inherits(data$end_dt, "POSIXt")) {
+    data[, end_dt := as.POSIXct(end_dt, tz = "UTC")]
+  }
+  if (anyNA(data$start_dt) || anyNA(data$end_dt)) {
+    stop("`start_dt` and `end_dt` must contain valid datetimes.")
+  }
+  if (any(data$start_dt > data$end_dt)) {
+    stop("Every note must have `start_dt <= end_dt`.")
+  }
+
+  note_id_numeric <- suppressWarnings(as.numeric(as.character(data$note_id)))
+  invalid_note_id <- !is.na(data$note_id) & (
+    is.na(note_id_numeric) |
+      note_id_numeric != floor(note_id_numeric) |
+      note_id_numeric < 1 |
+      note_id_numeric > .Machine$integer.max
+  )
+  if (any(invalid_note_id)) {
+    stop("Every non-missing `note_id` must be a positive integer.")
+  }
+  data[, note_id := as.integer(note_id_numeric)]
+  supplied_ids <- data$note_id[!is.na(data$note_id)]
+  if (anyDuplicated(supplied_ids)) {
+    stop("Each non-missing `note_id` may appear only once in `data`.")
+  }
+  data[, no_source_update := as.logical(no_source_update)]
+  data[is.na(no_source_update), no_source_update := FALSE]
+  if (isTRUE(source_update)) {
+    data[, no_source_update := FALSE]
+  }
+  data.table::setorder(data, start_dt, end_dt, note_id)
+
+  active <- dbTransBegin(con)
+  tryCatch(
+    {
+      supplied_id_filter <- if (length(supplied_ids) > 0L) {
+        paste0(
+          " OR note_id IN (",
+          paste(as.integer(supplied_ids), collapse = ", "),
+          ")"
+        )
+      } else {
+        ""
+      }
+      existing <- DBI::dbGetQuery(
+        con,
+        paste0(
+          "SELECT note_id, note, start_dt, end_dt, no_source_update
+             FROM continuous.notes
+            WHERE timeseries_id = $1
+              AND (start_dt >= $2",
+          supplied_id_filter,
+          ")
+            ORDER BY start_dt, end_dt, note_id"
+        ),
+        params = list(timeseries_id, min(data$start_dt))
+      )
+      existing <- data.table::as.data.table(existing)
+
+      missing_ids <- setdiff(supplied_ids, existing$note_id)
+      if (length(missing_ids) > 0L) {
+        stop(
+          "The following `note_id` values do not belong to timeseries_id ",
+          timeseries_id,
+          ": ",
+          paste(missing_ids, collapse = ", "),
+          "."
+        )
+      }
+
+      # Reuse exact existing rows when a synchronization source does not know
+      # database IDs. This keeps repeated imports idempotent while still
+      # allowing different notes to overlap.
+      unassigned <- which(is.na(data$note_id))
+      used_ids <- supplied_ids
+      for (i in unassigned) {
+        exact <- existing[
+          !(note_id %in% used_ids) &
+            note == data$note[[i]] &
+            start_dt == data$start_dt[[i]] &
+            end_dt == data$end_dt[[i]] &
+            (
+              no_source_update == data$no_source_update[[i]] |
+                isTRUE(source_update)
+            ),
+          note_id
+        ]
+        if (length(exact) > 0L) {
+          data$note_id[[i]] <- exact[[1L]]
+          used_ids <- c(used_ids, exact[[1L]])
+        }
+      }
+
+      kept_ids <- data$note_id[!is.na(data$note_id)]
+      if (isTRUE(delete)) {
+        delete_ids <- existing$note_id[
+          existing$start_dt >= min(data$start_dt) &
+            !(existing$note_id %in% kept_ids) &
+            (!isTRUE(source_update) | !existing$no_source_update)
+        ]
+        if (length(delete_ids) > 0L) {
+          DBI::dbExecute(
+            con,
+            paste0(
+              "DELETE FROM continuous.notes WHERE timeseries_id = $1 ",
+              "AND note_id IN (",
+              paste(as.integer(delete_ids), collapse = ", "),
+              ")"
+            ),
+            params = list(timeseries_id)
+          )
+        }
+      }
+
+      for (i in seq_len(nrow(data))) {
+        note_id <- data$note_id[[i]]
+        if (!is.na(note_id)) {
+          previous <- existing[existing$note_id == note_id]
+          unchanged <- nrow(previous) == 1L &&
+            identical(previous$note[[1L]], data$note[[i]]) &&
+            identical(previous$start_dt[[1L]], data$start_dt[[i]]) &&
+            identical(previous$end_dt[[1L]], data$end_dt[[i]]) &&
+            identical(
+              previous$no_source_update[[1L]],
+              data$no_source_update[[i]]
+            )
+          if (unchanged || (
+            isTRUE(source_update) &&
+              nrow(previous) == 1L &&
+              isTRUE(previous$no_source_update[[1L]])
+          )) {
+            next
+          }
+
+          updated <- DBI::dbExecute(
+            con,
+            paste0(
+              "UPDATE continuous.notes SET note = $1, start_dt = $2, ",
+              "end_dt = $3, no_source_update = $4 ",
+              "WHERE timeseries_id = $5 AND note_id = $6",
+              if (isTRUE(source_update)) {
+                " AND no_source_update IS FALSE"
+              } else {
+                ""
+              }
+            ),
+            params = list(
+              data$note[[i]],
+              data$start_dt[[i]],
+              data$end_dt[[i]],
+              data$no_source_update[[i]],
+              timeseries_id,
+              note_id
+            )
+          )
+          if (updated != 1L) {
+            stop("Failed to update note_id ", note_id, ".")
+          }
+        } else {
+          inserted <- DBI::dbGetQuery(
+            con,
+            "INSERT INTO continuous.notes (
+               timeseries_id,
+               note,
+               start_dt,
+               end_dt,
+               no_source_update
+             ) VALUES ($1, $2, $3, $4, $5)
+             RETURNING note_id",
+            params = list(
+              timeseries_id,
+              data$note[[i]],
+              data$start_dt[[i]],
+              data$end_dt[[i]],
+              data$no_source_update[[i]]
+            )
+          )
+          data$note_id[[i]] <- inserted$note_id[[1L]]
+        }
+      }
+
+      if (active) {
+        DBI::dbExecute(con, "COMMIT;")
+      }
+      invisible(data$note_id)
+    },
+    error = function(e) {
+      if (active) {
+        DBI::dbExecute(con, "ROLLBACK;")
+      }
+      warning(
+        "adjust_note: Failed to commit changes to the database with error ",
+        e$message
+      )
+      invisible(integer())
+    }
+  )
+}
+
+
 #' Adjust the owner of a timeseries in the database
 #'
 #' @param con A connection to the database with write privileges to the 'owners' and 'measurements_continuous' tables.
