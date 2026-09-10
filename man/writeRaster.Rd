@@ -9,7 +9,6 @@ writeRaster(
   raster,
   rast_table = c("spatial", "rasters"),
   bit.depth = NULL,
-  blocks = NULL,
   constraints = FALSE
 )
 }
@@ -21,8 +20,6 @@ writeRaster(
 \item{rast_table}{A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{c("schema","table")}).}
 
 \item{bit.depth}{The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).}
-
-\item{blocks}{Optional desired number of blocks (tiles) to split the raster into in the resulting PostGIS table. This should be specified as a one or two-length (columns, rows) integer vector. See also 'Details'.}
 
 \item{constraints}{Whether to reset constraints. Will drop all constraints except for SRID.}
 }
@@ -44,11 +41,11 @@ SpatRaster band names will be stored in an array in the column
 "band_names", which will be restored in R when imported with the function
 \code{\link[rpostgis]{pgGetRast}}.
 
-If \code{blocks = NULL}, the raster is uploaded as a single tile. When a
-1- or 2-length integer vector is supplied, it represents the desired number
-of tiles along the X and Y axes; the raster will be uploaded in tiles sized
-\code{ceiling(ncol(raster) / blocks[1])} by \code{ceiling(nrow(raster) / blocks[2])}
-pixels. Fewer, larger tiles generally result in faster uploads and downloads.
+Rasters are split automatically so that tiles are no larger than 512 by 512
+pixels. Smaller rasters remain in a single tile. This deterministic layout is
+used by both the \code{raster2pgsql} and R-only writers. Fewer, larger tiles
+generally result in faster complete-raster uploads and downloads, while
+smaller tiles make spatial subsets more selective.
 Each tile is inserted as a brand-new row, so previously stored rasters remain
 untouched regardless of how much data is already present in the table. PostGIS
 rasters do not need to share a common tiling scheme, so older uploads and new

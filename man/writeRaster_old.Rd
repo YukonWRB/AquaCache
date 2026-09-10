@@ -9,7 +9,6 @@ writeRaster_old(
   raster,
   rast_table = c("spatial", "rasters"),
   bit.depth = NULL,
-  blocks = NULL,
   constraints = TRUE
 )
 }
@@ -21,8 +20,6 @@ writeRaster_old(
 \item{rast_table}{A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{c("schema","table")}).}
 
 \item{bit.depth}{The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).}
-
-\item{blocks}{Optional desired number of blocks (tiles) to split the raster into in the resulting PostGIS table. This should be specified as a one or two-length (columns, rows) integer vector. See also 'Details'.}
 
 \item{constraints}{Whether to create constraints from raster data. Recommended to leave \code{TRUE} unless applying constraints manually (see \url{http://postgis.net/docs/RT_AddRasterConstraints.html}). Note that constraint notices may print to the console, depending on the PostgreSQL server settings.}
 }
@@ -39,11 +36,11 @@ SpatRaster band names will be stored in an array in the column
 "band_names", which will be restored in R when imported with the function
 \code{\link[rpostgis]{pgGetRast}}.
 
-If \code{blocks = NULL}, the number of block will vary by raster size, with
-a default value of 100 copies of the data in the memory at any point in time.
-If a specified number of blocks is desired, set blocks to a one or two-length
-integer vector. Note that fewer, larger blocks generally results in faster
-write times.
+Rasters are split automatically so that tiles are no larger than 512 by 512
+pixels. Smaller rasters remain in a single tile. This is the same deterministic
+layout used by \code{\link[=writeRaster]{writeRaster()}}. Fewer, larger tiles generally result in faster
+complete-raster writes and reads, while smaller tiles make spatial subsets
+more selective.
 
 If the raster has no CRS specified, it will be assigned
 \code{EPSG:4326} before being written. This avoids importing
