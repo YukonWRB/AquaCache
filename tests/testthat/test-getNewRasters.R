@@ -11,7 +11,7 @@ test_that("getNewRasters resumes immediately before preliminary valid_to", {
           last_issue = as.POSIXct(NA, tz = "UTC"),
           type = "reanalysis",
           source_fx = "downloadHRDPA",
-          source_fx_args = NA_character_,
+          source_fx_args = '{"clip":[70,-142,59,-123]}',
           fetch_priority = 1L,
           parameter_name = "precipitation",
           active = TRUE
@@ -47,6 +47,7 @@ test_that("getNewRasters resumes immediately before preliminary valid_to", {
 
   expect_identical(result, character())
   expect_equal(captured_args$start_datetime, prelim_valid_to - 1)
+  expect_identical(captured_args$clip, c(70L, -142L, 59L, -123L))
   expect_equal(
     captured_args$end_datetime,
     as.POSIXct("2026-08-12", tz = "UTC")
@@ -314,4 +315,88 @@ test_that("getNewRasters surfaces append failures without changing forecast clea
     executed_sql,
     fixed = TRUE
   )))
+})
+
+test_that("getNewRasters stops a reanalysis series after an append failure", {
+  start <- as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+  attempted <- as.POSIXct(character(), tz = "UTC")
+  reanalysis <- lapply(0:2, function(hour) {
+    valid_from <- start + hour * 3600
+    list(
+      rast = structure(list(), class = "mock_raster"),
+      valid_from = valid_from,
+      valid_to = valid_from + 3600,
+      issued = valid_from + 5 * 24 * 3600,
+      source = "ECMWF API",
+      flag = NA_character_,
+      units = "K",
+      model = "reanalysis-era5-land"
+    )
+  })
+  reanalysis$forecast <- FALSE
+
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, ...) {
+      if (grepl("FROM spatial.raster_series_index", statement, fixed = TRUE)) {
+        return(data.frame(
+          raster_series_id = 20L,
+          end_datetime = start,
+          last_issue = as.POSIXct(NA, tz = "UTC"),
+          type = "reanalysis",
+          source_fx = "downloadERA5",
+          source_fx_args = NA_character_,
+          fetch_priority = 1L,
+          parameter_name = "temperature, air",
+          active = TRUE
+        ))
+      }
+      if (grepl("SELECT min(valid_to)", statement, fixed = TRUE)) {
+        return(data.frame(min = as.POSIXct(NA, tz = "UTC")))
+      }
+      if (grepl("SELECT reference_id", statement, fixed = TRUE)) {
+        return(data.frame(reference_id = NA_integer_))
+      }
+      if (grepl("AS is_identical", statement, fixed = TRUE)) {
+        return(data.frame(
+          reference_id = integer(),
+          is_identical = logical()
+        ))
+      }
+      stop("Unexpected query in reanalysis append-failure test: ", statement)
+    },
+    dbExecute = function(...) 1L,
+    .package = "DBI"
+  )
+  local_mocked_bindings(
+    getSourceAdapterCapabilities = function(...) {
+      data.frame(source_fx = "downloadERA5")
+    },
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(...) TRUE,
+    downloadERA5 = function(...) reanalysis,
+    insertACModelRaster = function(valid_from, ...) {
+      attempted <<- c(attempted, valid_from)
+      if (identical(as.numeric(valid_from), as.numeric(start + 3600))) {
+        stop("simulated raster2pgsql failure")
+      }
+      1001L
+    },
+    .package = "AquaCache"
+  )
+
+  expect_warning(
+    result <- suppressMessages(getNewRasters(
+      raster_series_ids = 20L,
+      con = structure(list(), class = "mock_con"),
+      start_datetime = start
+    )),
+    "raster 2 of 3.*simulated raster2pgsql failure"
+  )
+
+  expect_identical(as.vector(result), "20")
+  expect_equal(attempted, start + 0:1 * 3600)
+  append_errors <- attr(result, "append_errors")
+  expect_equal(nrow(append_errors), 1L)
+  expect_equal(append_errors$raster_index, 2L)
 })

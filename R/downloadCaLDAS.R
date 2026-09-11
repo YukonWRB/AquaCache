@@ -2,7 +2,14 @@
 #'
 #' @param parameter The parameter for which to get new rasters, such as 'AirTemp_AGL-1.5m' or 'SnowDepth_Sfc' or 'SnowWaterEquiv_Sfc'.
 #' @param start_datetime The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC. At present, CaLDAS rasters are only available for 30 days in the past, so earlier start datetimes will be adjusted to 30 days ago for speed.
-#' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the rasters. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
+#' @param clip The area with which to clip the rasters. Supply one or more
+#'   two-letter province or territory abbreviations as per the [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8)
+#'   to use their combined 300 km buffered boundary. Alternatively, supply an
+#'   unnamed numeric EPSG:4326 vector in `north`, `west`, `south`, `east` order, a named
+#'   numeric vector or named list using either those names or `xmin`, `xmax`,
+#'   `ymin`, and `ymax`, or a [terra::SpatExtent]. JSON arrays and named JSON
+#'   objects passed through `source_fx_args` are supported. Set to `NULL` for
+#'   no clip.
 #' @param hrs CaLDAS data is provided every 3 hours. Give a vector of hours from 0, 3, 6, 9, 12, 15, 18, 21 to specify which rasters to bring in from start_datetime to end_datetime. Default is for 0 hours only, so each day at 00:00 UTC.
 
 #'
@@ -11,14 +18,7 @@
 #'
 
 downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
-  # check parameter 'clip'
-  if (!is.null(clip)) {
-    if (!inherits(clip, "character")) {
-      stop("Parameter clip must be a character vector of 2 characters.")
-    } else if (nchar(clip) != 2) {
-      stop("Parameter clip must be a character vector of 2 characters.")
-    }
-  }
+  clip_spec <- raster_clip_normalize(clip)
 
   if (!inherits(start_datetime, "POSIXct")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
@@ -150,13 +150,7 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
     duplicated(available$datetime)
   available <- available[!(available$prelim & duplicates) | !duplicates, ]
 
-  # Make clip polygon
-  if (!is.null(clip)) {
-    clip <- prov_buff[prov_buff$PREABBR %in% clip, ] #This is package data living as shapefile in inst/extdata, loaded using file data_load.R
-    if (nrow(clip) == 0) {
-      clip <- NULL
-    }
-  }
+  clip <- raster_clip_spatial(clip_spec)
 
   if (nrow(available) > 0) {
     message("downloadCaLDAS: new rasters available. Downloading...")
@@ -175,14 +169,18 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
       file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
       rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
       if (!clipped) {
-        if (!is.null(clip)) {
+        if (!is.null(clip) && identical(clip_spec$type, "provinces")) {
           clip <- terra::project(clip, rast) # project clip vector to crs of the raster
         }
         clipped <- TRUE # So that project doesn't happen after the first iteration
       }
       if (!is.null(clip)) {
-        rast <- terra::mask(rast, clip) # Makes NA values beyond the boundary of clip
-        rast <- terra::trim(rast) # Trims the NA values
+        if (identical(clip_spec$type, "bbox")) {
+          rast <- terra::crop(rast, clip)
+        } else {
+          rast <- terra::mask(rast, clip) # Makes NA values beyond the boundary of clip
+          rast <- terra::trim(rast) # Trims the NA values
+        }
       }
       file[["rast"]] <- rast
       # Check which parameter we're dealing with: 6h or 24h, based on if 'parameter' contains 6h or 24h
