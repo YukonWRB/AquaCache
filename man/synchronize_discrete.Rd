@@ -58,7 +58,8 @@ For a matched sample, supplied qualifier and observer collections replace
 their respective associations; omission preserves the database values.
 Supplied aggregation configurations and components replace that detail for
 matched canonical results; two supplied empty data frames explicitly remove
-existing aggregation detail, while omission preserves it.
+existing aggregation detail through the administrative aggregate-to-direct
+conversion, while omission preserves it.
 Locationless remote samples are matched by their database-enforced
 \code{import_source} and \code{import_source_id} identity. Located samples retain
 location and collection-context matching because source IDs may legitimately

@@ -1,6 +1,7 @@
 # Patch 60 adds generic component-based discrete results, supports multiple
-# qualifiers and observers for one sample, hardens observer identity, and
-# standardizes source-update protection across continuous and discrete data.
+# qualifiers and observers for one sample, hardens observer identity, adds
+# time-ranged continuous notes, and standardizes source-update protection
+# across continuous and discrete data.
 # discrete.results remains the canonical reportable result; result components
 # and their versioned calculation configuration are normalized in child
 # tables below it.
@@ -19,74 +20,28 @@
 #    multipliers, and final rounding.
 # 5. Preserve AquaCache audit, RLS, metadata-view, and privilege conventions,
 #    and expose the new contract through discrete ingestion functions. Add new
-#    tables to audit tracking
+#    tables to audit tracking.
 # 6. Rename source-update protection consistently, remove the obsolete derived
 #    daily flag, and add independent protection to continuous QC intervals.
+# 7. Add auditable, visibility-aware notes that can overlap and apply to
+#    explicit temporal ranges on a continuous timeseries.
+# 8. Preserve result-specific laboratory identifiers and normalized grade and
+#    approval metadata in the canonical result and broad metadata views.
 #
 # -------------------------------------------------------------------------------
-# Still missing or to do:
+# Outstanding release work:
 # 1. Rename this file to 'patch_60.R' once finalized so it gets read by AquaConnect()!
-# 2. Update YGwater application pieces (when this is totally finalized). Consumption-only
-#    modules/functions require a change to 'plotDiscrete.R' and to Shiny app module
-#    'discreteData.R', while the 'admin' side of the application (add/edit samples/results)
-#    will require updates to at least the editSamples.R module.
-# 3. Re-create the 'testdb' fixture when this patch is finally applied; also update
-#    the test fixture in the 'YGwater' package.
-# 4. DONE (NWT, September 4 2026). Added discrete.convert_result_aggregation_to_direct()
-#    with modes preserve_calculated and replace, and re-added the delete guard it makes
-#    safe as forbid_result_aggregation_delete_trigger. Sanctioned deletes announce
-#    themselves with transaction-local aquacache.allow_result_aggregation_delete - the
-#    same idiom as aquacache.defer_result_aggregation_refresh and aquacache.audit_user.
-#    The cascade from discrete.results is still permitted, as it was before. The reason
-#    is preserved in the audit trail by writing it onto result_aggregations.note
-#    immediately before the delete, so the existing generic audit trigger captures it
-#    in new_data of the UPDATE and original_data of the DELETE - no change to
-#    audit.if_modified_func(). synchronize_discrete_sample_detail() converts through the
-#    function and brackets its in-place rebuild deletes with the guard variable.
-#    The function is safe to call partway through a deferred batch: it leaves the
-#    constraint mode alone when set_result_aggregation_constraints() has already
-#    deferred it, because SET CONSTRAINTS ... IMMEDIATE fires every outstanding
-#    check in the transaction and not only this function's.
-#    The original note follows.
+# 2. Regenerate the checked-in AquaCache test database from create_test_DB()
+#    after this patch is finalized, then replace the YGwater test database copy.
 #
-#    Decide on and implement the aggregate-to-direct conversion path before
-#    restricting direct DELETE on result_aggregations. Deleting that row cascades to
-#    result_components, but does nothing
-#    to results on deletion to result_aggregations. It's therefore possible to delete
-#    result components completely and remove a result aggregation entry while retaining a
-#    result. synchronize_discrete_sample_detail() currently uses that behaviour during
-#    replacement, so a delete guard cannot be added until synchronization uses an explicit
-#    conversion operation. Perhaps a better way is to have a database function, such as
-# discrete.convert_result_aggregation_to_direct(
-#   result_id,
-#   conversion_mode,
-#   result,
-#   result_condition,
-#   result_condition_value,
-#   reason
-# )
-# conversion_mode should require one of:
-# - preserve_calculated: retain the current database-calculated value as the new direct result.
-# - replace: require an explicitly supplied result or result condition.
-# The function should:
-# 1. Lock the result and aggregation rows.
-# 2. Verify that the caller can update the result.
-# 3. Defer the aggregation constraints.
-# 4. Validate and assign the new direct-result state.
-# 5. Delete the aggregation, cascading to its components.
-# 6. Restore immediate constraints before returning.
-# 7. Require a nonblank reason, preserving it in the audit trail.
-
-# Later stuff:
-# 1. snow survey workbook creation and ingestion functions (in this package and
+# Longer-term work:
+# 1. Snow survey workbook creation and ingestion functions (in this package and
 #    YGwater) currently work with the 'snow' database. These functions will need
 #    to work on 'aquacache' to fully close out 'snowdb'. This will also allow NWT
 #    to use the same snow survey forms if they choose to do so.
 # 2. Point-in-time reconstruction using audit tables is currently implemented in
 #    continuous plots (YGwater package). Let's implement that for discrete plots as
 #    well when we're fairly certain that the schema won't change further.
-# 3. Update 'downloadSnowCourseYG' so it can be used to fetch composite results from
-#    the YG snow survey database. This will be the first step to deprecating that database.
 #
 # -------------------------------------------------------------------------------
 
@@ -98,7 +53,7 @@ if (check$session_user != "postgres") {
 }
 
 message(
-  "Working on patch 60: adding generic result aggregations and components, multi-valued sample qualifiers, sample observers, and database-maintained canonical results. Changes are being made within a transaction, so an error will roll back the database."
+  "Working on patch 60: adding generic result aggregations and components, multi-valued sample qualifiers, sample observers, time-ranged continuous notes, and database-maintained canonical results. Changes are being made within a transaction, so an error will roll back the database."
 )
 
 if (dbTransCheck(con)) {
@@ -117,6 +72,8 @@ tryCatch(
          to_regclass('discrete.results') IS NOT NULL AS has_results,
          to_regclass('discrete.import_profiles') IS NOT NULL AS has_import_profiles,
          to_regclass('public.qualifier_types') IS NOT NULL AS has_qualifier_types,
+         to_regclass('public.grade_types') IS NOT NULL AS has_grade_types,
+         to_regclass('public.approval_types') IS NOT NULL AS has_approval_types,
          to_regclass('instruments.observers') IS NOT NULL AS has_observers,
          to_regclass('discrete.samples_metadata_en') IS NOT NULL AS has_samples_metadata_en,
          to_regclass('discrete.samples_metadata_fr') IS NOT NULL AS has_samples_metadata_fr,
@@ -124,6 +81,7 @@ tryCatch(
          to_regclass('discrete.results_metadata_fr') IS NOT NULL AS has_results_metadata_fr,
          to_regclass('continuous.measurements_continuous') IS NOT NULL AS has_measurements_continuous,
          to_regclass('continuous.measurements_calculated_daily') IS NOT NULL AS has_measurements_calculated_daily,
+         to_regclass('continuous.timeseries') IS NOT NULL AS has_timeseries,
          to_regclass('continuous.grades') IS NOT NULL AS has_grades,
          to_regclass('continuous.approvals') IS NOT NULL AS has_approvals,
          to_regclass('continuous.qualifiers') IS NOT NULL AS has_continuous_qualifiers,
@@ -220,6 +178,7 @@ tryCatch(
          to_regclass('discrete.result_aggregation_types') IS NOT NULL AS has_result_aggregation_types,
          to_regclass('discrete.result_aggregations') IS NOT NULL AS has_result_aggregations,
          to_regclass('discrete.result_components') IS NOT NULL AS has_result_components,
+         to_regclass('continuous.notes') IS NOT NULL AS has_continuous_notes,
          to_regclass('discrete.result_aggregation_summary') IS NOT NULL AS has_result_aggregation_summary,
          to_regclass('discrete.stale_result_aggregations') IS NOT NULL AS has_stale_result_aggregations,
          to_regprocedure('discrete.calculate_result_aggregation(integer)') IS NOT NULL AS has_calculation_function,
@@ -247,6 +206,60 @@ tryCatch(
         "Patch 60 found one or more target tables or columns already present. Investigate the partial migration before applying this patch."
       )
     }
+
+    existing_result_metadata_columns <- DBI::dbGetQuery(
+      con,
+      "SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'discrete'
+         AND table_name = 'results'
+         AND column_name IN (
+           'lab_report_no',
+           'lab_sample_no',
+           'grade_type_id',
+           'approval_type_id'
+         )"
+    )$column_name
+    if (length(existing_result_metadata_columns)) {
+      stop(
+        "Patch 60 found result metadata columns already present: ",
+        paste(existing_result_metadata_columns, collapse = ", "),
+        ". Investigate the partial migration before applying this patch."
+      )
+    }
+
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE discrete.results
+         ADD COLUMN lab_report_no TEXT,
+         ADD COLUMN lab_sample_no TEXT,
+         ADD COLUMN grade_type_id INTEGER
+           REFERENCES public.grade_types(grade_type_id)
+           ON DELETE SET NULL ON UPDATE CASCADE,
+         ADD COLUMN approval_type_id INTEGER
+           REFERENCES public.approval_types(approval_type_id)
+           ON DELETE SET NULL ON UPDATE CASCADE"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN discrete.results.lab_report_no IS
+       'Laboratory report number associated with this result, if available.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN discrete.results.lab_sample_no IS
+       'Laboratory sample number associated with this result, if available.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN discrete.results.grade_type_id IS
+       'Optional result-level data grade from public.grade_types.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN discrete.results.approval_type_id IS
+       'Optional result-level approval status from public.approval_types.'"
+    )
 
     # The new relations and functions are owned by admin. Their foreign-key and
     # calculation paths reference these schemas while running with owner rights.
@@ -436,6 +449,41 @@ tryCatch(
       con,
       "COMMENT ON TABLE discrete.sample_observers IS
        'Associates people from instruments.observers with a discrete sample and records their role in collecting or documenting it. The observer catalogue remains shared by sampling, calibration, and maintenance workflows.'"
+    )
+
+    DBI::dbExecute(
+      con,
+      "CREATE TABLE continuous.notes (
+         note_id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+         timeseries_id INTEGER NOT NULL
+           REFERENCES continuous.timeseries(timeseries_id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         note TEXT NOT NULL,
+         start_dt TIMESTAMPTZ NOT NULL,
+         end_dt TIMESTAMPTZ NOT NULL,
+         created TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         created_by TEXT NOT NULL DEFAULT CURRENT_USER,
+         modified_by TEXT,
+         modified TIMESTAMPTZ,
+         no_source_update BOOLEAN NOT NULL DEFAULT FALSE,
+         CONSTRAINT notes_text_not_blank CHECK (btrim(note) <> ''),
+         CONSTRAINT notes_period_valid CHECK (start_dt <= end_dt)
+       )"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE INDEX notes_timeseries_period_idx
+       ON continuous.notes (timeseries_id, start_dt, end_dt)"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON TABLE continuous.notes IS
+       'Free-text annotations that apply to explicit time ranges on a continuous timeseries. Different notes may overlap because independent observations can apply to the same data.'"
+    )
+    DBI::dbExecute(
+      con,
+      "COMMENT ON COLUMN continuous.notes.no_source_update IS
+       'TRUE prevents source-adapter and source-synchronization workflows from modifying or deleting this note; direct user edits remain allowed.'"
     )
 
     DBI::dbExecute(
@@ -1167,8 +1215,8 @@ tryCatch(
     )
 
     # ---------------------------------------------------------------------
-    # TODO ITEM 4: the aggregate-to-direct conversion path, and the delete
-    # guard that it makes safe.
+    # The aggregate-to-direct conversion path, and the delete guard that it
+    # makes safe.
     #
     # Deleting a result_aggregations row cascades to its components but leaves
     # discrete.results untouched, so it is possible to strip a calculated
@@ -1191,31 +1239,31 @@ tryCatch(
        LANGUAGE plpgsql
        AS $$
        BEGIN
-         -- A sanctioned operation is in progress. Set transaction-locally by
-         -- discrete.convert_result_aggregation_to_direct(), and by callers that
-         -- are rebuilding an aggregation in place rather than converting it.
-         IF COALESCE(
-           NULLIF(
-             current_setting(
-               'aquacache.allow_result_aggregation_delete',
-               TRUE
-             ),
-             ''
-           ),
-           'off'
-         ) = 'on' THEN
+         -- An administrative conversion is in progress. Ordinary roles cannot
+         -- authorize themselves merely by setting the custom GUC.
+         IF current_user IN ('admin', 'postgres')
+            AND COALESCE(
+              NULLIF(
+                current_setting(
+                  'aquacache.allow_result_aggregation_delete',
+                  TRUE
+                ),
+                ''
+              ),
+              'off'
+            ) = 'on' THEN
            RETURN OLD;
          END IF;
-         -- Permitted as part of the cascade from discrete.results, which is in
-         -- progress when the parent result has already gone.
-         IF EXISTS (
-           SELECT 1 FROM discrete.results WHERE result_id = OLD.result_id
-         ) THEN
-           RAISE EXCEPTION
-             'Cannot delete the result_aggregations row for result % directly, because that would leave a calculated result with no components. Delete the result itself, exclude components with included_in_aggregate = FALSE, or convert the result with discrete.convert_result_aggregation_to_direct().',
-             OLD.result_id;
+         -- A foreign-key cascade from discrete.results reaches this trigger
+         -- from inside PostgreSQL's referential-action trigger. Detecting that
+         -- nested execution avoids querying the FORCE-RLS parent while the
+         -- cascade is running under the child table owner.
+         IF pg_trigger_depth() > 1 THEN
+           RETURN OLD;
          END IF;
-         RETURN OLD;
+         RAISE EXCEPTION
+           'Cannot delete the result_aggregations row for result % directly, because that would leave a calculated result with no components. Delete the result itself, exclude components with included_in_aggregate = FALSE, or convert the result with discrete.convert_result_aggregation_to_direct().',
+           OLD.result_id;
        END;
        $$"
     )
@@ -1228,10 +1276,9 @@ tryCatch(
        EXECUTE FUNCTION discrete.forbid_result_aggregation_delete()"
     )
 
-    # The explicit conversion. SECURITY INVOKER deliberately: the caller's own
-    # privileges and row-level security decide what may be converted, so the
-    # function cannot be used to reach a result the caller could not otherwise
-    # update.
+    # The explicit administrative conversion. SECURITY INVOKER deliberately:
+    # the admin maintenance session remains subject to the same FORCE RLS
+    # policies as its surrounding synchronization transaction.
     #
     # The reason is preserved in the audit trail without touching the shared
     # audit function: it is written onto the aggregation row immediately before
@@ -1266,8 +1313,18 @@ tryCatch(
          v_calculated NUMERIC;
          v_calculated_condition INTEGER;
          v_calculated_condition_value NUMERIC;
+         v_expected NUMERIC;
          v_caller_deferred BOOLEAN;
        BEGIN
+         -- Conversion is an administrative maintenance operation. Keeping the
+         -- function SECURITY INVOKER preserves the same RLS context used by
+         -- the surrounding synchronization transaction.
+         IF current_user NOT IN ('admin', 'postgres') THEN
+           RAISE EXCEPTION
+             'Role % may not convert result aggregations; use an admin connection.',
+             current_user;
+         END IF;
+
          -- 7. A nonblank reason is mandatory.
          IF v_reason = '' THEN
            RAISE EXCEPTION
@@ -1282,18 +1339,20 @@ tryCatch(
                       '<NULL>');
          END IF;
 
-         -- 2. Verify the caller may make this change. Row visibility is left to
-         -- row-level security on the SELECT below.
-         IF NOT has_table_privilege(
-                  current_user, 'discrete.results', 'UPDATE')
-            OR NOT has_table_privilege(
-                  current_user, 'discrete.result_aggregations', 'DELETE') THEN
+         -- 1. Lock the aggregation, result, and current components in that
+         -- order. Component writers acquire a foreign-key lock on the
+         -- aggregation before their refresh trigger locks the result, so using
+         -- the same order here avoids a conversion/component-insert deadlock.
+         PERFORM 1
+           FROM discrete.result_aggregations ra
+          WHERE ra.result_id = v_result_id
+            FOR UPDATE;
+         IF NOT FOUND THEN
            RAISE EXCEPTION
-             'Role % may not convert result aggregations: UPDATE on discrete.results and DELETE on discrete.result_aggregations are both required.',
-             current_user;
+             'Result % has no aggregation to convert; it is already a direct result.',
+             v_result_id;
          END IF;
 
-         -- 1. Lock the result and its aggregation row, in that order.
          SELECT r.result, r.result_condition, r.result_condition_value
            INTO v_calculated, v_calculated_condition,
                 v_calculated_condition_value
@@ -1307,14 +1366,10 @@ tryCatch(
          END IF;
 
          PERFORM 1
-           FROM discrete.result_aggregations ra
-          WHERE ra.result_id = v_result_id
-            FOR UPDATE;
-         IF NOT FOUND THEN
-           RAISE EXCEPTION
-             'Result % has no aggregation to convert; it is already a direct result.',
-             v_result_id;
-         END IF;
+           FROM discrete.result_components rc
+          WHERE rc.result_id = v_result_id
+          ORDER BY rc.result_component_id
+          FOR UPDATE;
 
          -- 4. Validate and assign the new direct-result state.
          IF v_mode = 'preserve_calculated' THEN
@@ -1327,14 +1382,22 @@ tryCatch(
                'conversion_mode preserve_calculated keeps the calculated value and does not accept a supplied result for result %. Use replace instead.',
                v_result_id;
            END IF;
-           IF v_calculated IS NULL AND v_calculated_condition IS NULL THEN
+           v_expected := discrete.calculate_result_aggregation(v_result_id);
+           IF v_expected IS NULL THEN
              RAISE EXCEPTION
-               'Result % has no calculated value to preserve. Refresh it first, or use conversion_mode replace with an explicit value.',
+               'Result % has no calculable aggregate value to preserve. Repair its components, or use conversion_mode replace with an explicit value.',
+               v_result_id;
+           END IF;
+           IF v_calculated IS DISTINCT FROM v_expected
+              OR v_calculated_condition IS NOT NULL
+              OR v_calculated_condition_value IS NOT NULL THEN
+             RAISE EXCEPTION
+               'Result % is stale or has an invalid aggregate condition. Refresh it before preserving the calculated value.',
                v_result_id;
            END IF;
            v_result := v_calculated;
-           v_condition := v_calculated_condition;
-           v_condition_value := v_calculated_condition_value;
+           v_condition := NULL;
+           v_condition_value := NULL;
          ELSE
            IF v_result IS NULL AND v_condition IS NULL THEN
              RAISE EXCEPTION
@@ -1420,7 +1483,7 @@ tryCatch(
       "COMMENT ON FUNCTION discrete.convert_result_aggregation_to_direct(
          INTEGER, TEXT, NUMERIC, INTEGER, NUMERIC, TEXT
        ) IS
-       'Converts a component-built result into a direct result, deleting its aggregation and components. preserve_calculated keeps the value the database calculated; replace requires an explicitly supplied result or result condition. A nonblank reason is required and is preserved in the audit trail on discrete.result_aggregations. This is the only sanctioned way to remove an aggregation while keeping its result; a direct DELETE is refused by forbid_result_aggregation_delete_trigger.'"
+       'Administrative, RLS-respecting conversion of a component-built result into a direct result, deleting its aggregation and components. preserve_calculated first verifies that the stored value matches the locked components; replace requires an explicitly supplied result or result condition. A nonblank reason is required and is preserved in the audit trail on discrete.result_aggregations. This is the only sanctioned way to remove an aggregation while keeping its result; a direct DELETE is refused by forbid_result_aggregation_delete_trigger.'"
     )
 
     component_function_signatures <- c(
@@ -1492,6 +1555,25 @@ tryCatch(
 
     DBI::dbExecute(
       con,
+      "CREATE TRIGGER update_notes_modified
+       BEFORE UPDATE ON continuous.notes
+       FOR EACH ROW EXECUTE FUNCTION public.update_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER update_notes_modified_by
+       BEFORE UPDATE ON continuous.notes
+       FOR EACH ROW EXECUTE FUNCTION public.user_modified()"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TRIGGER audit_notes_trigger
+       AFTER INSERT OR UPDATE OR DELETE ON continuous.notes
+       FOR EACH ROW EXECUTE FUNCTION audit.if_modified_func()"
+    )
+
+    DBI::dbExecute(
+      con,
       "INSERT INTO audit.table_registry (
          schema_name,
          table_name,
@@ -1508,9 +1590,9 @@ tryCatch(
            clock_timestamp(),
            clock_timestamp()
          ),
-         (
-           'discrete',
-           'sample_observers',
+          (
+            'discrete',
+            'sample_observers',
            'generic_insert_update_delete',
            'Sample-observer attribution is provenance for field collection and documentation.',
            clock_timestamp(),
@@ -1537,6 +1619,14 @@ tryCatch(
             'result_components',
             'generic_insert_update_delete',
             'Component values and inclusion decisions determine the canonical reportable aggregate result.',
+            clock_timestamp(),
+            clock_timestamp()
+          ),
+          (
+            'continuous',
+            'notes',
+            'generic_insert_update_delete',
+            'Time-ranged notes provide user-authored context for interpreting continuous observations.',
             clock_timestamp(),
             clock_timestamp()
           )"
@@ -1629,6 +1719,51 @@ tryCatch(
        )"
     )
 
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE continuous.notes ENABLE ROW LEVEL SECURITY"
+    )
+    note_visibility_sql <- "EXISTS (
+      SELECT 1
+      FROM continuous.timeseries ts
+      WHERE ts.timeseries_id = notes.timeseries_id
+    )"
+    note_policy_statements <- c(
+      sprintf(
+        "CREATE POLICY parent_visibility_restrict
+         ON continuous.notes AS RESTRICTIVE FOR SELECT USING (%s)",
+        note_visibility_sql
+      ),
+      sprintf(
+        "CREATE POLICY parent_visibility_restrict_insert
+         ON continuous.notes AS RESTRICTIVE FOR INSERT WITH CHECK (%s)",
+        note_visibility_sql
+      ),
+      sprintf(
+        "CREATE POLICY parent_visibility_restrict_update
+         ON continuous.notes AS RESTRICTIVE FOR UPDATE
+         USING (%s) WITH CHECK (%s)",
+        note_visibility_sql,
+        note_visibility_sql
+      ),
+      sprintf(
+        "CREATE POLICY parent_visibility_restrict_delete
+         ON continuous.notes AS RESTRICTIVE FOR DELETE USING (%s)",
+        note_visibility_sql
+      ),
+      "CREATE POLICY parent_visibility_allow_select
+       ON continuous.notes FOR SELECT USING (true)",
+      "CREATE POLICY parent_visibility_allow_insert
+       ON continuous.notes FOR INSERT WITH CHECK (true)",
+      "CREATE POLICY parent_visibility_allow_update
+       ON continuous.notes FOR UPDATE USING (true) WITH CHECK (true)",
+      "CREATE POLICY parent_visibility_allow_delete
+       ON continuous.notes FOR DELETE USING (true)"
+    )
+    for (statement in note_policy_statements) {
+      DBI::dbExecute(con, statement)
+    }
+
     # Apply the same owner-enforced visibility chain used by locations and
     # continuous timeseries throughout the application-facing discrete model.
     # A hidden location therefore hides its samples; a hidden sample hides its
@@ -1673,6 +1808,14 @@ tryCatch(
          discrete.result_components_result_component_id_seq
        FROM PUBLIC"
     )
+    DBI::dbExecute(
+      con,
+      "REVOKE ALL ON TABLE continuous.notes FROM PUBLIC"
+    )
+    DBI::dbExecute(
+      con,
+      "REVOKE ALL ON SEQUENCE continuous.notes_note_id_seq FROM PUBLIC"
+    )
 
     # Quote a role for generated GRANT statements while preserving PostgreSQL's
     # special unquoted PUBLIC grantee.
@@ -1681,6 +1824,72 @@ tryCatch(
         return("PUBLIC")
       }
       as.character(DBI::dbQuoteIdentifier(con, role_name))
+    }
+
+    note_default_grantees <- DBI::dbGetQuery(
+      con,
+      "SELECT DISTINCT grants.grantee
+       FROM information_schema.role_table_grants grants
+       JOIN pg_tables tables
+         ON tables.schemaname = grants.table_schema
+        AND tables.tablename = grants.table_name
+       WHERE grants.table_schema = 'continuous'
+         AND grants.table_name = 'notes'
+         AND grants.grantee <> tables.tableowner"
+    )$grantee
+    for (role_name in note_default_grantees) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "REVOKE ALL ON TABLE continuous.notes FROM %s",
+          quote_grantee(role_name)
+        )
+      )
+    }
+
+    continuous_note_privileges <- DBI::dbGetQuery(
+      con,
+      "SELECT grantee,
+              string_agg(
+                privilege_type,
+                ', ' ORDER BY privilege_type
+              ) AS privileges
+       FROM information_schema.role_table_grants
+       WHERE table_schema = 'continuous'
+         AND table_name = 'grades'
+         AND grantee <> (
+           SELECT tableowner
+           FROM pg_tables
+           WHERE schemaname = 'continuous' AND tablename = 'grades'
+         )
+       GROUP BY grantee
+       ORDER BY grantee"
+    )
+    for (i in seq_len(nrow(continuous_note_privileges))) {
+      role_name <- continuous_note_privileges$grantee[[i]]
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "GRANT %s ON TABLE continuous.notes TO %s",
+          continuous_note_privileges$privileges[[i]],
+          quote_grantee(role_name)
+        )
+      )
+      if (
+        grepl(
+          "(^|, )INSERT($|, )",
+          continuous_note_privileges$privileges[[i]]
+        )
+      ) {
+        DBI::dbExecute(
+          con,
+          sprintf(
+            "GRANT USAGE, SELECT, UPDATE ON SEQUENCE
+               continuous.notes_note_id_seq TO %s",
+            quote_grantee(role_name)
+          )
+        )
+      }
     }
 
     # CREATE TABLE can apply cluster-specific default privileges. Clear those
@@ -1770,6 +1979,22 @@ tryCatch(
       "results",
       c("result_aggregations", "result_components")
     )
+    # An aggregation definition may be removed only by the administrative
+    # aggregate-to-direct conversion operation (or by the cascade from its
+    # parent result). Components retain the parent result's DELETE grants so
+    # editors can replace observation detail inside a validated transaction.
+    result_delete_roles <- unique(result_privileges$grantee[
+      grepl("(^|, )DELETE($|, )", result_privileges$privileges)
+    ])
+    for (role_name in result_delete_roles) {
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "REVOKE DELETE ON TABLE discrete.result_aggregations FROM %s",
+          quote_grantee(role_name)
+        )
+      )
+    }
     result_select_roles <- result_privileges$grantee[
       grepl("(^|, )SELECT($|, )", result_privileges$privileges)
     ]
@@ -1833,40 +2058,81 @@ tryCatch(
       )
     }
 
-    # New child tables inherit the explicit DML grants of their parent table.
-    # Verify exact set equality so this patch cannot silently omit or broaden a
-    # cluster-specific role grant.
-    table_privilege_differences <- function(source_table, target_table) {
+    # Verify effective privileges for ordinary roles, including inherited role
+    # membership. Owners, members of either owner role, and superusers are
+    # administrative exceptions with implicit rights that are not expected to
+    # match between parent and child tables. PUBLIC ACLs are added separately
+    # because PUBLIC is not a row in pg_roles.
+    table_privilege_differences <- function(
+      source_table,
+      target_table,
+      privilege_types = c("SELECT", "INSERT", "UPDATE", "DELETE")
+    ) {
       DBI::dbGetQuery(
         con,
-        # Owners are excluded because an owner holds its privileges implicitly
-        # and never needs an explicit grant. Both owners are excluded from BOTH
-        # sides: a per-side exclusion is only sound when parent and child share
-        # an owner. They frequently do not - this patch creates its tables OWNER
-        # TO admin, while tables inherited from an older restore are owned by
-        # postgres with admin holding an explicit grant. A per-side filter then
-        # drops admin from the target set only and reports its parent grant as
-        # missing, even though admin owns the child outright.
-        "WITH excluded_owners AS (
-           SELECT tableowner
-           FROM pg_tables
-           WHERE schemaname = 'discrete'
-             AND tablename IN ($1, $2)
-             AND tableowner IS NOT NULL
+        "WITH requested_privileges AS (
+           SELECT unnest($3::text[]) AS privilege_type
+         ), relations AS (
+           SELECT relation.oid, relation.relname, relation.relowner,
+                  relation.relacl
+           FROM pg_class relation
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'discrete'
+             AND relation.relname IN ($1, $2)
+         ), administrative_roles AS (
+           SELECT roles.oid
+           FROM pg_roles roles
+           WHERE roles.rolsuper
+              OR EXISTS (
+                SELECT 1
+                FROM relations relation
+                WHERE pg_has_role(
+                  roles.oid, relation.relowner, 'member'
+                )
+              )
          ), source_privileges AS (
-           SELECT grantee, privilege_type
-           FROM information_schema.role_table_grants
-           WHERE table_schema = 'discrete'
-             AND table_name = $1
-             AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
-             AND grantee NOT IN (SELECT tableowner FROM excluded_owners)
+           SELECT roles.rolname::text AS grantee,
+                  requested.privilege_type
+           FROM pg_roles roles
+           CROSS JOIN requested_privileges requested
+           WHERE roles.oid NOT IN (SELECT oid FROM administrative_roles)
+             AND has_table_privilege(
+             roles.oid,
+             format('discrete.%I', $1),
+             requested.privilege_type
+           )
+           UNION ALL
+           SELECT 'PUBLIC', acl.privilege_type
+           FROM relations relation
+           CROSS JOIN LATERAL aclexplode(COALESCE(
+             relation.relacl,
+             acldefault('r', relation.relowner)
+           )) acl
+           JOIN requested_privileges requested
+             ON requested.privilege_type = acl.privilege_type
+           WHERE relation.relname = $1 AND acl.grantee = 0
          ), target_privileges AS (
-           SELECT grantee, privilege_type
-           FROM information_schema.role_table_grants
-           WHERE table_schema = 'discrete'
-             AND table_name = $2
-             AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
-             AND grantee NOT IN (SELECT tableowner FROM excluded_owners)
+           SELECT roles.rolname::text AS grantee,
+                  requested.privilege_type
+           FROM pg_roles roles
+           CROSS JOIN requested_privileges requested
+           WHERE roles.oid NOT IN (SELECT oid FROM administrative_roles)
+             AND has_table_privilege(
+             roles.oid,
+             format('discrete.%I', $2),
+             requested.privilege_type
+           )
+           UNION ALL
+           SELECT 'PUBLIC', acl.privilege_type
+           FROM relations relation
+           CROSS JOIN LATERAL aclexplode(COALESCE(
+             relation.relacl,
+             acldefault('r', relation.relowner)
+           )) acl
+           JOIN requested_privileges requested
+             ON requested.privilege_type = acl.privilege_type
+           WHERE relation.relname = $2 AND acl.grantee = 0
          )
          SELECT 'missing' AS difference, missing.*
          FROM (
@@ -1882,7 +2148,49 @@ tryCatch(
            SELECT * FROM source_privileges
          ) unexpected
          ORDER BY difference, grantee, privilege_type",
-        params = list(source_table, target_table)
+        params = list(
+          source_table,
+          target_table,
+          paste0("{", paste(privilege_types, collapse = ","), "}")
+        )
+      )
+    }
+    restricted_delete_differences <- function(target_table) {
+      DBI::dbGetQuery(
+        con,
+        # Check explicit ACLs here, not effective rights. PostgreSQL's built-in
+        # pg_write_all_data role has unavoidable effective DELETE rights on
+        # every table; the trigger still rejects its direct deletion because
+        # that role is neither admin nor postgres.
+        "WITH target AS (
+           SELECT relation.oid, relation.relowner, relation.relacl
+           FROM pg_class relation
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'discrete'
+             AND relation.relname = $1
+         )
+         SELECT 'unexpected' AS difference,
+                CASE
+                  WHEN acl.grantee = 0 THEN 'PUBLIC'
+                  ELSE roles.rolname::text
+                END AS grantee,
+                'DELETE'::text AS privilege_type
+         FROM target
+         CROSS JOIN LATERAL aclexplode(target.relacl) acl
+         LEFT JOIN pg_roles roles ON roles.oid = acl.grantee
+         WHERE acl.privilege_type = 'DELETE'
+           AND (
+             acl.grantee = 0
+             OR (
+               NOT roles.rolsuper
+               AND NOT pg_has_role(
+                 roles.oid, target.relowner, 'member'
+               )
+             )
+           )
+         ORDER BY grantee",
+        params = list(target_table)
       )
     }
     privilege_differences <- list(
@@ -1894,9 +2202,13 @@ tryCatch(
         "samples",
         "sample_observers"
       ),
-      result_aggregations = table_privilege_differences(
-        "results",
-        "result_aggregations"
+      result_aggregations = rbind(
+        table_privilege_differences(
+          "results",
+          "result_aggregations",
+          c("SELECT", "INSERT", "UPDATE")
+        ),
+        restricted_delete_differences("result_aggregations")
       ),
       result_components = table_privilege_differences(
         "results",
@@ -1937,6 +2249,23 @@ tryCatch(
           all(vapply(
             function_signatures,
             function(function_signature) {
+              if (identical(role_name, "PUBLIC")) {
+                return(isTRUE(DBI::dbGetQuery(
+                  con,
+                  "SELECT EXISTS (
+                     SELECT 1
+                     FROM pg_proc function_definition
+                     CROSS JOIN LATERAL aclexplode(COALESCE(
+                       function_definition.proacl,
+                       acldefault('f', function_definition.proowner)
+                     )) acl
+                     WHERE function_definition.oid = to_regprocedure($1)
+                       AND acl.grantee = 0
+                       AND acl.privilege_type = 'EXECUTE'
+                   ) AS allowed",
+                  params = list(function_signature)
+                )$allowed[[1]]))
+              }
               isTRUE(DBI::dbGetQuery(
                 con,
                 "SELECT has_function_privilege($1, $2, 'EXECUTE') AS allowed",
@@ -1967,9 +2296,31 @@ tryCatch(
         unique(component_mutation_roles),
         result_mutation_functions
       ),
+      aggregation_conversion_admin = roles_have_function(
+        "admin",
+        paste0(
+          "discrete.convert_result_aggregation_to_direct",
+          "(integer,text,numeric,integer,numeric,text)"
+        )
+      ),
       component_sequence = all(vapply(
         insert_roles,
         function(role_name) {
+          if (identical(role_name, "PUBLIC")) {
+            return(isTRUE(DBI::dbGetQuery(
+              con,
+              "SELECT count(DISTINCT acl.privilege_type) = 3 AS allowed
+               FROM pg_class sequence_definition
+               CROSS JOIN LATERAL aclexplode(COALESCE(
+                 sequence_definition.relacl,
+                 acldefault('S', sequence_definition.relowner)
+               )) acl
+               WHERE sequence_definition.oid =
+                 'discrete.result_components_result_component_id_seq'::regclass
+                 AND acl.grantee = 0
+                 AND acl.privilege_type IN ('USAGE', 'SELECT', 'UPDATE')"
+            )$allowed[[1]]))
+          }
           isTRUE(DBI::dbGetQuery(
             con,
             "SELECT
@@ -2112,6 +2463,33 @@ tryCatch(
         "(r\\.result(?: AS [^,]+)?),",
         paste0(
           "\\1,\n",
+          "    r.lab_report_no,\n",
+          "    r.lab_sample_no,\n",
+          "    r.grade_type_id AS result_grade_id,\n",
+          "    result_grade.grade_type_code AS result_grade_code,\n",
+          if (french) {
+            paste0(
+              "    COALESCE(result_grade.grade_type_description_fr, ",
+              "result_grade.grade_type_description) AS ",
+              "result_grade_description_fr,\n"
+            )
+          } else {
+            "    result_grade.grade_type_description AS result_grade_description,\n"
+          },
+          "    r.approval_type_id AS result_approval_id,\n",
+          "    result_approval.approval_type_code AS result_approval_code,\n",
+          if (french) {
+            paste0(
+              "    COALESCE(result_approval.approval_type_description_fr, ",
+              "result_approval.approval_type_description) AS ",
+              "result_approval_description_fr,\n"
+            )
+          } else {
+            paste0(
+              "    result_approval.approval_type_description AS ",
+              "result_approval_description,\n"
+            )
+          },
           "    aggregation_metadata.result_aggregation_type_id,\n",
           "    aggregation_metadata.aggregation_type,\n",
           "    aggregation_metadata.calculation_version,\n",
@@ -2129,6 +2507,10 @@ tryCatch(
       paste0(
         updated_definition,
         "
+       LEFT JOIN public.grade_types result_grade
+         ON result_grade.grade_type_id = r.grade_type_id
+       LEFT JOIN public.approval_types result_approval
+         ON result_approval.approval_type_id = r.approval_type_id
        LEFT JOIN LATERAL (
          SELECT
             ra.result_aggregation_type_id,
@@ -2175,7 +2557,11 @@ tryCatch(
           grepl("sample_qualifier_ids", view_definition, fixed = TRUE) &&
           !grepl("observer_", view_definition, fixed = TRUE) &&
           (!startsWith(view_name, "results_") ||
-            (grepl("aggregation_type", view_definition, fixed = TRUE) &&
+            (grepl("lab_report_no", view_definition, fixed = TRUE) &&
+              grepl("lab_sample_no", view_definition, fixed = TRUE) &&
+              grepl("result_grade_id", view_definition, fixed = TRUE) &&
+              grepl("result_approval_id", view_definition, fixed = TRUE) &&
+              grepl("aggregation_type", view_definition, fixed = TRUE) &&
               grepl(
                 "calculation_arguments",
                 view_definition,
@@ -2318,12 +2704,12 @@ tryCatch(
     DBI::dbExecute(
       con,
       "COMMENT ON VIEW discrete.results_metadata_en IS
-       'English-language view that joins each discrete result to flattened sample metadata and optional component-aggregation configuration.'"
+       'English-language view that joins each discrete result to flattened sample metadata, result-level laboratory and quality metadata, and optional component-aggregation configuration.'"
     )
     DBI::dbExecute(
       con,
       "COMMENT ON VIEW discrete.results_metadata_fr IS
-       'French-language view that joins each discrete result to flattened sample metadata and optional component-aggregation configuration.'"
+       'French-language view that joins each discrete result to flattened sample metadata, result-level laboratory and quality metadata, and optional component-aggregation configuration.'"
     )
     for (i in seq_len(nrow(metadata_view_privileges))) {
       DBI::dbExecute(
@@ -2501,6 +2887,8 @@ tryCatch(
       "SELECT
          to_regclass('discrete.sample_qualifiers') IS NOT NULL
            AS has_sample_qualifiers,
+         to_regclass('continuous.notes') IS NOT NULL
+           AS has_continuous_notes,
          to_regclass('discrete.sample_observers') IS NOT NULL
            AS has_sample_observers,
          to_regclass('discrete.result_aggregation_types') IS NOT NULL
@@ -2515,6 +2903,22 @@ tryCatch(
            AS has_stale_result_aggregations,
          to_regprocedure('discrete.refresh_result_aggregations(integer[])')
            IS NOT NULL AS has_batch_refresh_function,
+         to_regprocedure(
+           'discrete.convert_result_aggregation_to_direct(integer,text,numeric,integer,numeric,text)'
+         ) IS NOT NULL AS has_aggregation_conversion_function,
+         EXISTS (
+           SELECT 1
+           FROM pg_trigger trigger_definition
+           JOIN pg_class relation
+             ON relation.oid = trigger_definition.tgrelid
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'discrete'
+             AND relation.relname = 'result_aggregations'
+             AND trigger_definition.tgname =
+               'forbid_result_aggregation_delete_trigger'
+             AND NOT trigger_definition.tgisinternal
+         ) AS has_aggregation_delete_guard,
          has_schema_privilege('admin', 'discrete', 'USAGE')
            AND has_schema_privilege('admin', 'instruments', 'USAGE')
            AND has_schema_privilege('admin', 'public', 'USAGE')
@@ -2536,14 +2940,55 @@ tryCatch(
                  'measurements_continuous',
                  'grades',
                  'approvals',
-                 'qualifiers'
+                 'qualifiers',
+                 'notes'
                ))
                OR (table_schema = 'discrete' AND table_name IN (
                  'samples',
                  'results'
                ))
              )
-         ) = 6 AS all_source_update_columns_available,
+         ) = 7 AS all_source_update_columns_available,
+         (
+           SELECT count(*)
+           FROM information_schema.columns
+           WHERE table_schema = 'continuous'
+             AND table_name = 'notes'
+             AND column_name IN (
+               'note_id',
+               'timeseries_id',
+               'note',
+               'start_dt',
+               'end_dt',
+               'created',
+               'created_by',
+               'modified_by',
+               'modified',
+               'no_source_update'
+             )
+         ) = 10 AS continuous_notes_has_expected_columns,
+         NOT EXISTS (
+           SELECT 1
+           FROM (
+             SELECT conname
+             FROM pg_constraint
+             WHERE conrelid = 'continuous.notes'::regclass
+               AND conname IN (
+                 'notes_pkey',
+                 'notes_timeseries_id_fkey',
+                 'notes_text_not_blank',
+                 'notes_period_valid'
+               )
+           ) present
+           RIGHT JOIN (
+             VALUES
+               ('notes_pkey'),
+               ('notes_timeseries_id_fkey'),
+               ('notes_text_not_blank'),
+               ('notes_period_valid')
+           ) expected(conname) USING (conname)
+           WHERE present.conname IS NULL
+         ) AS continuous_notes_has_expected_constraints,
          NOT EXISTS (
            SELECT 1
            FROM information_schema.columns
@@ -2603,18 +3048,19 @@ tryCatch(
            SELECT 1
            FROM (
              VALUES
-               ('sample_qualifiers', 'audit_sample_qualifiers_trigger'),
-               ('sample_observers', 'audit_sample_observers_trigger'),
-               ('result_aggregation_types', 'audit_result_aggregation_types_trigger'),
-               ('result_aggregations', 'audit_result_aggregations_trigger'),
-               ('result_components', 'audit_result_components_trigger')
-           ) expected(table_name, trigger_name)
+               ('discrete', 'sample_qualifiers', 'audit_sample_qualifiers_trigger'),
+                ('discrete', 'sample_observers', 'audit_sample_observers_trigger'),
+               ('discrete', 'result_aggregation_types', 'audit_result_aggregation_types_trigger'),
+               ('discrete', 'result_aggregations', 'audit_result_aggregations_trigger'),
+               ('discrete', 'result_components', 'audit_result_components_trigger'),
+               ('continuous', 'notes', 'audit_notes_trigger')
+           ) expected(schema_name, table_name, trigger_name)
            LEFT JOIN audit.table_registry registry
-             ON registry.schema_name = 'discrete'
+             ON registry.schema_name = expected.schema_name
             AND registry.table_name = expected.table_name
             AND registry.capture_mode = 'generic_insert_update_delete'
            LEFT JOIN pg_namespace namespace
-             ON namespace.nspname = 'discrete'
+             ON namespace.nspname = expected.schema_name
            LEFT JOIN pg_class relation
              ON relation.relnamespace = namespace.oid
             AND relation.relname = expected.table_name
@@ -2627,14 +3073,106 @@ tryCatch(
          ) AS all_audit_configuration_available,
          (
            SELECT count(*)
+           FROM pg_trigger trigger_definition
+           JOIN pg_class relation
+             ON relation.oid = trigger_definition.tgrelid
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'continuous'
+             AND relation.relname = 'notes'
+             AND trigger_definition.tgname IN (
+               'update_notes_modified',
+               'update_notes_modified_by',
+               'audit_notes_trigger'
+             )
+             AND NOT trigger_definition.tgisinternal
+         ) = 3 AS continuous_notes_has_change_triggers,
+         EXISTS (
+           SELECT 1
+           FROM pg_class relation
+           JOIN pg_namespace namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname = 'continuous'
+             AND relation.relname = 'notes'
+             AND relation.relrowsecurity
+         ) AS continuous_notes_uses_rls,
+         (
+           SELECT count(*)
+           FROM pg_policies
+           WHERE schemaname = 'continuous'
+             AND tablename = 'notes'
+             AND policyname IN (
+               'parent_visibility_restrict',
+               'parent_visibility_restrict_insert',
+               'parent_visibility_restrict_update',
+               'parent_visibility_restrict_delete',
+               'parent_visibility_allow_select',
+               'parent_visibility_allow_insert',
+               'parent_visibility_allow_update',
+               'parent_visibility_allow_delete'
+             )
+         ) = 8 AS continuous_notes_has_visibility_policies,
+         NOT EXISTS (
+           (
+             SELECT grantee, privilege_type
+             FROM information_schema.role_table_grants
+             WHERE table_schema = 'continuous'
+               AND table_name = 'grades'
+             EXCEPT
+             SELECT grantee, privilege_type
+             FROM information_schema.role_table_grants
+             WHERE table_schema = 'continuous'
+               AND table_name = 'notes'
+           )
+           UNION ALL
+           (
+             SELECT grantee, privilege_type
+             FROM information_schema.role_table_grants
+             WHERE table_schema = 'continuous'
+               AND table_name = 'notes'
+             EXCEPT
+             SELECT grantee, privilege_type
+             FROM information_schema.role_table_grants
+             WHERE table_schema = 'continuous'
+               AND table_name = 'grades'
+           )
+         ) AS continuous_note_privileges_match_grades,
+         NOT EXISTS (
+           SELECT 1
+           FROM information_schema.role_table_grants grants
+           WHERE grants.table_schema = 'continuous'
+             AND grants.table_name = 'notes'
+             AND grants.privilege_type = 'INSERT'
+             AND NOT CASE
+               WHEN grants.grantee = 'PUBLIC' THEN EXISTS (
+                 SELECT 1
+                 FROM pg_class sequence_definition
+                 CROSS JOIN LATERAL aclexplode(COALESCE(
+                   sequence_definition.relacl,
+                   acldefault('S', sequence_definition.relowner)
+                 )) acl
+                 WHERE sequence_definition.oid =
+                   'continuous.notes_note_id_seq'::regclass
+                   AND acl.grantee = 0
+                   AND acl.privilege_type = 'USAGE'
+               )
+               ELSE has_sequence_privilege(
+                 grants.grantee,
+                 'continuous.notes_note_id_seq',
+                 'USAGE'
+               )
+             END
+         ) AS continuous_note_insert_roles_have_sequence_usage,
+         (
+           SELECT count(*)
            FROM pg_class relation
            JOIN pg_namespace namespace
              ON namespace.oid = relation.relnamespace
            WHERE namespace.nspname = 'discrete'
              AND relation.relname IN (
                'sample_qualifiers',
-               'sample_observers',
-               'result_aggregations',
+                'sample_observers',
+                'result_aggregations',
                'result_components'
              )
              AND relation.relrowsecurity
@@ -2652,8 +3190,8 @@ tryCatch(
                'sample_groups',
                'sample_group_members',
                'sample_qualifiers',
-               'sample_observers',
-               'result_aggregations',
+                'sample_observers',
+                'result_aggregations',
                'result_components'
              )
              AND relation.relrowsecurity
@@ -2665,8 +3203,8 @@ tryCatch(
            WHERE schemaname = 'discrete'
              AND policyname IN (
                'sample_qualifiers_parent_sample_access',
-               'sample_observers_parent_sample_access',
-               'result_aggregations_parent_access',
+                'sample_observers_parent_sample_access',
+                'result_aggregations_parent_access',
                'result_components_parent_access'
              )
              AND cmd = 'ALL'
@@ -2841,32 +3379,265 @@ tryCatch(
          AND data_domain = 'discrete'"
     )
 
-    # Add two columns to discrete.results for lab IDs
+    # Fix the overly restrictive sub_location unique constraint. This was also done in patch_59, but it was missed in the original patch_59 implementation so this ensures even application across systems.
     DBI::dbExecute(
       con,
-      "ALTER TABLE discrete.results
-         ADD COLUMN IF NOT EXISTS lab_report_no TEXT,
-         ADD COLUMN IF NOT EXISTS lab_sample_no TEXT"
+      "ALTER TABLE public.sub_locations DROP CONSTRAINT IF EXISTS sub_locations_name_key"
+    )
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE public.sub_locations ADD CONSTRAINT sub_locations_name_key UNIQUE (location_id, sub_location_name)"
     )
 
-    # Set the patch version in the database and commit.
+    # Record the patch version before the final verification so that the
+    # verification is the last database operation before COMMIT and can still
+    # roll the entire schema change back if any final-state invariant fails.
     DBI::dbExecute(
       con,
       "UPDATE information.version_info SET version = '60'
        WHERE item = 'Last patch number'"
     )
+    patch_package_version <- as.character(packageVersion("AquaCache"))
     DBI::dbExecute(
       con,
       "UPDATE information.version_info SET version = $1
        WHERE item = 'AquaCache R package used for last patch'",
-      params = list(as.character(packageVersion("AquaCache")))
+      params = list(patch_package_version)
     )
 
-    # Commit and be done!
+    final_verification <- DBI::dbGetQuery(
+      con,
+      "SELECT
+         (
+           SELECT count(*)
+           FROM information_schema.columns
+           WHERE table_schema = 'discrete'
+             AND table_name = 'results'
+             AND (column_name, data_type, is_nullable) IN (
+               ('lab_report_no', 'text', 'YES'),
+               ('lab_sample_no', 'text', 'YES'),
+               ('grade_type_id', 'integer', 'YES'),
+               ('approval_type_id', 'integer', 'YES')
+             )
+         ) = 4 AS result_metadata_columns_are_available,
+         NOT EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'discrete'
+             AND table_name = 'results'
+             AND column_name IN ('grade_id', 'qualifier_id', 'approval_id')
+         ) AS ambiguous_result_metadata_columns_are_absent,
+         to_regclass('discrete.result_qualifiers') IS NULL
+           AS result_qualifier_table_is_absent,
+         position(
+           'pg_trigger_depth() > 1' IN pg_get_functiondef(
+             'discrete.forbid_result_aggregation_delete()'::regprocedure
+           )
+         ) > 0 AS aggregation_delete_guard_allows_parent_cascade,
+         (
+           SELECT count(*)
+           FROM pg_constraint constraint_definition
+           WHERE constraint_definition.conrelid = 'discrete.results'::regclass
+             AND constraint_definition.contype = 'f'
+             AND constraint_definition.confupdtype = 'c'
+             AND constraint_definition.confdeltype = 'n'
+             AND constraint_definition.confrelid IN (
+               'public.grade_types'::regclass,
+               'public.approval_types'::regclass
+             )
+         ) = 2 AS result_quality_foreign_keys_are_safe,
+         NOT EXISTS (
+           SELECT 1
+           FROM (
+             VALUES
+               ('results_metadata_en', 'lab_report_no'),
+               ('results_metadata_en', 'lab_sample_no'),
+               ('results_metadata_en', 'result_grade_id'),
+               ('results_metadata_en', 'result_grade_code'),
+               ('results_metadata_en', 'result_grade_description'),
+               ('results_metadata_en', 'result_approval_id'),
+               ('results_metadata_en', 'result_approval_code'),
+               ('results_metadata_en', 'result_approval_description'),
+               ('results_metadata_fr', 'lab_report_no'),
+               ('results_metadata_fr', 'lab_sample_no'),
+               ('results_metadata_fr', 'result_grade_id'),
+               ('results_metadata_fr', 'result_grade_code'),
+               ('results_metadata_fr', 'result_grade_description_fr'),
+               ('results_metadata_fr', 'result_approval_id'),
+               ('results_metadata_fr', 'result_approval_code'),
+               ('results_metadata_fr', 'result_approval_description_fr')
+           ) expected(table_name, column_name)
+           LEFT JOIN information_schema.columns actual
+             ON actual.table_schema = 'discrete'
+            AND actual.table_name = expected.table_name
+            AND actual.column_name = expected.column_name
+           WHERE actual.column_name IS NULL
+         ) AS result_metadata_views_are_complete,
+         EXISTS (
+           SELECT 1
+           FROM public.source_adapter_capabilities
+           WHERE source_fx = 'downloadSnowCourseYG'
+             AND data_domain = 'discrete'
+         )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM public.source_adapter_capabilities
+           WHERE source_fx = 'downloadSnowCourse'
+             AND data_domain = 'discrete'
+         )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM discrete.sample_series_source_adapters
+           WHERE source_fx = 'downloadSnowCourse'
+         )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM discrete.samples
+           WHERE import_source = 'downloadSnowCourse'
+         ) AS snow_course_adapter_rename_is_complete,
+         EXISTS (
+           SELECT 1
+           FROM pg_constraint constraint_definition
+           WHERE constraint_definition.conrelid = 'public.sub_locations'::regclass
+             AND constraint_definition.conname = 'sub_locations_name_key'
+             AND constraint_definition.contype = 'u'
+             AND pg_get_constraintdef(constraint_definition.oid) =
+               'UNIQUE (location_id, sub_location_name)'
+         ) AS sub_location_uniqueness_is_scoped,
+         (
+           SELECT version = '60'
+           FROM information.version_info
+           WHERE item = 'Last patch number'
+         ) AS patch_number_is_current,
+         (
+           SELECT version = $1
+           FROM information.version_info
+           WHERE item = 'AquaCache R package used for last patch'
+         ) AS patch_package_version_is_current",
+      params = list(patch_package_version)
+    )
+    if (!all(unlist(final_verification[1, ], use.names = FALSE))) {
+      failed_final_verification <- names(final_verification)[
+        !vapply(final_verification[1, ], isTRUE, logical(1))
+      ]
+      stop(
+        "Patch 60 final verification failed: ",
+        paste(failed_final_verification, collapse = ", "),
+        "."
+      )
+    }
+
+    # Commit the fully verified schema before attempting the optional data
+    # migration from the Yukon SnowDB.
     DBI::dbExecute(con, "COMMIT")
     active <- FALSE
     message(
-      "Patch 60 applied successfully. Generic result aggregations, result components, multi-valued qualifiers, sample observers, and source-update protection are ready."
+      "Patch 60 applied successfully. Generic result aggregations, result components, multi-valued sample qualifiers, sample observers, time-ranged continuous notes, and source-update protection are ready."
+    )
+
+    # SnowDB is a Yukon source database. Probe for it on the same server as
+    # this AquaCache connection and skip quietly for partner installations.
+    # Any migration error is reported after commit and cannot roll back or make
+    # the Patch 60 schema upgrade appear to have failed.
+    message(
+      "Checking if the Yukon SnowDB is available for optional snow-course component migration..."
+    )
+    tryCatch(
+      local({
+        server_address <- DBI::dbGetQuery(
+          con,
+          "SELECT host(inet_server_addr()) AS server_address"
+        )$server_address[[1L]]
+        snow_settings <- c(
+          port = Sys.getenv("snowPort"),
+          user = Sys.getenv("snowUser", Sys.getenv("snowAdminUser")),
+          password = Sys.getenv("snowPass", Sys.getenv("snowAdminPass"))
+        )
+        if (
+          is.na(server_address) ||
+            !nzchar(server_address) ||
+            any(!nzchar(snow_settings))
+        ) {
+          message(
+            "Snow-course component migration skipped: the AquaCache server ",
+            "address or SnowDB connection settings are unavailable."
+          )
+        } else {
+          snow_con <- tryCatch(
+            {
+              DBI::dbConnect(
+                RPostgres::Postgres(),
+                dbname = Sys.getenv("snowName", "snow"),
+                host = server_address,
+                port = snow_settings[["port"]],
+                user = snow_settings[["user"]],
+                password = snow_settings[["password"]],
+                connect_timeout = 5L
+              )
+              message("SnowDB connection established.")
+            },
+            error = function(e) NULL
+          )
+          if (is.null(snow_con)) {
+            message(
+              "Snow-course component migration skipped: SnowDB is not ",
+              "reachable at AquaCache server ",
+              server_address,
+              "."
+            )
+          } else {
+            DBI::dbExecute(snow_con, "SET timezone = 'UTC'")
+            on.exit(
+              {
+                if (DBI::dbIsValid(snow_con)) DBI::dbDisconnect(snow_con)
+              },
+              add = TRUE
+            )
+            migration_candidates <- c(
+              system.file(
+                "patches",
+                "migrate_snow_course_components.R",
+                package = "AquaCache"
+              ),
+              file.path(
+                "inst",
+                "patches",
+                "migrate_snow_course_components.R"
+              )
+            )
+            migration_script <- migration_candidates[
+              nzchar(migration_candidates) & file.exists(migration_candidates)
+            ][1L]
+            if (is.na(migration_script)) {
+              stop(
+                "Could not find patches/migrate_snow_course_components.R."
+              )
+            }
+            old_options <- options(
+              AquaCache.snow_component_migration.source_only = TRUE
+            )
+            on.exit(options(old_options), add = TRUE)
+            migration_environment <- new.env(parent = globalenv())
+            sys.source(migration_script, envir = migration_environment)
+            migration_environment$run_snow_component_migration(
+              apply_changes = TRUE,
+              aquacache = con,
+              snow = snow_con,
+              confirm_production = TRUE
+            )
+            message("Snow-course component migration completed successfully.")
+          }
+        }
+      }),
+      error = function(e) {
+        message(
+          "WARNING: Patch 60 is committed, but the optional snow-course component ",
+          "migration failed: ",
+          conditionMessage(e),
+          " Re-run inst/patches/migrate_snow_course_components.R after ",
+          "correcting the problem."
+        )
+      }
     )
   },
   error = function(e) {

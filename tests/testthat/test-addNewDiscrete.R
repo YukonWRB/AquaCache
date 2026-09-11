@@ -76,6 +76,22 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
   )) {
     testthat::skip("The test database has not applied patch 60.")
   }
+  final_result_metadata <- DBI::dbGetQuery(
+    con,
+    "SELECT count(*) = 4 AS available
+     FROM information_schema.columns
+     WHERE table_schema = 'discrete'
+       AND table_name = 'results'
+       AND column_name IN (
+         'lab_report_no',
+         'lab_sample_no',
+         'grade_type_id',
+         'approval_type_id'
+       )"
+  )$available[[1L]]
+  if (!isTRUE(final_result_metadata)) {
+    testthat::skip("The test database does not have final Patch 60 metadata.")
+  }
 
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
@@ -111,6 +127,21 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
   sample$import_source_id <- NA_character_
   results$result_id <- NULL
   results$sample_id <- NULL
+  grade_type_id <- DBI::dbGetQuery(
+    con,
+    "SELECT grade_type_id FROM public.grade_types ORDER BY grade_type_id LIMIT 1"
+  )$grade_type_id[[1L]]
+  approval_type_id <- DBI::dbGetQuery(
+    con,
+    "SELECT approval_type_id
+     FROM public.approval_types
+     ORDER BY approval_type_id
+     LIMIT 1"
+  )$approval_type_id[[1L]]
+  results$lab_report_no <- "TEST-COMPOSITE-REPORT"
+  results$lab_sample_no <- "TEST-COMPOSITE-SAMPLE"
+  results$grade_type_id <- grade_type_id
+  results$approval_type_id <- approval_type_id
   component_values <- data.frame(
     result_row = 1L,
     observation_number = 1:3,
@@ -135,7 +166,9 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
 
   canonical <- DBI::dbGetQuery(
     con,
-    "SELECT r.result_id, r.result, rat.aggregation_type, ra.expected_count
+    "SELECT r.result_id, r.result, r.lab_report_no, r.lab_sample_no,
+            r.grade_type_id, r.approval_type_id,
+            rat.aggregation_type, ra.expected_count
      FROM discrete.results r
      JOIN discrete.result_aggregations ra USING (result_id)
      JOIN discrete.result_aggregation_types rat
@@ -144,8 +177,24 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     params = list(sample_id)
   )
   expect_equal(canonical$result[[1]], 9)
+  expect_identical(canonical$lab_report_no[[1]], "TEST-COMPOSITE-REPORT")
+  expect_identical(canonical$lab_sample_no[[1]], "TEST-COMPOSITE-SAMPLE")
+  expect_equal(canonical$grade_type_id[[1]], grade_type_id)
+  expect_equal(canonical$approval_type_id[[1]], approval_type_id)
   expect_identical(canonical$aggregation_type[[1]], "mean")
   expect_equal(canonical$expected_count[[1]], 3L)
+  view_metadata <- DBI::dbGetQuery(
+    con,
+    "SELECT lab_report_no, lab_sample_no, result_grade_id,
+            result_approval_id
+     FROM discrete.results_metadata_en
+     WHERE result_id = $1",
+    params = list(canonical$result_id[[1]])
+  )
+  expect_identical(view_metadata$lab_report_no[[1]], "TEST-COMPOSITE-REPORT")
+  expect_identical(view_metadata$lab_sample_no[[1]], "TEST-COMPOSITE-SAMPLE")
+  expect_equal(view_metadata$result_grade_id[[1]], grade_type_id)
+  expect_equal(view_metadata$result_approval_id[[1]], approval_type_id)
   canonical_update_count <- DBI::dbGetQuery(
     con,
     "SELECT count(*)::integer AS n
@@ -684,6 +733,16 @@ test_that("synchronization replaces and removes result aggregation detail", {
   )) {
     testthat::skip("The test database has not applied patch 60.")
   }
+  if (is.na(DBI::dbGetQuery(
+    con,
+    "SELECT to_regprocedure(
+       'discrete.convert_result_aggregation_to_direct(integer,text,numeric,integer,numeric,text)'
+     ) AS conversion_function"
+  )$conversion_function[[1]])) {
+    testthat::skip(
+      "The test database does not have the final patch 60 conversion function."
+    )
+  }
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
 
@@ -746,6 +805,264 @@ test_that("synchronization replaces and removes result aggregation detail", {
     params = list(result_id)
   )$result[[1]], 9)
 
+  DBI::dbExecute(con, "SAVEPOINT reject_direct_aggregation_delete")
+  expect_error(
+    DBI::dbExecute(
+      con,
+      "DELETE FROM discrete.result_aggregations WHERE result_id = $1",
+      params = list(result_id)
+    ),
+    "Cannot delete.*directly"
+  )
+  suppressWarnings(DBI::dbExecute(
+    con,
+    "ROLLBACK TO SAVEPOINT reject_direct_aggregation_delete"
+  ))
+  DBI::dbExecute(con, "RELEASE SAVEPOINT reject_direct_aggregation_delete")
+
+  DBI::dbExecute(con, "SAVEPOINT allow_parent_result_delete")
+  expect_equal(
+    DBI::dbExecute(
+      con,
+      "DELETE FROM discrete.results WHERE result_id = $1",
+      params = list(result_id)
+    ),
+    1L
+  )
+  expect_equal(DBI::dbGetQuery(
+    con,
+    "SELECT count(*)
+     FROM discrete.result_aggregations
+     WHERE result_id = $1",
+    params = list(result_id)
+  )[[1]], 0)
+  DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT allow_parent_result_delete")
+  DBI::dbExecute(con, "RELEASE SAVEPOINT allow_parent_result_delete")
+
+  current_role <- DBI::dbGetQuery(
+    con,
+    "SELECT roles.rolsuper
+     FROM pg_roles roles
+     WHERE roles.rolname = current_user"
+  )
+  if (isTRUE(current_role$rolsuper[[1]])) {
+    guard_role <- paste0(
+      "patch60_guard_test_",
+      DBI::dbGetQuery(con, "SELECT pg_backend_pid()")[[1]]
+    )
+    quoted_guard_role <- DBI::dbQuoteIdentifier(con, guard_role)
+    DBI::dbExecute(
+      con,
+      sprintf("CREATE ROLE %s NOLOGIN BYPASSRLS", quoted_guard_role)
+    )
+    DBI::dbExecute(
+      con,
+      sprintf("GRANT USAGE ON SCHEMA discrete TO %s", quoted_guard_role)
+    )
+    DBI::dbExecute(
+      con,
+      sprintf(
+        paste0(
+          "GRANT SELECT ON discrete.results, ",
+          "discrete.result_aggregations TO %s"
+        ),
+        quoted_guard_role
+      )
+    )
+    DBI::dbExecute(
+      con,
+      sprintf(
+        "GRANT DELETE ON discrete.result_aggregations TO %s",
+        quoted_guard_role
+      )
+    )
+    DBI::dbExecute(
+      con,
+      sprintf(
+        paste0(
+          "GRANT EXECUTE ON FUNCTION ",
+          "discrete.convert_result_aggregation_to_direct(",
+          "integer,text,numeric,integer,numeric,text) TO %s"
+        ),
+        quoted_guard_role
+      )
+    )
+    DBI::dbExecute(con, sprintf("SET LOCAL ROLE %s", quoted_guard_role))
+    DBI::dbExecute(con, "SAVEPOINT reject_guard_guc_bypass")
+    DBI::dbExecute(
+      con,
+      "SELECT set_config(
+         'aquacache.allow_result_aggregation_delete', 'on', TRUE
+       )"
+    )
+    expect_error(
+      DBI::dbExecute(
+        con,
+        "DELETE FROM discrete.result_aggregations WHERE result_id = $1",
+        params = list(result_id)
+      ),
+      "Cannot delete.*directly"
+    )
+    suppressWarnings(DBI::dbExecute(
+      con,
+      "ROLLBACK TO SAVEPOINT reject_guard_guc_bypass"
+    ))
+    DBI::dbExecute(con, "RELEASE SAVEPOINT reject_guard_guc_bypass")
+
+    DBI::dbExecute(con, "SAVEPOINT reject_non_admin_conversion")
+    expect_error(
+      DBI::dbExecute(
+        con,
+        "SELECT discrete.convert_result_aggregation_to_direct(
+           $1, 'preserve_calculated', NULL, NULL, NULL, $2
+         )",
+        params = list(result_id, "Non-admin conversion test")
+      ),
+      "may not convert result aggregations"
+    )
+    suppressWarnings(DBI::dbExecute(
+      con,
+      "ROLLBACK TO SAVEPOINT reject_non_admin_conversion"
+    ))
+    DBI::dbExecute(con, "RELEASE SAVEPOINT reject_non_admin_conversion")
+    DBI::dbExecute(con, "RESET ROLE")
+  }
+
+  normalized_replacement <- normalize_discrete_result_aggregations(
+    results = results,
+    result_aggregations = data.frame(
+      result_row = 1L,
+      aggregation_type = "sum",
+      expected_count = 2L,
+      note = "Replacement aggregation"
+    ),
+    result_components = data.frame(
+      result_row = 1L,
+      observation_number = 1:2,
+      result = c(7, 13)
+    )
+  )
+  synchronize_discrete_sample_detail(
+    con = con,
+    sample_id = sample_id,
+    remote_results = normalized_replacement$results,
+    result_ids = result_id,
+    pending_results = list(),
+    sample_qualifiers = NULL,
+    sample_observers = NULL,
+    result_aggregations = normalized_replacement$result_aggregations,
+    result_components = normalized_replacement$result_components
+  )
+  rebuilt <- DBI::dbGetQuery(
+    con,
+    "SELECT r.result, rat.aggregation_type, ra.expected_count, ra.note,
+            count(rc.result_component_id)::integer AS component_count
+     FROM discrete.results r
+     JOIN discrete.result_aggregations ra USING (result_id)
+     JOIN discrete.result_aggregation_types rat
+       USING (result_aggregation_type_id)
+     JOIN discrete.result_components rc USING (result_id)
+     WHERE r.result_id = $1
+     GROUP BY r.result, rat.aggregation_type, ra.expected_count, ra.note",
+    params = list(result_id)
+  )
+  expect_equal(rebuilt$result[[1]], 20)
+  expect_identical(rebuilt$aggregation_type[[1]], "sum")
+  expect_equal(rebuilt$expected_count[[1]], 2L)
+  expect_identical(rebuilt$note[[1]], "Replacement aggregation")
+  expect_equal(rebuilt$component_count[[1]], 2L)
+  aggregation_audit <- DBI::dbGetQuery(
+    con,
+    "SELECT action, count(*)::integer AS n
+     FROM audit.general_log
+     WHERE transaction_id = txid_current()
+       AND schema_name = 'discrete'
+       AND table_name = 'result_aggregations'
+       AND COALESCE(
+         (new_data ->> 'result_id')::integer,
+         (original_data ->> 'result_id')::integer
+       ) = $1
+     GROUP BY action",
+    params = list(result_id)
+  )
+  expect_equal(
+    aggregation_audit$n[aggregation_audit$action == "UPDATE"],
+    1L
+  )
+  expect_length(
+    aggregation_audit$n[aggregation_audit$action == "DELETE"],
+    0L
+  )
+
+  set_result_aggregation_constraints(con, "deferred")
+  DBI::dbExecute(
+    con,
+    "SET LOCAL aquacache.defer_result_aggregation_refresh = 'on'"
+  )
+  DBI::dbExecute(con, "SAVEPOINT reject_stale_preservation")
+  DBI::dbExecute(
+    con,
+    "UPDATE discrete.result_components
+     SET result = result + 1
+     WHERE result_id = $1 AND observation_number = 1",
+    params = list(result_id)
+  )
+  expect_error(
+    DBI::dbExecute(
+      con,
+      "SELECT discrete.convert_result_aggregation_to_direct(
+         $1, 'preserve_calculated', NULL, NULL, NULL, $2
+       )",
+      params = list(result_id, "Stale-value test")
+    ),
+    "stale or has an invalid aggregate condition"
+  )
+  suppressWarnings(DBI::dbExecute(
+    con,
+    "ROLLBACK TO SAVEPOINT reject_stale_preservation"
+  ))
+  DBI::dbExecute(con, "RELEASE SAVEPOINT reject_stale_preservation")
+  DBI::dbExecute(
+    con,
+    "SET LOCAL aquacache.defer_result_aggregation_refresh = 'off'"
+  )
+  set_result_aggregation_constraints(con, "immediate")
+
+  DBI::dbExecute(
+    con,
+    "SELECT discrete.convert_result_aggregation_to_direct(
+       $1, 'preserve_calculated', NULL, NULL, NULL, $2
+     )",
+    params = list(result_id, "Preserve the verified aggregate for test")
+  )
+  expect_equal(DBI::dbGetQuery(
+    con,
+    "SELECT result FROM discrete.results WHERE result_id = $1",
+    params = list(result_id)
+  )$result[[1]], 20)
+  expect_equal(DBI::dbGetQuery(
+    con,
+    "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
+    params = list(result_id)
+  )[[1]], 0)
+
+  synchronize_discrete_sample_detail(
+    con = con,
+    sample_id = sample_id,
+    remote_results = normalized_replacement$results,
+    result_ids = result_id,
+    pending_results = list(),
+    sample_qualifiers = NULL,
+    sample_observers = NULL,
+    result_aggregations = normalized_replacement$result_aggregations,
+    result_components = normalized_replacement$result_components
+  )
+  expect_equal(DBI::dbGetQuery(
+    con,
+    "SELECT result FROM discrete.results WHERE result_id = $1",
+    params = list(result_id)
+  )$result[[1]], 20)
+
   synchronize_discrete_sample_detail(
     con = con,
     sample_id = sample_id,
@@ -768,6 +1085,24 @@ test_that("synchronization replaces and removes result aggregation detail", {
     "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
     params = list(result_id)
   )[[1]], 0)
+  conversion_audit <- DBI::dbGetQuery(
+    con,
+    "SELECT original_data ->> 'note' AS note
+     FROM audit.general_log
+     WHERE transaction_id = txid_current()
+       AND schema_name = 'discrete'
+       AND table_name = 'result_aggregations'
+       AND action = 'DELETE'
+       AND (original_data ->> 'result_id')::integer = $1
+       AND original_data ->> 'note' LIKE
+         '%Incoming sample detail no longer aggregates this result%'",
+    params = list(result_id)
+  )
+  expect_equal(nrow(conversion_audit), 1L)
+  expect_match(
+    conversion_audit$note[[1]],
+    "Incoming sample detail no longer aggregates this result"
+  )
 })
 
 

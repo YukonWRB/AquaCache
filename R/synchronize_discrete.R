@@ -144,6 +144,9 @@ synchronize_discrete_sample_metadata <- function(
 #' Parent result rows required by a new aggregation are inserted before its
 #' aggregation metadata and components. The helper participates in the caller's
 #' transaction or creates one so replacement cannot be partially committed.
+#' Converting a formerly aggregated result to a direct result is an
+#' administrative operation and therefore requires an `admin` or `postgres`
+#' connection.
 #'
 #' @param con An open DBI connection to an AquaCache database.
 #' @param sample_id Integer ID of the sample being synchronized.
@@ -304,6 +307,7 @@ synchronize_discrete_sample_detail <- function(
           target_result_ids,
           previously_aggregated
         ))
+        rebuilding_ids <- integer()
         if (length(affected_result_ids)) {
           placeholders <- paste0("$", seq_along(affected_result_ids))
           protected_results <- DBI::dbGetQuery(
@@ -387,40 +391,13 @@ synchronize_discrete_sample_detail <- function(
               )
             )
           }
-          # Targets keep their aggregate identity and are rebuilt below. Their
-          # existing aggregation rows are removed in place, which is a
-          # sanctioned delete rather than a conversion.
+          # Targets keep their aggregation row and audit identity. The shared
+          # writer updates their definitions and replaces their components
+          # while the constraints are deferred.
           rebuilding_ids <- intersect(
             target_result_ids,
             database_aggregations$result_id
           )
-          if (length(rebuilding_ids)) {
-            DBI::dbExecute(
-              con,
-              "SELECT set_config(
-                 'aquacache.allow_result_aggregation_delete', 'on', TRUE
-               )"
-            )
-            # No on.exit reset is needed: the guard is transaction-local, so a
-            # failure between here and the reset below rolls it back with the
-            # rest of the transaction.
-            rebuild_placeholders <- paste0("$", seq_along(rebuilding_ids))
-            DBI::dbExecute(
-              con,
-              paste0(
-                "DELETE FROM discrete.result_aggregations WHERE result_id IN (",
-                paste(rebuild_placeholders, collapse = ", "),
-                ")"
-              ),
-              params = as.list(as.integer(rebuilding_ids))
-            )
-            DBI::dbExecute(
-              con,
-              "SELECT set_config(
-                 'aquacache.allow_result_aggregation_delete', 'off', TRUE
-               )"
-            )
-          }
         }
 
         for (result_row in target_rows) {
@@ -438,7 +415,8 @@ synchronize_discrete_sample_detail <- function(
           con = con,
           result_ids = result_ids,
           result_aggregations = result_aggregations,
-          result_components = result_components
+          result_components = result_components,
+          replace_existing_result_ids = rebuilding_ids
         )
       }
 
@@ -486,7 +464,8 @@ synchronize_discrete_sample_detail <- function(
 #' their respective associations; omission preserves the database values.
 #' Supplied aggregation configurations and components replace that detail for
 #' matched canonical results; two supplied empty data frames explicitly remove
-#' existing aggregation detail, while omission preserves it.
+#' existing aggregation detail through the administrative aggregate-to-direct
+#' conversion, while omission preserves it.
 #' Locationless remote samples are matched by their database-enforced
 #' `import_source` and `import_source_id` identity. Located samples retain
 #' location and collection-context matching because source IDs may legitimately

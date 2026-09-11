@@ -2,7 +2,7 @@
 % Please edit documentation in R/downloadSnowCourseYG.R
 \name{downloadSnowCourseYG}
 \alias{downloadSnowCourseYG}
-\title{Bring Yukon Government snow course data into the aquacache database}
+\title{Fetch Yukon Government snow-course samples and component results}
 \usage{
 downloadSnowCourseYG(
   location,
@@ -13,31 +13,61 @@ downloadSnowCourseYG(
   adjust_end = NULL,
   share_with = "yg_reader_group",
   con = NULL,
-  snowCon = snowConnect()
+  snowCon = NULL
 )
 }
 \arguments{
-\item{location}{The location code associated with the snow course in the snow database,  should match locations.location_code in the aquacache database (locations.alias is checked as a fallback).}
+\item{location}{Snow-database location code. It should match
+\code{public.locations.location_code} in AquaCache; \code{alias} is also accepted.}
 
-\item{start_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.}
+\item{start_datetime}{Earliest survey datetime to retrieve, as a \code{Date},
+\code{POSIXct}, or coercible character value. The lower boundary is exclusive.}
 
-\item{end_datetime}{Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.}
+\item{end_datetime}{Latest survey datetime to retrieve. A \code{Date} includes
+that whole day; the upper survey-date boundary remains exclusive for
+compatibility with the discrete ingestion framework.}
 
-\item{old_loc}{In some cases the measurement location has moved slightly over the years, but not enough for the new location to be distinct from the old location. In this case you can specify the old location name which will be searched for in the snow database. If found, the timeseries from the old location will be treated as if they are the new location. An offset will be calculated whenever possible putting the old location in-line with the new location. New location data takes precedence when both were measured.}
+\item{old_loc}{Optional earlier snow-database location whose surveys should
+be used to extend \code{location}. Surveys at \code{location} take precedence on
+overlapping dates. When parallel observations exist, raw observations
+from \code{old_loc} are retained as components and a parameter-specific
+multiplier is recorded in the aggregation calculation arguments.}
 
-\item{adjust_start}{The start date or datetime to use for the adjustment of the old location data. If NULL, the start date of the new location will be used. To have no adjustment, set adjust_start and adjust_end to the same date/datetime}
+\item{adjust_start, adjust_end}{Optional bounds on parallel surveys used to
+calculate \code{old_loc} multipliers. Setting both to the same date disables
+adjustment.}
 
-\item{adjust_end}{The end date or datetime to use for the adjustment of the old location data. If NULL, the end date of the new location will be used.}
+\item{share_with}{Roles with which newly inserted samples should be shared.
+Existing sample visibility is not changed by synchronization.}
 
-\item{share_with}{Which user groups to share the data with. Default is 'yg_reader_group'; set to 'public_reader' to share publicly. This does not affect samples which already exist and are being refreshed/replaced. For multiple groups, specify as a character vector, e.g. c('yg_reader_group', 'public_reader').}
+\item{con}{AquaCache connection used to resolve reference identifiers. A
+connection is opened and closed automatically when \code{NULL}.}
 
-\item{con}{A connection to the aquacache database. a connection will be attempted using AquaConnect().}
-
-\item{snowCon}{A connection to the YG snow database.}
+\item{snowCon}{Connection to the Yukon snow database. A connection is opened
+and closed automatically when \code{NULL}.}
 }
 \value{
-A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
+A list with one element per survey. Each element contains \code{sample},
+\code{results}, \code{result_aggregations}, and \code{result_components} data frames.
+Surveys without a calculable SWE or depth result are omitted because the
+discrete source-adapter contract requires at least one result. An empty
+list is returned when no qualifying surveys are available.
 }
 \description{
-Brings in pared-down snow course data from the Yukon Government's snow survey database to the aquacache database. Can automatically calculate an offset value where locations have operated in parallel in anticipation of replacing the old location with a nearby new one, updating the calculation with each new data point (see parameter old_loc).
+Retrieves snow-course surveys from the Yukon Government snow database in
+the discrete source-adapter format used by \code{\link[=getNewDiscrete]{getNewDiscrete()}} and
+\code{\link[=synchronize_discrete]{synchronize_discrete()}}. Each reportable SWE or snow-depth result is
+returned as a canonical result backed by all of its source observations,
+including observations excluded from the mean.
+
+The function only reads the snow database and returns data. AquaCache
+insertion and replacement are handled transactionally by the calling
+ingestion function.
+
+Every returned canonical result uses the \code{mean} aggregation type. Source
+\code{exclude_flag} values control \code{included_in_aggregate}; an exclusion without
+a source note receives an explicit fallback note required by AquaCache.
+Standard surveys declare an expected count of 10 observations. Missing
+component values are retained and configured to be ignored by the
+aggregation calculation.
 }

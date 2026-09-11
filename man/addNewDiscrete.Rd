@@ -67,7 +67,7 @@ samples may omit both fields.
 \item 'no_source_update': logical; \code{TRUE} preserves the sample from later
 source-adapter synchronization while still allowing direct user edits.
 \item 'contributor': the numeric organization ID that contributed the sample.
-\item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
+\item 'approval': the approval status of the sample, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 \item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
 }
 
@@ -77,13 +77,17 @@ The 'results' data.frame should contain one row per result and must contain the 
 \item 'result': a numeric specifying the sample's results, matched to the parameters
 \item 'result_type': a numeric specifying the result_type_id of the data point from table 'result_types', such as 1 (concentration), 2 (load), or 3 (other).
 Additionally, the following columns may need to be included:
-\item 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA values will be dropped.
+\item 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA result values will be dropped.
 \item 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 \item 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 \item 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
 \item 'no_source_update': logical; \code{TRUE} preserves that result from later
 source-adapter synchronization while still allowing direct user edits.
+\item 'lab_report_no' and 'lab_sample_no': optional laboratory report and sample
+identifiers.
+\item 'grade_type_id' and 'approval_type_id': optional result-level quality and
+approval catalogue identifiers.
 }
 
 \code{sample_qualifiers} may be a vector of \code{qualifier_type_id} values or a data

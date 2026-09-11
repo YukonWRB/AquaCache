@@ -1,6 +1,6 @@
 #' Create a small test or seed database
 #'
-#' This function uses the `pg_dump` utility to create a dump of the schema and reference table data, and adds deterministic synthetic fixture data in an aquacache PostgreSQL database. The fixtures include a snow-survey sample with multiple qualifiers and observers, an SWE result calculated as the mean of nine included observations plus one excluded observation, and a weighted snow-depth result containing a conditioned component. The schema dump is saved to an SQL file in the specified output path and can be restored with [restore_seed_db()]. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `aquacache`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. Audit history starts at the completion of the deterministic initial snapshot rather than inheriting the source database's history dates. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
+#' This function uses the `pg_dump` utility to create a dump of the schema and reference table data, and adds deterministic synthetic fixture data in an aquacache PostgreSQL database. The fixtures include a snow-survey sample with multiple qualifiers and observers, result-specific laboratory, grade, and approval metadata, an SWE result calculated as the mean of nine included observations plus one excluded observation, and a weighted snow-depth result containing a conditioned component. The schema dump is saved to an SQL file in the specified output path and can be restored with [restore_seed_db()]. The resulting SQL includes AquaCache package/patch metadata, a bootstrap block for the `public_reader` login role using password `aquacache`, and a command to set the database `search_path` on restore so that queries without schema qualifiers work. Audit history starts at the completion of the deterministic initial snapshot rather than inheriting the source database's history dates. You must call this function from a machine with the PostgreSQL pg_dump and psql utilities installed.
 #'
 #' @param name Target database name (i.e. the one to be dumped). By default, it is set to "aquacache". If you want to dump a different database, specify its name here.
 #' @param host Database host address. By default searches the .Renviron file for parameter:value pair of form aquacacheHost="hostname".
@@ -1759,22 +1759,29 @@ create_test_db <- function(
              result_id, sample_id, result_type, parameter_id,
              sample_fraction_id, result, result_condition,
              result_condition_value, result_value_type, analysis_datetime,
-             share_with, no_source_update, matrix_state_id
+             share_with, no_source_update, matrix_state_id,
+             lab_report_no, lab_sample_no, grade_type_id, approval_type_id
            ) VALUES
              (27, 9, %d, %d, %d, NULL, NULL, NULL, %d,
-              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d),
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d,
+              'SYN-SNOW-2023-03', 'SYN-S9-SWE', %d, %d),
              (28, 9, %d, %d, %d, NULL, NULL, NULL, %d,
-              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d)",
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d,
+              'SYN-SNOW-2023-03', 'SYN-S9-DEPTH', %d, %d)",
            result_type_field,
            swe_param,
            sample_fraction_total,
            result_value_calculated,
            matrix_solid,
+           grade_a,
+           approval_a,
            result_type_field,
            snow_depth_param,
            sample_fraction_total,
            result_value_calculated,
-           matrix_solid
+           matrix_solid,
+           grade_b,
+           approval_n
          )
        )
       DBI::dbExecute(
@@ -1897,7 +1904,16 @@ create_test_db <- function(
             FROM discrete.results_metadata_en
             WHERE sample_id = 9
               AND result_id IN (27, 28)
-              AND aggregation_type IS NOT NULL)
+              AND aggregation_type IS NOT NULL
+              AND lab_report_no = 'SYN-SNOW-2023-03'
+              AND result_grade_id IS NOT NULL
+              AND result_grade_code IS NOT NULL
+              AND result_approval_id IS NOT NULL
+              AND result_approval_code IS NOT NULL
+              AND (
+                (result_id = 27 AND lab_sample_no = 'SYN-S9-SWE') OR
+                (result_id = 28 AND lab_sample_no = 'SYN-S9-DEPTH')
+              ))
              AS valid"
       )$valid
       if (

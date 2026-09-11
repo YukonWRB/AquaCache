@@ -420,9 +420,11 @@ set_result_aggregation_constraints <- function(
 #' Converts temporary `result_row` references to the database-generated
 #' `result_id` values for their parent results, resolves textual aggregation
 #' types against active rows in `discrete.result_aggregation_types`, and
-#' appends the aggregation and component rows to their discrete-schema tables.
-#' Per-row refresh is disabled locally during the append, after which one
-#' parameterized batch refresh calculates every affected canonical result.
+#' writes the aggregation and component rows to their discrete-schema tables.
+#' Existing aggregation definitions named in `replace_existing_result_ids` are
+#' updated in place and their components are replaced; other definitions are
+#' inserted. Per-row refresh is disabled locally during the write, after which
+#' one parameterized batch refresh calculates every affected canonical result.
 #'
 #' The parent rows in `discrete.results` must already exist. This helper does
 #' not open a transaction; callers are responsible for inserting parent
@@ -438,6 +440,8 @@ set_result_aggregation_constraints <- function(
 #'   `normalize_discrete_result_aggregations()` (internal function).
 #' @param result_components A normalized component data frame returned by
 #'  `normalize_discrete_result_aggregations()` (internal function).
+#' @param replace_existing_result_ids Integer result IDs whose existing
+#'   aggregation definitions and components should be replaced in place.
 #'
 #' @return `NULL`, invisibly. The function is called for its database effects.
 #'
@@ -447,7 +451,8 @@ append_discrete_result_aggregations <- function(
   con,
   result_ids,
   result_aggregations,
-  result_components
+  result_components,
+  replace_existing_result_ids = integer()
 ) {
   if (is.null(result_aggregations) || !nrow(result_aggregations)) {
     return(invisible(NULL))
@@ -480,11 +485,81 @@ append_discrete_result_aggregations <- function(
   }
   aggregations$result_id <- result_ids[aggregations$result_row]
   aggregations$result_row <- NULL
+  if (!"note" %in% names(aggregations)) {
+    aggregations$note <- NA_character_
+  }
+  replace_existing_result_ids <- unique(as.integer(
+    replace_existing_result_ids
+  ))
+  replace_existing_result_ids <- replace_existing_result_ids[
+    !is.na(replace_existing_result_ids)
+  ]
+  unknown_replacements <- setdiff(
+    replace_existing_result_ids,
+    aggregations$result_id
+  )
+  if (length(unknown_replacements)) {
+    stop(
+      "replace_existing_result_ids must reference supplied aggregations: ",
+      paste(unknown_replacements, collapse = ", "),
+      "."
+    )
+  }
+  replace_rows <- aggregations$result_id %in% replace_existing_result_ids
   DBI::dbExecute(
     con,
     "SET LOCAL aquacache.defer_result_aggregation_refresh = 'on'"
   )
-  dbAppendTableRLS(con, "discrete.result_aggregations", aggregations)
+  if (any(replace_rows)) {
+    for (row_index in which(replace_rows)) {
+      aggregation <- aggregations[row_index, , drop = FALSE]
+      updated <- DBI::dbExecute(
+        con,
+        "UPDATE discrete.result_aggregations
+         SET result_aggregation_type_id = $1,
+             calculation_version = $2,
+             calculation_arguments = $3::jsonb,
+             expected_count = $4,
+             note = $5
+         WHERE result_id = $6",
+        params = list(
+          aggregation$result_aggregation_type_id[[1L]],
+          aggregation$calculation_version[[1L]],
+          aggregation$calculation_arguments[[1L]],
+          aggregation$expected_count[[1L]],
+          aggregation$note[[1L]],
+          aggregation$result_id[[1L]]
+        )
+      )
+      if (updated != 1L) {
+        stop(
+          "Could not replace aggregation definition for result_id ",
+          aggregation$result_id[[1L]],
+          "."
+        )
+      }
+    }
+    replacement_placeholders <- paste0(
+      "$",
+      seq_along(replace_existing_result_ids)
+    )
+    DBI::dbExecute(
+      con,
+      paste0(
+        "DELETE FROM discrete.result_components WHERE result_id IN (",
+        paste(replacement_placeholders, collapse = ", "),
+        ")"
+      ),
+      params = as.list(replace_existing_result_ids)
+    )
+  }
+  if (any(!replace_rows)) {
+    dbAppendTableRLS(
+      con,
+      "discrete.result_aggregations",
+      aggregations[!replace_rows, , drop = FALSE]
+    )
+  }
 
   components <- result_components
   components$result_id <- result_ids[components$result_row]
