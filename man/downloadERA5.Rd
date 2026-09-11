@@ -15,7 +15,8 @@ downloadERA5(
   batch = TRUE,
   max_attempts = 5L,
   retry_delay = 30,
-  request_timeout = 3600
+  request_timeout = 3600,
+  poll_interval = 30
 )
 }
 \arguments{
@@ -55,14 +56,18 @@ out batch requests are retried sequentially. Both modes return only the
 longest complete chronological prefix, so later successful downloads can
 never advance a raster series past missing data.}
 
-\item{max_attempts}{Maximum number of attempts for each request after a batch
-failure or when downloading sequentially.}
+\item{max_attempts}{Maximum number of transient errors tolerated while
+submitting, polling, or downloading each sequential request.}
 
-\item{retry_delay}{Initial delay in seconds between request attempts. The
-delay doubles after each failure, up to five minutes.}
+\item{retry_delay}{Initial delay in seconds after a transient request error.
+The delay doubles after each error, up to five minutes.}
 
-\item{request_timeout}{Maximum number of seconds to wait for a request during
-each attempt.}
+\item{request_timeout}{Maximum total number of seconds to wait for each
+sequential CDS job, including queue and download time.}
+
+\item{poll_interval}{Number of seconds between status checks for a queued or
+running sequential CDS job. Its status is also reported at least every
+five minutes.}
 }
 \value{
 A list of lists, where each element consists of the target raster as well as associated attributes.

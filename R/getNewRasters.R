@@ -234,6 +234,7 @@ getNewRasters <- function(
           next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
         }
       } else {
+        # prelim is NA, so there are no preliminary rasters to replace. Fetch from the last raster end_datetime + 1 second, or from start_datetime if it is specified.
         if (!is.null(start_datetime_i)) {
           next_instant <- start_datetime_i
         } else {

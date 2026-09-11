@@ -26,24 +26,27 @@ test_that("downloadERA5 bypasses keyring and builds current CDS requests", {
       observed$requests <- request_list
       observed$workers <- workers
       observed$retry <- retry
-      stop("download test sentinel")
+      stop("<html><title>502 Bad Gateway</title><body>nginx</body></html>")
     },
-    wf_request = function(...) stop("download test sentinel"),
+    wf_request = function(...) stop("502 Bad Gateway"),
     .package = "ecmwfr"
   )
 
-  expect_error(
-    downloadERA5(
-      start_datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
-      end_datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
-      clip = "YT",
-      param = "snow_depth",
-      user = "legacy-user",
-      key = "request-token",
-      max_attempts = 1L,
-      retry_delay = 0
+  expect_message(
+    expect_error(
+      downloadERA5(
+        start_datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        end_datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        clip = "YT",
+        param = "snow_depth",
+        user = "legacy-user",
+        key = "request-token",
+        max_attempts = 1L,
+        retry_delay = 0
+      ),
+      "No data was downloaded"
     ),
-    "No data was downloaded"
+    "ERA5 batch request ended early: HTTP 502 Bad Gateway"
   )
 
   expect_identical(observed$token, "request-token")
@@ -363,7 +366,7 @@ test_that("downloadERA5 retries a transient sequential submission failure", {
       }
       file <- file.path(path, request$target)
       job <- new.env(parent = emptyenv())
-      job$transfer <- function(...) invisible(job)
+      job$download <- function(...) invisible(job)
       job$is_success <- function() TRUE
       job$get_file <- function() file
       job$get_status <- function() "successful"
@@ -393,7 +396,7 @@ test_that("downloadERA5 retries a transient sequential submission failure", {
   expect_identical(result$forecast, FALSE)
 })
 
-test_that("downloadERA5 retries transfer from the same completed CDS job", {
+test_that("downloadERA5 retries download from the same completed CDS job", {
   withr::local_envvar(c(ecmwfr_PAT = "test-token"))
   submissions <- 0L
   transfers <- 0L
@@ -427,7 +430,7 @@ test_that("downloadERA5 retries transfer from the same completed CDS job", {
       submissions <<- submissions + 1L
       file <- file.path(path, request$target)
       job <- new.env(parent = emptyenv())
-      job$transfer <- function(...) {
+      job$download <- function(...) {
         transfers <<- transfers + 1L
         if (transfers == 1L) stop("502 Bad Gateway")
         invisible(job)
@@ -455,6 +458,55 @@ test_that("downloadERA5 retries transfer from the same completed CDS job", {
   expect_identical(submissions, 1L)
   expect_identical(transfers, 2L)
   expect_length(result, 2L)
+})
+
+test_that("downloadERA5 polls pending jobs and applies one total timeout", {
+  withr::local_envvar(c(ecmwfr_PAT = "test-token"))
+  polls <- 0L
+
+  local_mocked_bindings(
+    read_html = function(...) structure(list(), class = "era5_test_page"),
+    html_table = function(...) {
+      list(data.frame(
+        `Variable name in CDS` = "2m_temperature",
+        shortName = "2t",
+        check.names = FALSE
+      ))
+    },
+    .package = "rvest"
+  )
+  local_mocked_bindings(
+    wf_request = function(...) {
+      job <- new.env(parent = emptyenv())
+      job$download <- function(...) {
+        polls <<- polls + 1L
+        invisible(job)
+      }
+      job$is_success <- function() FALSE
+      job$get_status <- function() "queued"
+      job$delete <- function() invisible(job)
+      job
+    },
+    .package = "ecmwfr"
+  )
+
+  expect_message(
+    expect_error(
+      downloadERA5(
+        start_datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        end_datetime = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        clip = NULL,
+        param = "2m_temperature",
+        batch = FALSE,
+        request_timeout = 0.05,
+        poll_interval = 0.01
+      ),
+      "No data was downloaded"
+    ),
+    "is in CDS status 'queued'"
+  )
+  expect_gte(polls, 1L)
+  expect_lt(polls, 20L)
 })
 
 test_that("downloadERA5 returns only a complete prefix after partial batch failure", {

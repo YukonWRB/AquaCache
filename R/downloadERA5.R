@@ -39,12 +39,15 @@
 #'   out batch requests are retried sequentially. Both modes return only the
 #'   longest complete chronological prefix, so later successful downloads can
 #'   never advance a raster series past missing data.
-#' @param max_attempts Maximum number of attempts for each request after a batch
-#'   failure or when downloading sequentially.
-#' @param retry_delay Initial delay in seconds between request attempts. The
-#'   delay doubles after each failure, up to five minutes.
-#' @param request_timeout Maximum number of seconds to wait for a request during
-#'   each attempt.
+#' @param max_attempts Maximum number of transient errors tolerated while
+#'   submitting, polling, or downloading each sequential request.
+#' @param retry_delay Initial delay in seconds after a transient request error.
+#'   The delay doubles after each error, up to five minutes.
+#' @param request_timeout Maximum total number of seconds to wait for each
+#'   sequential CDS job, including queue and download time.
+#' @param poll_interval Number of seconds between status checks for a queued or
+#'   running sequential CDS job. Its status is also reported at least every
+#'   five minutes.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
@@ -61,7 +64,8 @@ downloadERA5 <- function(
   batch = TRUE,
   max_attempts = 5L,
   retry_delay = 30,
-  request_timeout = 3600
+  request_timeout = 3600,
+  poll_interval = 30
 ) {
   # Checks and conversions for datetimes
   if (!inherits(start_datetime, "POSIXct")) {
@@ -163,6 +167,14 @@ downloadERA5 <- function(
       request_timeout <= 0
   ) {
     stop("Parameter 'request_timeout' must be a positive number.")
+  }
+  if (
+    length(poll_interval) != 1L ||
+      is.na(poll_interval) ||
+      !is.numeric(poll_interval) ||
+      poll_interval < 0
+  ) {
+    stop("Parameter 'poll_interval' must be a non-negative number.")
   }
 
   if (!is.character(key) || length(key) != 1 || is.na(key) || !nzchar(key)) {
@@ -404,38 +416,76 @@ downloadERA5 <- function(
     )
   }
 
+  concise_error <- function(message) {
+    message <- gsub("[[:space:]]+", " ", message)
+    for (status in c(
+      "500 Internal Server Error",
+      "502 Bad Gateway",
+      "503 Service Unavailable",
+      "504 Gateway Timeout"
+    )) {
+      if (grepl(status, message, fixed = TRUE)) {
+        return(paste("HTTP", status))
+      }
+    }
+    message <- gsub("<[^>]*>", " ", message)
+    message <- trimws(gsub("[[:space:]]+", " ", message))
+    if (nchar(message) > 300L) {
+      message <- paste0(substr(message, 1L, 297L), "...")
+    }
+    message
+  }
+
   download_request <- function(request) {
     job <- NULL
     last_error <- "request did not complete"
-    attempts_used <- 0L
-    for (attempt in seq_len(max_attempts)) {
-      attempts_used <- attempt
+    errors_used <- 0L
+    started <- Sys.time()
+    deadline <- started + request_timeout
+    next_status_report <- started
+    last_status <- NA_character_
+
+    repeat {
+      if (Sys.time() >= deadline) {
+        last_error <- paste0(
+          "timed out after ",
+          round(request_timeout),
+          " seconds",
+          if (!is.na(last_status)) paste0(" with CDS status '", last_status, "'")
+        )
+        break
+      }
+
       result <- tryCatch(
         {
           if (is.null(job)) {
+            message("Submitting ERA5 request '", request$target, "'.")
             job <- suppressMessages(ecmwfr::wf_request(
               request = request,
               path = data_dir,
               user = user,
               transfer = FALSE,
-              retry = 5,
+              retry = max(1, poll_interval),
               verbose = FALSE
             ))
           }
 
-          # Permit simple character-returning mocks and remain defensive if a
-          # future ecmwfr version returns a completed path at submission.
+          # Permit a completed path if a future ecmwfr version returns one at
+          # submission even when transfer = FALSE.
           if (is.character(job)) {
             return(job[1L])
           }
 
-          suppressMessages(job$transfer(time_out = request_timeout))
+          # ecmwfr::service$transfer() can remain silent for its entire timeout
+          # and poll too quickly. One download() call performs exactly one
+          # status check and downloads only when the job is ready.
+          suppressMessages(job$download())
           if (isTRUE(job$is_success())) {
             path <- job$get_file()
             try(suppressMessages(job$delete()), silent = TRUE)
             return(path)
           }
-          stop("request timed out before a file became available")
+          NULL
         },
         error = identity
       )
@@ -443,45 +493,83 @@ downloadERA5 <- function(
       if (is.character(result)) {
         return(result)
       }
-      last_error <- conditionMessage(result)
-      if (permanent_error(last_error)) {
-        break
-      }
 
-      if (!is.null(job) && !is.character(job)) {
-        status <- tryCatch(job$get_status(), error = function(e) NA_character_)
-        if (status %in% c("failed", "deleted")) {
+      status <- if (is.null(job) || is.character(job)) {
+        NA_character_
+      } else {
+        tryCatch(job$get_status(), error = function(e) NA_character_)
+      }
+      if (length(status) != 1L || is.null(status)) {
+        status <- NA_character_
+      }
+      if (inherits(result, "error") || status %in% c("failed", "deleted")) {
+        last_error <- if (inherits(result, "error")) {
+          conditionMessage(result)
+        } else {
+          paste0("CDS job status is '", status, "'")
+        }
+        errors_used <- errors_used + 1L
+        if (permanent_error(last_error) || errors_used >= max_attempts) {
+          break
+        }
+
+        if (!is.null(job) && status %in% c("failed", "deleted")) {
           try(suppressMessages(job$delete()), silent = TRUE)
           job <- NULL
         }
-      }
-
-      if (attempt < max_attempts) {
-        delay <- min(300, retry_delay * 2^(attempt - 1L))
-        if (delay > 0) {
-          Sys.sleep(delay + stats::runif(1L, 0, min(5, delay * 0.1)))
-        }
+        delay <- min(300, retry_delay * 2^(errors_used - 1L))
         message(
-          "Retrying ERA5 request '",
+          "ERA5 request '",
           request$target,
-          "' (attempt ",
-          attempt + 1L,
+          "' encountered ",
+          concise_error(last_error),
+          "; retrying in ",
+          round(delay),
+          " seconds (transient error ",
+          errors_used,
           " of ",
           max_attempts,
           ")."
         )
+        if (delay > 0) {
+          Sys.sleep(delay + stats::runif(1L, 0, min(5, delay * 0.1)))
+        }
+        next
+      }
+
+      now <- Sys.time()
+      if (!identical(status, last_status) || now >= next_status_report) {
+        message(
+          "ERA5 request '",
+          request$target,
+          "' is ",
+          if (is.na(status)) "pending" else paste0("in CDS status '", status, "'"),
+          " after ",
+          round(as.numeric(difftime(now, started, units = "mins")), 1),
+          " minute(s)."
+        )
+        next_status_report <- now + 300
+      }
+      last_status <- status
+      remaining <- as.numeric(difftime(deadline, Sys.time(), units = "secs"))
+      if (poll_interval > 0 && remaining > 0) {
+        Sys.sleep(min(poll_interval, remaining))
       }
     }
 
     message(
       "Failed to download request '",
       request$target,
-      "' after ",
-      attempts_used,
-      " attempt",
-      if (attempts_used == 1L) "" else "s",
-      ": ",
-      gsub("[[:space:]]+", " ", last_error)
+      "': ",
+      concise_error(last_error),
+      if (errors_used > 0L) paste0(
+        " (",
+        errors_used,
+        " transient error",
+        if (errors_used == 1L) "" else "s",
+        ")"
+      ) else "",
+      "."
     )
     NA_character_
   }
@@ -510,7 +598,7 @@ downloadERA5 <- function(
     if (inherits(batch_result, "error")) {
       message(
         "ERA5 batch request ended early: ",
-        gsub("[[:space:]]+", " ", conditionMessage(batch_result)),
+        concise_error(conditionMessage(batch_result)),
         ". Retrying the first missing request sequentially."
       )
     } else {
