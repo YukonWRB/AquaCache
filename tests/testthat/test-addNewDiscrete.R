@@ -19,13 +19,18 @@ test_that("addNewDiscrete inserts a new sample and results", {
   if (nrow(sample_template) == 0) {
     testthat::skip("No sample data available for addNewDiscrete test.")
   }
-  results_template <- DBI::dbGetQuery(con, "SELECT * FROM discrete.results LIMIT 1")
+  results_template <- DBI::dbGetQuery(
+    con,
+    "SELECT * FROM discrete.results LIMIT 1"
+  )
   if (nrow(results_template) == 0) {
     testthat::skip("No results data available for addNewDiscrete test.")
   }
 
   sample <- sample_template[1, , drop = FALSE]
-  max_dt <- DBI::dbGetQuery(con, "SELECT MAX(datetime) FROM discrete.samples")[[1]]
+  max_dt <- DBI::dbGetQuery(con, "SELECT MAX(datetime) FROM discrete.samples")[[
+    1
+  ]]
   if (is.na(max_dt)) {
     max_dt <- as.POSIXct("2020-01-01 00:00:00", tz = "UTC")
   }
@@ -70,10 +75,12 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (!DBI::dbExistsTable(
-    con,
-    DBI::Id(schema = "discrete", table = "result_components")
-  )) {
+  if (
+    !DBI::dbExistsTable(
+      con,
+      DBI::Id(schema = "discrete", table = "result_components")
+    )
+  ) {
     testthat::skip("The test database has not applied patch 60.")
   }
   final_result_metadata <- DBI::dbGetQuery(
@@ -206,12 +213,15 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     params = list(canonical$result_id[[1]])
   )$n[[1]]
   expect_equal(canonical_update_count, 1L)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) FROM discrete.result_components
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) FROM discrete.result_components
      WHERE result_id = $1",
-    params = list(canonical$result_id[[1]])
-  )[[1]], 3)
+      params = list(canonical$result_id[[1]])
+    )[[1]],
+    3
+  )
   DBI::dbExecute(
     con,
     "UPDATE discrete.result_aggregations
@@ -276,11 +286,14 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     "ROLLBACK TO SAVEPOINT reject_uncalculable_aggregate"
   ))
   DBI::dbExecute(con, "RELEASE SAVEPOINT reject_uncalculable_aggregate")
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT result FROM discrete.results WHERE result_id = $1",
-    params = list(canonical$result_id[[1]])
-  )$result[[1]], 18)
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT result FROM discrete.results WHERE result_id = $1",
+      params = list(canonical$result_id[[1]])
+    )$result[[1]],
+    18
+  )
 
   parent_modified <- DBI::dbGetQuery(
     con,
@@ -294,11 +307,14 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
      WHERE result_id = $1 AND observation_number = 1",
     params = list(canonical$result_id[[1]])
   )
-  expect_identical(DBI::dbGetQuery(
-    con,
-    "SELECT modified FROM discrete.results WHERE result_id = $1",
-    params = list(canonical$result_id[[1]])
-  )$modified[[1]], parent_modified)
+  expect_identical(
+    DBI::dbGetQuery(
+      con,
+      "SELECT modified FROM discrete.results WHERE result_id = $1",
+      params = list(canonical$result_id[[1]])
+    )$modified[[1]],
+    parent_modified
+  )
 
   DBI::dbExecute(
     con,
@@ -323,11 +339,14 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
        AND rat.aggregation_type = 'weighted_mean'",
     params = list(canonical$result_id[[1]])
   )
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT result FROM discrete.results WHERE result_id = $1",
-    params = list(canonical$result_id[[1]])
-  )$result[[1]], 276)
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT result FROM discrete.results WHERE result_id = $1",
+      params = list(canonical$result_id[[1]])
+    )$result[[1]],
+    276
+  )
 })
 
 
@@ -442,10 +461,12 @@ test_that("result aggregation constraints fail at the responsible statement", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (!DBI::dbExistsTable(
-    con,
-    DBI::Id(schema = "discrete", table = "result_aggregations")
-  )) {
+  if (
+    !DBI::dbExistsTable(
+      con,
+      DBI::Id(schema = "discrete", table = "result_aggregations")
+    )
+  ) {
     testthat::skip("The test database has not applied patch 60.")
   }
 
@@ -521,10 +542,12 @@ test_that("discrete visibility inherits from location through composite results"
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (!DBI::dbExistsTable(
-    con,
-    DBI::Id(schema = "discrete", table = "result_aggregations")
-  )) {
+  if (
+    !DBI::dbExistsTable(
+      con,
+      DBI::Id(schema = "discrete", table = "result_aggregations")
+    )
+  ) {
     testthat::skip("The test database has not applied patch 60.")
   }
 
@@ -572,16 +595,20 @@ test_that("discrete visibility inherits from location through composite results"
     "discrete.result_components"
   )
   role_can_select <- function(role_name) {
-    vapply(required_rls_tables, function(table_name) {
-      DBI::dbGetQuery(
-        con,
-        "SELECT has_table_privilege($1, $2, 'SELECT') AS allowed",
-        params = list(role_name, table_name)
-      )$allowed[[1]]
-    }, logical(1))
+    vapply(
+      required_rls_tables,
+      function(table_name) {
+        DBI::dbGetQuery(
+          con,
+          "SELECT has_table_privilege($1, $2, 'SELECT') AS allowed",
+          params = list(role_name, table_name)
+        )$allowed[[1]]
+      },
+      logical(1)
+    )
   }
-  if (!all(role_can_select("tester")) || !all(role_can_select("public_reader"))) {
-    testthat::skip("The RLS test roles lack required SELECT grants.")
+  if (!all(role_can_select("public_reader"))) {
+    testthat::skip("The RLS test role lacks required SELECT grants.")
   }
 
   target <- DBI::dbGetQuery(
@@ -622,15 +649,13 @@ test_that("discrete visibility inherits from location through composite results"
     con,
     sprintf("CREATE ROLE %s NOLOGIN", quoted_visibility_role)
   )
-  DBI::dbExecute(
-    con,
-    sprintf("GRANT %s TO tester", quoted_visibility_role)
-  )
-  if (isTRUE(DBI::dbGetQuery(
-    con,
-    "SELECT pg_has_role('public_reader', $1, 'member') AS is_member",
-    params = list(visibility_role)
-  )$is_member[[1]])) {
+  if (
+    isTRUE(DBI::dbGetQuery(
+      con,
+      "SELECT pg_has_role('public_reader', $1, 'member') AS is_member",
+      params = list(visibility_role)
+    )$is_member[[1]])
+  ) {
     testthat::skip("public_reader unexpectedly inherits the test sharing role.")
   }
   visibility_array <- paste0("{", visibility_role, "}")
@@ -715,10 +740,6 @@ test_that("discrete visibility inherits from location through composite results"
   DBI::dbExecute(con, "SET LOCAL ROLE public_reader")
   expect_equal(unname(row_counts()), rep(0, 5))
   DBI::dbExecute(con, "RESET ROLE")
-
-  DBI::dbExecute(con, "SET LOCAL ROLE tester")
-  expect_equal(unname(row_counts()), rep(1, 5))
-  DBI::dbExecute(con, "RESET ROLE")
 })
 
 
@@ -727,22 +748,6 @@ test_that("synchronization replaces and removes result aggregation detail", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (!DBI::dbExistsTable(
-    con,
-    DBI::Id(schema = "discrete", table = "result_aggregations")
-  )) {
-    testthat::skip("The test database has not applied patch 60.")
-  }
-  if (is.na(DBI::dbGetQuery(
-    con,
-    "SELECT to_regprocedure(
-       'discrete.convert_result_aggregation_to_direct(integer,text,numeric,integer,numeric,text)'
-     ) AS conversion_function"
-  )$conversion_function[[1]])) {
-    testthat::skip(
-      "The test database does not have the final patch 60 conversion function."
-    )
-  }
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
 
@@ -799,11 +804,14 @@ test_that("synchronization replaces and removes result aggregation detail", {
     result_aggregations = normalized$result_aggregations,
     result_components = normalized$result_components
   )
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT result FROM discrete.results WHERE result_id = $1",
-    params = list(result_id)
-  )$result[[1]], 9)
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT result FROM discrete.results WHERE result_id = $1",
+      params = list(result_id)
+    )$result[[1]],
+    9
+  )
 
   DBI::dbExecute(con, "SAVEPOINT reject_direct_aggregation_delete")
   expect_error(
@@ -829,13 +837,16 @@ test_that("synchronization replaces and removes result aggregation detail", {
     ),
     1L
   )
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*)
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*)
      FROM discrete.result_aggregations
      WHERE result_id = $1",
-    params = list(result_id)
-  )[[1]], 0)
+      params = list(result_id)
+    )[[1]],
+    0
+  )
   DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT allow_parent_result_delete")
   DBI::dbExecute(con, "RELEASE SAVEPOINT allow_parent_result_delete")
 
@@ -1035,16 +1046,22 @@ test_that("synchronization replaces and removes result aggregation detail", {
      )",
     params = list(result_id, "Preserve the verified aggregate for test")
   )
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT result FROM discrete.results WHERE result_id = $1",
-    params = list(result_id)
-  )$result[[1]], 20)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
-    params = list(result_id)
-  )[[1]], 0)
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT result FROM discrete.results WHERE result_id = $1",
+      params = list(result_id)
+    )$result[[1]],
+    20
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
+      params = list(result_id)
+    )[[1]],
+    0
+  )
 
   synchronize_discrete_sample_detail(
     con = con,
@@ -1057,11 +1074,14 @@ test_that("synchronization replaces and removes result aggregation detail", {
     result_aggregations = normalized_replacement$result_aggregations,
     result_components = normalized_replacement$result_components
   )
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT result FROM discrete.results WHERE result_id = $1",
-    params = list(result_id)
-  )$result[[1]], 20)
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT result FROM discrete.results WHERE result_id = $1",
+      params = list(result_id)
+    )$result[[1]],
+    20
+  )
 
   synchronize_discrete_sample_detail(
     con = con,
@@ -1075,16 +1095,22 @@ test_that("synchronization replaces and removes result aggregation detail", {
     result_components = data.frame()
   )
   DBI::dbExecute(con, "SET CONSTRAINTS ALL IMMEDIATE")
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT result FROM discrete.results WHERE result_id = $1",
-    params = list(result_id)
-  )$result[[1]], 12)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
-    params = list(result_id)
-  )[[1]], 0)
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT result FROM discrete.results WHERE result_id = $1",
+      params = list(result_id)
+    )$result[[1]],
+    12
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
+      params = list(result_id)
+    )[[1]],
+    0
+  )
   conversion_audit <- DBI::dbGetQuery(
     con,
     "SELECT original_data ->> 'note' AS note

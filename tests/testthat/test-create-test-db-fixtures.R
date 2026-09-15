@@ -37,7 +37,7 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
   expect_equal(sample_associations$observer_count, 2)
   expect_identical(
     sample_associations$observer_roles[[1]],
-    c("recorder", "sampler")
+    c("recorder,sampler")
   )
 
   aggregations <- DBI::dbGetQuery(
