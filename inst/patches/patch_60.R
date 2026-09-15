@@ -29,21 +29,6 @@
 #    approval metadata in the canonical result and broad metadata views.
 #
 # -------------------------------------------------------------------------------
-# Outstanding release work:
-# 1. Rename this file to 'patch_60.R' once finalized so it gets read by AquaConnect()!
-# 2. Regenerate the checked-in AquaCache test database from create_test_DB()
-#    after this patch is finalized, then replace the YGwater test database copy.
-#
-# Longer-term work:
-# 1. Snow survey workbook creation and ingestion functions (in this package and
-#    YGwater) currently work with the 'snow' database. These functions will need
-#    to work on 'aquacache' to fully close out 'snowdb'. This will also allow NWT
-#    to use the same snow survey forms if they choose to do so.
-# 2. Point-in-time reconstruction using audit tables is currently implemented in
-#    continuous plots (YGwater package). Let's implement that for discrete plots as
-#    well when we're fairly certain that the schema won't change further.
-#
-# -------------------------------------------------------------------------------
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 if (check$session_user != "postgres") {
