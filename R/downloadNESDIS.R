@@ -61,7 +61,12 @@
 #' not apply rwdm-style range clamping. A field mapping can set
 #' `mapping_config.round_digits` to a whole number from 0 through 15 when the
 #' canonical timeseries stores a rounded form of the transmitted value; this is
-#' applied after the mapping's multiplier and offset.
+#' applied after the mapping's multiplier and offset. For a cumulative field,
+#' `mapping_config.difference_seconds` converts consecutive counter readings to
+#' an increment only when they are separated by exactly that many seconds. The
+#' importer automatically extends the retrieval window by the same interval.
+#' `mapping_config.negative_difference_value` can replace negative increments
+#' caused by a counter reset; without it, negative increments are discarded.
 #'
 #' @param transmission_route_id Optional integer vector of GOES transmission
 #'   route IDs. When `NULL`, all currently effective GOES DCS routes having
@@ -252,6 +257,33 @@ downloadNESDIS <- function(
       default = 5
     )
   ]
+  mapping_difference_seconds <- vapply(
+    mappings$mapping_config,
+    function(value) nesdis_mapping_settings(value)$difference_seconds,
+    numeric(1)
+  )
+  mapping_lookback <- data.table::data.table(
+    transmission_route_id = mappings$transmission_route_id,
+    difference_seconds = mapping_difference_seconds
+  )[!is.na(difference_seconds)]
+  if (nrow(mapping_lookback)) {
+    mapping_lookback <- mapping_lookback[
+      ,
+      .(mapping_lookback_seconds = max(difference_seconds)),
+      by = transmission_route_id
+    ]
+  } else {
+    mapping_lookback <- data.table::data.table(
+      transmission_route_id = integer(),
+      mapping_lookback_seconds = numeric()
+    )
+  }
+  routes[
+    mapping_lookback,
+    on = "transmission_route_id",
+    mapping_lookback_seconds := i.mapping_lookback_seconds
+  ]
+  routes[is.na(mapping_lookback_seconds), mapping_lookback_seconds := 0]
 
   cursor <- nesdis_get_cursors(con, routes$transmission_route_id)
   routes <- merge(
@@ -293,8 +325,18 @@ downloadNESDIS <- function(
     query_since < start_datetime_setup,
     query_since := start_datetime_setup
   ]
-  if (any(routes$query_since >= routes$query_until)) {
-    bad <- routes$query_since >= routes$query_until
+  routes[, result_since := query_since]
+  routes[, query_since := as.POSIXct(
+    as.numeric(query_since) - mapping_lookback_seconds,
+    origin = "1970-01-01",
+    tz = "UTC"
+  )]
+  routes[
+    query_since < start_datetime_setup,
+    query_since := start_datetime_setup
+  ]
+  if (any(routes$result_since >= routes$query_until)) {
+    bad <- routes$result_since >= routes$query_until
     stop(
       "downloadNESDIS: The effective setup period leaves no query window for ",
       "route(s) ",
@@ -516,7 +558,7 @@ downloadNESDIS <- function(
       transmissions_received <- attr(parsed, "transmissions_received") %||% 0L
       route_data <- nesdis_apply_mappings(parsed, route_mappings)
       route_data <- route_data[
-        datetime >= route$query_since & datetime <= route$query_until
+        datetime >= route$result_since & datetime <= route$query_until
       ]
       if (nrow(route_data) > 0L) {
         data_index <- data_index + 1L
@@ -2519,26 +2561,30 @@ nesdis_apply_mappings <- function(parsed, mappings) {
   }
   parsed <- data.table::copy(data.table::as.data.table(parsed))
   mappings <- data.table::copy(data.table::as.data.table(mappings))
+  mapping_settings <- lapply(
+    mappings$mapping_config,
+    nesdis_mapping_settings
+  )
   mappings[,
-    round_digits := vapply(
-      mapping_config,
-      function(value) {
-        config <- nesdis_parse_json_object(value)
-        digits <- config$round_digits %||% NA_real_
-        digits <- suppressWarnings(as.numeric(digits))
-        if (
-          length(digits) != 1L ||
-            (!is.na(digits) &&
-              (digits < 0 || digits != as.integer(digits) || digits > 15))
-        ) {
-          stop(
-            "downloadNESDIS: mapping_config.round_digits must be a whole ",
-            "number from 0 through 15."
-          )
-        }
-        digits
-      },
-      numeric(1)
+    `:=`(
+      round_digits = vapply(
+        mapping_settings,
+        `[[`,
+        numeric(1),
+        "round_digits"
+      ),
+      difference_seconds = vapply(
+        mapping_settings,
+        `[[`,
+        numeric(1),
+        "difference_seconds"
+      ),
+      negative_difference_value = vapply(
+        mapping_settings,
+        `[[`,
+        numeric(1),
+        "negative_difference_value"
+      )
     )
   ]
   mapped <- merge(
@@ -2574,6 +2620,35 @@ nesdis_apply_mappings <- function(parsed, mappings) {
   mapped[,
     value := value * as.numeric(value_multiplier) + as.numeric(value_offset)
   ]
+  data.table::setorder(mapped, transmission_mapping_id, datetime)
+  mapped[,
+    `:=`(
+      prior_datetime = data.table::shift(datetime),
+      prior_value = data.table::shift(value)
+    ),
+    by = transmission_mapping_id
+  ]
+  mapped[
+    !is.na(difference_seconds),
+    elapsed_seconds := as.numeric(
+      difftime(datetime, prior_datetime, units = "secs")
+    )
+  ]
+  mapped[
+    !is.na(difference_seconds),
+    value := fifelse(
+      !is.na(prior_value) & elapsed_seconds == difference_seconds,
+      value - prior_value,
+      NA_real_
+    )
+  ]
+  mapped[
+    !is.na(difference_seconds) & value < 0,
+    value := negative_difference_value
+  ]
+  mapped[,
+    c("prior_datetime", "prior_value", "elapsed_seconds") := NULL
+  ]
   mapped[
     !is.na(round_digits),
     value := round(value, digits = as.integer(round_digits[[1L]])),
@@ -2597,6 +2672,61 @@ nesdis_apply_mappings <- function(parsed, mappings) {
     raw_value,
     value
   )]
+}
+
+#' @keywords internal
+#' @noRd
+nesdis_mapping_settings <- function(value) {
+  config <- nesdis_parse_json_object(value)
+  round_digits <- suppressWarnings(as.numeric(
+    config$round_digits %||% NA_real_
+  ))
+  if (
+    length(round_digits) != 1L ||
+      (!is.na(round_digits) &&
+        (round_digits < 0 ||
+          round_digits != as.integer(round_digits) ||
+          round_digits > 15))
+  ) {
+    stop(
+      "downloadNESDIS: mapping_config.round_digits must be a whole ",
+      "number from 0 through 15."
+    )
+  }
+
+  difference_seconds <- suppressWarnings(as.numeric(
+    config$difference_seconds %||% NA_real_
+  ))
+  if (
+    length(difference_seconds) != 1L ||
+      (!is.na(difference_seconds) &&
+        (!is.finite(difference_seconds) || difference_seconds <= 0))
+  ) {
+    stop(
+      "downloadNESDIS: mapping_config.difference_seconds must be a positive ",
+      "number."
+    )
+  }
+
+  negative_difference_value <- suppressWarnings(as.numeric(
+    config$negative_difference_value %||% NA_real_
+  ))
+  if (
+    length(negative_difference_value) != 1L ||
+      (!is.na(negative_difference_value) &&
+        !is.finite(negative_difference_value))
+  ) {
+    stop(
+      "downloadNESDIS: mapping_config.negative_difference_value must be a ",
+      "finite number."
+    )
+  }
+
+  list(
+    round_digits = round_digits,
+    difference_seconds = difference_seconds,
+    negative_difference_value = negative_difference_value
+  )
 }
 
 #' @keywords internal
