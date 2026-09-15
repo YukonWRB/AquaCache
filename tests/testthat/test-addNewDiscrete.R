@@ -965,42 +965,44 @@ test_that("synchronization replaces and removes result aggregation detail", {
     0L
   )
 
-  set_result_aggregation_constraints(con, "deferred")
-  DBI::dbExecute(
-    con,
-    "SET LOCAL aquacache.defer_result_aggregation_refresh = 'on'"
-  )
-  DBI::dbExecute(con, "SAVEPOINT reject_stale_preservation")
-  DBI::dbExecute(
-    con,
-    "UPDATE discrete.result_components
-     SET result = result + 1
-     WHERE result_id = $1 AND observation_number = 1",
-    params = list(result_id)
-  )
-  expect_error(
+  curr_user <- DBI::dbGetQuery(con, "SELECT current_user")[[1]]
+  if (curr_user %in% c("admin", "postgres")) {
+    set_result_aggregation_constraints(con, "deferred")
     DBI::dbExecute(
       con,
-      "SELECT discrete.convert_result_aggregation_to_direct(
+      "SET LOCAL aquacache.defer_result_aggregation_refresh = 'on'"
+    )
+    DBI::dbExecute(con, "SAVEPOINT reject_stale_preservation")
+    DBI::dbExecute(
+      con,
+      "UPDATE discrete.result_components
+     SET result = result + 1
+     WHERE result_id = $1 AND observation_number = 1",
+      params = list(result_id)
+    )
+    expect_error(
+      DBI::dbExecute(
+        con,
+        "SELECT discrete.convert_result_aggregation_to_direct(
          $1, 'preserve_calculated', NULL, NULL, NULL, $2
        )",
-      params = list(result_id, "Stale-value test")
-    ),
-    "stale or has an invalid aggregate condition"
-  )
-  suppressWarnings(DBI::dbExecute(
-    con,
-    "ROLLBACK TO SAVEPOINT reject_stale_preservation"
-  ))
-  DBI::dbExecute(con, "RELEASE SAVEPOINT reject_stale_preservation")
-  DBI::dbExecute(
-    con,
-    "SET LOCAL aquacache.defer_result_aggregation_refresh = 'off'"
-  )
-  set_result_aggregation_constraints(con, "immediate")
+        params = list(result_id, "Stale-value test")
+      ),
+      "stale or has an invalid aggregate condition"
+    )
+    suppressWarnings(DBI::dbExecute(
+      con,
+      "ROLLBACK TO SAVEPOINT reject_stale_preservation"
+    ))
+    DBI::dbExecute(con, "RELEASE SAVEPOINT reject_stale_preservation")
+    DBI::dbExecute(
+      con,
+      "SET LOCAL aquacache.defer_result_aggregation_refresh = 'off'"
+    )
+    set_result_aggregation_constraints(con, "immediate")
+  }
 
   # Check if current user is one of 'admin' or 'postgres', otherwise the function won't run
-  curr_user <- DBI::dbGetQuery(con, "SELECT current_user")[[1]]
   if (curr_user %in% c("admin", "postgres")) {
     DBI::dbExecute(
       con,

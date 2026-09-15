@@ -720,7 +720,7 @@ synchronize_continuous <- function(
       {
         if (!transmission_runs_finalized) {
           try(
-            getFromNamespace(
+            utils::getFromNamespace(
               "transmission_fail_import_runs",
               "AquaCache"
             )(
@@ -739,7 +739,7 @@ synchronize_continuous <- function(
         transmission_runs_finalized <<- TRUE
         return(invisible(0L))
       }
-      getFromNamespace(
+      utils::getFromNamespace(
         "transmission_finalize_import_runs",
         "AquaCache"
       )(
