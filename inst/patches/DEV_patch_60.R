@@ -3582,9 +3582,10 @@ tryCatch(
         "address or SnowDB connection settings are unavailable."
       )
     } else {
-      snow_con <- tryCatch(
+      snow_con <- NULL
+      tryCatch(
         {
-          DBI::dbConnect(
+          snow_con <- DBI::dbConnect(
             RPostgres::Postgres(),
             dbname = Sys.getenv("snowName", "snow"),
             host = server_address,
