@@ -428,3 +428,159 @@ test_that("adjust_grade splits an existing contiguous period when inserting a mi
     )
   )
 })
+
+
+# Tests for adjust_notes
+test_that("adjust_note validates explicit note intervals before connecting", {
+  expect_error(
+    adjust_note(
+      NULL,
+      1L,
+      data.frame(
+        note = "",
+        start_dt = as.POSIXct("2026-01-01", tz = "UTC"),
+        end_dt = as.POSIXct("2026-01-02", tz = "UTC")
+      )
+    ),
+    "non-blank text"
+  )
+
+  expect_error(
+    adjust_note(
+      NULL,
+      1L,
+      data.frame(
+        note = "Range is reversed",
+        start_dt = as.POSIXct("2026-01-02", tz = "UTC"),
+        end_dt = as.POSIXct("2026-01-01", tz = "UTC")
+      )
+    ),
+    "start_dt <= end_dt",
+    fixed = TRUE
+  )
+
+  expect_error(
+    adjust_note(
+      NULL,
+      1L,
+      data.frame(
+        note_id = 1.5,
+        note = "Invalid identifier",
+        start_dt = as.POSIXct("2026-01-01", tz = "UTC"),
+        end_dt = as.POSIXct("2026-01-02", tz = "UTC")
+      )
+    ),
+    "positive integer",
+    fixed = TRUE
+  )
+})
+
+test_that("adjust_note inserts a validated explicit interval", {
+  statements <- character()
+  select_params <- NULL
+  fake_db_get_query <- function(conn, statement, params = NULL, ...) {
+    statements <<- c(statements, statement)
+    if (grepl("SELECT note_id", statement, fixed = TRUE)) {
+      select_params <<- params
+      return(data.frame(
+        note_id = integer(),
+        note = character(),
+        start_dt = as.POSIXct(character(), tz = "UTC"),
+        end_dt = as.POSIXct(character(), tz = "UTC"),
+        no_source_update = logical()
+      ))
+    }
+    data.frame(note_id = 101L)
+  }
+  fake_db_execute <- function(conn, statement, params = NULL, ...) {
+    statements <<- c(statements, statement)
+    1L
+  }
+
+  inserted_id <- testthat::with_mocked_bindings(
+    testthat::with_mocked_bindings(
+      adjust_note(
+        structure(list(), class = "test_connection"),
+        17L,
+        data.frame(
+          note = "Ice affected",
+          start_dt = as.POSIXct("2026-01-01", tz = "UTC"),
+          end_dt = as.POSIXct("2026-01-15", tz = "UTC")
+        )
+      ),
+      dbGetQuery = fake_db_get_query,
+      dbExecute = fake_db_execute,
+      .package = "DBI"
+    ),
+    dbTransBegin = function(con) TRUE,
+    .package = "AquaCache"
+  )
+
+  expect_identical(inserted_id, 101L)
+  expect_length(select_params, 2L)
+  expect_false(any(grepl("ANY(", statements, fixed = TRUE)))
+  expect_true(any(grepl(
+    "INSERT INTO continuous.notes",
+    statements,
+    fixed = TRUE
+  )))
+  expect_true(any(grepl("COMMIT", statements, fixed = TRUE)))
+})
+
+
+# Database-backed tests
+test_that("adjust_note inserts overlapping notes and updates by note_id", {
+  con <- connect_test()
+  on.exit(cleanup_postgres_session(con))
+
+  DBI::dbExecute(con, "BEGIN;")
+  ts_id <- DBI::dbGetQuery(
+    con,
+    "SELECT timeseries_id
+       FROM continuous.timeseries
+      ORDER BY timeseries_id
+      LIMIT 1"
+  )$timeseries_id[[1L]]
+
+  inserted_ids <- adjust_note(
+    con,
+    ts_id,
+    data.frame(
+      note = c("Ice affected", "Sensor inspection"),
+      start_datetime = as.POSIXct(
+        c("2099-01-01", "2099-01-05"),
+        tz = "UTC"
+      ),
+      end_datetime = as.POSIXct(
+        c("2099-01-10", "2099-01-06"),
+        tz = "UTC"
+      )
+    )
+  )
+
+  expect_length(inserted_ids, 2L)
+  expect_true(all(!is.na(inserted_ids)))
+
+  updated_ids <- adjust_note(
+    con,
+    ts_id,
+    data.frame(
+      note_id = inserted_ids[[1L]],
+      note = "Ice affected; interpret cautiously",
+      start_dt = as.POSIXct("2099-01-01", tz = "UTC"),
+      end_dt = as.POSIXct("2099-01-12", tz = "UTC"),
+      no_source_update = TRUE
+    )
+  )
+
+  expect_identical(updated_ids, inserted_ids[[1L]])
+  notes <- DBI::dbGetQuery(
+    con,
+    "SELECT note, no_source_update
+       FROM continuous.notes
+      WHERE note_id = $1",
+    params = list(inserted_ids[[1L]])
+  )
+  expect_identical(notes$note, "Ice affected; interpret cautiously")
+  expect_true(notes$no_source_update)
+})

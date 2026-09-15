@@ -221,7 +221,9 @@ upsertImportParameterMappings <- function(
 #' @param column_map Named list mapping AquaCache staging fields to source
 #'   columns.
 #' @param wide_config Named list describing wide-format result columns.
-#' @param defaults Named list of profile-level defaults.
+#' @param defaults Named list of profile-level defaults. Use
+#' `no_source_update`, not the pre-Patch-60 `no_update`, for sample or result
+#' source-protection defaults.
 #' @param sample_identity Character vector naming fields that identify a sample.
 #' @param result_identity Character vector naming fields that identify a result.
 #' @param validation_rules Named list of extra validation rules for the UI or
@@ -1312,4 +1314,41 @@ import_mapping_resolve_match <- function(mappings, source_match) {
   }
 
   matched[1]
+}
+
+import_mapping_match_status <- function(mappings, source_match) {
+  tryCatch(
+    {
+      mapping <- import_mapping_resolve_match(mappings, source_match)
+      if (is.null(mapping)) {
+        return(list(
+          status = "no_mapping",
+          message = NA_character_,
+          mapping = NULL
+        ))
+      }
+      if (
+        !("parameter_id" %in% names(mapping)) ||
+          is.na(mapping$parameter_id[[1]])
+      ) {
+        return(list(
+          status = "missing_parameter_id",
+          message = NA_character_,
+          mapping = mapping
+        ))
+      }
+      list(
+        status = "mapped",
+        message = NA_character_,
+        mapping = mapping
+      )
+    },
+    error = function(e) {
+      list(
+        status = "mapping_error",
+        message = conditionMessage(e),
+        mapping = NULL
+      )
+    }
+  )
 }

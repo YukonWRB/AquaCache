@@ -3,7 +3,7 @@
 #' This function can be used to append new continuous type data directly to the database without downloading it from a remote source. Differs from [getNewContinuous()] as the latter is used to pull data from a remote before append. New data can only be appended to basic timeseries.
 #'
 #' @param tsid The timeseries_id to which the data will be appended. This is a required parameter.
-#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'data_sharing_agreement_id', 'imputed'; see the `adjust_` series of functions to see how these are used.
+#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'data_sharing_agreement_id', 'imputed', and 'no_source_update'. Independent interval protection can be supplied through 'grade_no_source_update', 'approval_no_source_update', and 'qualifier_no_source_update'; see the `adjust_` series of functions for details.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #' @param overwrite Select one of "no", "all", "conflict". Default is "no", which will not overwrite any existing data (and fail if there is a conflict). "all" will wipe and replace all database entries for the target timeseries in the temporal range of `df`, while "conflict" will overwrite only those entries that conflict with the data in `df` (i.e. have the same datetime or date).
 #'
@@ -161,9 +161,10 @@ addNewContinuous <- function(
     df$imputed <- FALSE
   }
 
-  if (!("no_update" %in% names(df))) {
-    df$no_update <- FALSE
+  if (!("no_source_update" %in% names(df))) {
+    df$no_source_update <- FALSE
   }
+  df$no_source_update[is.na(df$no_source_update)] <- FALSE
 
   if ("data_sharing_agreement_id" %in% names(df)) {
     if (!is.na(info$default_data_sharing_agreement_id)) {
@@ -201,9 +202,17 @@ addNewContinuous <- function(
   }
 
   commit_fx <- function(con, df, last_data_point, tsid) {
-    adjust_grade(con, tsid, df[, c("datetime", "grade")])
-    adjust_approval(con, tsid, df[, c("datetime", "approval")])
-    adjust_qualifier(con, tsid, df[, c("datetime", "qualifier")])
+    attribute_data <- function(value_col) {
+      protection_col <- paste0(value_col, "_no_source_update")
+      result <- df[, c("datetime", value_col), drop = FALSE]
+      if (protection_col %in% names(df)) {
+        result$no_source_update <- df[[protection_col]]
+      }
+      result
+    }
+    adjust_grade(con, tsid, attribute_data("grade"))
+    adjust_approval(con, tsid, attribute_data("approval"))
+    adjust_qualifier(con, tsid, attribute_data("qualifier"))
     if ("owner" %in% names(df)) {
       adjust_owner(con, tsid, df[, c("datetime", "owner")])
     }
@@ -224,7 +233,7 @@ addNewContinuous <- function(
       "value",
       "timeseries_id",
       "imputed",
-      "no_update"
+      "no_source_update"
     )]
 
     # assign a period to the data
@@ -342,7 +351,7 @@ addNewContinuous <- function(
     }
     if (overwrite %in% c("all", "conflict")) {
       measurement_update_cols <- intersect(
-        c("value", "period", "imputed", "no_update"),
+        c("value", "period", "imputed", "no_source_update"),
         names(df)
       )
       dbAppendTableRLS(

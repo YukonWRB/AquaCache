@@ -17,7 +17,8 @@ downloadEQWin(
   unknown_time_local = "12:00:00",
   media_id = NULL,
   collection_method = NULL,
-  sample_type = NULL
+  sample_type = NULL,
+  mode = c("data", "missing_mappings")
 )
 }
 \arguments{
@@ -31,7 +32,7 @@ downloadEQWin(
 Access connection when \code{EQCon} is \code{NULL} and, unless \code{EQsource_id} is
 provided, to identify the source database in sample import IDs.}
 
-\item{key}{Import mapping source code or key path. Defaults to the stable
+\item{key}{Import mapping source code. Defaults to the stable
 EQWin source code used by \code{\link[=upsertImportParameterMappings]{upsertImportParameterMappings()}}.}
 
 \item{con}{AquaCache connection.}
@@ -56,6 +57,10 @@ stored by EQWin as midnight, which commonly indicates an unknown time.}
 \item{collection_method}{Optional AquaCache collection method ID override.}
 
 \item{sample_type}{Optional AquaCache sample type ID override.}
+
+\item{mode}{\code{"data"} returns samples/results for import. \code{"missing_mappings"}
+returns EQWin parameter/unit combinations in the requested data that do not
+have a complete database import mapping.}
 }
 \value{
 A list of samples and associated results. Returns an empty list when
@@ -66,6 +71,8 @@ Brings water quality data from an EQWin Access database into the list format
 expected by \code{\link[=getNewDiscrete]{getNewDiscrete()}} and \code{\link[=synchronize_discrete]{synchronize_discrete()}}. Parameter
 mapping is read from \code{discrete.import_parameter_mappings} when the requested
 key/source code has been loaded with \code{\link[=upsertImportParameterMappings]{upsertImportParameterMappings()}}. EQWin
+parameters are matched by \code{eqparams.ParamCode} and \code{eqparams.Units} because
+\code{ParamDesc} can be missing or vary between EQWin databases.
 \verb{udf_*} fields and \code{eqsampls.LastModified} are intentionally not used.
 EQWin \code{SampleClass} values are mapped to AquaCache sample types where
 possible: regular monitoring (\code{M}) to routine samples, QA/QC duplicate or

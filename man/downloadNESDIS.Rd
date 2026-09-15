@@ -131,14 +131,14 @@ windows whose delegated measurement write completed advance the route's
 incremental retrieval cursor.
 \subsection{Route-configured payload formats}{
 
-SHEF routes need no parser settings. BLM and delimited routes store their
-layout in \code{route_config.parser_config}, keeping format differences with the
-route rather than in function arguments. BLM configuration requires
+Payload parser settings live in \code{route_config.parser_config}, keeping format
+differences with the route rather than in function arguments. BLM
+configuration requires
 \code{fields}, ordered one per payload row, and normally supplies
 \code{sample_interval_seconds}, \code{sample_offset_seconds}, and \code{values_order}.
-\code{timestamp_floor_seconds} is needed only when the payload body does not carry
-observation times and measurements belong on fixed clock boundaries. It
-rounds the GOES/LRGS header time down to that interval. For example, a BLM
+\code{timestamp_floor_seconds} is needed only when measurements belong on fixed
+clock boundaries. It rounds parsed observation times down to that interval
+for BLM, SHEF, and delimited routes. For example, a BLM
 route with \code{timestamp_floor_seconds = 3600} treats a message received at
 22:09:33 as an observation at 22:00:00. Omit it when the payload supplies
 observation times or when the header time is the intended measurement time.
@@ -160,6 +160,9 @@ Delimited configuration uses \code{has_header}; headerless messages also require
 Both parsers include the LRGS header fields by default; set
 \code{include_lrgs_header_fields} to \code{FALSE} to omit them. Parsed text fields are
 retained in \code{raw_value} and receive a missing numeric \code{value}; AquaCache does
-not apply rwdm-style range clamping.
+not apply rwdm-style range clamping. A field mapping can set
+\code{mapping_config.round_digits} to a whole number from 0 through 15 when the
+canonical timeseries stores a rounded form of the transmitted value; this is
+applied after the mapping's multiplier and offset.
 }
 }

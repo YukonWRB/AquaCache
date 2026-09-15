@@ -523,7 +523,7 @@ test_that("stored replay does not compare beyond its last parsed observation", {
       ) {
         measurement_query <<- statement
         return(data.frame(
-          no_update = FALSE,
+          no_source_update = FALSE,
           datetime = observation_time,
           value = 1,
           period = "00:00:00",
@@ -554,6 +554,79 @@ test_that("stored replay does not compare beyond its last parsed observation", {
   expect_equal(finalized$transmission_import_run_ids, 6101)
   expect_equal(finalized$measurements_inserted, 0L)
   expect_equal(finalized$workflow, "synchronize_continuous")
+})
+
+test_that("fully protected measurements retain values but not metadata locks", {
+  observation_time <- as.POSIXct("2026-07-10 12:00:00", tz = "UTC")
+  append_calls <- 0L
+  metadata_source_flags <- logical()
+  base_query <- mock_sync_db_get_query(1323L, "downloadRWIS")
+
+  local_mocked_bindings(
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(...) TRUE,
+    downloadRWIS = function(...) {
+      data.frame(
+        datetime = observation_time,
+        value = 99,
+        grade = 2L,
+        approval = 2L,
+        qualifier = 2L
+      )
+    },
+    adjust_grade = function(..., source_update) {
+      metadata_source_flags <<- c(metadata_source_flags, source_update)
+      invisible(TRUE)
+    },
+    adjust_approval = function(..., source_update) {
+      metadata_source_flags <<- c(metadata_source_flags, source_update)
+      invisible(TRUE)
+    },
+    adjust_qualifier = function(..., source_update) {
+      metadata_source_flags <<- c(metadata_source_flags, source_update)
+      invisible(TRUE)
+    },
+    adjust_owner = function(...) invisible(TRUE),
+    adjust_contributor = function(...) invisible(TRUE),
+    dbAppendTableRLS = function(...) {
+      append_calls <<- append_calls + 1L
+      invisible(TRUE)
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, ...) {
+      if (
+        grepl(
+          "FROM continuous.measurements_continuous",
+          statement,
+          fixed = TRUE
+        )
+      ) {
+        return(data.frame(
+          no_source_update = TRUE,
+          datetime = observation_time,
+          value = 1,
+          period = "00:00:00",
+          imputed = FALSE
+        ))
+      }
+      base_query(con, statement, ...)
+    },
+    dbExecute = function(...) 1L,
+    .package = "DBI"
+  )
+
+  result <- synchronize_continuous(
+    con = structure(list(), class = "mock_con"),
+    timeseries_id = 1323L,
+    start_datetime = "2026-07-01 00:00:00"
+  )
+
+  expect_true(result$success)
+  expect_equal(append_calls, 0L)
+  expect_equal(metadata_source_flags, rep(TRUE, 3))
 })
 
 test_that("stored replay rejects adapters that have not opted in", {

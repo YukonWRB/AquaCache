@@ -26,7 +26,10 @@ mock_getnew_timeseries_table <- function(
     fetch_priority = rep(1L, length(timeseries_ids)),
     aggregation_type = aggregation_type,
     default_owner = rep(NA_integer_, length(timeseries_ids)),
-    default_data_sharing_agreement_id = rep(NA_integer_, length(timeseries_ids)),
+    default_data_sharing_agreement_id = rep(
+      NA_integer_,
+      length(timeseries_ids)
+    ),
     active = rep(TRUE, length(timeseries_ids)),
     last_data_point = last_data_point,
     transmission_platform_identifier = transmission_platform_identifier,
@@ -34,39 +37,6 @@ mock_getnew_timeseries_table <- function(
   )
 }
 
-ensure_patch56_query_tables <- function(con) {
-  DBI::dbExecute(
-    con,
-    "CREATE TABLE IF NOT EXISTS public.source_adapter_capabilities (
-       source_fx text NOT NULL,
-       data_domain text NOT NULL,
-       enabled boolean NOT NULL DEFAULT TRUE,
-       requires_transmission_mapping boolean NOT NULL DEFAULT FALSE,
-       transmission_method_codes text[] NOT NULL DEFAULT ARRAY[]::text[]
-     )"
-  )
-  DBI::dbExecute(
-    con,
-    "CREATE TABLE IF NOT EXISTS continuous.timeseries_source_adapters (
-       timeseries_source_adapter_id serial PRIMARY KEY,
-       timeseries_id integer NOT NULL,
-       source_fx text NOT NULL,
-       source_fx_args jsonb,
-       fetch_priority smallint,
-       synchronize_priority smallint,
-       active boolean NOT NULL DEFAULT TRUE
-     )"
-  )
-  DBI::dbExecute(
-    con,
-    "CREATE TABLE IF NOT EXISTS continuous.transmission_timeseries_mappings (
-       timeseries_id integer NOT NULL,
-       transmission_route_id integer NOT NULL,
-       enabled boolean NOT NULL DEFAULT TRUE
-     )"
-  )
-  invisible(NULL)
-}
 
 mock_getnew_db_get_query <- function(
   timeseries_ids,
@@ -109,10 +79,22 @@ mock_getnew_db_get_query <- function(
           "standard"
         ),
         requires_transmission_mapping = c(
-          FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE
+          FALSE,
+          FALSE,
+          FALSE,
+          TRUE,
+          FALSE,
+          FALSE,
+          FALSE
         ),
         inject_timeseries_id = c(
-          FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE
+          FALSE,
+          FALSE,
+          FALSE,
+          TRUE,
+          FALSE,
+          FALSE,
+          FALSE
         ),
         parallel_group_strategy = c(
           "timeseries",
@@ -133,7 +115,13 @@ mock_getnew_db_get_query <- function(
           "[]"
         ),
         allow_empty_initial_fetch = c(
-          FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE
+          FALSE,
+          FALSE,
+          FALSE,
+          TRUE,
+          FALSE,
+          FALSE,
+          FALSE
         ),
         transmission_method_codes_json = c(
           "[]",
@@ -168,8 +156,7 @@ mock_getnew_db_get_query <- function(
         source_fx_args = source_fx_args,
         last_data_point = last_data_point,
         timeseries_type = timeseries_type,
-        transmission_platform_identifier =
-          transmission_platform_identifier
+        transmission_platform_identifier = transmission_platform_identifier
       ))
     }
     if (grepl("FROM public.grade_types", statement, fixed = TRUE)) {
@@ -319,7 +306,14 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
     dbAppendTableRLS = function(con, table, value) invisible(TRUE),
     getSourceAdapterCapabilities = function(...) adapter_capabilities,
-    downloadECCCwx = function(start_datetime, con, location, parameter, interval, ...) {
+    downloadECCCwx = function(
+      start_datetime,
+      con,
+      location,
+      parameter,
+      interval,
+      ...
+    ) {
       captured$parameters <- c(captured$parameters, parameter)
       data.frame(
         datetime = start_datetime,
@@ -389,14 +383,19 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
   )
   expect_true(all(vapply(
     captured$connect_args,
-    function(args) identical(args, list(
-      name = "mock_db",
-      host = "mock_host",
-      port = "5432",
-      username = "mock_user",
-      password = "mock_pass",
-      silent = TRUE
-    )),
+    function(args) {
+      identical(
+        args,
+        list(
+          name = "mock_db",
+          host = "mock_host",
+          port = "5432",
+          username = "mock_user",
+          password = "mock_pass",
+          silent = TRUE
+        )
+      )
+    },
     logical(1)
   )))
 })
@@ -622,7 +621,9 @@ test_that("getNewContinuous fails unfinished transmission run history", {
     adjust_owner = function(...) invisible(TRUE),
     adjust_contributor = function(...) invisible(TRUE),
     adjust_data_sharing_agreement = function(...) invisible(TRUE),
-    dbAppendTableRLS = function(...) stop("simulated measurement write failure"),
+    dbAppendTableRLS = function(...) {
+      stop("simulated measurement write failure")
+    },
     downloadNESDIS = function(start_datetime, con, timeseries_id, ...) {
       result <- data.frame(datetime = start_datetime, value = 1)
       attr(result, "transmission_import_run_ids") <- 7201
@@ -851,14 +852,19 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
   expect_equal(captured$parameters, c("temp", "wind_spd", "temp"))
   expect_true(all(vapply(
     captured$connect_args,
-    function(args) identical(args, list(
-      name = "mock_db",
-      host = "mock_host",
-      port = "5432",
-      username = "mock_user",
-      password = "mock_pass",
-      silent = TRUE
-    )),
+    function(args) {
+      identical(
+        args,
+        list(
+          name = "mock_db",
+          host = "mock_host",
+          port = "5432",
+          username = "mock_user",
+          password = "mock_pass",
+          silent = TRUE
+        )
+      )
+    },
     logical(1)
   )))
 })
@@ -894,10 +900,15 @@ test_that("getNewContinuous does not delete history when period calculation need
     params = list(tsid)
   )
   if (nrow(history) < 2) {
-    testthat::skip("Not enough history to build a regression test for getNewContinuous.")
+    testthat::skip(
+      "Not enough history to build a regression test for getNewContinuous."
+    )
   }
 
-  step_seconds <- median(as.numeric(diff(sort(history$datetime)), units = "secs"))
+  step_seconds <- median(as.numeric(
+    diff(sort(history$datetime)),
+    units = "secs"
+  ))
   if (is.na(step_seconds) || step_seconds <= 0) {
     step_seconds <- 3600
   }
@@ -910,7 +921,6 @@ test_that("getNewContinuous does not delete history when period calculation need
 
   AquaCache:::dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
-  ensure_patch56_query_tables(con)
 
   DBI::dbExecute(
     con,
@@ -1022,7 +1032,6 @@ test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinut
 
   AquaCache:::dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
-  ensure_patch56_query_tables(con)
 
   DBI::dbExecute(
     con,

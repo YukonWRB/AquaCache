@@ -598,8 +598,8 @@ getNewContinuous <- function(
   # listed in foreach's .packages argument. Resolve them from the namespace so
   # this also works when getNewContinuous.R is sourced by a deployment script.
   transmission_finalize_import_runs_worker <-
-    getFromNamespace("transmission_finalize_import_runs", "AquaCache")
-  transmission_fail_import_runs_worker <- getFromNamespace(
+    utils::getFromNamespace("transmission_finalize_import_runs", "AquaCache")
+  transmission_fail_import_runs_worker <- utils::getFromNamespace(
     "transmission_fail_import_runs",
     "AquaCache"
   )
@@ -797,9 +797,24 @@ getNewContinuous <- function(
     }
 
     commit_fx <- function(con, ts, tsid) {
-      adjust_grade(con, tsid, ts[, c("datetime", "grade")])
-      adjust_approval(con, tsid, ts[, c("datetime", "approval")])
-      adjust_qualifier(con, tsid, ts[, c("datetime", "qualifier")])
+      adjust_grade(
+        con,
+        tsid,
+        ts[, c("datetime", "grade")],
+        source_update = TRUE
+      )
+      adjust_approval(
+        con,
+        tsid,
+        ts[, c("datetime", "approval")],
+        source_update = TRUE
+      )
+      adjust_qualifier(
+        con,
+        tsid,
+        ts[, c("datetime", "qualifier")],
+        source_update = TRUE
+      )
       if ("owner" %in% names(ts)) {
         adjust_owner(con, tsid, ts[, c("datetime", "owner")])
       }

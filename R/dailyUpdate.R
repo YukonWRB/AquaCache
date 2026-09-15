@@ -274,7 +274,7 @@ dailyUpdate <- function(
         hy_start <- Sys.time()
         suppressMessages({
           new_hydat <- update_hydat(con = con)
-        }) #This function will run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
+        }) # This function will run for flow and level for each station, even if one of the two is not currently in the HYDAT database. This allows for new data streams to be incorporated seamlessly, either because HYDAT covers a station already reporting but only in realtime or because a flow/level only station is reporting the other param.
         if (new_hydat) {
           hy_duration <- Sys.time() - hy_start
           message(

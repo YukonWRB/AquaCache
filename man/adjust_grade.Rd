@@ -4,7 +4,7 @@
 \alias{adjust_grade}
 \title{Adjust the grade of a timeseries in the database}
 \usage{
-adjust_grade(con, timeseries_id, data, delete = FALSE)
+adjust_grade(con, timeseries_id, data, delete = FALSE, source_update = FALSE)
 }
 \arguments{
 \item{con}{A connection to the database with write privileges to the 'grades' and 'measurements_continuous' tables.}
@@ -14,6 +14,11 @@ adjust_grade(con, timeseries_id, data, delete = FALSE)
 \item{data}{A data.frame with columns for 'datetime' and 'grade'. 'datetime' should be POSIXct and 'grade' should either character (in which case it must refer to entries in column 'grade_type_code' of table 'grade_types' or integer/numeric, in which case it must refer to column 'grade_type_id' of the same table.}
 
 \item{delete}{Logical. If TRUE, the function will delete grades which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.}
+
+\item{source_update}{Logical. Set TRUE when \code{data} came from a source
+adapter or synchronization workflow. Existing intervals marked
+\code{no_source_update} are then immutable. Direct/manual calls leave this FALSE
+and may set \code{data$no_source_update} explicitly.}
 }
 \value{
 Modifies the 'grades' table in the database.

@@ -4,7 +4,7 @@
 #'
 #' @param df A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for `con` must be left as their default values.
 #' @param name A character vector of the location name(s).
-#' @param name_fr A character vector of the location name(s) in French. You're highly encouraged to populate this field, but if left blank (or the corresponding column in `df` is missing or empty) it will be populated with 'Translation required!'.
+#' @param name_fr A character vector of the location name(s) in French. You're highly encouraged to populate this field, but if left blank (or the corresponding column in `df` is missing or empty) it will be populated with 'Traduction requise!'.
 #' @param alias A character vector of the location alias(es). This is optional, leave NA if not needed.
 #' @param location_code A character vector of the location code(s). Note that in most cases this should be auto-generated when by adding a new location using the YGwater Shiny application!
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.

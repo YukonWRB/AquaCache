@@ -1,0 +1,1036 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aquacache:report-recipe:2",
+  "title": "AquaCache portable report recipe version 2",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "urn:aquacache:report-recipe:2"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/input"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "datasets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dataset"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/criterion"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotation"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "output": {
+      "$ref": "#/$defs/output"
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "contract",
+    "inputs",
+    "datasets",
+    "steps",
+    "criteria",
+    "sections",
+    "annotations",
+    "output"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "capability": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/id"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "code",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "date",
+            "datetime",
+            "string_array",
+            "integer_array"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "default": {}
+      },
+      "required": [
+        "id",
+        "type",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "all",
+            "explicit",
+            "input"
+          ]
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "series_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "sample_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "licence_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "input": {
+          "$ref": "#/$defs/id"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "fractions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "include_locationless": {
+          "type": "boolean"
+        },
+        "input_field": {
+          "type": "string",
+          "enum": [
+            "locations",
+            "series_ids",
+            "sample_ids",
+            "licence_ids"
+          ]
+        },
+        "parameter_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "period": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "start": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/value_datetime"
+                },
+                {
+                  "$ref": "#/$defs/binding"
+                }
+              ]
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/value_datetime"
+                },
+                {
+                  "$ref": "#/$defs/binding"
+                }
+              ]
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "anchor": {
+              "$ref": "#/$defs/binding"
+            },
+            "start_offset_seconds": {
+              "type": "integer"
+            },
+            "end_offset_seconds": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "anchor",
+            "start_offset_seconds",
+            "end_offset_seconds"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "quality": {
+      "type": "object",
+      "properties": {
+        "missing": {
+          "type": "string",
+          "enum": [
+            "retain",
+            "omit",
+            "fail"
+          ]
+        },
+        "censored": {
+          "type": "string",
+          "enum": [
+            "retain",
+            "omit",
+            "fail"
+          ]
+        },
+        "approval": {
+          "type": "string",
+          "enum": [
+            "any",
+            "approved_only"
+          ]
+        },
+        "qualifiers": {
+          "type": "string",
+          "enum": [
+            "retain",
+            "omit_flagged",
+            "fail_flagged"
+          ]
+        }
+      },
+      "required": [
+        "missing",
+        "censored",
+        "approval",
+        "qualifiers"
+      ],
+      "additionalProperties": false
+    },
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "source": {
+          "$ref": "#/$defs/capability"
+        },
+        "selection": {
+          "$ref": "#/$defs/selection"
+        },
+        "period": {
+          "$ref": "#/$defs/period"
+        },
+        "quality": {
+          "$ref": "#/$defs/quality"
+        },
+        "options": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "selection",
+        "period",
+        "quality"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "code": {
+                    "const": "aquacache.continuous"
+                  },
+                  "version": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "options": {
+                "type": "object",
+                "properties": {
+                  "series_policy": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "single_or_fail"
+                    ]
+                  }
+                },
+                "required": [
+                  "series_policy"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "options"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "code": {
+                    "const": "aquacache.raster"
+                  },
+                  "version": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "options": {
+                "type": "object",
+                "properties": {
+                  "past_product": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "forecast_product": {
+                    "$ref": "#/$defs/text"
+                  }
+                },
+                "required": [
+                  "past_product",
+                  "forecast_product"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "options"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "code": {
+                    "const": "aquacache.discrete"
+                  },
+                  "version": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "options": {
+                "type": "object",
+                "properties": {
+                  "result_level": {
+                    "type": "string",
+                    "enum": [
+                      "canonical"
+                    ]
+                  },
+                  "include_components": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "result_level",
+                  "include_components"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "options"
+            ]
+          }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation": {
+          "$ref": "#/$defs/capability"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "options": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "operation",
+        "inputs",
+        "options"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "properties": {
+                  "code": {
+                    "const": "aquacache.conditions"
+                  },
+                  "version": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "options": {
+                "$ref": "#/$defs/options_conditions"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "properties": {
+                  "code": {
+                    "const": "aquacache.basin_precipitation"
+                  },
+                  "version": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "options": {
+                "$ref": "#/$defs/options_basin_precipitation"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "properties": {
+                  "code": {
+                    "const": "aquacache.exceedances"
+                  },
+                  "version": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "options": {
+                "$ref": "#/$defs/options_exceedances"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "criterion": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "provider": {
+          "$ref": "#/$defs/capability"
+        },
+        "selection": {
+          "type": "object"
+        },
+        "evaluation": {
+          "type": "object",
+          "properties": {
+            "basis": {
+              "type": "string",
+              "enum": [
+                "sample",
+                "daily",
+                "period"
+              ]
+            },
+            "censored": {
+              "type": "string",
+              "enum": [
+                "indeterminate",
+                "upper_bound",
+                "omit"
+              ]
+            },
+            "missing": {
+              "type": "string",
+              "enum": [
+                "indeterminate",
+                "fail"
+              ]
+            },
+            "unit_mismatch": {
+              "type": "string",
+              "enum": [
+                "convert_or_indeterminate",
+                "fail"
+              ]
+            },
+            "unmatched": {
+              "type": "string",
+              "enum": [
+                "indeterminate",
+                "fail"
+              ]
+            }
+          },
+          "required": [
+            "basis",
+            "censored",
+            "missing",
+            "unit_mismatch",
+            "unmatched"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "provider",
+        "selection",
+        "evaluation"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "properties": {
+                  "code": {
+                    "const": "aquacache.criteria"
+                  },
+                  "version": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selection": {
+                "type": "object",
+                "properties": {
+                  "guideline_input": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "licence_input": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "effective_at": {
+                    "type": "string",
+                    "enum": [
+                      "sample_time"
+                    ]
+                  }
+                },
+                "required": [
+                  "guideline_input",
+                  "effective_at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "column": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/text"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "unit": {
+          "$ref": "#/$defs/text"
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        }
+      },
+      "required": [
+        "field",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "section": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "$ref": "#/$defs/capability"
+        },
+        "title": {
+          "$ref": "#/$defs/text"
+        },
+        "datasets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/column"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "text": {
+          "type": "string"
+        },
+        "options": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "annotation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "section": {
+          "$ref": "#/$defs/id"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "report",
+            "section",
+            "entity"
+          ]
+        },
+        "carry_forward": {
+          "type": "boolean"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "carry_forward",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "formats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "locale": {
+          "$ref": "#/$defs/text"
+        },
+        "timezone": {
+          "$ref": "#/$defs/text"
+        },
+        "template": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/text"
+            },
+            "version": {
+              "$ref": "#/$defs/text"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "options": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "formats",
+        "locale",
+        "timezone"
+      ],
+      "additionalProperties": false
+    },
+    "value_string": {
+      "type": "string"
+    },
+    "value_number": {
+      "type": "number"
+    },
+    "value_integer": {
+      "type": "integer"
+    },
+    "value_boolean": {
+      "type": "boolean"
+    },
+    "value_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "value_datetime": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "value_string_array": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "value_integer_array": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer"
+      }
+    },
+    "options_conditions": {
+      "type": "object",
+      "properties": {
+        "lags_seconds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "baseline_start_year": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "baseline_end_year": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "minimum_years": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lag_tolerance_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stale_after_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "historical_method": {
+          "type": "string",
+          "enum": [
+            "same_calendar_day"
+          ]
+        },
+        "zero_denominator": {
+          "type": "string",
+          "enum": [
+            "null"
+          ]
+        },
+        "leap_day": {
+          "type": "string",
+          "enum": [
+            "omit"
+          ]
+        }
+      },
+      "required": [
+        "lags_seconds",
+        "baseline_start_year",
+        "baseline_end_year",
+        "minimum_years",
+        "lag_tolerance_seconds",
+        "stale_after_seconds",
+        "historical_method",
+        "zero_denominator",
+        "leap_day"
+      ],
+      "additionalProperties": false
+    },
+    "options_basin_precipitation": {
+      "type": "object",
+      "properties": {
+        "past_hours": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "forecast_hours": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "forecast_cycle": {
+          "type": "string",
+          "enum": [
+            "latest_at_or_before_as_of"
+          ]
+        },
+        "spatial_weighting": {
+          "type": "string",
+          "enum": [
+            "area"
+          ]
+        },
+        "minimum_coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "past_hours",
+        "forecast_hours",
+        "forecast_cycle",
+        "spatial_weighting",
+        "minimum_coverage"
+      ],
+      "additionalProperties": false
+    },
+    "options_exceedances": {
+      "type": "object",
+      "properties": {
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "include_qc": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "criteria",
+        "include_qc"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

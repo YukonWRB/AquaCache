@@ -14,7 +14,6 @@
 #' @param units The units associated with each band, as a character vector. If left NULL function will attempt to retrieve units from the raster metadata. Otherwise if specified must be a vector of 1 or of length equal to the number of raster bands.
 #' @param source The source from which this raster was retrieved (optional but recommended).
 #' @param bit.depth The bit depth of the raster. 32-bit float is '32BF', 32-bit unsigned integer is '32BUI', 32-bit signed integer is '32BSI'. Default to NULL which will parse the data to determine which 32-bit flavor to choose. You **must** specify if your data is greater than 32 bit.
-#' @param blocks The number of blocks in which to break the raster apart. If NULL blocks will be automatically determined, as per [rpostgis::pgWriteRast()]. Blocks (tiles) can be useful to speed up queries that only need a small subset of the raster, but lengthen write time.
 #'
 #' @return The reference_id of the newly appended raster.
 #' @export
@@ -29,8 +28,7 @@ insertACRaster <- function(
   flag = NA,
   units = NULL,
   source = NULL,
-  bit.depth = NULL,
-  blocks = NULL
+  bit.depth = NULL
 ) {
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
@@ -72,7 +70,6 @@ insertACRaster <- function(
     raster = raster,
     rast_table = c("spatial", "rasters"),
     bit.depth = bit.depth,
-    blocks = blocks,
     constraints = TRUE
   )
 
