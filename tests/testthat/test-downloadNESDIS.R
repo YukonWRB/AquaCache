@@ -115,6 +115,28 @@ test_that("standard SHEF transmissions are parsed to normalized long data", {
   )))
 })
 
+test_that("SHEF observation timestamps can be floored to the hour", {
+  line <- make_lrgs_shef_line(
+    "CD7016EE",
+    timestamp = "26258180215",
+    body = ":TN 02 #60 7.5:PR 02 #60 0"
+  )
+
+  parsed <- AquaCache:::nesdis_parse_dispatch(
+    line,
+    "CD7016EE",
+    "SHEF",
+    route_config = list(
+      parser_config = list(timestamp_floor_seconds = 60 * 60)
+    )
+  )
+
+  expect_equal(
+    unique(parsed[source_field %in% c("TN", "PR")]$datetime),
+    as.POSIXct("2026-09-15 18:00:00", tz = "UTC")
+  )
+})
+
 test_that("McMaster underscore fields are preserved and independently mapped", {
   line <- make_lrgs_shef_line(
     "47011656",
@@ -415,6 +437,31 @@ test_that("headerless delimited transmissions use configured record timing", {
   )
 })
 
+test_that("delimited transmission timestamps can be floored to the hour", {
+  line <- make_lrgs_shef_line(
+    "2C64667E",
+    timestamp = "26216122034",
+    body = "12.88,2.8,2.6,222.0"
+  )
+  parsed <- AquaCache:::nesdis_parse_dispatch(
+    line,
+    "2C64667E",
+    "comma-delimited",
+    route_config = list(
+      parser_config = list(
+        fields = c("vbmin", "tas", "ws", "wd"),
+        timestamp_floor_seconds = 60 * 60
+      )
+    )
+  )
+
+  expect_equal(
+    parsed[source_field == "ws"]$datetime,
+    as.POSIXct("2026-08-04 12:00:00", tz = "UTC")
+  )
+  expect_equal(parsed[source_field == "ws"]$value, 2.6)
+})
+
 test_that("mapping transformations and missing-value rules are applied", {
   parsed <- data.table::data.table(
     source_field = rep("SD", 3),
@@ -444,6 +491,29 @@ test_that("mapping transformations and missing-value rules are applied", {
 
   expect_equal(mapped$value, c(151, 201))
   expect_equal(nrow(mapped), 2L)
+})
+
+test_that("mapping configuration can round transformed values", {
+  parsed <- data.table::data.table(
+    source_field = "pcp1",
+    datetime = as.POSIXct("2026-09-11 04:00:00", tz = "UTC"),
+    raw_value = "0.08",
+    value = 0.08
+  )
+  mappings <- data.table::data.table(
+    transmission_mapping_id = 1L,
+    transmission_route_id = 1L,
+    source_field = "pcp1",
+    timeseries_id = 10L,
+    value_multiplier = 1,
+    value_offset = 0,
+    missing_values = "[]",
+    mapping_config = '{"round_digits":1}'
+  )
+
+  mapped <- AquaCache:::nesdis_apply_mappings(parsed, mappings)
+
+  expect_equal(mapped$value, 0.1)
 })
 
 test_that("unsupported formats fail with an extension instruction", {

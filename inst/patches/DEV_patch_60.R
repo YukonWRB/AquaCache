@@ -3389,6 +3389,16 @@ tryCatch(
       "ALTER TABLE public.sub_locations ADD CONSTRAINT sub_locations_name_key UNIQUE (location_id, sub_location_name)"
     )
 
+    # Drop extra columns from spatial.spatial_ref_sys - these were added at some point but can prevent proper recovery, as spatial_ref_sys is a PostGIS system table that should not be modified.
+    DBI::dbExecute(
+      con,
+      "ALTER TABLE spatial.spatial_ref_sys
+       DROP COLUMN IF EXISTS created,
+       DROP COLUMN IF EXISTS modified,
+       DROP COLUMN IF EXISTS created_by,
+       DROP COLUMN IF EXISTS modified_by"
+    )
+
     # Record the patch version before the final verification so that the
     # verification is the last database operation before COMMIT and can still
     # roll the entire schema change back if any final-state invariant fails.
@@ -3534,111 +3544,6 @@ tryCatch(
     message(
       "Patch 60 applied successfully. Generic result aggregations, result components, multi-valued sample qualifiers, sample observers, time-ranged continuous notes, and source-update protection are ready."
     )
-
-    # SnowDB is a Yukon source database. Probe for it on the same server as
-    # this AquaCache connection and skip quietly for partner installations.
-    # Any migration error is reported after commit and cannot roll back or make
-    # the Patch 60 schema upgrade appear to have failed.
-    message(
-      "Checking if the Yukon SnowDB is available for optional snow-course component migration..."
-    )
-    tryCatch(
-      local({
-        server_address <- DBI::dbGetQuery(
-          con,
-          "SELECT host(inet_server_addr()) AS server_address"
-        )$server_address[[1L]]
-        snow_settings <- c(
-          port = Sys.getenv("snowPort"),
-          user = Sys.getenv("snowUser", Sys.getenv("snowAdminUser")),
-          password = Sys.getenv("snowPass", Sys.getenv("snowAdminPass"))
-        )
-        if (
-          is.na(server_address) ||
-            !nzchar(server_address) ||
-            any(!nzchar(snow_settings))
-        ) {
-          message(
-            "Snow-course component migration skipped: the AquaCache server ",
-            "address or SnowDB connection settings are unavailable."
-          )
-        } else {
-          snow_con <- tryCatch(
-            {
-              DBI::dbConnect(
-                RPostgres::Postgres(),
-                dbname = Sys.getenv("snowName", "snow"),
-                host = server_address,
-                port = snow_settings[["port"]],
-                user = snow_settings[["user"]],
-                password = snow_settings[["password"]],
-                connect_timeout = 5L
-              )
-              message("SnowDB connection established.")
-            },
-            error = function(e) NULL
-          )
-          if (is.null(snow_con)) {
-            message(
-              "Snow-course component migration skipped: SnowDB is not ",
-              "reachable at AquaCache server ",
-              server_address,
-              "."
-            )
-          } else {
-            DBI::dbExecute(snow_con, "SET timezone = 'UTC'")
-            on.exit(
-              {
-                if (DBI::dbIsValid(snow_con)) DBI::dbDisconnect(snow_con)
-              },
-              add = TRUE
-            )
-            migration_candidates <- c(
-              system.file(
-                "patches",
-                "migrate_snow_course_components.R",
-                package = "AquaCache"
-              ),
-              file.path(
-                "inst",
-                "patches",
-                "migrate_snow_course_components.R"
-              )
-            )
-            migration_script <- migration_candidates[
-              nzchar(migration_candidates) & file.exists(migration_candidates)
-            ][1L]
-            if (is.na(migration_script)) {
-              stop(
-                "Could not find patches/migrate_snow_course_components.R."
-              )
-            }
-            old_options <- options(
-              AquaCache.snow_component_migration.source_only = TRUE
-            )
-            on.exit(options(old_options), add = TRUE)
-            migration_environment <- new.env(parent = globalenv())
-            sys.source(migration_script, envir = migration_environment)
-            migration_environment$run_snow_component_migration(
-              apply_changes = TRUE,
-              aquacache = con,
-              snow = snow_con,
-              confirm_production = TRUE
-            )
-            message("Snow-course component migration completed successfully.")
-          }
-        }
-      }),
-      error = function(e) {
-        message(
-          "WARNING: Patch 60 is committed, but the optional snow-course component ",
-          "migration failed: ",
-          conditionMessage(e),
-          " Re-run inst/patches/migrate_snow_course_components.R after ",
-          "correcting the problem."
-        )
-      }
-    )
   },
   error = function(e) {
     if (isTRUE(active)) {
@@ -3646,5 +3551,110 @@ tryCatch(
       try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
     }
     stop(e)
+  }
+)
+
+# SnowDB is a Yukon source database. Probe for it on the same server as
+# this AquaCache connection and skip quietly for partner installations.
+# Any migration error is reported after commit and cannot roll back or make
+# the Patch 60 schema upgrade appear to have failed.
+message(
+  "Checking if the Yukon SnowDB is available for optional snow-course component migration..."
+)
+tryCatch(
+  local({
+    server_address <- DBI::dbGetQuery(
+      con,
+      "SELECT host(inet_server_addr()) AS server_address"
+    )$server_address[[1L]]
+    snow_settings <- c(
+      port = Sys.getenv("snowPort"),
+      user = Sys.getenv("snowUser", Sys.getenv("snowAdminUser")),
+      password = Sys.getenv("snowPass", Sys.getenv("snowAdminPass"))
+    )
+    if (
+      is.na(server_address) ||
+        !nzchar(server_address) ||
+        any(!nzchar(snow_settings))
+    ) {
+      message(
+        "Snow-course component migration skipped: the AquaCache server ",
+        "address or SnowDB connection settings are unavailable."
+      )
+    } else {
+      snow_con <- tryCatch(
+        {
+          DBI::dbConnect(
+            RPostgres::Postgres(),
+            dbname = Sys.getenv("snowName", "snow"),
+            host = server_address,
+            port = snow_settings[["port"]],
+            user = snow_settings[["user"]],
+            password = snow_settings[["password"]],
+            connect_timeout = 5L
+          )
+          message("SnowDB connection established.")
+        },
+        error = function(e) NULL
+      )
+      if (is.null(snow_con)) {
+        message(
+          "Snow-course component migration skipped: SnowDB is not ",
+          "reachable at AquaCache server ",
+          server_address,
+          "."
+        )
+      } else {
+        DBI::dbExecute(snow_con, "SET timezone = 'UTC'")
+        on.exit(
+          {
+            if (DBI::dbIsValid(snow_con)) DBI::dbDisconnect(snow_con)
+          },
+          add = TRUE
+        )
+        migration_candidates <- c(
+          system.file(
+            "patches",
+            "migrate_snow_course_components.R",
+            package = "AquaCache"
+          ),
+          file.path(
+            "inst",
+            "patches",
+            "migrate_snow_course_components.R"
+          )
+        )
+        migration_script <- migration_candidates[
+          nzchar(migration_candidates) & file.exists(migration_candidates)
+        ][1L]
+        if (is.na(migration_script)) {
+          stop(
+            "Could not find patches/migrate_snow_course_components.R."
+          )
+        }
+        old_options <- options(
+          AquaCache.snow_component_migration.source_only = TRUE
+        )
+        on.exit(options(old_options), add = TRUE)
+        migration_environment <- new.env(parent = globalenv())
+        sys.source(migration_script, envir = migration_environment)
+        migration_environment$run_snow_component_migration(
+          apply_changes = TRUE,
+          aquacache = con,
+          snow = snow_con,
+          confirm_production = TRUE
+        )
+        message("Snow-course component migration completed successfully.")
+      }
+    }
+  }),
+  error = function(e) {
+    message(
+      "WARNING: Patch 60 is committed, but the optional snow-course component ",
+      "migration failed: ",
+      conditionMessage(e),
+      " Re-run inst/patches/migrate_snow_course_components.R after ",
+      "correcting the problem."
+    )
   }
 )

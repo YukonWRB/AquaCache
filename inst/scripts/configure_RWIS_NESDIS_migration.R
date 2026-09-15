@@ -9,27 +9,23 @@
 # Run from the AquaCache repository root. Connection values are read from
 # ../.Renviron unless they are already present in the process environment.
 #
-# Preview Antimony Creek on dev:
-#   $env:RWIS_NESDIS_AQUACACHE_HOST = "10.250.12.154"
-#   $env:RWIS_NESDIS_STATIONS = "ANT"
-#   & 'C:\Program Files\R\R-4.6.0\bin\Rscript.exe' `
-#     inst/scripts/configure_RWIS_NESDIS_migration.R
-#
-# Apply Antimony Creek on dev:
-#   $env:RWIS_NESDIS_APPLY = "YES"
-#   & 'C:\Program Files\R\R-4.6.0\bin\Rscript.exe' `
-#     inst/scripts/configure_RWIS_NESDIS_migration.R
-#
-# Preview all active matched RWDM stations:
+# Preview all supported production stations:
+#   $env:RWIS_NESDIS_AQUACACHE_HOST = "199.247.132.26"
 #   $env:RWIS_NESDIS_STATIONS = "ALL"
-#   $env:RWIS_NESDIS_APPLY = "NO"
+#   & 'C:\Program Files\R\R-4.6.0\bin\Rscript.exe' `
+#     inst/scripts/configure_RWIS_NESDIS_migration.R
+#
+# Apply all supported production stations after reviewing the dry run:
+#   $env:RWIS_NESDIS_APPLY = "YES"
+#   $env:RWIS_NESDIS_CONFIRM_BULK = "YES"
 #   & 'C:\Program Files\R\R-4.6.0\bin\Rscript.exe' `
 #     inst/scripts/configure_RWIS_NESDIS_migration.R
 #
 # Applying ALL additionally requires RWIS_NESDIS_CONFIRM_BULK=YES. The apply
-# is refused while any source field is unresolved. SHEF field codes and BLM
-# precipitation products that are derived rather than direct payload fields
-# must be entered in mapping_overrides below after checking a raw message.
+# is refused while any source field or route layout is unresolved. The mappings
+# below were checked against public NOAA DADDS messages and same-hour RWDM rows
+# on 2026-09-15. Retired RWDM parameters deliberately map to absent field names
+# so that the replacement adapter returns no new values, matching RWDM.
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -50,7 +46,7 @@ include_inactive_stations <- identical(
   "YES"
 )
 station_selection <- trimws(strsplit(
-  Sys.getenv("RWIS_NESDIS_STATIONS", "ANT"),
+  Sys.getenv("RWIS_NESDIS_STATIONS", "ALL"),
   ",",
   fixed = TRUE
 )[[1L]])
@@ -73,38 +69,152 @@ if (
   stop("Applying ALL requires RWIS_NESDIS_CONFIRM_BULK=YES.")
 }
 
-# Add only mappings confirmed from raw payloads. Parameter is the value in the
-# existing downloadRWIS source_fx_args. One row overrides one station/series.
-# value_multiplier and value_offset are applied after missing-value handling.
-mapping_overrides <- data.table(
-  station = character(),
-  parameter = character(),
-  source_field = character(),
-  value_multiplier = numeric(),
-  value_offset = numeric()
+# CD700B4A was reassigned by NOAA to a Revelstoke, BC platform in 2025. RWDM
+# still lists it for YAAHP, so activating that route would import another site's
+# data. Leave its existing downloadRWIS adapters unchanged until RWDM has a
+# current YAAHP DCP address.
+station_exclusions <- data.table(
+  station = "YAAHP",
+  reason = paste(
+    "RWDM DCP CD700B4A is assigned by NOAA to Revelstoke, BC;",
+    "a current Haines Pass DCP is required"
+  )
 )
 
-# Provider/station payloads can override the defaults below. Delimited layouts
-# cannot be inferred from the RWDM transmission_format label and therefore
-# always need an override. Examples:
-# route_parser_overrides <- list(
-#   JPK = list(
-#     has_header = TRUE,
-#     delimiter = ",",
-#     datetime_field = "datetime_utc",
-#     datetime_format = "%Y/%m/%d %H:%M:%S",
-#     datetime_timezone = "UTC"
-#   ),
-#   POOL = list(
-#     has_header = FALSE,
-#     delimiter = ",",
-#     fields = c("STN", "ta", "rh"),
-#     record_interval_seconds = 3600,
-#     record_offset_seconds = 1800,
-#     records_order = "oldest_first"
-#   )
-# )
-route_parser_overrides <- list()
+# RWDM labels KLOT as BLM, but its current payload is a single CSV record.
+transmission_format_overrides <- data.table(
+  station = "KLOT",
+  transmission_format = "comma-delimited"
+)
+
+# Add only mappings confirmed from raw payloads. Parameter is the value in the
+# existing downloadRWIS source_fx_args. One row overrides one station/series.
+# Multipliers and offsets are applied after missing-value handling.
+mapping_overrides <- data.table(
+  station = c(
+    "BR", "CA", "CC", "DAF", "EPF", "KLOT", "KLOT", "KLOT", "NU",
+    "PE", "POOL", "POOL", "POOL", "STW", "SWI", "WIL", "YAAFRA",
+    "YAAFRA", "YAAFRA", "YAASUM", "YAASUM", "YPKU", "YPKU", "YPKU",
+    "YPKU", "YPKU"
+  ),
+  parameter = c(
+    "pcp1", "pcp1", "pcp1", "ws", "pcp1", "pcp1", "ta", "ws", "pcp1",
+    "pcp1", "ta", "wd", "ws", "pcp1", "pcp1", "pcp1", "pcp1", "rn1",
+    "ta", "ta", "ws", "pcp24", "rn1", "ta", "wd", "ws"
+  ),
+  source_field = c(
+    "pcp1_unavailable", "pcp1_unavailable", "pcp1", "ws", "pcp1",
+    "pcp1", "ta", "ws", "pcp1_unavailable", "pcp1_unavailable", "ta",
+    "wd", "ws", "pcp1_unavailable", "pcp1", "pcp1_unavailable",
+    "pcp1_unavailable", "PR", "TN", "TN", "US", "pcp24", "rn1",
+    "ta_unavailable", "wd", "ws"
+  ),
+  value_multiplier = c(rep(1, 25), 3.6),
+  value_offset = 0
+)
+mapping_overrides[, missing_values := '["-9999"]']
+mapping_overrides[, mapping_config := "{}"]
+# DAF transmits zero wind speed while its failed direction sensor is slashed;
+# RWDM has no valid zero wind-speed rows in the latest year.
+mapping_overrides[
+  station == "DAF" & parameter == "ws",
+  missing_values := '["-9999","0"]'
+]
+# RWDM stores these Pluvio values to one decimal place.
+mapping_overrides[
+  station %in% c("CC", "EPF", "SWI") & parameter == "pcp1",
+  mapping_config := '{"round_digits":1}'
+]
+
+make_blm_parser <- function(field_count, named_fields = character()) {
+  fields <- sprintf("blm_row_%02d", seq_len(field_count))
+  fields[seq_len(11L)] <- c(
+    "blm_row_01", "blm_row_02", "ws", "wd", "rn1", "wg",
+    "tmax1", "tmin1", "rhmax1", "rhmin1", "vb"
+  )
+  fields[(field_count - 1L):field_count] <- c("ta", "rh")
+  if (length(named_fields)) {
+    fields[as.integer(names(named_fields))] <- unname(named_fields)
+  }
+  list(
+    fields = fields,
+    sample_interval_seconds = 900,
+    sample_offset_seconds = 0,
+    timestamp_floor_seconds = 3600,
+    values_order = "oldest_first",
+    strict_field_count = TRUE,
+    include_lrgs_header_fields = TRUE
+  )
+}
+
+# Station payload layouts are fixed by the datalogger program, not by the
+# generic RWDM format label. Names are assigned only where they are useful to
+# an AquaCache mapping; the remaining rows retain stable positional names.
+route_parser_overrides <- list(
+  BCT = make_blm_parser(24L),
+  CC = make_blm_parser(17L, c(`13` = "pcp1")),
+  CH = make_blm_parser(18L, c(`1` = "ta", `17` = "blm_ta_secondary")),
+  EPF = make_blm_parser(17L, c(`13` = "pcp1")),
+  JAK = make_blm_parser(36L, c(`1` = "ta", `35` = "blm_ta_secondary")),
+  PCB = list(
+    fields = c(
+      "latitude", "longitude", "rh", "rhmin1", "rhmax1", "ta",
+      "tmin1", "tmax1", "ws", "wd", "wg", "wdg", "rn1", "pc",
+      "vbmin", "pcb_row_16", "pcb_row_17", "pcb_row_18", "pcb_row_19",
+      "pcb_row_20", "pcb_row_21", "pcb_row_22", "pcb_row_23", "pcb_row_24",
+      "pcp24", "pcb_row_26", "pcb_row_27", "pcb_row_28"
+    ),
+    sample_interval_seconds = 900,
+    sample_offset_seconds = 0,
+    timestamp_floor_seconds = 3600,
+    values_order = "oldest_first",
+    strict_field_count = TRUE,
+    include_lrgs_header_fields = TRUE
+  ),
+  SWI = make_blm_parser(31L, c(`25` = "pcp1")),
+  TUC = make_blm_parser(24L, c(`1` = "ta", `23` = "blm_ta_secondary")),
+  WIL = make_blm_parser(31L),
+  YPKU = list(
+    fields = c(
+      "tas", "rh", "ws", "ypku_wg", "wdg", "wd", "rn1", "pcp24",
+      "tmax24", "tmin24", "rhmax24", "rhmin24", "ypku_row_13",
+      "ypku_row_14", "ypku_row_15", "ypku_row_16", "ypku_row_17",
+      "ypku_row_18", "ypku_row_19", "ypku_row_20", "ypku_row_21",
+      "ypku_row_22", "ypku_row_23"
+    ),
+    sample_interval_seconds = 900,
+    sample_offset_seconds = 0,
+    timestamp_floor_seconds = 3600,
+    values_order = "oldest_first",
+    strict_field_count = TRUE,
+    include_lrgs_header_fields = TRUE
+  ),
+  KLOT = list(
+    has_header = FALSE,
+    delimiter = ",",
+    fields = c(
+      "klot_row_01", "klot_row_02", "klot_row_03", "klot_row_04",
+      "klot_row_05", "klot_row_06", "klot_row_07", "klot_row_08",
+      "klot_row_09", "klot_row_10", "klot_row_11", "vb", "ta", "rh",
+      "ws", "wd", "wg", "wdg", "pcp1", "pc", "klot_row_21"
+    ),
+    timestamp_floor_seconds = 3600,
+    include_lrgs_header_fields = TRUE
+  ),
+  POOL = list(
+    has_header = FALSE,
+    delimiter = ",",
+    fields = c(
+      "vbmin", "tas", "ws", "wd", "wg", "wdg", "rmk1", "rmk2",
+      "rmk3", "ta", "tmin1", "tmax1", "rh", "rhmin1", "rhmax1",
+      "pool_trailing"
+    ),
+    timestamp_floor_seconds = 3600,
+    include_lrgs_header_fields = TRUE
+  ),
+  YAAFRA = list(timestamp_floor_seconds = 3600),
+  YAASUM = list(timestamp_floor_seconds = 3600)
+)
 
 required_environment <- c(
   "aquacacheName",
@@ -285,9 +395,35 @@ if (bulk_mode) {
   }
   plan <- plan[station %in% station_selection]
 }
+
+excluded_stations <- unique(plan[
+  station_exclusions,
+  on = "station",
+  nomatch = 0L,
+  .(station, station_name, dcp_address, reason = i.reason)
+])
+if (nrow(excluded_stations)) {
+  if (!bulk_mode) {
+    stop(
+      "Selected station is unsafe to migrate: ",
+      paste0(
+        excluded_stations$station,
+        " (",
+        excluded_stations$reason,
+        ")",
+        collapse = "; "
+      ),
+      "."
+    )
+  }
+  plan <- plan[!station_exclusions, on = "station"]
+}
 if (!nrow(plan)) {
   stop("No matched timeseries remain after applying the station filters.")
 }
+
+plan[transmission_format_overrides, on = "station", transmission_format :=
+  i.transmission_format]
 
 plan[, format_key := tolower(gsub("[^[:alnum:]]", "", transmission_format))]
 plan[
@@ -311,7 +447,12 @@ plan[, source_field := fifelse(
     NA_character_
   )
 )]
-plan[, `:=`(value_multiplier = 1, value_offset = 0)]
+plan[, `:=`(
+  value_multiplier = 1,
+  value_offset = 0,
+  missing_values = '["-9999"]',
+  mapping_config = "{}"
+)]
 
 if (nrow(mapping_overrides)) {
   mapping_overrides[, station := toupper(trimws(station))]
@@ -322,7 +463,9 @@ if (nrow(mapping_overrides)) {
   plan[mapping_overrides, on = .(station, parameter), `:=`(
     source_field = i.source_field,
     value_multiplier = i.value_multiplier,
-    value_offset = i.value_offset
+    value_offset = i.value_offset,
+    missing_values = i.missing_values,
+    mapping_config = i.mapping_config
   )]
 }
 
@@ -354,6 +497,29 @@ invalid_transforms <- plan[
     value_multiplier == 0 |
     is.na(value_offset) |
     !is.finite(value_offset)
+]
+invalid_missing_values <- plan[
+  !vapply(
+    missing_values,
+    function(value) {
+      parsed <- tryCatch(jsonlite::fromJSON(value), error = identity)
+      !inherits(parsed, "error") && is.atomic(parsed)
+    },
+    logical(1)
+  )
+]
+invalid_mapping_config <- plan[
+  !vapply(
+    mapping_config,
+    function(value) {
+      parsed <- tryCatch(
+        jsonlite::fromJSON(value, simplifyVector = TRUE),
+        error = identity
+      )
+      !inherits(parsed, "error") && is.list(parsed)
+    },
+    logical(1)
+  )
 ]
 
 routes <- unique(plan[, .(
@@ -392,10 +558,30 @@ interval_seconds <- function(value) {
 routes[, transmit_interval_seconds := interval_seconds(
   transmission_frequency
 )]
-routes[, schedule_reference_time_utc := fifelse(
-  grepl("^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$", transmission_time),
-  transmission_time,
+schedule_reference_time <- function(value, frequency) {
+  value <- trimws(value)
+  if (is.na(value) || !nzchar(value)) {
+    return(NA_character_)
+  }
+  if (grepl("^xx:[0-5][0-9]:[0-5][0-9]$", value, ignore.case = TRUE)) {
+    return(paste0("00:", substring(value, 4L)))
+  }
+  if (
+    tolower(trimws(frequency)) == "hourly" &&
+      grepl("^[0-5][0-9]:[0-5][0-9]$", value)
+  ) {
+    return(paste0("00:", value))
+  }
+  if (grepl("^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$", value)) {
+    return(value)
+  }
   NA_character_
+}
+routes[, schedule_reference_time_utc := mapply(
+  schedule_reference_time,
+  transmission_time,
+  transmission_frequency,
+  USE.NAMES = FALSE
 )]
 routes[, route_name := paste(station, "GOES", transmission_format)]
 
@@ -474,6 +660,10 @@ print(routes[, .(
   schedule_reference_time_utc,
   transmit_interval_seconds
 )])
+if (nrow(excluded_stations)) {
+  cat("\nStations left on downloadRWIS because their GOES route is unsafe:\n")
+  print(excluded_stations)
+}
 cat("\nTimeseries mappings and adapter changes:\n")
 print(plan[, .(
   station,
@@ -481,6 +671,10 @@ print(plan[, .(
   parameter,
   param_name,
   source_field,
+  value_multiplier,
+  value_offset,
+  missing_values,
+  mapping_config,
   rwis_adapter_id,
   rwis_adapter_active
 )][order(station, timeseries_id)])
@@ -507,6 +701,24 @@ if (nrow(invalid_transforms)) {
     value_offset
   )])
 }
+if (nrow(invalid_missing_values)) {
+  cat("\nInvalid mapping missing-value JSON:\n")
+  print(invalid_missing_values[, .(
+    station,
+    timeseries_id,
+    parameter,
+    missing_values
+  )])
+}
+if (nrow(invalid_mapping_config)) {
+  cat("\nInvalid mapping configuration JSON:\n")
+  print(invalid_mapping_config[, .(
+    station,
+    timeseries_id,
+    parameter,
+    mapping_config
+  )])
+}
 if (nrow(missing_route_config)) {
   cat("\nDelimited routes needing route_parser_overrides:\n")
   print(missing_route_config[, .(
@@ -526,6 +738,8 @@ if (
     nrow(unresolved) ||
     nrow(duplicate_fields) ||
     nrow(invalid_transforms) ||
+    nrow(invalid_missing_values) ||
+    nrow(invalid_mapping_config) ||
     nrow(missing_route_config)
 ) {
   stop("Apply refused until every reported route and source-field issue is resolved.")
@@ -710,8 +924,8 @@ tryCatch(
              mapping_config,
              enabled,
              note
-           ) VALUES ($1, $2, $3, $4, $5, '[\"-9999\"]'::jsonb,
-                     '{}'::jsonb, TRUE, $6)
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb,
+                     $7::jsonb, TRUE, $8)
            ON CONFLICT (transmission_route_id, timeseries_id) DO UPDATE
            SET source_field = EXCLUDED.source_field,
                value_multiplier = EXCLUDED.value_multiplier,
@@ -725,6 +939,8 @@ tryCatch(
             mapping$timeseries_id,
             mapping$value_multiplier,
             mapping$value_offset,
+            mapping$missing_values,
+            mapping$mapping_config,
             paste0("Direct mapping from RWDM station ", route$station, ".")
           )
         )

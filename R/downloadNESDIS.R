@@ -29,14 +29,14 @@
 #'
 #' ## Route-configured payload formats
 #'
-#' SHEF routes need no parser settings. BLM and delimited routes store their
-#' layout in `route_config.parser_config`, keeping format differences with the
-#' route rather than in function arguments. BLM configuration requires
+#' Payload parser settings live in `route_config.parser_config`, keeping format
+#' differences with the route rather than in function arguments. BLM
+#' configuration requires
 #' `fields`, ordered one per payload row, and normally supplies
 #' `sample_interval_seconds`, `sample_offset_seconds`, and `values_order`.
-#' `timestamp_floor_seconds` is needed only when the payload body does not carry
-#' observation times and measurements belong on fixed clock boundaries. It
-#' rounds the GOES/LRGS header time down to that interval. For example, a BLM
+#' `timestamp_floor_seconds` is needed only when measurements belong on fixed
+#' clock boundaries. It rounds parsed observation times down to that interval
+#' for BLM, SHEF, and delimited routes. For example, a BLM
 #' route with `timestamp_floor_seconds = 3600` treats a message received at
 #' 22:09:33 as an observation at 22:00:00. Omit it when the payload supplies
 #' observation times or when the header time is the intended measurement time.
@@ -58,7 +58,10 @@
 #' Both parsers include the LRGS header fields by default; set
 #' `include_lrgs_header_fields` to `FALSE` to omit them. Parsed text fields are
 #' retained in `raw_value` and receive a missing numeric `value`; AquaCache does
-#' not apply rwdm-style range clamping.
+#' not apply rwdm-style range clamping. A field mapping can set
+#' `mapping_config.round_digits` to a whole number from 0 through 15 when the
+#' canonical timeseries stores a rounded form of the transmitted value; this is
+#' applied after the mapping's multiplier and offset.
 #'
 #' @param transmission_route_id Optional integer vector of GOES transmission
 #'   route IDs. When `NULL`, all currently effective GOES DCS routes having
@@ -1612,7 +1615,7 @@ nesdis_parse_dispatch <- function(
 
   normalized_format <- gsub("[^A-Z0-9]", "", toupper(message_format %||% ""))
   if (normalized_format %in% c("SHEF", "SHEFMCMASTER")) {
-    return(nesdis_parse_shef(message, dcp_address))
+    return(nesdis_parse_shef(message, dcp_address, parser_config))
   }
   if (normalized_format %in% c("CSV", "COMMADELIMITED", "COMMASEPARATED")) {
     return(nesdis_parse_delimited(message, dcp_address, parser_config))
@@ -2083,6 +2086,11 @@ nesdis_parse_delimited <- function(message, dcp_address, config) {
     "record_offset_seconds",
     default = 0
   )
+  timestamp_floor_seconds <- nesdis_parser_number(
+    config,
+    "timestamp_floor_seconds",
+    default = 0
+  )
   records_order <- nesdis_parser_choice(
     config,
     "records_order",
@@ -2220,6 +2228,14 @@ nesdis_parse_delimited <- function(message, dcp_address, config) {
         record_offset -
         record_age * record_interval
     }
+    if (timestamp_floor_seconds > 0) {
+      datetimes <- as.POSIXct(
+        floor(as.numeric(datetimes) / timestamp_floor_seconds) *
+          timestamp_floor_seconds,
+        origin = "1970-01-01",
+        tz = "UTC"
+      )
+    }
 
     order_base <- transmission$transmission_sequence * 1000000L
     if (include_header) {
@@ -2290,7 +2306,12 @@ nesdis_validate_parser_output <- function(parsed) {
 
 #' @keywords internal
 #' @noRd
-nesdis_parse_shef <- function(message, dcp_address) {
+nesdis_parse_shef <- function(message, dcp_address, config = list()) {
+  timestamp_floor_seconds <- nesdis_parser_number(
+    config,
+    "timestamp_floor_seconds",
+    default = 0
+  )
   if (length(message) == 0L || is.na(message) || !nzchar(message)) {
     empty <- data.table::data.table(
       source_field = character(),
@@ -2332,6 +2353,14 @@ nesdis_parse_shef <- function(message, dcp_address) {
   }
 
   result <- data.table::rbindlist(parsed_lines, fill = TRUE)
+  if (timestamp_floor_seconds > 0) {
+    result[, datetime := as.POSIXct(
+      floor(as.numeric(datetime) / timestamp_floor_seconds) *
+        timestamp_floor_seconds,
+      origin = "1970-01-01",
+      tz = "UTC"
+    )]
+  }
   data.table::setorder(result, source_field, datetime, transmission_order)
   result <- result[, .SD[.N], by = .(source_field, datetime)]
   result[, transmission_order := NULL]
@@ -2490,6 +2519,28 @@ nesdis_apply_mappings <- function(parsed, mappings) {
   }
   parsed <- data.table::copy(data.table::as.data.table(parsed))
   mappings <- data.table::copy(data.table::as.data.table(mappings))
+  mappings[,
+    round_digits := vapply(
+      mapping_config,
+      function(value) {
+        config <- nesdis_parse_json_object(value)
+        digits <- config$round_digits %||% NA_real_
+        digits <- suppressWarnings(as.numeric(digits))
+        if (
+          length(digits) != 1L ||
+            (!is.na(digits) &&
+              (digits < 0 || digits != as.integer(digits) || digits > 15))
+        ) {
+          stop(
+            "downloadNESDIS: mapping_config.round_digits must be a whole ",
+            "number from 0 through 15."
+          )
+        }
+        digits
+      },
+      numeric(1)
+    )
+  ]
   mapped <- merge(
     parsed,
     mappings,
@@ -2522,6 +2573,11 @@ nesdis_apply_mappings <- function(parsed, mappings) {
   mapped[is_missing_source == TRUE, value := NA_real_]
   mapped[,
     value := value * as.numeric(value_multiplier) + as.numeric(value_offset)
+  ]
+  mapped[
+    !is.na(round_digits),
+    value := round(value, digits = as.integer(round_digits[[1L]])),
+    by = round_digits
   ]
   mapped <- mapped[!is.na(datetime) & !is.na(value)]
   if (nrow(mapped) == 0L) {
