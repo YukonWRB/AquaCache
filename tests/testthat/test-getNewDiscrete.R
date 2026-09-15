@@ -4,10 +4,6 @@ test_that("getNewDiscrete inserts composites without updating existing samples",
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
 
-  if (aquacache_db_patch_number(con) < 60L) {
-    skip("Composite discrete results require database Patch 60.")
-  }
-
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
 

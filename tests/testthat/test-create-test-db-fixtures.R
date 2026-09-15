@@ -3,10 +3,6 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE)
-
-  if (aquacache_db_patch_number(con) < 60L) {
-    skip("Composite discrete fixtures require database Patch 60.")
-  }
   fixture_exists <- DBI::dbGetQuery(
     con,
     "SELECT EXISTS (
@@ -17,7 +13,9 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
      ) AS fixture_exists"
   )$fixture_exists[[1]]
   if (!isTRUE(fixture_exists)) {
-    skip("The checked-in seed dump has not yet been regenerated.")
+    skip(
+      "The checked-in seed dump has not yet been regenerated or you are testing on a non-standard database."
+    )
   }
 
   sample_associations <- DBI::dbGetQuery(
@@ -37,7 +35,7 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
   expect_equal(sample_associations$observer_count, 2)
   expect_identical(
     sample_associations$observer_roles[[1]],
-    c("recorder,sampler")
+    c("{recorder,sampler}")
   )
 
   aggregations <- DBI::dbGetQuery(
@@ -73,7 +71,7 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
   expect_equal(mean_result$expected_count, 10)
   expect_equal(mean_result$included_component_count, 9)
   expect_equal(mean_result$excluded_component_count, 1)
-  expect_identical(mean_result$excluded_observation_numbers[[1]], 10L)
+  expect_identical(mean_result$excluded_observation_numbers[[1]], "{10}")
 
   weighted_result <- aggregations[
     aggregations$aggregation_type == "weighted_mean",

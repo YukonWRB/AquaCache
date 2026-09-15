@@ -533,15 +533,6 @@ test_that("adjust_note inserts overlapping notes and updates by note_id", {
   con <- connect_test()
   on.exit(cleanup_postgres_session(con))
 
-  if (
-    !DBI::dbExistsTable(
-      con,
-      DBI::Id(schema = "continuous", table = "notes")
-    )
-  ) {
-    skip("Time-ranged notes require the finalized Patch 60 test fixture.")
-  }
-
   DBI::dbExecute(con, "BEGIN;")
   ts_id <- DBI::dbGetQuery(
     con,

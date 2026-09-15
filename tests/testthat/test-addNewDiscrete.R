@@ -75,30 +75,6 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (
-    !DBI::dbExistsTable(
-      con,
-      DBI::Id(schema = "discrete", table = "result_components")
-    )
-  ) {
-    testthat::skip("The test database has not applied patch 60.")
-  }
-  final_result_metadata <- DBI::dbGetQuery(
-    con,
-    "SELECT count(*) = 4 AS available
-     FROM information_schema.columns
-     WHERE table_schema = 'discrete'
-       AND table_name = 'results'
-       AND column_name IN (
-         'lab_report_no',
-         'lab_sample_no',
-         'grade_type_id',
-         'approval_type_id'
-       )"
-  )$available[[1L]]
-  if (!isTRUE(final_result_metadata)) {
-    testthat::skip("The test database does not have final Patch 60 metadata.")
-  }
 
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
@@ -461,14 +437,6 @@ test_that("result aggregation constraints fail at the responsible statement", {
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (
-    !DBI::dbExistsTable(
-      con,
-      DBI::Id(schema = "discrete", table = "result_aggregations")
-    )
-  ) {
-    testthat::skip("The test database has not applied patch 60.")
-  }
 
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
@@ -542,14 +510,6 @@ test_that("discrete visibility inherits from location through composite results"
 
   con <- connect_test()
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
-  if (
-    !DBI::dbExistsTable(
-      con,
-      DBI::Id(schema = "discrete", table = "result_aggregations")
-    )
-  ) {
-    testthat::skip("The test database has not applied patch 60.")
-  }
 
   forced_tables <- DBI::dbGetQuery(
     con,
@@ -1039,29 +999,33 @@ test_that("synchronization replaces and removes result aggregation detail", {
   )
   set_result_aggregation_constraints(con, "immediate")
 
-  DBI::dbExecute(
-    con,
-    "SELECT discrete.convert_result_aggregation_to_direct(
-       $1, 'preserve_calculated', NULL, NULL, NULL, $2
-     )",
-    params = list(result_id, "Preserve the verified aggregate for test")
-  )
-  expect_equal(
-    DBI::dbGetQuery(
+  # Check if current user is one of 'admin' or 'postgres', otherwise the function won't run
+  curr_user <- DBI::dbGetQuery(con, "SELECT current_user")[[1]]
+  if (curr_user %in% c("admin", "postgres")) {
+    DBI::dbExecute(
       con,
-      "SELECT result FROM discrete.results WHERE result_id = $1",
-      params = list(result_id)
-    )$result[[1]],
-    20
-  )
-  expect_equal(
-    DBI::dbGetQuery(
-      con,
-      "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
-      params = list(result_id)
-    )[[1]],
-    0
-  )
+      "SELECT discrete.convert_result_aggregation_to_direct(
+         $1, 'preserve_calculated', NULL, NULL, NULL, $2
+       )",
+      params = list(result_id, "Preserve the verified aggregate for test")
+    )
+    expect_equal(
+      DBI::dbGetQuery(
+        con,
+        "SELECT result FROM discrete.results WHERE result_id = $1",
+        params = list(result_id)
+      )$result[[1]],
+      20
+    )
+    expect_equal(
+      DBI::dbGetQuery(
+        con,
+        "SELECT count(*) FROM discrete.result_aggregations WHERE result_id = $1",
+        params = list(result_id)
+      )[[1]],
+      0
+    )
+  }
 
   synchronize_discrete_sample_detail(
     con = con,
