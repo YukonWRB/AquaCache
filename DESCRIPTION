@@ -36,6 +36,7 @@ Imports:
     dplyr,
     ecmwfr (>= 2.0.3),
     httr,
+    httr2,
     jsonlite,
     lubridate,
     magrittr,

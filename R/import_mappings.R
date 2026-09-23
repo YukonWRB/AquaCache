@@ -2135,6 +2135,11 @@ import_mapping_resolve_match <- function(mappings, source_match) {
   }
 
   matched <- mappings[hits]
+  # Hand-built or legacy mapping tables may not carry profile scope. Treat
+  # those rows as source-wide mappings, which rank below profile overrides.
+  if (!("profile_specific" %in% names(matched))) {
+    matched[, profile_specific := FALSE]
+  }
   data.table::setorder(
     matched,
     -profile_specific,
