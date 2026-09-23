@@ -14,7 +14,7 @@ delayedAssign(
       terra::vect(
         system.file(
           "extdata/prov_buffers/Provinces_buffered_300km.shp",
-          package = "YGwater"
+          package = "AquaCache"
         ) #This lives in the /inst folder, but because of how /inst works the path does not include /inst. Read up on this behavior in the R packages e-book.
       ),
       silent = TRUE
