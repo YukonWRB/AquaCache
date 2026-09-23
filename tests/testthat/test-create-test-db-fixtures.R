@@ -8,8 +8,8 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
     "SELECT EXISTS (
        SELECT 1
        FROM discrete.samples
-       WHERE import_source = 'synthetic_fixture'
-         AND import_source_id = 'SYN-S9'
+       WHERE source_adapter_function = 'synthetic_fixture'
+         AND external_sample_id = 'SYN-S9'
      ) AS fixture_exists"
   )$fixture_exists[[1]]
   if (!isTRUE(fixture_exists)) {
@@ -28,8 +28,8 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
      FROM discrete.samples s
      LEFT JOIN discrete.sample_qualifiers sq USING (sample_id)
      LEFT JOIN discrete.sample_observers so USING (sample_id)
-     WHERE s.import_source = 'synthetic_fixture'
-       AND s.import_source_id = 'SYN-S9'"
+     WHERE s.source_adapter_function = 'synthetic_fixture'
+       AND s.external_sample_id = 'SYN-S9'"
   )
   expect_equal(sample_associations$qualifier_count, 2)
   expect_equal(sample_associations$observer_count, 2)
@@ -58,8 +58,8 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
      FROM discrete.samples s
      JOIN discrete.result_aggregation_summary summary
        ON summary.sample_id = s.sample_id
-     WHERE s.import_source = 'synthetic_fixture'
-       AND s.import_source_id = 'SYN-S9'
+     WHERE s.source_adapter_function = 'synthetic_fixture'
+       AND s.external_sample_id = 'SYN-S9'
      ORDER BY summary.aggregation_type"
   )
   expect_identical(aggregations$aggregation_type, c("mean", "weighted_mean"))
@@ -90,12 +90,12 @@ test_that("the seed database contains complete Patch 60 discrete fixtures", {
     "SELECT
        (SELECT count(*)
         FROM discrete.samples_metadata_en
-        WHERE import_source = 'synthetic_fixture'
-          AND import_source_id = 'SYN-S9') AS sample_rows,
+        WHERE source_adapter_function = 'synthetic_fixture'
+          AND external_sample_id = 'SYN-S9') AS sample_rows,
        (SELECT count(*)
         FROM discrete.results_metadata_en
-        WHERE sample_import_source = 'synthetic_fixture'
-          AND sample_import_source_id = 'SYN-S9') AS result_rows"
+        WHERE sample_source_adapter_function = 'synthetic_fixture'
+          AND sample_external_sample_id = 'SYN-S9') AS result_rows"
   )
   expect_equal(metadata_cardinality$sample_rows, 1)
   expect_equal(metadata_cardinality$result_rows, 2)

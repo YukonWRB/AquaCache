@@ -43,7 +43,7 @@ sample series that share the same \code{EQpath}.}
 
 \item{EQsource_id}{Stable identifier for the EQWin database being imported.
 This value is combined with EQWin \code{SampleId} in
-\code{discrete.samples.import_source_id} so samples from different EQWin
+\code{discrete.samples.external_sample_id} so samples from different EQWin
 databases do not collide. Defaults to the normalized \code{EQpath} when an
 \code{EQpath} is supplied, otherwise \code{"EQWin"} for caller-managed connections.}
 

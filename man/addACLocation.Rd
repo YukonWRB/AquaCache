@@ -26,7 +26,12 @@ addACLocation(
 )
 }
 \arguments{
-\item{df}{A data.frame containing the following columns: name, name_fr, alias, location_code, latitude, longitude, share_with, location_type, note, contact, datum_id_from, datum_id_to, conversion_m, current, network, project. If this parameter is provided, all other parameters except for \code{con} must be left as their default values.}
+\item{df}{A data.frame containing the location fields. \code{datum_id_from},
+\code{datum_id_to}, \code{conversion_m}, and \code{current} are optional. When
+\code{conversion_m} is missing, \code{\link[=get_elevation]{get_elevation()}} estimates the elevation from
+\code{latitude} and \code{longitude} and the matching datum IDs are populated
+automatically. If this parameter is provided, all other parameters except
+for \code{con} must be left as their default values.}
 
 \item{name}{A character vector of the location name(s).}
 
@@ -48,13 +53,21 @@ addACLocation(
 
 \item{contact}{A character vector of the contact(s) for the location(s) (optional).}
 
-\item{datum_id_from}{A numeric vector of the datum ID(s) from which the location(s) are measured, from table 'datum_list'.}
+\item{datum_id_from}{A numeric vector of the datum ID(s) from which the
+location(s) are measured, from \code{public.datum_list}. When \code{conversion_m} is
+omitted, this is set to the Assumed Datum ID.}
 
-\item{datum_id_to}{A numeric vector of the datum ID(s) to which the location(s) are measured, from table 'datum_list'.}
+\item{datum_id_to}{A numeric vector of the datum ID(s) to which the
+location(s) are measured, from \code{public.datum_list}. When \code{conversion_m} is
+omitted, this is matched to the vertical datum returned by
+\code{\link[=get_elevation]{get_elevation()}}. A missing datum is added to \code{public.datum_list}.}
 
-\item{conversion_m}{A numeric vector of the conversion factor(s) from the datum_id_from to the datum_id_to.}
+\item{conversion_m}{A numeric vector of conversion factors from
+\code{datum_id_from} to \code{datum_id_to}. Missing values are estimated with
+\code{\link[=get_elevation]{get_elevation()}}.}
 
-\item{current}{A logical vector of whether the conversion factor(s) are current.}
+\item{current}{A logical vector indicating whether the conversion factor(s)
+are current. Missing values default to \code{TRUE}.}
 
 \item{network}{A numeric vector of the network(s) to which the location(s) belong.}
 
@@ -63,7 +76,8 @@ addACLocation(
 \item{con}{A connection to the aquacache database. Default uses \code{\link[=AquaConnect]{AquaConnect()}}. If left NULL the function will attempt to connect to the database and automatically disconnect afterwards.}
 }
 \value{
-Success/error messages and new entries added to the database.
+Invisibly, a data.frame describing the new locations and their
+datum conversions.
 }
 \description{
 Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.

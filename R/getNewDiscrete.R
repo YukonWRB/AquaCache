@@ -23,7 +23,7 @@
 #' - 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
 #' - 'owner': the numeric organization ID that owns the sample. If omitted, the
 #'   sample-series default owner is used.
-#' - 'import_source_id': a non-missing source-specific identifier used to
+#' - 'external_sample_id': a non-missing source-specific identifier used to
 #'   match the sample across runs. Together with the registered source
 #'   function, it is the database-enforced identity for a locationless sample.
 #' Optional columns are:
@@ -300,7 +300,7 @@ getNewDiscrete <- function(
         query <- paste0(
           "SELECT MAX(datetime) FROM discrete.samples WHERE location_id = ",
           loc_id,
-          " AND import_source = '",
+          " AND source_adapter_function = '",
           source_fx,
           "'"
         )
@@ -455,14 +455,14 @@ getNewDiscrete <- function(
             sample$sub_location <- NULL
             names_samp <- names(sample)
           }
-          # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
+          # Source adapters must return a stable external sample identifier.
           mandatory_samp <- c(
             "location_id",
             "media_id",
             "datetime",
             "collection_method",
             "sample_type",
-            "import_source_id"
+            "external_sample_id"
           )
           if (!all(c(mandatory_samp) %in% names_samp)) {
             # Make an error message stating which column is missing
@@ -481,7 +481,7 @@ getNewDiscrete <- function(
             next
           }
 
-          sample$import_source <- source_fx
+          sample$source_adapter_function <- source_fx
 
           # Apply default owner/contributor if not provided
           if (!("owner" %in% names_samp) || is.na(sample$owner)) {
@@ -745,15 +745,15 @@ getNewDiscrete <- function(
           # pair unique for locationless samples, where location metadata
           # cannot provide a retry key.
           if (
-            is.na(sample$import_source_id[[1]]) ||
-              !nzchar(trimws(as.character(sample$import_source_id[[1]])))
+            is.na(sample$external_sample_id[[1]]) ||
+              !nzchar(trimws(as.character(sample$external_sample_id[[1]])))
           ) {
             warning(
               "For sample_series_id ",
               sid,
               " element ",
               j,
-              " import_source_id must be non-missing and nonblank. ",
+              " external_sample_id must be non-missing and nonblank. ",
               "Skipping this source record."
             )
             next
@@ -761,8 +761,8 @@ getNewDiscrete <- function(
           if (is.na(suppressWarnings(as.integer(sample$location_id[[1]])))) {
             existing_sample <- find_locationless_import_sample(
               con = con,
-              import_source = source_fx,
-              import_source_id = sample$import_source_id
+              source_adapter_function = source_fx,
+              external_sample_id = sample$external_sample_id
             )
             if (nrow(existing_sample) == 1L) {
               # This importer is deliberately insertion-only. Return the
@@ -806,8 +806,8 @@ getNewDiscrete <- function(
               ) {
                 existing_sample <- find_locationless_import_sample(
                   con = con,
-                  import_source = source_fx,
-                  import_source_id = sample$import_source_id
+                  source_adapter_function = source_fx,
+                  external_sample_id = sample$external_sample_id
                 )
                 if (nrow(existing_sample) == 1L) {
                   # A concurrent importer won the insert race. Preserve its

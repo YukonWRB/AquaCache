@@ -55,7 +55,7 @@ the sample-series location is used.
 \item 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
 \item 'owner': the numeric organization ID that owns the sample. If omitted, the
 sample-series default owner is used.
-\item 'import_source_id': a non-missing source-specific identifier used to
+\item 'external_sample_id': a non-missing source-specific identifier used to
 match the sample across runs. Together with the registered source
 function, it is the database-enforced identity for a locationless sample.
 Optional columns are:

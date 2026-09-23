@@ -259,11 +259,12 @@ downloadECCCwq <- function(
       sample_type = sample_type,
       owner = owner_contributor,
       contributor = owner_contributor,
-      import_source_id = paste(
+      external_sample_id = paste(
         unique(subset[["SAMPLE_ID_\u00C9CHANTILLON"]]),
         collapse = ","
-      )
-      # import_source is added in by getNewDiscrete
+      ),
+      import_source_id = unique(key$import_source_id)[[1]]
+      # source_adapter_function is added by getNewDiscrete
     )
     results <- data.frame()
     for (j in seq_len(nrow(subset))) {
