@@ -456,9 +456,9 @@ link_discrete_sample_groups <- function(
 #' monitoring location.
 #'
 #' @param con An open DBI connection to an AquaCache database.
-#' @param import_source The source-adapter or import-source name stored on the
+#' @param source_adapter_function The source-adapter function stored on the
 #'   sample.
-#' @param import_source_id The source system's sample identifier. A missing or
+#' @param external_sample_id The source system's sample identifier. A missing or
 #'   empty value disables the lookup.
 #'
 #' @return A data frame containing at most one matching row from
@@ -469,13 +469,13 @@ link_discrete_sample_groups <- function(
 #' @noRd
 find_locationless_import_sample <- function(
   con,
-  import_source,
-  import_source_id
+  source_adapter_function,
+  external_sample_id
 ) {
   if (
-    is.null(import_source_id) ||
-      length(import_source_id) == 0L ||
-      is.na(import_source_id[[1]])
+    is.null(external_sample_id) ||
+      length(external_sample_id) == 0L ||
+      is.na(external_sample_id[[1]])
   ) {
     return(data.frame())
   }
@@ -484,10 +484,13 @@ find_locationless_import_sample <- function(
     "SELECT *
      FROM discrete.samples
      WHERE location_id IS NULL
-       AND import_source = $1
-       AND import_source_id = $2
+       AND source_adapter_function = $1
+       AND external_sample_id = $2
      LIMIT 1;",
-    params = list(import_source, as.character(import_source_id[[1]]))
+    params = list(
+      source_adapter_function,
+      as.character(external_sample_id[[1]])
+    )
   )
 }
 

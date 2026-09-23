@@ -59,9 +59,13 @@ least one \code{sample_groups} entry.
 \item 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
 \item 'owner': the numeric organization ID that owns the sample.
 Optional columns are:
-\item 'import_source_id': a source-specific identifier used to match automated
-imports across runs. It must be supplied with \code{import_source}; manual
-samples may omit both fields.
+\item 'source_adapter_function': the registered adapter function that supplied
+the sample.
+\item 'external_sample_id': a stable source-specific identifier used to match
+automated imports across runs. It must be supplied with
+\code{source_adapter_function}; manual samples may omit both fields.
+\item 'import_source_id': an optional integer reference to
+\code{discrete.import_sources} identifying the mapping namespace used.
 \item 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
 \item 'note': a character string with a note about the data point(s).
 \item 'no_source_update': logical; \code{TRUE} preserves the sample from later

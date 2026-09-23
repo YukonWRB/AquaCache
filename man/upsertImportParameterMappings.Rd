@@ -11,7 +11,8 @@ upsertImportParameterMappings(
   match_columns,
   source_name = source_code,
   source_description = NULL,
-  target_columns = import_mapping_default_target_columns()
+  target_columns = import_mapping_default_target_columns(),
+  profile_code = NULL
 )
 }
 \arguments{
@@ -33,6 +34,9 @@ identify the source-side result.}
 AquaCache target values. Names can include \code{parameter}, \code{result_type},
 \code{sample_fraction}, \code{result_value_type}, \code{result_speciation}, and
 \code{matrix_state}.}
+
+\item{profile_code}{Optional profile code. When supplied, mappings override
+source-wide mappings only while that profile is being used.}
 }
 \value{
 Invisibly returns the resolved mapping table that was uploaded.

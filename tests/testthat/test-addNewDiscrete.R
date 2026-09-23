@@ -36,8 +36,8 @@ test_that("addNewDiscrete inserts a new sample and results", {
   }
   sample$datetime <- max_dt + lubridate::dhours(1)
   sample <- sample[, setdiff(names(sample), "sample_id"), drop = FALSE]
-  sample$import_source <- NA_character_
-  sample$import_source_id <- NA_character_
+  sample$source_adapter_function <- NA_character_
+  sample$external_sample_id <- NA_character_
 
   results <- results_template[1, , drop = FALSE]
   results <- results[,
@@ -46,7 +46,7 @@ test_that("addNewDiscrete inserts a new sample and results", {
   ]
 
   invalid_source <- sample
-  invalid_source$import_source <- "testthat"
+  invalid_source$source_adapter_function <- "testthat"
   expect_error(
     addNewDiscrete(con, invalid_source, results),
     "must either both be supplied or both be absent"
@@ -106,8 +106,8 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
 
   sample$sample_id <- NULL
   sample$datetime <- as.POSIXct(Sys.time(), tz = "UTC") + 172800
-  sample$import_source <- NA_character_
-  sample$import_source_id <- NA_character_
+  sample$source_adapter_function <- NA_character_
+  sample$external_sample_id <- NA_character_
   results$result_id <- NULL
   results$sample_id <- NULL
   grade_type_id <- DBI::dbGetQuery(
@@ -729,8 +729,8 @@ test_that("synchronization replaces and removes result aggregation detail", {
   }
   sample$sample_id <- NULL
   sample$datetime <- as.POSIXct(Sys.time(), tz = "UTC") + 259200
-  sample$import_source <- NA_character_
-  sample$import_source_id <- NA_character_
+  sample$source_adapter_function <- NA_character_
+  sample$external_sample_id <- NA_character_
   results$result_id <- NULL
   results$sample_id <- NULL
   results$result <- 12
@@ -1120,10 +1120,11 @@ test_that("sample group helpers create and assign idempotently", {
   code <- paste0("test-group-", format(Sys.time(), "%Y%m%d%H%M%OS6"))
 
   group_types <- getSampleGroupTypes(con)
-  expect_equal(nrow(group_types), 7L)
+  expect_equal(nrow(group_types), 8L)
   expect_true(all(group_types$active))
   expect_true(all(nzchar(group_types$group_type_name_fr)))
   expect_identical(group_types$sort_order, sort(group_types$sort_order))
+  expect_true("replicate_set" %in% group_types$group_type)
 
   group_id <- createSampleGroup(
     con = con,
@@ -1256,8 +1257,8 @@ test_that("addNewDiscrete commits a locationless blank with its group", {
   sample$sub_location_id <- NA_integer_
   sample$sample_type <- blank_type$sample_type_id[[1]]
   sample$datetime <- as.POSIXct(Sys.time(), tz = "UTC") + 86400
-  sample$import_source <- "testthat"
-  sample$import_source_id <- paste0(
+  sample$source_adapter_function <- "testthat"
+  sample$external_sample_id <- paste0(
     "locationless-blank-",
     format(Sys.time(), "%Y%m%d%H%M%OS6")
   )

@@ -16,9 +16,13 @@
 #' - 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
 #' - 'owner': the numeric organization ID that owns the sample.
 #' Optional columns are:
-#' - 'import_source_id': a source-specific identifier used to match automated
-#'   imports across runs. It must be supplied with `import_source`; manual
-#'   samples may omit both fields.
+#' - 'source_adapter_function': the registered adapter function that supplied
+#'   the sample.
+#' - 'external_sample_id': a stable source-specific identifier used to match
+#'   automated imports across runs. It must be supplied with
+#'   `source_adapter_function`; manual samples may omit both fields.
+#' - 'import_source_id': an optional integer reference to
+#'   `discrete.import_sources` identifying the mapping namespace used.
 #' - 'target_datetime': a POSIXct datetime object in UTC 0 time zone, specifying an artificial datetime for the data point which can be used for data analysis or plotting purposes.
 #' - 'note': a character string with a note about the data point(s).
 #' - 'no_source_update': logical; `TRUE` preserves the sample from later
@@ -155,27 +159,27 @@ addNewDiscrete <- function(
     )
   }
 
-  source_value <- if ("import_source" %in% names(sample)) {
-    sample$import_source[[1]]
+  source_value <- if ("source_adapter_function" %in% names(sample)) {
+    sample$source_adapter_function[[1]]
   } else {
     NA_character_
   }
-  source_id_value <- if ("import_source_id" %in% names(sample)) {
-    sample$import_source_id[[1]]
+  source_id_value <- if ("external_sample_id" %in% names(sample)) {
+    sample$external_sample_id[[1]]
   } else {
     NA_character_
   }
   source_missing <- length(source_value) == 0L || is.na(source_value)
   source_id_missing <- length(source_id_value) == 0L || is.na(source_id_value)
   if (!source_missing && !nzchar(trimws(as.character(source_value)))) {
-    stop("import_source must be nonblank when supplied.")
+    stop("source_adapter_function must be nonblank when supplied.")
   }
   if (!source_id_missing && !nzchar(trimws(as.character(source_id_value)))) {
-    stop("import_source_id must be nonblank when supplied.")
+    stop("external_sample_id must be nonblank when supplied.")
   }
   if (xor(source_missing, source_id_missing)) {
     stop(
-      "import_source and import_source_id must either both be supplied or ",
+      "source_adapter_function and external_sample_id must either both be supplied or ",
       "both be absent."
     )
   }

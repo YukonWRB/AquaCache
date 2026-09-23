@@ -105,13 +105,16 @@ downloadERA5 <- function(
     hrs_text <- trimws(hrs)
     hrs_text <- sub("^c\\((.*)\\)$", "\\1", hrs_text)
     hrs_tokens <- trimws(strsplit(hrs_text, ",", fixed = TRUE)[[1]])
-    hrs <- unlist(lapply(hrs_tokens, function(token) {
-      if (grepl("^[0-9]+\\s*:\\s*[0-9]+$", token)) {
-        bounds <- as.integer(strsplit(token, ":", fixed = TRUE)[[1]])
-        return(seq.int(bounds[1], bounds[2]))
-      }
-      suppressWarnings(as.numeric(token))
-    }), use.names = FALSE)
+    hrs <- unlist(
+      lapply(hrs_tokens, function(token) {
+        if (grepl("^[0-9]+\\s*:\\s*[0-9]+$", token)) {
+          bounds <- as.integer(strsplit(token, ":", fixed = TRUE)[[1]])
+          return(seq.int(bounds[1], bounds[2]))
+        }
+        suppressWarnings(as.numeric(token))
+      }),
+      use.names = FALSE
+    )
   }
 
   # Check that 'hrs' is a numeric vector of integers between 0 and 23
@@ -216,7 +219,7 @@ downloadERA5 <- function(
   if (identical(clip_spec$type, "provinces")) {
     prov_buff <- terra::vect(system.file(
       "extdata/prov_buffers/Provinces_buffered_300km.shp",
-      package = "YGwater"
+      package = "AquaCache"
     ))
     prov_buff <- terra::project(prov_buff, "epsg:4326")
     clip <- raster_clip_spatial(clip_spec, prov_buff)
@@ -387,7 +390,8 @@ downloadERA5 <- function(
     disk_files <- list.files(data_dir, full.names = TRUE)
     candidates <- unique(c(returned_files, disk_files))
     candidates <- candidates[
-      !is.na(candidates) & nzchar(candidates) &
+      !is.na(candidates) &
+        nzchar(candidates) &
         tools::file_path_sans_ext(basename(candidates)) == request_stem &
         tolower(tools::file_ext(candidates)) %in% c("nc", "zip")
     ]
@@ -451,7 +455,9 @@ downloadERA5 <- function(
           "timed out after ",
           round(request_timeout),
           " seconds",
-          if (!is.na(last_status)) paste0(" with CDS status '", last_status, "'")
+          if (!is.na(last_status)) {
+            paste0(" with CDS status '", last_status, "'")
+          }
         )
         break
       }
@@ -543,7 +549,11 @@ downloadERA5 <- function(
           "ERA5 request '",
           request$target,
           "' is ",
-          if (is.na(status)) "pending" else paste0("in CDS status '", status, "'"),
+          if (is.na(status)) {
+            "pending"
+          } else {
+            paste0("in CDS status '", status, "'")
+          },
           " after ",
           round(as.numeric(difftime(now, started, units = "mins")), 1),
           " minute(s)."
@@ -562,13 +572,17 @@ downloadERA5 <- function(
       request$target,
       "': ",
       concise_error(last_error),
-      if (errors_used > 0L) paste0(
-        " (",
-        errors_used,
-        " transient error",
-        if (errors_used == 1L) "" else "s",
-        ")"
-      ) else "",
+      if (errors_used > 0L) {
+        paste0(
+          " (",
+          errors_used,
+          " transient error",
+          if (errors_used == 1L) "" else "s",
+          ")"
+        )
+      } else {
+        ""
+      },
       "."
     )
     NA_character_

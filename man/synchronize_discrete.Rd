@@ -26,7 +26,7 @@ synchronize_discrete(
 \item{sync_remote_false}{Controls whether to synchronize sample_series that have the \code{sync_remote} column set to FALSE in the \code{sample_series} table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!}
 
 \item{delete}{If TRUE, the function will delete located samples and/or
-results that are not found remotely when their \code{import_source} matches the
+results that are not found remotely when their \code{source_adapter_function} matches the
 selected source function. Locationless samples are not deleted
 automatically because they are not owned by one location-based sample
 series. If FALSE, no data are deleted.}
@@ -44,7 +44,7 @@ This synchronize function pulls and replaces data referenced in table 'sample_se
 \details{
 Each sample series uses the active source-adapter assignment with the lowest
 synchronization priority. Samples missing remotely are deleted only when
-their existing \code{import_source} matches the selected source function,
+their existing \code{source_adapter_function} matches the selected source function,
 protecting records imported through another route.
 
 Every source function must have an enabled discrete-domain entry in
@@ -61,7 +61,7 @@ matched canonical results; two supplied empty data frames explicitly remove
 existing aggregation detail through the administrative aggregate-to-direct
 conversion, while omission preserves it.
 Locationless remote samples are matched by their database-enforced
-\code{import_source} and \code{import_source_id} identity. Located samples retain
+\code{source_adapter_function} and \code{external_sample_id} identity. Located samples retain
 location and collection-context matching because source IDs may legitimately
 recur at different locations.
 }

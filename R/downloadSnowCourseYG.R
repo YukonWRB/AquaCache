@@ -375,7 +375,7 @@ downloadSnowCourseYG <- function(
       }
 
       sample <- data.frame(
-        import_source_id = as.character(survey$import_source_id),
+        external_sample_id = as.character(survey$import_source_id),
         target_datetime = as.POSIXct(survey$target_datetime, tz = "UTC"),
         datetime = as.POSIXct(survey$datetime, tz = "UTC"),
         note = if (length(sample_note) && nzchar(sample_note)) {

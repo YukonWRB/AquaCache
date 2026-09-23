@@ -29,7 +29,7 @@
 #'   sample series that share the same `EQpath`.
 #' @param EQsource_id Stable identifier for the EQWin database being imported.
 #'   This value is combined with EQWin `SampleId` in
-#'   `discrete.samples.import_source_id` so samples from different EQWin
+#'   `discrete.samples.external_sample_id` so samples from different EQWin
 #'   databases do not collide. Defaults to the normalized `EQpath` when an
 #'   `EQpath` is supplied, otherwise `"EQWin"` for caller-managed connections.
 #' @param tz Time zone used to interpret EQWin collection datetimes.
@@ -78,7 +78,7 @@ downloadEQWin <- function(
     EQCon <- AccessConnect(EQpath, silent = TRUE)
     on.exit(DBI::dbDisconnect(EQCon), add = TRUE)
   }
-  eqwin_import_source <- eqwin_source_identifier(EQpath, EQsource_id)
+  eqwin_source_namespace <- eqwin_source_identifier(EQpath, EQsource_id)
 
   key_source <- key
   mapping <- import_mapping_load_db(con, key)
@@ -298,11 +298,12 @@ downloadEQWin <- function(
         ),
         collection_method = defaults$collection_method,
         sample_type = sample_type_i,
-        import_source_id = paste0(
-          eqwin_import_source,
+        external_sample_id = paste0(
+          eqwin_source_namespace,
           "-",
           as.character(sample_row$SampleId[[1]])
         ),
+        import_source_id = unique(mapping$import_source_id)[[1]],
         note = eqwin_collapse_note(c(
           sample_row$SampleNo[[1]],
           paste0("EQWin SampleClass: ", sample_row$SampleClass[[1]]),

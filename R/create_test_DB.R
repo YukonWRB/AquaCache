@@ -1254,21 +1254,21 @@ create_test_db <- function(
          sample_id, location_id, sub_location_id, media_id, z, datetime,
          target_datetime, collection_method, sample_type, sample_volume_ml,
          sample_grade, sample_approval, owner,
-         contributor, sampling_org, share_with, import_source,
-         no_source_update, note, import_source_id
+         contributor, sampling_org, share_with, source_adapter_function,
+         no_source_update, note, external_sample_id, import_source_id
        ) VALUES
          (1, %d, %d, %d, 0.5, '2023-01-01 12:00+00',
           '2023-01-01 12:00+00', %d, %d, 250, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          false, 'Synthetic water quality sample 1.', 'SYN-S1'),
+          false, 'Synthetic water quality sample 1.', 'SYN-S1', NULL),
          (2, %d, %d, %d, 0.5, '2023-02-01 12:00+00',
           '2023-02-01 12:00+00', %d, %d, 250, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          false, 'Synthetic water quality sample 2.', 'SYN-S2'),
+          false, 'Synthetic water quality sample 2.', 'SYN-S2', NULL),
          (3, %d, %d, %d, 0.5, '2023-03-01 12:00+00',
           '2023-03-01 12:00+00', %d, %d, 500, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          false, 'Synthetic water quality sample 3.', 'SYN-S3')",
+          false, 'Synthetic water quality sample 3.', 'SYN-S3', NULL)",
           fake_location_id,
           fake_sub_location_id,
           media_surface,
@@ -1306,37 +1306,37 @@ create_test_db <- function(
         sprintf(
           "INSERT INTO discrete.samples (
          sample_id, location_id, sub_location_id, media_id, z, datetime,
-         target_datetime, collection_method, sample_type, linked_with,
+         target_datetime, collection_method, sample_type,
          sample_volume_ml, purge_volume_l, purge_time_min, flow_rate_l_min,
          sample_grade, sample_approval, owner,
-         contributor, sampling_org, share_with, import_source,
-         no_source_update, note, import_source_id
+         contributor, sampling_org, share_with, source_adapter_function,
+         no_source_update, note, external_sample_id, import_source_id
        ) VALUES
          (4, %d, %d, %d, 0.5, '2023-04-01 12:00+00',
-          '2023-04-01 12:00+00', %d, %d, NULL,
+          '2023-04-01 12:00+00', %d, %d,
           1000, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          false, 'Routine spring freshet surface-water chemistry sample.', 'SYN-S4'),
+          false, 'Routine spring freshet surface-water chemistry sample.', 'SYN-S4', NULL),
          (5, %d, %d, %d, 0.5, '2023-04-01 12:05+00',
-          '2023-04-01 12:00+00', %d, %d, 4,
+          '2023-04-01 12:00+00', %d, %d,
           1000, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          false, 'Field replicate paired with SYN-S4.', 'SYN-S5'),
+          false, 'Field replicate paired with SYN-S4.', 'SYN-S5', NULL),
          (6, NULL, NULL, %d, 0.5, '2023-04-01 12:10+00',
-          '2023-04-01 12:00+00', %d, %d, NULL,
+          '2023-04-01 12:00+00', %d, %d,
           500, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          true, %s, 'SYN-S6'),
+          true, %s, 'SYN-S6', NULL),
          (7, %d, %d, %d, -4.2, '2023-05-15 18:00+00',
-          '2023-05-15 18:00+00', %d, %d, NULL,
+          '2023-05-15 18:00+00', %d, %d,
           1000, 18.5, 21, 0.9, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          false, 'Pumped groundwater chemistry sample with purge metadata.', 'SYN-S7'),
+          false, 'Pumped groundwater chemistry sample with purge metadata.', 'SYN-S7', NULL),
          (8, %d, %d, %d, NULL, '2023-06-01 09:00+00',
-          '2023-06-01 09:00+00', %d, %d, NULL,
+          '2023-06-01 09:00+00', %d, %d,
           750, NULL, NULL, NULL, %d, %d,
           %d, %d, %d, ARRAY['public_reader'], 'synthetic_fixture',
-          false, 'Rain-water grab sample after a synthetic storm event.', 'SYN-S8')",
+          false, 'Rain-water grab sample after a synthetic storm event.', 'SYN-S8', NULL)",
           fake_location_id,
           fake_sub_location_id,
           media_surface,
@@ -1444,6 +1444,52 @@ create_test_db <- function(
           sample_group_id,
           sample_group_id,
           sample_group_id
+        )
+      )
+
+      replicate_group_id <- DBI::dbGetQuery(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.sample_groups (
+               group_type,
+               group_code,
+               group_name,
+               start_datetime,
+               end_datetime,
+               owner,
+               contributor,
+               note,
+               share_with
+             ) VALUES (
+               'replicate_set',
+               'SYN-R1',
+               'Synthetic field replicate set',
+               '2023-04-01 12:00+00',
+               '2023-04-01 12:05+00',
+               %d,
+               %d,
+               'Groups the primary routine sample and its field replicate.',
+               ARRAY['public_reader']
+             )
+             RETURNING sample_group_id",
+          owner_org,
+          contributor_org
+        )
+      )$sample_group_id[[1]]
+
+      DBI::dbExecute(
+        test_con,
+        sprintf(
+          "INSERT INTO discrete.sample_group_members (
+               sample_group_id,
+               sample_id,
+               sequence_in_group,
+               note
+             ) VALUES
+               (%d, 4, 1, 'Primary routine sample.'),
+               (%d, 5, 2, 'Field replicate.');",
+          replicate_group_id,
+          replicate_group_id
         )
       )
     }
@@ -1701,14 +1747,15 @@ create_test_db <- function(
              sample_id, location_id, sub_location_id, media_id, datetime,
              target_datetime, collection_method, sample_type, sample_grade,
              sample_approval, owner, contributor, sampling_org, share_with,
-             import_source, no_source_update, note, import_source_id
+             source_adapter_function, no_source_update, note,
+             external_sample_id, import_source_id
            ) VALUES (
              9, %d, %d, %d, '2023-03-15 15:00+00',
              '2023-03-15 15:00+00', %d, %d, %d,
              %d, %d, %d, %d, ARRAY['public_reader'],
              'synthetic_fixture', false,
              'Synthetic snow survey with ten SWE component observations.',
-             'SYN-S9'
+             'SYN-S9', NULL
            )",
           fake_location_id,
           fake_sub_location_id,

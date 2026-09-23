@@ -2,7 +2,7 @@
 #'
 #' Adds any source-provided sample-group memberships and updates mutable sample
 #' columns whose remote values differ from the database. Local visibility and
-#' source ownership are protected: `share_with` and `import_source` are never
+#' source ownership are protected: `share_with` and `source_adapter_function` are never
 #' changed by this helper.
 #'
 #' The operation participates in an existing transaction or opens and manages
@@ -66,7 +66,7 @@ synchronize_discrete_sample_metadata <- function(
       for (column in intersect(names(remote_sample), valid_sample_names)) {
         # Synchronization must not change local visibility or reassign a
         # sample to a different source adapter.
-        if (column %in% c("share_with", "import_source")) {
+        if (column %in% c("share_with", "source_adapter_function")) {
           next
         }
 
@@ -383,7 +383,7 @@ synchronize_discrete_sample_detail <- function(
                 },
                 paste0(
                   "Incoming sample detail no longer aggregates this result ",
-                  "(synchronize_discrete_sample_detail, import_source ",
+                  "(synchronize_discrete_sample_detail, source_adapter_function ",
                   "sample_id ",
                   sample_id,
                   ")."
@@ -450,7 +450,7 @@ synchronize_discrete_sample_detail <- function(
 #' @details
 #' Each sample series uses the active source-adapter assignment with the lowest
 #' synchronization priority. Samples missing remotely are deleted only when
-#' their existing `import_source` matches the selected source function,
+#' their existing `source_adapter_function` matches the selected source function,
 #' protecting records imported through another route.
 #'
 #' Every source function must have an enabled discrete-domain entry in
@@ -467,7 +467,7 @@ synchronize_discrete_sample_detail <- function(
 #' existing aggregation detail through the administrative aggregate-to-direct
 #' conversion, while omission preserves it.
 #' Locationless remote samples are matched by their database-enforced
-#' `import_source` and `import_source_id` identity. Located samples retain
+#' `source_adapter_function` and `external_sample_id` identity. Located samples retain
 #' location and collection-context matching because source IDs may legitimately
 #' recur at different locations.
 #'
@@ -477,7 +477,7 @@ synchronize_discrete_sample_detail <- function(
 #' @param active Sets behavior for checking sample_series_ids or not. If set to 'default', the function will look to the column 'active' in the 'sample_series_id' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and check all sample_series_id
 #' @param sync_remote_false Controls whether to synchronize sample_series that have the `sync_remote` column set to FALSE in the `sample_series` table. Usually if this column is set to FALSE it means that the series should not be synchronized, so use with caution!
 #' @param delete If TRUE, the function will delete located samples and/or
-#'   results that are not found remotely when their `import_source` matches the
+#'   results that are not found remotely when their `source_adapter_function` matches the
 #'   selected source function. Locationless samples are not deleted
 #'   automatically because they are not owned by one location-based sample
 #'   series. If FALSE, no data are deleted.
@@ -640,14 +640,8 @@ synchronize_discrete <- function(
     )
   }
 
-  valid_sample_names <- DBI::dbGetQuery(
-    con,
-    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'samples';"
-  )[, 1]
-  valid_result_names <- DBI::dbGetQuery(
-    con,
-    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'discrete' AND table_name = 'results';"
-  )[, 1]
+  valid_sample_names <- DBI::dbListFields(con, DBI::Id(schema = "discrete", table = "samples"))
+  valid_result_names <- DBI::dbListFields(con, DBI::Id(schema = "discrete", table = "results"))
 
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
@@ -852,18 +846,18 @@ synchronize_discrete <- function(
               }
               names_inRemote_samp <- names(inRemote_sample)
             }
-            inRemote_sample$import_source <- source_fx
+            inRemote_sample$source_adapter_function <- source_fx
             names_inRemote_samp <- names(inRemote_sample)
             if (
-              !("import_source_id" %in% names_inRemote_samp) ||
-                is.na(inRemote_sample$import_source_id[[1]]) ||
+              !("external_sample_id" %in% names_inRemote_samp) ||
+                is.na(inRemote_sample$external_sample_id[[1]]) ||
                 !nzchar(trimws(as.character(
-                  inRemote_sample$import_source_id[[1]]
+                  inRemote_sample$external_sample_id[[1]]
                 )))
             ) {
               warning(
                 "Every source sample must have a non-missing, nonblank ",
-                "import_source_id."
+                "external_sample_id."
               )
               next
             }
@@ -901,7 +895,7 @@ synchronize_discrete <- function(
                       inRemote_sample$sample_type,
                       " AND collection_method = ",
                       inRemote_sample$collection_method,
-                      " AND import_source = '",
+                      " AND source_adapter_function = '",
                       source_fx,
                       "' AND no_source_update IS FALSE;"
                     )
@@ -934,7 +928,7 @@ synchronize_discrete <- function(
                       inRemote_sample$sample_type,
                       " AND collection_method = ",
                       inRemote_sample$collection_method,
-                      " AND import_source = '",
+                      " AND source_adapter_function = '",
                       source_fx,
                       "' AND no_source_update IS FALSE;"
                     )
@@ -967,7 +961,7 @@ synchronize_discrete <- function(
                       inRemote_sample$sample_type,
                       " AND collection_method = ",
                       inRemote_sample$collection_method,
-                      " AND import_source = '",
+                      " AND source_adapter_function = '",
                       source_fx,
                       "' AND no_source_update IS FALSE;"
                     )
@@ -1038,8 +1032,8 @@ synchronize_discrete <- function(
             if (is.na(remote_location_id)) {
               inDB_sample <- find_locationless_import_sample(
                 con = con,
-                import_source = source_fx,
-                import_source_id = inRemote_sample$import_source_id
+                source_adapter_function = source_fx,
+                external_sample_id = inRemote_sample$external_sample_id
               )
             } else {
               inDB_sample <- DBI::dbGetQuery(
@@ -1076,7 +1070,7 @@ synchronize_discrete <- function(
               nrow(inDB_sample) == 1L &&
                 !is.na(remote_location_id) &&
                 !isTRUE(
-                  as.character(inDB_sample$import_source[[1]]) ==
+                  as.character(inDB_sample$source_adapter_function[[1]]) ==
                     as.character(source_fx)
                 )
             ) {
@@ -1086,11 +1080,11 @@ synchronize_discrete <- function(
                 " the remote sample matches the unique location context of ",
                 "sample_id ",
                 inDB_sample$sample_id[[1]],
-                ", but that sample belongs to import_source ",
-                if (is.na(inDB_sample$import_source[[1]])) {
+                ", but that sample belongs to source_adapter_function ",
+                if (is.na(inDB_sample$source_adapter_function[[1]])) {
                   "NULL"
                 } else {
-                  shQuote(as.character(inDB_sample$import_source[[1]]))
+                  shQuote(as.character(inDB_sample$source_adapter_function[[1]]))
                 },
                 " rather than ",
                 shQuote(as.character(source_fx)),
@@ -1562,14 +1556,14 @@ synchronize_discrete <- function(
                 names_inRemote_samp <- names(inRemote_sample)
               }
 
-              # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
+              # Source adapters must return a stable external sample identifier.
               mandatory_samp <- c(
                 "location_id",
                 "media_id",
                 "datetime",
                 "collection_method",
                 "sample_type",
-                "import_source_id"
+                "external_sample_id"
               )
               if (!all(c(mandatory_samp) %in% names_inRemote_samp)) {
                 # Make an error message stating which column is missing
@@ -1848,8 +1842,8 @@ synchronize_discrete <- function(
                   if (is.na(inRemote_sample$location_id[[1]])) {
                     existing_sample <- find_locationless_import_sample(
                       con = con,
-                      import_source = source_fx,
-                      import_source_id = inRemote_sample$import_source_id
+                      source_adapter_function = source_fx,
+                      external_sample_id = inRemote_sample$external_sample_id
                     )
                     if (nrow(existing_sample) == 1L) {
                       link_discrete_sample_groups(

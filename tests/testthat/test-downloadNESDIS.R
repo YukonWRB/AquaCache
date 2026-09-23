@@ -137,6 +137,71 @@ test_that("SHEF observation timestamps can be floored to the hour", {
   )
 })
 
+test_that("Haines Pass SHEF fields reproduce RWDM values", {
+  line <- paste(
+    make_lrgs_shef_line(
+      "CD702374",
+      timestamp = "26252020220",
+      body = paste0(
+        ":CU 02 #60 8.0",
+        ":US 02 #60 14.7",
+        ":PP 02 #60 0.254",
+        ":PC 02 #60 575.72"
+      )
+    ),
+    make_lrgs_shef_line(
+      "CD702374",
+      timestamp = "26252030220",
+      body = paste0(
+        ":CU 02 #60 7.8",
+        ":US 02 #60 11.4",
+        ":PP 02 #60 2.032",
+        ":PC 02 #60 578.22"
+      )
+    ),
+    sep = "\n"
+  )
+  parsed <- AquaCache:::nesdis_parse_dispatch(
+    line,
+    "CD702374",
+    "SHEF",
+    route_config = list(
+      parser_config = list(timestamp_floor_seconds = 60 * 60)
+    )
+  )
+  mappings <- data.table::data.table(
+    transmission_mapping_id = 1:4,
+    transmission_route_id = 1L,
+    source_field = c("CU", "US", "PP", "PC"),
+    timeseries_id = 1:4,
+    value_multiplier = 1,
+    value_offset = 0,
+    missing_values = "[]",
+    mapping_config = c(
+      "{}",
+      "{}",
+      '{"round_digits":1}',
+      paste0(
+        '{"difference_seconds":3600,"negative_difference_value":0,',
+        '"round_digits":1}'
+      )
+    )
+  )
+
+  mapped <- AquaCache:::nesdis_apply_mappings(parsed, mappings)
+
+  expect_equal(
+    mapped[
+      datetime == as.POSIXct("2026-09-09 03:00:00", tz = "UTC")
+    ][order(timeseries_id), value],
+    c(7.8, 11.4, 2.0, 2.5)
+  )
+  expect_equal(
+    mapped[timeseries_id == 4L, datetime],
+    as.POSIXct("2026-09-09 03:00:00", tz = "UTC")
+  )
+})
+
 test_that("McMaster underscore fields are preserved and independently mapped", {
   line <- make_lrgs_shef_line(
     "47011656",
@@ -514,6 +579,111 @@ test_that("mapping configuration can round transformed values", {
   mapped <- AquaCache:::nesdis_apply_mappings(parsed, mappings)
 
   expect_equal(mapped$value, 0.1)
+})
+
+test_that("cumulative mappings require the configured interval and handle resets", {
+  parsed <- data.table::data.table(
+    source_field = "PC",
+    datetime = as.POSIXct(
+      c(
+        "2026-09-11 00:00:00",
+        "2026-09-11 01:00:00",
+        "2026-09-11 03:00:00",
+        "2026-09-11 04:00:00"
+      ),
+      tz = "UTC"
+    ),
+    raw_value = c("10", "12.52", "14", "1"),
+    value = c(10, 12.52, 14, 1)
+  )
+  mappings <- data.table::data.table(
+    transmission_mapping_id = 1L,
+    transmission_route_id = 1L,
+    source_field = "PC",
+    timeseries_id = 10L,
+    value_multiplier = 1,
+    value_offset = 0,
+    missing_values = "[]",
+    mapping_config = paste0(
+      '{"difference_seconds":3600,"negative_difference_value":0,',
+      '"round_digits":1}'
+    )
+  )
+
+  mapped <- AquaCache:::nesdis_apply_mappings(parsed, mappings)
+
+  expect_equal(mapped$value, c(2.5, 0))
+  expect_equal(
+    mapped$datetime,
+    as.POSIXct(
+      c("2026-09-11 01:00:00", "2026-09-11 04:00:00"),
+      tz = "UTC"
+    )
+  )
+})
+
+test_that("cumulative adapter mappings fetch lookback but return requested rows", {
+  recorded_since <- as.POSIXct(NA, tz = "UTC")
+  route <- data.table::data.table(
+    transmission_route_id = 101L,
+    transmission_setup_id = 11L,
+    message_format = "CUSTOM",
+    route_config = "{}",
+    route_name = "cumulative route",
+    platform_identifier = "CD702374",
+    start_datetime_setup = as.POSIXct("2020-01-01", tz = "UTC"),
+    end_datetime_setup = as.POSIXct(NA, tz = "UTC"),
+    location_id = 1L
+  )
+  mapping <- data.table::data.table(
+    transmission_mapping_id = 1L,
+    transmission_route_id = 101L,
+    source_field = "PC",
+    timeseries_id = 9001L,
+    value_multiplier = 1,
+    value_offset = 0,
+    missing_values = "[]",
+    mapping_config = '{"difference_seconds":3600,"round_digits":1}'
+  )
+  custom <- function(...) {
+    data.frame(
+      source_field = "PC",
+      datetime = as.POSIXct(
+        c("2026-09-09 02:00:00", "2026-09-09 03:00:00"),
+        tz = "UTC"
+      ),
+      raw_value = c("575.72", "578.22"),
+      value = c(575.72, 578.22)
+    )
+  }
+  local_mocked_bindings(
+    nesdis_get_routes = function(...) route,
+    nesdis_get_mappings = function(...) mapping,
+    nesdis_get_cursors = function(...) {
+      data.table::data.table(
+        transmission_route_id = integer(),
+        last_query_until = as.POSIXct(character(), tz = "UTC")
+      )
+    },
+    nesdis_record_import_run = function(route, ...) {
+      recorded_since <<- route$query_since
+      5005
+    },
+    .package = "AquaCache"
+  )
+
+  result <- downloadNESDIS(
+    timeseries_id = 9001L,
+    start_datetime = as.POSIXct("2026-09-09 03:00:00", tz = "UTC"),
+    end_datetime = as.POSIXct("2026-09-09 04:00:00", tz = "UTC"),
+    con = structure(list(), class = "mock_con"),
+    raw_messages = list(CD702374 = "ignored"),
+    parser = custom
+  )
+
+  expect_equal(recorded_since, as.POSIXct("2026-09-09 02:00:00", tz = "UTC"))
+  expect_equal(result$datetime, as.POSIXct("2026-09-09 03:00:00", tz = "UTC"))
+  expect_equal(result$value, 2.5)
 })
 
 test_that("unsupported formats fail with an extension instruction", {

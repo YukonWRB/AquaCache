@@ -163,6 +163,11 @@ retained in \code{raw_value} and receive a missing numeric \code{value}; AquaCac
 not apply rwdm-style range clamping. A field mapping can set
 \code{mapping_config.round_digits} to a whole number from 0 through 15 when the
 canonical timeseries stores a rounded form of the transmitted value; this is
-applied after the mapping's multiplier and offset.
+applied after the mapping's multiplier and offset. For a cumulative field,
+\code{mapping_config.difference_seconds} converts consecutive counter readings to
+an increment only when they are separated by exactly that many seconds. The
+importer automatically extends the retrieval window by the same interval.
+\code{mapping_config.negative_difference_value} can replace negative increments
+caused by a counter reset; without it, negative increments are discarded.
 }
 }

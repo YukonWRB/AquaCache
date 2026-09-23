@@ -81,8 +81,8 @@ test_that("getNewDiscrete inserts composites without updating existing samples",
     sample_type = ids$sample_type,
     owner = ids$owner,
     note = "Original existing sample",
-    import_source = "downloadECCCwq",
-    import_source_id = existing_source_id
+    source_adapter_function = "downloadECCCwq",
+    external_sample_id = existing_source_id
   )
   direct_result <- data.frame(
     result_type = ids$result_type,
@@ -120,11 +120,11 @@ test_that("getNewDiscrete inserts composites without updating existing samples",
   )
   changed_existing_sample <- sample_row
   changed_existing_sample$note <- "Source attempted to replace existing data"
-  changed_existing_sample$import_source <- NULL
+  changed_existing_sample$source_adapter_function <- NULL
   new_sample <- changed_existing_sample
   new_sample$datetime <- new_sample$datetime + 60
   new_sample$note <- "New composite sample"
-  new_sample$import_source_id <- new_source_id
+  new_sample$external_sample_id <- new_source_id
 
   source_records <- list(
     list(

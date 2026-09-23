@@ -336,7 +336,7 @@ run_snow_component_migration <- function(
        )::integer AS liquid_results_to_correct
      FROM discrete.samples s
      LEFT JOIN discrete.results r USING (sample_id)
-     WHERE s.import_source = 'downloadSnowCourseYG'
+     WHERE s.source_adapter_function = 'downloadSnowCourseYG'
        AND s.location_id IN (",
       location_ids,
       ")"
@@ -371,7 +371,7 @@ run_snow_component_migration <- function(
        AND NOT solid.no_source_update
        AND NOT liquid.no_source_update
        AND NOT s.no_source_update
-       AND s.import_source = 'downloadSnowCourseYG'
+       AND s.source_adapter_function = 'downloadSnowCourseYG'
        AND s.location_id IN (",
       location_ids,
       ")
@@ -380,7 +380,7 @@ run_snow_component_migration <- function(
          WHERE ra.result_id = solid.result_id
        )
        AND NOT EXISTS (
-         SELECT 1 FROM discrete.import_upload_rows iur
+         SELECT 1 FROM discrete.import_run_rows iur
          WHERE iur.result_id = solid.result_id
        )"
     )
@@ -449,7 +449,7 @@ run_snow_component_migration <- function(
       adapter_records,
       function(record) {
         identical(
-          as.character(record$sample$import_source_id[[1L]]),
+          as.character(record$sample$external_sample_id[[1L]]),
           as.character(latest$survey_id)
         )
       },
@@ -542,7 +542,7 @@ run_snow_component_migration <- function(
            AND NOT solid.no_source_update
            AND NOT liquid.no_source_update
            AND NOT s.no_source_update
-           AND s.import_source = 'downloadSnowCourseYG'
+           AND s.source_adapter_function = 'downloadSnowCourseYG'
            AND s.location_id = $3
            AND liquid.parameter_id = solid.parameter_id
            AND liquid.result_type = solid.result_type
@@ -562,7 +562,7 @@ run_snow_component_migration <- function(
              WHERE ra.result_id = solid.result_id
            )
            AND NOT EXISTS (
-             SELECT 1 FROM discrete.import_upload_rows iur
+             SELECT 1 FROM discrete.import_run_rows iur
              WHERE iur.result_id = solid.result_id
            )",
           params = list(solid_id, liquid_id, current$location_id)
@@ -576,7 +576,7 @@ run_snow_component_migration <- function(
            AND r.matrix_state_id = $2
            AND NOT r.no_source_update
            AND NOT s.no_source_update
-           AND s.import_source = 'downloadSnowCourseYG'
+           AND s.source_adapter_function = 'downloadSnowCourseYG'
            AND s.location_id = $3",
           params = list(solid_id, liquid_id, current$location_id)
         )
@@ -659,7 +659,7 @@ run_snow_component_migration <- function(
           "DELETE FROM discrete.results direct
          USING discrete.samples s
          WHERE direct.sample_id = s.sample_id
-           AND s.import_source = 'downloadSnowCourseYG'
+           AND s.source_adapter_function = 'downloadSnowCourseYG'
            AND s.location_id IN (",
           location_ids,
           ")
@@ -682,7 +682,7 @@ run_snow_component_migration <- function(
                AND replacement.matrix_state_id = direct.matrix_state_id
            )
            AND NOT EXISTS (
-             SELECT 1 FROM discrete.import_upload_rows iur
+             SELECT 1 FROM discrete.import_run_rows iur
              WHERE iur.result_id = direct.result_id
            )"
         )
@@ -703,12 +703,12 @@ run_snow_component_migration <- function(
   remaining_samples <- as.data.table(dbGetQuery(
     aquacache,
     paste0(
-      "SELECT DISTINCT s.sample_id, s.import_source_id, s.datetime,
+      "SELECT DISTINCT s.sample_id, s.external_sample_id, s.datetime,
             s.location_id, s.media_id
      FROM discrete.samples s
      JOIN discrete.results r USING (sample_id)
      LEFT JOIN discrete.result_aggregations ra USING (result_id)
-     WHERE s.import_source = 'downloadSnowCourseYG'
+     WHERE s.source_adapter_function = 'downloadSnowCourseYG'
        AND s.location_id IN (",
       location_ids,
       ")
@@ -757,8 +757,8 @@ run_snow_component_migration <- function(
           records,
           function(record) {
             identical(
-              as.character(record$sample$import_source_id[[1L]]),
-              as.character(existing_sample$import_source_id)
+              as.character(record$sample$external_sample_id[[1L]]),
+              as.character(existing_sample$external_sample_id)
             )
           },
           logical(1)
@@ -766,8 +766,8 @@ run_snow_component_migration <- function(
         if (length(record_index) == 1L) {
           if (!is.null(matched_record)) {
             stop(
-              "More than one snow adapter returned import_source_id ",
-              existing_sample$import_source_id,
+              "More than one snow adapter returned external_sample_id ",
+              existing_sample$external_sample_id,
               " for sample_id ",
               existing_sample$sample_id,
               "."
@@ -778,8 +778,8 @@ run_snow_component_migration <- function(
       }
       if (is.null(matched_record)) {
         stop(
-          "No configured snow adapter returned import_source_id ",
-          existing_sample$import_source_id,
+          "No configured snow adapter returned external_sample_id ",
+          existing_sample$external_sample_id,
           " for sample_id ",
           existing_sample$sample_id,
           "."
@@ -898,7 +898,7 @@ run_snow_component_migration <- function(
      LEFT JOIN discrete.result_aggregations ra USING (result_id)
      LEFT JOIN discrete.result_components rc USING (result_id)
      LEFT JOIN discrete.result_aggregation_summary summary USING (result_id)
-     WHERE s.import_source = 'downloadSnowCourseYG'
+     WHERE s.source_adapter_function = 'downloadSnowCourseYG'
        AND s.location_id IN (",
       location_ids,
       ")"
