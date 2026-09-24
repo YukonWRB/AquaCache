@@ -1,6 +1,6 @@
 Package: AquaCache
 Title: Hydrometeorological database creation and maintenance
-Version: 2.8.6
+Version: 2.8.7
 Authors@R: c(
     person("Ghislain", "de Laplante", , email = "ghislain.delaplante@yukon.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5093-9185")),
@@ -25,6 +25,8 @@ Description: Set of functions for the ongoing maintenance of
     Disparate data sources are handled via import scripts and function arguments specified for each
     timeseries/sample series/raster series/image series, allowing for great flexibility.
 License: AGPL (>= 3) + file LICENSE
+URL: https://github.com/YukonWRB/AquaCache
+BugReports: https://github.com/YukonWRB/AquaCache/issues
 Depends: 
     R (>= 4.2.0)
 Imports:
