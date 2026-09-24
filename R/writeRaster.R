@@ -1,3 +1,62 @@
+# Determine a deterministic PostGIS raster tile layout.
+#
+# @param raster A terra SpatRaster.
+# @param max_tile_size Maximum automatic tile dimensions in pixels.
+# @return A list containing block counts, tile dimensions, and total tile count.
+# @noRd
+raster_tile_layout <- function(raster, max_tile_size = 512L) {
+  raster_dimensions <- c(
+    columns = terra::ncol(raster),
+    rows = terra::nrow(raster)
+  )
+
+  if (
+    length(max_tile_size) != 1L ||
+      !is.numeric(max_tile_size) ||
+      is.na(max_tile_size) ||
+      !is.finite(max_tile_size) ||
+      max_tile_size <= 0 ||
+      max_tile_size != as.integer(max_tile_size)
+  ) {
+    cli::cli_abort("max_tile_size must be one positive integer.")
+  }
+  max_tile_size <- as.integer(max_tile_size)
+
+  blocks <- pmin(
+    as.integer(ceiling(raster_dimensions / max_tile_size)),
+    raster_dimensions
+  )
+  names(blocks) <- names(raster_dimensions)
+  tile_dimensions <- ceiling(raster_dimensions / blocks)
+  tile_ranges <- Map(
+    function(dimension, block_count) {
+      lengths <- rep.int(dimension %/% block_count, block_count)
+      remainder <- dimension %% block_count
+      if (remainder > 0L) {
+        lengths[seq_len(remainder)] <- lengths[seq_len(remainder)] + 1L
+      }
+      starts <- cumsum(c(1L, utils::head(lengths, -1L)))
+
+      list(row = starts, nrows = lengths, n = block_count)
+    },
+    raster_dimensions,
+    blocks
+  )
+  tile_option <- if (prod(blocks) > 1L) {
+    paste0(tile_dimensions, collapse = "x")
+  } else {
+    NULL
+  }
+
+  list(
+    blocks = blocks,
+    tile_dimensions = tile_dimensions,
+    tile_count = prod(blocks),
+    tile_ranges = tile_ranges,
+    tile_option = tile_option
+  )
+}
+
 #' Write raster to PostGIS database (psql version)
 #'
 #' @description
@@ -15,11 +74,11 @@
 #' "band_names", which will be restored in R when imported with the function
 #' \code{\link[rpostgis]{pgGetRast}}.
 #'
-#' If \code{blocks = NULL}, the raster is uploaded as a single tile. When a
-#' 1- or 2-length integer vector is supplied, it represents the desired number
-#' of tiles along the X and Y axes; the raster will be uploaded in tiles sized
-#' \code{ceiling(ncol(raster) / blocks[1])} by \code{ceiling(nrow(raster) / blocks[2])}
-#' pixels. Fewer, larger tiles generally result in faster uploads and downloads.
+#' Rasters are split automatically so that tiles are no larger than 512 by 512
+#' pixels. Smaller rasters remain in a single tile. This deterministic layout is
+#' used by both the `raster2pgsql` and R-only writers. Fewer, larger tiles
+#' generally result in faster complete-raster uploads and downloads, while
+#' smaller tiles make spatial subsets more selective.
 #' Each tile is inserted as a brand-new row, so previously stored rasters remain
 #' untouched regardless of how much data is already present in the table. PostGIS
 #' rasters do not need to share a common tiling scheme, so older uploads and new
@@ -36,7 +95,6 @@
 #' @param raster A terra \code{SpatRaster}.
 #' @param rast_table A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{c("schema","table")}).
 #' @param bit.depth The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).
-#' @param blocks Optional desired number of blocks (tiles) to split the raster into in the resulting PostGIS table. This should be specified as a one or two-length (columns, rows) integer vector. See also 'Details'.
 #' @param constraints Whether to reset constraints. Will drop all constraints except for SRID.
 #'
 #' @export
@@ -48,7 +106,6 @@ writeRaster <- function(
   raster,
   rast_table = c("spatial", "rasters"),
   bit.depth = NULL,
-  blocks = NULL,
   constraints = FALSE
 ) {
   restore_spatial_env <- unset_postgres_spatial_env()
@@ -89,7 +146,6 @@ writeRaster <- function(
       con = con,
       raster = raster,
       rast_table = rast_table,
-      blocks = blocks,
       bit.depth = bit.depth,
       constraints = FALSE
     )
@@ -273,24 +329,8 @@ writeRaster <- function(
   r1 <- raster
 
   # Determine tiling strategy -------------------------------------------------
-  tile_cols <- terra::ncol(r1)
-  tile_rows <- terra::nrow(r1)
-  tile_option <- NULL
-  if (!is.null(blocks)) {
-    blocks <- as.integer(blocks)
-    if (any(is.na(blocks)) || length(blocks) > 2) {
-      cli::cli_abort("blocks must be a 1- or 2-length integer vector.")
-    }
-    if (any(blocks <= 0)) {
-      cli::cli_abort("Invalid number of blocks (must be > 0).")
-    }
-    if (length(blocks) == 1) {
-      blocks <- rep(blocks, 2)
-    }
-    tile_cols <- max(1L, ceiling(terra::ncol(r1) / blocks[1]))
-    tile_rows <- max(1L, ceiling(terra::nrow(r1) / blocks[2]))
-    tile_option <- paste0(tile_cols, "x", tile_rows)
-  }
+  tile_layout <- raster_tile_layout(r1)
+  tile_option <- tile_layout$tile_option
 
   if (is.null(tile_option)) {
     message(
@@ -302,7 +342,9 @@ writeRaster <- function(
     message(
       "Uploading ",
       terra::nlyr(r1),
-      " band(s) as PostGIS raster tiles sized ",
+      " band(s) as ",
+      tile_layout$tile_count,
+      " PostGIS raster tiles sized up to ",
       tile_option,
       " pixels"
     )

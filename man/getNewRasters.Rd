@@ -20,7 +20,7 @@ getNewRasters(
 
 \item{keep_forecasts}{Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'}
 
-\item{active}{Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.}
+\item{active}{Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all raster series will be fetched regardless of the 'active' column.}
 
 \item{start_datetime}{A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with \code{replace = TRUE}, could be used to replace rasters from a specific datetime to \code{end_datetime}. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Existing forecast series continue from \code{last_issue}; this value is used only to initialize a forecast series that has no issue metadata yet.}
 
@@ -31,6 +31,9 @@ A character vector of raster series IDs that appended at least one
 raster. If individual rasters fail, processing continues, a detailed
 warning is emitted after all series have been processed, and the returned
 vector has an \code{append_errors} attribute containing the failure details.
+For reanalysis series, later rasters in the same series are not attempted
+after an append failure, preventing the series endpoint from advancing
+past missing data.
 }
 \description{
 Retrieves rasters using the active assignment with the lowest fetch priority

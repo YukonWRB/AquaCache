@@ -95,7 +95,7 @@ If the user does not have write privileges to the required tables then an error 
 5.  CHECK and re-check that your patch works as intended and that ALL of the steps in the template script have been followed.
 6.  ENSURE that your patch can be applied when called from function AquaConnect().
 7.  COMMUNICATE with other collaborators to ensure that they are aware of the changes you have made.
-8.  ENSURE that other packages that depend on the database aren't adversely affected, and if they are, suggest or make changes to these packages for compatibility. At present this is limited to the *YGwater* and *WRBcalibrates* packages.
+8.  ENSURE that other packages that depend on the database aren't adversely affected, and if they are, suggest or make changes to these packages for compatibility. At present this is limited to the *YGwater* package.
 9.  Write down what you did in the NEWS.md file.
 
 # Package usage information

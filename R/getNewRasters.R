@@ -12,13 +12,16 @@
 #' @param raster_series_ids A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.
 #' @param con A connection to the database. Default is NULL, which will use the package default connection settings and close the connection afterwards.
 #' @param keep_forecasts Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'
-#' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all image series will be fetched regardless of the 'active' column.
+#' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all raster series will be fetched regardless of the 'active' column.
 #' @param start_datetime A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with `replace = TRUE`, could be used to replace rasters from a specific datetime to `end_datetime`. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Existing forecast series continue from `last_issue`; this value is used only to initialize a forecast series that has no issue metadata yet.
 #' @param end_datetime An end datetime to fetch rasters to. By default, fetches to the current time, however this parameter is provided for flexibility. If combined with `replace = TRUE` (Warning! parameter not implemented yet), could be used to replace rasters from `start_datetime` to a specific datetime. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Only used for reanalysis rasters!
 #' @return A character vector of raster series IDs that appended at least one
 #'   raster. If individual rasters fail, processing continues, a detailed
 #'   warning is emitted after all series have been processed, and the returned
 #'   vector has an `append_errors` attribute containing the failure details.
+#'   For reanalysis series, later rasters in the same series are not attempted
+#'   after an append failure, preventing the series endpoint from advancing
+#'   past missing data.
 #' @export
 
 getNewRasters <- function(
@@ -203,16 +206,20 @@ getNewRasters <- function(
     start_datetime_i <- start_datetime
     if (type == "reanalysis") {
       # Reanalysis data may have preliminary rasters that should be replaced when final versions are produced.
-      prelim <- DBI::dbGetQuery(
-        con,
-        paste0(
-          "SELECT min(valid_to) FROM spatial.rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '",
-          meta_ids[i, "end_datetime"] - 60 * 60 * 24 * 30,
-          "' AND raster_series_id = ",
-          id,
-          ";"
-        )
-      )[1, 1] # searches for rasters labelled 'prelim' within the last 30 days. HRDPA filters on product end times, so resume immediately before valid_to.
+      if (is.na(meta_ids[i, "end_datetime"])) {
+        prelim <- NA
+      } else {
+        prelim <- DBI::dbGetQuery(
+          con,
+          paste0(
+            "SELECT min(valid_to) FROM spatial.rasters_reference WHERE flag = 'PRELIMINARY' AND valid_from > '",
+            meta_ids[i, "end_datetime"] - 60 * 60 * 24 * 30,
+            "' AND raster_series_id = ",
+            id,
+            ";"
+          )
+        )[1, 1] # searches for rasters labelled 'prelim' within the last 30 days. HRDPA filters on product end times, so resume immediately before valid_to.
+      }
       if (!is.na(prelim)) {
         if (!is.null(end_datetime)) {
           if (
@@ -227,6 +234,7 @@ getNewRasters <- function(
           next_instant <- prelim - 1 # one second before the last raster end_datetime so that the last earliest prelim raster is replaced.
         }
       } else {
+        # prelim is NA, so there are no preliminary rasters to replace. Fetch from the last raster end_datetime + 1 second, or from start_datetime if it is specified.
         if (!is.null(start_datetime_i)) {
           next_instant <- start_datetime_i
         } else {
@@ -346,6 +354,7 @@ getNewRasters <- function(
               if (is.null(rast)) {
                 next
               }
+              append_failed <- FALSE
 
               valid_from <- rast[["valid_from"]]
               valid_to <- rast[["valid_to"]]
@@ -422,7 +431,9 @@ getNewRasters <- function(
                     if (nrow(existing_final) > 0L) {
                       # Never replace a final raster with a preliminary one.
                       # Identical final rasters are also idempotent no-ops.
-                      if (!is.na(flag) || isTRUE(existing_final$is_identical[1])) {
+                      if (
+                        !is.na(flag) || isTRUE(existing_final$is_identical[1])
+                      ) {
                         DBI::dbExecute(con, "ROLLBACK")
                         message("Already present; skipped")
                         next
@@ -478,6 +489,7 @@ getNewRasters <- function(
                     error = conditionMessage(e)
                   )
                   append_errors[[length(append_errors) + 1L]] <<- append_error
+                  append_failed <<- TRUE
 
                   message(
                     "getNewRasters: Failed to append raster ",
@@ -508,6 +520,15 @@ getNewRasters <- function(
                   )
                 }
               )
+              if (append_failed && type == "reanalysis") {
+                message(
+                  "getNewRasters: Stopping raster_series_id ",
+                  id,
+                  " after an append failure so its reanalysis timeline ",
+                  "cannot advance past missing data."
+                )
+                break
+              }
             }
 
             if (forecast && series_raster_count > 0) {
@@ -567,7 +588,6 @@ getNewRasters <- function(
                   )
                 )
               } # else keep_forecasts == 'all', so delete nothing
-
             }
 
             if (series_raster_count > 0) {

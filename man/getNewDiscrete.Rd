@@ -30,8 +30,7 @@ getNewDiscrete(
 A data.table with one row per inserted or previously imported sample
 and columns
 \code{sample_series_id}, \code{sample_id}, \code{action}, and list-columns containing the
-normalized \code{sample}, \code{results}, and \code{sample_groups} input. An empty result
-has the same columns.
+normalized source inputs. An empty result has the same columns.
 }
 \description{
 Retrieves new discrete data starting from the last local sample. The active
@@ -56,7 +55,7 @@ the sample-series location is used.
 \item 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
 \item 'owner': the numeric organization ID that owns the sample. If omitted, the
 sample-series default owner is used.
-\item 'import_source_id': a non-missing source-specific identifier used to
+\item 'external_sample_id': a non-missing source-specific identifier used to
 match the sample across runs. Together with the registered source
 function, it is the database-enforced identity for a locationless sample.
 Optional columns are:
@@ -66,7 +65,6 @@ Optional columns are:
 sample-series default contributor is used.
 \item 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 \item 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
-\item 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 }
 
 The 'results' data.frame should contain one row per result and must contain the following columns:
@@ -80,6 +78,12 @@ Additionally, the following columns may need to be included:
 \item 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 \item 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+\item 'lab_report_no' and 'lab_sample_no': optional laboratory report and sample
+identifiers.
+\item 'grade_type_id' and 'approval_type_id': optional result-level quality and
+approval catalogue identifiers.
+\item 'no_source_update': logical; \code{TRUE} preserves that result from later
+source-adapter synchronization while still allowing direct user edits.
 }
 
 Each returned sample list may also contain \code{sample_groups}. It can be a
@@ -88,6 +92,15 @@ accepted by \code{\link[=addNewDiscrete]{addNewDiscrete()}}. Source adapters sho
 \code{group_type}, \code{owner}, and \code{group_code} for related samples; the group will
 be created once and reused. A locationless sample, or a sample type whose
 \code{requires_sample_group} flag is true, must provide at least one group.
+The optional \code{sample_qualifiers}, \code{sample_observers}, \code{result_aggregations},
+and \code{result_components} elements use the formats documented by
+\code{\link[=addNewDiscrete]{addNewDiscrete()}}.
+
+\code{getNewDiscrete()} is insertion-only. If a source record has already been
+imported, the function reports that sample with \code{action = "existing"} but
+does not update its sample row, group memberships, qualifiers, observers,
+results, aggregation configuration, or components. Use
+\code{\link[=synchronize_discrete]{synchronize_discrete()}} when existing source records must be reconciled.
 
 Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.

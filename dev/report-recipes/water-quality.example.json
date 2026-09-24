@@ -1,0 +1,157 @@
+{
+  "contract": "urn:aquacache:report-recipe:2",
+  "metadata": {
+    "title": "Inspection and licence monitoring",
+    "example_only": true,
+    "description": "Caller supplies reviewed guideline IDs. Licence membership alone does not establish which guideline is a legally applicable licence limit."
+  },
+  "inputs": [
+    {
+      "id": "start",
+      "type": "datetime",
+      "required": true
+    },
+    {
+      "id": "end",
+      "type": "datetime",
+      "required": true
+    },
+    {
+      "id": "licences",
+      "type": "integer_array",
+      "required": true
+    },
+    {
+      "id": "guidelines",
+      "type": "integer_array",
+      "required": true
+    }
+  ],
+  "datasets": [
+    {
+      "id": "samples",
+      "source": {
+        "code": "aquacache.discrete",
+        "version": 1
+      },
+      "selection": {
+        "mode": "input",
+        "input": "licences",
+        "include_locationless": true,
+        "input_field": "licence_ids"
+      },
+      "period": {
+        "start": {
+          "input": "start"
+        },
+        "end": {
+          "input": "end"
+        }
+      },
+      "quality": {
+        "missing": "retain",
+        "censored": "retain",
+        "approval": "any",
+        "qualifiers": "retain"
+      },
+      "options": {
+        "result_level": "canonical",
+        "include_components": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "assessment",
+      "operation": {
+        "code": "aquacache.exceedances",
+        "version": 1
+      },
+      "inputs": [
+        "samples"
+      ],
+      "options": {
+        "criteria": [
+          "licence_limits"
+        ],
+        "include_qc": true
+      }
+    }
+  ],
+  "criteria": [
+    {
+      "id": "licence_limits",
+      "provider": {
+        "code": "aquacache.criteria",
+        "version": 1
+      },
+      "selection": {
+        "licence_input": "licences",
+        "effective_at": "sample_time",
+        "guideline_input": "guidelines"
+      },
+      "evaluation": {
+        "basis": "sample",
+        "censored": "indeterminate",
+        "missing": "indeterminate",
+        "unit_mismatch": "convert_or_indeterminate",
+        "unmatched": "indeterminate"
+      }
+    }
+  ],
+  "sections": [
+    {
+      "id": "results",
+      "type": {
+        "code": "table",
+        "version": 1
+      },
+      "title": "Results",
+      "datasets": [
+        "assessment"
+      ],
+      "columns": [
+        {
+          "field": "sample_id",
+          "label": "Sample"
+        },
+        {
+          "field": "parameter",
+          "label": "Parameter"
+        },
+        {
+          "field": "result",
+          "label": "Result"
+        },
+        {
+          "field": "unit",
+          "label": "Unit"
+        },
+        {
+          "field": "criterion",
+          "label": "Applicable criterion"
+        },
+        {
+          "field": "assessment",
+          "label": "Assessment"
+        }
+      ]
+    }
+  ],
+  "annotations": [
+    {
+      "id": "inspection",
+      "scope": "report",
+      "carry_forward": false,
+      "label": "Inspector observations"
+    }
+  ],
+  "output": {
+    "formats": [
+      "pdf",
+      "xlsx"
+    ],
+    "locale": "en-CA",
+    "timezone": "America/Whitehorse"
+  }
+}

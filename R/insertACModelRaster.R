@@ -17,7 +17,6 @@
 #' @param model The model which created the raster.
 #' @param source The source from which this raster was retrieve (optional but recommended).
 #' @param bit.depth The bit depth of the raster. 32-bit float is '32BF', 32-bit unsigned integer is '32BUI', 32-bit signed integer is '32BSI'. Default to NULL which will parse the data to determine which 32-bit flavor to choose. You **must** specify if your data is greater than 32 bit.
-#' @param blocks The number of blocks in which to break the raster apart. If NULL blocks will be automatically determined, as per [rpostgis::pgWriteRast()]. Blocks (tiles) can be useful to speed up queries that only need a small subset of the raster, but lengthen write time.
 #'
 #' @return The reference_id of the newly appended raster.
 #' @export
@@ -34,8 +33,7 @@ insertACModelRaster <- function(
   units = NULL,
   model = NA,
   source = NA,
-  bit.depth = NULL,
-  blocks = NULL
+  bit.depth = NULL
 ) {
   # Parameter check in case they're passed as NULL by other functions
   if (is.null(description)) {
@@ -156,7 +154,6 @@ insertACModelRaster <- function(
     raster = raster,
     rast_table = c("spatial", "rasters"),
     bit.depth = bit.depth,
-    blocks = blocks,
     constraints = FALSE
   )
 

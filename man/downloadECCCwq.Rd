@@ -12,7 +12,8 @@ downloadECCCwq(
   start_datetime,
   end_datetime = Sys.time(),
   con = NULL,
-  warn_unmapped = interactive()
+  warn_unmapped = interactive(),
+  mode = c("data", "missing_mappings")
 )
 }
 \arguments{
@@ -20,7 +21,7 @@ downloadECCCwq(
 
 \item{file}{Path (URL) to the ECCC water quality .csv file containing the data to be imported for the specified location.}
 
-\item{key}{Path to the import key .csv file defining the parameter mappings for ECCC water quality data.}
+\item{key}{Import mapping source code in \code{discrete.import_sources}.}
 
 \item{tz}{Time zone of the input data (does NOT apply to \code{start_datetime} or \code{end_datetime} parameters). This is used to correctly interpret the datetime values in the ECCC data file. Common time zones include "UTC", "MST", "PST", etc.}
 
@@ -33,12 +34,16 @@ downloadECCCwq(
 \item{warn_unmapped}{If \code{TRUE}, warn when an ECCC variable/unit does not
 have an import mapping. Set to \code{FALSE} for automated synchronization
 workflows where unmapped source variables are expected.}
+
+\item{mode}{\code{"data"} returns samples/results for import. \code{"missing_mappings"}
+returns source variable/unit combinations in the requested data that do not
+have a complete database import mapping.}
 }
 \value{
 A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 }
 \description{
-Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings defined in an import key .csv file, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
+Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings loaded in \code{discrete.import_parameter_mappings}, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
 
-Note that ECCC's results are converted to the AquaCache database parameters and units using the provided key file. Users should ensure that the key file contains accurate mappings for the parameters of interest, including an explicit \code{matrix_state} or \code{matrix_state_id} column for patch-39-era databases. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
+Note that ECCC's results are converted to the AquaCache database parameters and units using the requested database import key. Users should ensure that the import key has been loaded before importing ECCC data. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
 }

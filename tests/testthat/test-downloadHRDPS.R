@@ -1,5 +1,7 @@
 test_that("downloadHRDPS compacts unavailable forecast-hour files", {
   hour_links <- sprintf("%03d/", 0:48)
+  observed <- new.env(parent = emptyenv())
+  observed$crop_count <- 0L
 
   local_mocked_bindings(
     session = function(url) url,
@@ -18,13 +20,23 @@ test_that("downloadHRDPS compacts unavailable forecast-hour files", {
     rast = function(x) list(structure(x, class = "mock_raster")),
     units = function(x) "mm",
     project = function(x, ...) x,
+    ext = function(x) {
+      observed$extent <- x
+      "bbox-extent"
+    },
+    crop = function(x, y) {
+      observed$crop_count <- observed$crop_count + 1L
+      observed$crop_extent <- y
+      x
+    },
     .package = "terra"
   )
 
   expect_message(
     result <- downloadHRDPS(
       parameter = "APCP-Accum1h_Sfc",
-      start_datetime = as.POSIXct("2000-01-01", tz = "UTC")
+      start_datetime = as.POSIXct("2000-01-01", tz = "UTC"),
+      clip = c(70, -142, 59, -123)
     ),
     "finished downloading 48 new rasters; 1 of 49 candidate files was unavailable"
   )
@@ -39,4 +51,7 @@ test_that("downloadHRDPS compacts unavailable forecast-hour files", {
   expect_equal(result[[1]]$valid_from, issue + 3600)
   expect_equal(result[[48]]$valid_to, issue + 49 * 3600)
   expect_false(any(vapply(result, is.null, logical(1))))
+  expect_equal(observed$extent, c(-142, -123, 59, 70))
+  expect_identical(observed$crop_extent, "bbox-extent")
+  expect_identical(observed$crop_count, 48L)
 })

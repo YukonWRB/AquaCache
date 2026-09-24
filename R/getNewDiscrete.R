@@ -23,7 +23,7 @@
 #' - 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
 #' - 'owner': the numeric organization ID that owns the sample. If omitted, the
 #'   sample-series default owner is used.
-#' - 'import_source_id': a non-missing source-specific identifier used to
+#' - 'external_sample_id': a non-missing source-specific identifier used to
 #'   match the sample across runs. Together with the registered source
 #'   function, it is the database-enforced identity for a locationless sample.
 #' Optional columns are:
@@ -33,7 +33,6 @@
 #'   sample-series default contributor is used.
 #' - 'approval': the approval status of the data, as a character string. This should match entries in the 'approvals' table and an error will be thrown if it does not.
 #' - 'grade': the grade of the data, as a character string. This should match entries in the 'grades' table and an error will be thrown if it does not.
-#' - 'qualifier': the qualifier of the data, as a character string. This should match entries in the 'qualifiers' table and an error will be thrown if it does not.
 #'
 #' The 'results' data.frame should contain one row per result and must contain the following columns:
 #' - 'parameter_id': a numeric specifying the parameter_id of the data point from table 'parameters'.
@@ -45,6 +44,12 @@
 #' - 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+#' - 'lab_report_no' and 'lab_sample_no': optional laboratory report and sample
+#'   identifiers.
+#' - 'grade_type_id' and 'approval_type_id': optional result-level quality and
+#'   approval catalogue identifiers.
+#' - 'no_source_update': logical; `TRUE` preserves that result from later
+#'   source-adapter synchronization while still allowing direct user edits.
 #'
 #' Each returned sample list may also contain `sample_groups`. It can be a
 #' vector of existing `sample_group_id` values or a data frame in the format
@@ -52,6 +57,15 @@
 #' `group_type`, `owner`, and `group_code` for related samples; the group will
 #' be created once and reused. A locationless sample, or a sample type whose
 #' `requires_sample_group` flag is true, must provide at least one group.
+#' The optional `sample_qualifiers`, `sample_observers`, `result_aggregations`,
+#' and `result_components` elements use the formats documented by
+#' [addNewDiscrete()].
+#'
+#' `getNewDiscrete()` is insertion-only. If a source record has already been
+#' imported, the function reports that sample with `action = "existing"` but
+#' does not update its sample row, group memberships, qualifiers, observers,
+#' results, aggregation configuration, or components. Use
+#' [synchronize_discrete()] when existing source records must be reconciled.
 #'
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 #' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
@@ -66,8 +80,7 @@
 #' @return A data.table with one row per inserted or previously imported sample
 #'   and columns
 #'   `sample_series_id`, `sample_id`, `action`, and list-columns containing the
-#'   normalized `sample`, `results`, and `sample_groups` input. An empty result
-#'   has the same columns.
+#'   normalized source inputs. An empty result has the same columns.
 #' @export
 
 getNewDiscrete <- function(
@@ -287,7 +300,7 @@ getNewDiscrete <- function(
         query <- paste0(
           "SELECT MAX(datetime) FROM discrete.samples WHERE location_id = ",
           loc_id,
-          " AND import_source = '",
+          " AND source_adapter_function = '",
           source_fx,
           "'"
         )
@@ -325,7 +338,7 @@ getNewDiscrete <- function(
           last_data_point <- last_data_point + 1
         }
 
-        if (source_fx == "downloadSnowCourse" & is.null(snowCon)) {
+        if (source_fx == "downloadSnowCourseYG" & is.null(snowCon)) {
           # Try with the same host and port as the AquaCache connection
           dets <- DBI::dbGetQuery(
             con,
@@ -356,7 +369,7 @@ getNewDiscrete <- function(
             args_list[["EQpath"]]
           )
         }
-        if (source_fx == "downloadSnowCourse") {
+        if (source_fx == "downloadSnowCourseYG") {
           args_list[["snowCon"]] <- snowCon
         }
 
@@ -405,11 +418,26 @@ getNewDiscrete <- function(
           ## Checks on sample metadata ###########
           # Ensure the sample data has required minimum columns
           sample <- data[[j]][["sample"]]
+          if ("sample_qualifier" %in% names(sample)) {
+            warning(
+              "For sample_series_id ",
+              sid,
+              " element ",
+              j,
+              " returned sample_qualifier. Return sample_qualifiers as a ",
+              "separate element instead. Skipping this source record."
+            )
+            next
+          }
           sample_groups <- if ("sample_groups" %in% names(data[[j]])) {
             data[[j]][["sample_groups"]]
           } else {
             NULL
           }
+          sample_qualifiers <- data[[j]][["sample_qualifiers"]]
+          sample_observers <- data[[j]][["sample_observers"]]
+          result_aggregations <- data[[j]][["result_aggregations"]]
+          result_components <- data[[j]][["result_components"]]
 
           # Functions may pass the location code instead of location_id, change it
           # Also possible that the function did not pass 'location_id' at all, if so fill it in using 'loc_id'
@@ -427,14 +455,14 @@ getNewDiscrete <- function(
             sample$sub_location <- NULL
             names_samp <- names(sample)
           }
-          # Check that the sample data has the required columns at minimum: c("location_id", "media_id", "datetime", "collection_method", "sample_type", "import_source_id"). Note that import_source_id is only mandatory because this function pulls data in from a remote source
+          # Source adapters must return a stable external sample identifier.
           mandatory_samp <- c(
             "location_id",
             "media_id",
             "datetime",
             "collection_method",
             "sample_type",
-            "import_source_id"
+            "external_sample_id"
           )
           if (!all(c(mandatory_samp) %in% names_samp)) {
             # Make an error message stating which column is missing
@@ -453,7 +481,7 @@ getNewDiscrete <- function(
             next
           }
 
-          sample$import_source <- source_fx
+          sample$source_adapter_function <- source_fx
 
           # Apply default owner/contributor if not provided
           if (!("owner" %in% names_samp) || is.na(sample$owner)) {
@@ -540,7 +568,17 @@ getNewDiscrete <- function(
 
           # More complex checks if 'result' is NA
           # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
-          if (any(is.na(results$result))) {
+          aggregated_result_rows <- if (
+            !is.null(result_aggregations) &&
+              "result_row" %in% names(result_aggregations)
+          ) {
+            unique(as.integer(result_aggregations$result_row))
+          } else {
+            integer()
+          }
+          direct_missing_result <- is.na(results$result) &
+            !seq_len(nrow(results)) %in% aggregated_result_rows
+          if (any(direct_missing_result)) {
             if (!("result_condition" %in% names_res)) {
               warning(
                 "For sample_series_id ",
@@ -554,7 +592,7 @@ getNewDiscrete <- function(
               next
             } else {
               # Check that each NA in 'result' has a corresponding entry in 'result_condition'
-              sub.results <- results[is.na(results$result), ]
+              sub.results <- results[direct_missing_result, ]
               check_result_condition <- FALSE # prevents repeatedly checking for the same thing
 
               next_flag <- FALSE
@@ -707,15 +745,15 @@ getNewDiscrete <- function(
           # pair unique for locationless samples, where location metadata
           # cannot provide a retry key.
           if (
-            is.na(sample$import_source_id[[1]]) ||
-              !nzchar(trimws(as.character(sample$import_source_id[[1]])))
+            is.na(sample$external_sample_id[[1]]) ||
+              !nzchar(trimws(as.character(sample$external_sample_id[[1]])))
           ) {
             warning(
               "For sample_series_id ",
               sid,
               " element ",
               j,
-              " import_source_id must be non-missing and nonblank. ",
+              " external_sample_id must be non-missing and nonblank. ",
               "Skipping this source record."
             )
             next
@@ -723,23 +761,12 @@ getNewDiscrete <- function(
           if (is.na(suppressWarnings(as.integer(sample$location_id[[1]])))) {
             existing_sample <- find_locationless_import_sample(
               con = con,
-              import_source = source_fx,
-              import_source_id = sample$import_source_id
+              source_adapter_function = source_fx,
+              external_sample_id = sample$external_sample_id
             )
             if (nrow(existing_sample) == 1L) {
-              link_discrete_sample_groups(
-                con = con,
-                sample_id = existing_sample$sample_id[[1]],
-                sample_groups = sample_groups,
-                default_owner = sample$owner[[1]],
-                default_contributor = if (
-                  "contributor" %in% names(sample)
-                ) {
-                  sample$contributor[[1]]
-                } else {
-                  NA_integer_
-                }
-              )
+              # This importer is deliberately insertion-only. Return the
+              # existing identity without reconciling any parent or child data.
               import_records[[length(import_records) + 1L]] <-
                 new_discrete_import_record(
                   sample_series_id = sid,
@@ -747,7 +774,11 @@ getNewDiscrete <- function(
                   action = "existing",
                   sample = sample,
                   results = results,
-                  sample_groups = sample_groups
+                  sample_groups = sample_groups,
+                  sample_qualifiers = sample_qualifiers,
+                  sample_observers = sample_observers,
+                  result_aggregations = result_aggregations,
+                  result_components = result_components
                 )
               next
             }
@@ -762,30 +793,25 @@ getNewDiscrete <- function(
                 con = con,
                 sample = sample,
                 results = results,
-                sample_groups = sample_groups
+                sample_groups = sample_groups,
+                sample_qualifiers = sample_qualifiers,
+                sample_observers = sample_observers,
+                result_aggregations = result_aggregations,
+                result_components = result_components
               )
             },
             error = function(e) {
-              if (is.na(suppressWarnings(as.integer(sample$location_id[[1]])))) {
+              if (
+                is.na(suppressWarnings(as.integer(sample$location_id[[1]])))
+              ) {
                 existing_sample <- find_locationless_import_sample(
                   con = con,
-                  import_source = source_fx,
-                  import_source_id = sample$import_source_id
+                  source_adapter_function = source_fx,
+                  external_sample_id = sample$external_sample_id
                 )
                 if (nrow(existing_sample) == 1L) {
-                  link_discrete_sample_groups(
-                    con = con,
-                    sample_id = existing_sample$sample_id[[1]],
-                    sample_groups = sample_groups,
-                    default_owner = sample$owner[[1]],
-                    default_contributor = if (
-                      "contributor" %in% names(sample)
-                    ) {
-                      sample$contributor[[1]]
-                    } else {
-                      NA_integer_
-                    }
-                  )
+                  # A concurrent importer won the insert race. Preserve its
+                  # stored detail; synchronization owns all update semantics.
                   sample_action <<- "existing"
                   return(existing_sample$sample_id[[1]])
                 }
@@ -802,7 +828,9 @@ getNewDiscrete <- function(
             }
           )
           if (!is.na(sample_id)) {
-            if (sample_action == "inserted") count <- count + 1
+            if (sample_action == "inserted") {
+              count <- count + 1
+            }
             import_records[[length(import_records) + 1L]] <-
               new_discrete_import_record(
                 sample_series_id = sid,
@@ -810,7 +838,11 @@ getNewDiscrete <- function(
                 action = sample_action,
                 sample = sample,
                 results = results,
-                sample_groups = sample_groups
+                sample_groups = sample_groups,
+                sample_qualifiers = sample_qualifiers,
+                sample_observers = sample_observers,
+                result_aggregations = result_aggregations,
+                result_components = result_components
               )
           }
         } # End of looping over each list element (sample) for a sample_series_id

@@ -2,13 +2,13 @@
 #'
 #' @description
 #'
-#' Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings defined in an import key .csv file, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
+#' Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings loaded in `discrete.import_parameter_mappings`, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
 #'
-#' Note that ECCC's results are converted to the AquaCache database parameters and units using the provided key file. Users should ensure that the key file contains accurate mappings for the parameters of interest, including an explicit `matrix_state` or `matrix_state_id` column for patch-39-era databases. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
+#' Note that ECCC's results are converted to the AquaCache database parameters and units using the requested database import key. Users should ensure that the import key has been loaded before importing ECCC data. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
 #'
 #' @param location The location code associated with the ECCC monitoring site. Must be a valid location code in the `SITE_NO` field of the ECCC water quality .csv files.
 #' @param file Path (URL) to the ECCC water quality .csv file containing the data to be imported for the specified location.
-#' @param key Path to the import key .csv file defining the parameter mappings for ECCC water quality data.
+#' @param key Import mapping source code in `discrete.import_sources`.
 #' @param tz Time zone of the input data (does NOT apply to `start_datetime` or `end_datetime` parameters). This is used to correctly interpret the datetime values in the ECCC data file. Common time zones include "UTC", "MST", "PST", etc.
 #' @param start_datetime Start datetime (inclusive) from which to fetch measurements. Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If date, time will default to 00:00 to capture whole day.
 #' @param end_datetime End datetime (inclusive) to which to fetch measurements. Specify as class Date, POSIXct OR as character string which can be interpreted as POSIXct. If character, UTC offset of 0 will be assigned, otherwise conversion to UTC 0 will be performed on POSIXct class input. If Date, time will default to 23:59:59 to capture whole day.
@@ -16,6 +16,9 @@
 #' @param warn_unmapped If `TRUE`, warn when an ECCC variable/unit does not
 #'   have an import mapping. Set to `FALSE` for automated synchronization
 #'   workflows where unmapped source variables are expected.
+#' @param mode `"data"` returns samples/results for import. `"missing_mappings"`
+#'   returns source variable/unit combinations in the requested data that do not
+#'   have a complete database import mapping.
 #'
 #' @return A data.frame object with the requested data. If there are no new data points the data.frame will have 0 rows.
 #' @export
@@ -28,9 +31,11 @@ downloadECCCwq <- function(
   start_datetime,
   end_datetime = Sys.time(),
   con = NULL,
-  warn_unmapped = interactive()
+  warn_unmapped = interactive(),
+  mode = c("data", "missing_mappings")
 ) {
   warn_unmapped <- isTRUE(as.logical(warn_unmapped))
+  mode <- match.arg(mode)
 
   # ---- Cached download for `file` (URL or local path) ----
   is_url <- grepl("^(https?|ftp)://", file, ignore.case = TRUE)
@@ -179,14 +184,32 @@ downloadECCCwq <- function(
   }
   DBI::dbExecute(con, "SET timezone = 'UTC'")
 
-  db_key <- import_mapping_load_db(con, key)
-  if (is.null(db_key)) {
-    key <- downloadECCCwq_read_legacy_key(con, key)
-    key_from_db <- FALSE
-  } else {
-    key <- db_key
-    key_from_db <- TRUE
+  key_source <- key
+  key <- import_mapping_load_db(con, key_source)
+  if (is.null(key)) {
+    stop(
+      "No database import mapping rows found for ECCC key/source code '",
+      key_source,
+      "'. Load the key into discrete.import_parameter_mappings before calling downloadECCCwq()."
+    )
   }
+
+  # pre-processing
+  file$DATE_TIME_HEURE <- as.POSIXct(file$DATE_TIME_HEURE, tz = tz)
+  # Convert to UTC for storage in AquaCache
+  attr(file$DATE_TIME_HEURE, "tzone") <- "UTC"
+
+  # Now get the new data and return it ############################################
+  all_results <- file[
+    file$SITE_NO == location &
+      file$DATE_TIME_HEURE >= start_datetime &
+      file$DATE_TIME_HEURE <= end_datetime,
+  ]
+
+  if (identical(mode, "missing_mappings")) {
+    return(downloadECCCwq_missing_mappings(all_results, key))
+  }
+  all_samples <- unique(all_results$DATE_TIME_HEURE)
 
   media_id <- DBI::dbGetQuery(
     con,
@@ -225,43 +248,6 @@ downloadECCCwq <- function(
     )[1, 1]
   }
 
-  # pre-processing
-  file$DATE_TIME_HEURE <- as.POSIXct(file$DATE_TIME_HEURE, tz = tz)
-  # Convert to UTC for storage in AquaCache
-  attr(file$DATE_TIME_HEURE, "tzone") <- "UTC"
-
-  # Now get the new data and return it ############################################
-  all_results <- file[
-    file$SITE_NO == location &
-      file$DATE_TIME_HEURE >= start_datetime &
-      file$DATE_TIME_HEURE <= end_datetime,
-  ]
-
-  all_samples <- unique(all_results$DATE_TIME_HEURE)
-
-  # Helper function to get the mapping row for a given variable and unit. If the key is from the database, it uses the import_mapping_resolve_match function to find the appropriate mapping. If the key is from a legacy file, it performs a direct lookup in the key data frame. This allows for flexibility in how the key mappings are provided while ensuring that the correct mapping is applied for each variable and unit combination.
-  downloadECCCwq_mapping_row <- function(
-    key,
-    key_from_db,
-    input_param,
-    input_unit
-  ) {
-    if (key_from_db) {
-      return(import_mapping_resolve_match(
-        key,
-        list(
-          input_param = input_param,
-          input_unit = input_unit
-        )
-      ))
-    }
-
-    key[
-      key$input_param == input_param &
-        key$input_unit == input_unit,
-    ]
-  }
-
   # Build the list required by getNewDiscrete
   samples <- list()
   for (i in seq_along(all_samples)) {
@@ -273,11 +259,12 @@ downloadECCCwq <- function(
       sample_type = sample_type,
       owner = owner_contributor,
       contributor = owner_contributor,
-      import_source_id = paste(
+      external_sample_id = paste(
         unique(subset[["SAMPLE_ID_\u00C9CHANTILLON"]]),
         collapse = ","
-      )
-      # import_source is added in by getNewDiscrete
+      ),
+      import_source_id = unique(key$import_source_id)[[1]]
+      # source_adapter_function is added by getNewDiscrete
     )
     results <- data.frame()
     for (j in seq_len(nrow(subset))) {
@@ -286,11 +273,12 @@ downloadECCCwq <- function(
         next
       }
       input_unit <- subset[["UNIT_UNIT\u00C9"]][j]
-      param_row <- downloadECCCwq_mapping_row(
-        key = key,
-        key_from_db = key_from_db,
-        input_param = var,
-        input_unit = input_unit
+      param_row <- import_mapping_resolve_match(
+        key,
+        list(
+          input_param = var,
+          input_unit = input_unit
+        )
       )
       if (is.null(param_row) || nrow(param_row) == 0) {
         if (warn_unmapped) {
@@ -394,81 +382,136 @@ downloadECCCwq <- function(
   return(samples)
 }
 
-#' Read and process the legacy ECCC key file format
-#' @description This function reads the legacy ECCC key file format and processes it to ensure it has the necessary columns and formats for use in the `downloadECCCwq` function. It checks for required columns, handles missing optional columns, and resolves target IDs using the provided database connection. This function is used when the specified key file is not found in the database, allowing users to continue using legacy key files that may be included with the package or provided as a local file path.
-#' @param con A connection to the aquacache database, used for resolving target IDs based on the key file contents.
-#' @param key The path to the legacy key file, which can be a filename included in the package's `inst/import_keys` directory or a local file path provided by the user.
-#' @return A data.table containing the processed key mappings with resolved target IDs, ready for use in the `downloadECCCwq` function.
-#' @keywords internal
-#' @noRd
-downloadECCCwq_read_legacy_key <- function(con, key) {
-  keypath <- system.file(
-    "import_keys",
-    key,
-    package = "AquaCache"
-  )
-  if (keypath == "") {
-    if (file.exists(key)) {
-      keypath <- key
-    } else {
-      stop(
-        "The key you specified cannot be found in this package's inst/import_keys folder. "
-      )
-    }
-  }
-
-  key <- data.table::fread(
-    keypath,
-    stringsAsFactors = FALSE,
-    encoding = "UTF-8"
-  )
-
-  required_columns_key <- c(
+downloadECCCwq_missing_mappings <- function(all_results, mapping) {
+  output_cols <- c(
     "input_param",
     "input_unit",
-    "conversion",
-    "result_type",
-    "sample_fraction",
-    "result_value_type"
+    "n_results",
+    "n_samples",
+    "first_datetime",
+    "last_datetime",
+    "example_sample_id",
+    "import_mapping_id",
+    "missing_reason",
+    "mapping_error",
+    "source_match"
   )
-  missing_columns_key <- setdiff(required_columns_key, names(key))
-  if (length(missing_columns_key) > 0) {
-    stop(
-      paste0(
-        "The following required columns are missing from the key file: ",
-        paste(missing_columns_key, collapse = ", ")
+  empty_report <- data.table::data.table(
+    input_param = character(),
+    input_unit = character(),
+    n_results = integer(),
+    n_samples = integer(),
+    first_datetime = as.POSIXct(character(), tz = "UTC"),
+    last_datetime = as.POSIXct(character(), tz = "UTC"),
+    example_sample_id = character(),
+    import_mapping_id = integer(),
+    missing_reason = character(),
+    mapping_error = character(),
+    source_match = character()
+  )
+
+  if (nrow(all_results) == 0L) {
+    return(empty_report)
+  }
+
+  first_non_missing <- function(x) {
+    x <- as.character(x)
+    x <- x[!is.na(x) & nzchar(x)]
+    if (length(x) == 0L) {
+      return(NA_character_)
+    }
+    x[[1]]
+  }
+  min_datetime <- function(x) {
+    x <- x[!is.na(x)]
+    if (length(x) == 0L) {
+      return(as.POSIXct(NA, tz = "UTC"))
+    }
+    min(x)
+  }
+  max_datetime <- function(x) {
+    x <- x[!is.na(x)]
+    if (length(x) == 0L) {
+      return(as.POSIXct(NA, tz = "UTC"))
+    }
+    max(x)
+  }
+  source_column <- function(x, expected, prefix) {
+    cols <- names(x)
+    exact <- match(expected, cols)
+    if (!is.na(exact)) {
+      return(exact)
+    }
+    matches <- grep(paste0("^", prefix), cols, value = TRUE)
+    if (length(matches) == 1L) {
+      return(match(matches[[1]], cols))
+    }
+    stop("Could not resolve expected ECCC source column '", expected, "'.")
+  }
+
+  source <- data.table::copy(data.table::as.data.table(all_results))
+  sample_col <- source_column(source, "SAMPLE_ID_\u00C9CHANTILLON", "SAMPLE_ID_")
+  unit_col <- source_column(source, "UNIT_UNIT\u00C9", "UNIT_UNIT")
+  source[, eccc_sample_id := as.character(source[[sample_col]])]
+  source[, input_param := data.table::fifelse(is.na(VARIABLE), "", as.character(VARIABLE))]
+  source[, input_unit := data.table::fifelse(
+    is.na(source[[unit_col]]),
+    "",
+    as.character(source[[unit_col]])
+  )]
+  source <- source[nzchar(input_param)]
+  if (nrow(source) == 0L) {
+    return(empty_report)
+  }
+
+  report <- source[, .(
+    n_results = .N,
+    n_samples = data.table::uniqueN(eccc_sample_id),
+    first_datetime = min_datetime(DATE_TIME_HEURE),
+    last_datetime = max_datetime(DATE_TIME_HEURE),
+    example_sample_id = first_non_missing(eccc_sample_id)
+  ), by = .(input_param, input_unit)]
+
+  statuses <- lapply(seq_len(nrow(report)), function(i) {
+    import_mapping_match_status(
+      mapping,
+      list(
+        input_param = report$input_param[[i]],
+        input_unit = report$input_unit[[i]]
       )
     )
-  }
-  if (!("parameter_id" %in% names(key)) && !("parameter" %in% names(key))) {
-    stop("The key file must contain 'parameter_id' or 'parameter'.")
-  }
-  if (
-    !("result_speciation_id" %in% names(key)) &&
-      !("result_speciation" %in% names(key))
-  ) {
-    key$result_speciation_id <- NA_integer_
-  }
-  if (!("matrix_state" %in% names(key))) {
-    key$matrix_state <- NA_character_
-  }
-  if (!("matrix_state_id" %in% names(key))) {
-    key$matrix_state_id <- NA_integer_
-  }
-
-  key$matrix_state <- trimws(as.character(key$matrix_state))
-  key$matrix_state[!nzchar(key$matrix_state) | key$matrix_state == "NA"] <- NA
-  key$matrix_state_id <- suppressWarnings(as.integer(key$matrix_state_id))
-
-  missing_matrix_state <- is.na(key$matrix_state) & is.na(key$matrix_state_id)
-  if (any(missing_matrix_state)) {
-    warning(
-      "The ECCC key file is missing 'matrix_state' or 'matrix_state_id' for one or more rows. ",
-      "Assuming 'liquid' for those mappings. Update the key file to make matrix state explicit.",
-      call. = FALSE
-    )
-    key$matrix_state[missing_matrix_state] <- "liquid"
+  })
+  report[, missing_reason := vapply(statuses, `[[`, character(1), "status")]
+  report[, mapping_error := vapply(statuses, function(x) x$message, character(1))]
+  report[, import_mapping_id := vapply(
+    statuses,
+    function(x) {
+      if (is.null(x$mapping)) {
+        return(NA_integer_)
+      }
+      as.integer(x$mapping$import_mapping_id[[1]])
+    },
+    integer(1)
+  )]
+  report <- report[missing_reason != "mapped"]
+  if (nrow(report) == 0L) {
+    return(empty_report)
   }
 
-  return(import_mapping_resolve_targets(con, data.table::as.data.table(key)))
+  report[, source_match := vapply(
+    seq_len(.N),
+    function(i) {
+      jsonlite::toJSON(
+        list(
+          input_param = report$input_param[[i]],
+          input_unit = report$input_unit[[i]]
+        ),
+        auto_unbox = TRUE,
+        null = "null"
+      )
+    },
+    character(1)
+  )]
+  data.table::setorderv(report, c("missing_reason", "input_param", "input_unit"))
+  report[, ..output_cols]
 }

@@ -10,11 +10,11 @@
 #' "band_names", which will be restored in R when imported with the function
 #' \code{\link[rpostgis]{pgGetRast}}.
 #'
-#' If \code{blocks = NULL}, the number of block will vary by raster size, with
-#' a default value of 100 copies of the data in the memory at any point in time.
-#' If a specified number of blocks is desired, set blocks to a one or two-length
-#' integer vector. Note that fewer, larger blocks generally results in faster
-#' write times.
+#' Rasters are split automatically so that tiles are no larger than 512 by 512
+#' pixels. Smaller rasters remain in a single tile. This is the same deterministic
+#' layout used by [writeRaster()]. Fewer, larger tiles generally result in faster
+#' complete-raster writes and reads, while smaller tiles make spatial subsets
+#' more selective.
 #'
 #' If the raster has no CRS specified, it will be assigned
 #' \code{EPSG:4326} before being written. This avoids importing
@@ -26,7 +26,6 @@
 #' @param raster A terra \code{SpatRaster}.
 #' @param rast_table A character string specifying a PostgreSQL schema in the database (if necessary) and table name to hold the raster (e.g., \code{c("schema","table")}).
 #' @param bit.depth The bit depth of the raster. Will be set to 32-bit (unsigned int, signed int, or float, depending on the data) if left null, but can be specified (as character) as one of the PostGIS pixel types (see \url{http://postgis.net/docs/RT_ST_BandPixelType.html}).
-#' @param blocks Optional desired number of blocks (tiles) to split the raster into in the resulting PostGIS table. This should be specified as a one or two-length (columns, rows) integer vector. See also 'Details'.
 #' @param constraints Whether to create constraints from raster data. Recommended to leave \code{TRUE} unless applying constraints manually (see \url{http://postgis.net/docs/RT_AddRasterConstraints.html}). Note that constraint notices may print to the console, depending on the PostgreSQL server settings.
 #'
 #' @export
@@ -38,7 +37,6 @@ writeRaster_old <- function(
   raster,
   rast_table = c("spatial", "rasters"),
   bit.depth = NULL,
-  blocks = NULL,
   constraints = TRUE
 ) {
   restore_spatial_env <- unset_postgres_spatial_env()
@@ -183,84 +181,9 @@ writeRaster_old <- function(
   res <- round(terra::res(r1), 10)
 
   # figure out block size
-  if (!is.null(blocks)) {
-    # Define a function basically straight from the 'bs' unexported function from rpostgis
-    bs <- function(r1, blocks) {
-      blocks <- as.integer(blocks)
-      if (any(is.na(blocks)) || length(blocks) > 2) {
-        cli::cli_abort("blocks must be a 1- or 2-length integer vector.")
-      }
-      if (any(blocks == 0)) {
-        cli::cli_abort("Invalid number of blocks (0).")
-      }
-      if (length(blocks) == 1) {
-        blocks <- c(blocks, blocks)
-      }
-      r1 <- r1[[1]]
-
-      cr <- list()
-      tr <- list()
-
-      # Manage RasterLayer
-      r1 <- terra::rast(r1)
-
-      n.c <- terra::ncol(r1)
-      n.r1 <- terra::nrow(r1)
-
-      # cr
-      b <- blocks[1]
-      if (b == 1) {
-        cr$row <- 1
-        cr$nrows <- n.c
-        cr$n <- 1
-      } else {
-        if (b >= n.c) {
-          b <- n.c
-        }
-        if (n.c %% b == 0) {
-          by <- n.c / b
-          cr$row <- seq(1, to = n.c, by = by)
-          cr$nrows <- rep(by, b)
-          cr$n <- length(cr$row)
-        } else {
-          by <- floor(n.c / b)
-          cr$row <- c(1, seq(1 + by + (n.c %% b), to = n.c, by = by))
-          cr$nrows <- c(cr$row[2:length(cr$row)], n.c + 1) - cr$row
-          cr$n <- length(cr$row)
-        }
-      }
-
-      # tr
-      b <- blocks[2]
-      if (b == 1) {
-        tr$row <- 1
-        tr$nrows <- n.r1
-        tr$n <- 1
-      } else {
-        if (b >= n.r1) {
-          b <- n.r1
-        }
-        if (n.r1 %% b == 0) {
-          by <- n.r1 / b
-          tr$row <- seq(1, to = n.r1, by = by)
-          tr$nrows <- rep(by, b)
-          tr$n <- length(tr$row)
-        } else {
-          by <- floor(n.r1 / b)
-          tr$row <- c(1, seq(1 + by + (n.r1 %% b), to = n.r1, by = by))
-          tr$nrows <- c(tr$row[2:length(tr$row)], n.r1 + 1) - tr$row
-          tr$n <- length(tr$row)
-        }
-      }
-    }
-    bs <- bs(r1, blocks)
-
-    tr <- bs$tr
-    cr <- bs$cr
-  } else {
-    tr <- terra::blocks(r1[[1]], 100)
-    cr <- terra::blocks(terra::t(r1[[1]]), 100)
-  }
+  tile_layout <- raster_tile_layout(r1)
+  cr <- tile_layout$tile_ranges$columns
+  tr <- tile_layout$tile_ranges$rows
 
   message(
     "Splitting ",

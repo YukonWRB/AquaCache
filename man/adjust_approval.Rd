@@ -4,7 +4,13 @@
 \alias{adjust_approval}
 \title{Adjust the approval of a timeseries in the database}
 \usage{
-adjust_approval(con, timeseries_id, data, delete = FALSE)
+adjust_approval(
+  con,
+  timeseries_id,
+  data,
+  delete = FALSE,
+  source_update = FALSE
+)
 }
 \arguments{
 \item{con}{A connection to the database with write privileges to the 'approvals' and 'measurements_continuous' tables.}
@@ -14,6 +20,11 @@ adjust_approval(con, timeseries_id, data, delete = FALSE)
 \item{data}{A data.frame with columns for 'datetime' and 'approval'. 'datetime' should be POSIXct and 'approval' should either character (in which case it must refer to entries in column 'approval_type_code' of table 'approval_types' or integer/numeric, in which case it must refer to column 'approval_type_id' of the same table.}
 
 \item{delete}{Logical. If TRUE, the function will delete approvals which come entirely after the start of 'data'. This ensures synchronization with remote data stores and is called as TRUE from the 'synchronize' functions.}
+
+\item{source_update}{Logical. Set TRUE when \code{data} came from a source
+adapter or synchronization workflow. Existing intervals marked
+\code{no_source_update} are then immutable. Direct/manual calls leave this FALSE
+and may set \code{data$no_source_update} explicitly.}
 }
 \value{
 Modifies the 'approvals' table in the database.

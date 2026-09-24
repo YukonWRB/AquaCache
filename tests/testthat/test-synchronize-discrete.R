@@ -9,15 +9,15 @@ test_that("discrete synchronization does not reassign sample provenance", {
     sample_id = 1L,
     owner = 1L,
     contributor = 1L,
-    import_source = "adapter_a"
+    source_adapter_function = "adapter_a"
   )
-  remote_sample <- data.frame(import_source = "adapter_b")
+  remote_sample <- data.frame(source_adapter_function = "adapter_b")
 
   changed <- synchronize_discrete_sample_metadata(
     con = structure(list(), class = "mock_con"),
     database_sample = database_sample,
     remote_sample = remote_sample,
-    valid_sample_names = "import_source",
+    valid_sample_names = "source_adapter_function",
     sample_groups = NULL,
     default_owner = 1L,
     default_contributor = 1L

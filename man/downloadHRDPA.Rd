@@ -11,7 +11,14 @@ downloadHRDPA(parameter, start_datetime, clip = NULL)
 
 \item{start_datetime}{The datetime from which to start looking for new rasters. Coerced to POSIXct, timezone UTC. At present, HRDPA rasters are only available for 30 days in the past, so earlier start datetimes will be adjusted to 30 days ago for speed.}
 
-\item{clip}{The two-digit abbreviation(s) as per \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census} for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.}
+\item{clip}{The area with which to clip the rasters. Supply one or more
+two-letter province or territory abbreviations as per the \href{https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8}{Canadian Census}
+to use their combined 300 km buffered boundary. Alternatively, supply an
+unnamed numeric EPSG:4326 vector in \code{north}, \code{west}, \code{south}, \code{east} order, a named
+numeric vector or named list using either those names or \code{xmin}, \code{xmax},
+\code{ymin}, and \code{ymax}, or a \link[terra:SpatExtent]{terra::SpatExtent}. JSON arrays and named JSON
+objects passed through \code{source_fx_args} are supported. Set to \code{NULL} for
+no clip.}
 }
 \value{
 A list of lists, where each element consists of the target raster as well as associated attributes.

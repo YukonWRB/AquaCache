@@ -2,7 +2,14 @@
 #'
 #' @param parameter The parameter to fetch.
 #' @param start_datetime Not a true start_datetime in the sense used in fetching other data, but rather the datetime of the last issued forecast in the database. This is compared to what's on the remote and, if different, the new forecast is fetched.
-#' @param clip The two-digit abbreviation(s) as per [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8) for the province(s) with which to clip the HRDPA. A 300 km buffer is added beyond the provincial boundaries. Set to NULL for no clip.
+#' @param clip The area with which to clip the rasters. Supply one or more
+#'   two-letter province or territory abbreviations as per the [Canadian Census](https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_8)
+#'   to use their combined 300 km buffered boundary. Alternatively, supply an
+#'   unnamed numeric EPSG:4326 vector in `north`, `west`, `south`, `east` order, a named
+#'   numeric vector or named list using either those names or `xmin`, `xmax`,
+#'   `ymin`, and `ymax`, or a [terra::SpatExtent]. JSON arrays and named JSON
+#'   objects passed through `source_fx_args` are supported. Set to `NULL` for
+#'   no clip.
 #'
 #' @return A list of lists, where each element consists of the target raster as well as associated attributes.
 #' @export
@@ -12,14 +19,7 @@ downloadHRDPS <- function(
   start_datetime,
   clip = NULL
 ) {
-  # check parameter 'clip'
-  if (!is.null(clip)) {
-    if (!inherits(clip, "character")) {
-      stop("Parameter clip must be a character vector of 2 characters.")
-    } else if (nchar(clip) != 2) {
-      stop("Parameter clip must be a character vector of 2 characters.")
-    }
-  }
+  clip_spec <- raster_clip_normalize(clip)
   if (!inherits(start_datetime, "POSIXct")) {
     start_datetime <- as.POSIXct(start_datetime, tz = "UTC")
   } else {
@@ -156,13 +156,7 @@ downloadHRDPS <- function(
       "H.grib2"
     )
 
-    # Make clip polygon
-    if (!is.null(clip)) {
-      clip <- prov_buff[prov_buff$PREABBR %in% clip, ] # This is package data living as shapefile in inst/extdata, loaded using file data_load.R
-      if (nrow(clip) == 0) {
-        clip <- NULL
-      }
-    }
+    clip <- raster_clip_spatial(clip_spec)
 
     files <- list()
     unavailable_count <- 0L
@@ -183,14 +177,18 @@ downloadHRDPS <- function(
       file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
       rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
       if (!clipped) {
-        if (!is.null(clip)) {
+        if (!is.null(clip) && identical(clip_spec$type, "provinces")) {
           clip <- terra::project(clip, rast) # project clip vector to crs of the raster
         }
         clipped <- TRUE # So that project doesn't happen after the first iteration
       }
       if (!is.null(clip)) {
-        rast <- terra::mask(rast, clip) # Makes NA values beyond the boundary of clip
-        rast <- terra::trim(rast) # Trims the NA values
+        if (identical(clip_spec$type, "bbox")) {
+          rast <- terra::crop(rast, clip)
+        } else {
+          rast <- terra::mask(rast, clip) # Makes NA values beyond the boundary of clip
+          rast <- terra::trim(rast) # Trims the NA values
+        }
       }
       file[["rast"]] <- rast
       forecast_hour <- as.integer(sub("/", "", hour_links[i], fixed = TRUE))
