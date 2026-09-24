@@ -112,8 +112,35 @@ tryCatch(
        'Foreign key to public.units for a parameter with no applicable liquid, solid, or gas matrix state. When set, the other parameter unit columns must be NULL.';"
     )
 
+    # The Patch 39 row-validation triggers run on the following updates. Let
+    # them resolve the new state through the existing liquid unit until the
+    # well-depth unit is moved to units_na below.
+    DBI::dbExecute(
+      con,
+      "CREATE OR REPLACE FUNCTION public.get_parameter_unit_id(
+         p_parameter_id INTEGER,
+         p_matrix_state_id INTEGER
+       )
+       RETURNS INTEGER
+       LANGUAGE sql
+       STABLE
+       AS $function$
+         SELECT CASE ms.matrix_state_code
+           WHEN 'liquid' THEN p.units_liquid
+           WHEN 'solid' THEN p.units_solid
+           WHEN 'gas' THEN p.units_gas
+           WHEN 'not_applicable' THEN COALESCE(p.units_na, p.units_liquid)
+           ELSE NULL
+         END
+         FROM public.parameters p
+         JOIN public.matrix_states ms
+           ON ms.matrix_state_id = p_matrix_state_id
+         WHERE p.parameter_id = p_parameter_id;
+       $function$;"
+    )
+
     # Well depth was historically assigned a liquid unit. Reclassify its
-    # stored rows before moving that unit, preserving the existing values.
+    # stored rows while the transitional resolver still recognizes its unit.
     DBI::dbExecute(
       con,
       "DO $migration$
