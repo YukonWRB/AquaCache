@@ -12,7 +12,8 @@ upsertImportParameterMappings(
   source_name = source_code,
   source_description = NULL,
   target_columns = import_mapping_default_target_columns(),
-  profile_code = NULL
+  profile_code = NULL,
+  publish = TRUE
 )
 }
 \arguments{
@@ -21,7 +22,7 @@ upsertImportParameterMappings(
 \item{source_code}{Stable code for the external source or key set.}
 
 \item{mappings}{A data.frame/data.table of mappings, or a path to a CSV or
-Excel workbook file.}
+Excel workbook file. See examples.}
 
 \item{match_columns}{Character vector of column names from \code{mappings} that
 identify the source-side result.}
@@ -37,6 +38,9 @@ AquaCache target values. Names can include \code{parameter}, \code{result_type},
 
 \item{profile_code}{Optional profile code. When supplied, mappings override
 source-wide mappings only while that profile is being used.}
+
+\item{publish}{If \code{FALSE}, leave the changes in the scope's editable draft.
+Call \code{\link[=publishImportMappings]{publishImportMappings()}} after staging changes to any mapping type.}
 }
 \value{
 Invisibly returns the resolved mapping table that was uploaded.
@@ -47,4 +51,42 @@ Adds or updates parameter mappings for an external source in
 source-side matching fields are chosen by \code{match_columns}, so simple sources
 can match on a variable/unit pair while richer source databases can match on
 any combination of source columns.
+}
+\examples{
+\dontrun{
+# The 'mappings' argument should contain integer IDs for every column in table 'discrete.import_parameter_mappings', or NA, PLUS the source columns on which you wish to match.
+# For EQWin, the two source columns are 'ParamCode' and 'input_unit'; the other columns in the below data.frame correspond to AquaCache database columns.
+# this data.frame can contain multiple rows, one per new mapping.
+new_mapping <- data.frame(
+  ParamCode = "Hg-T-ULL",
+  input_unit = "mg/L",
+  parameter_id = 1105,
+  result_type = 2,
+  sample_fraction_id = 19,
+  result_value_type = 1,
+  result_speciation_id = NA,
+  matrix_state_id = 1,
+  conversion = 1, # The conversion to database units
+  result_offset = 0,
+  priority = 100, # ordering weight when more than one mapping could match. Lower number wins.
+  active = TRUE,
+  note = "Add any notes useful in future, if applicable."
+)
+
+con <- AquaConnect()
+
+upsertImportParameterMappings(
+  con,
+  source_code = "EQWin",
+  mappings = new_mapping,
+  match_columns = c("ParamCode", "input_unit"),
+  publish = FALSE
+)
+
+# Add more parameter, location, or result-flag mappings with publish = FALSE,
+# then publish the complete draft once all edits are ready.
+publishImportMappings(con, source_code = "EQWin")
+
+DBI::dbDisconnect(con)
+}
 }

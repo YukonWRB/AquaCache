@@ -11,7 +11,7 @@
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French. You're highly encouraged to populate this field, but if left blank (or the corresponding column in `df` is missing or empty) it will be populated with 'Traduction requise!'.
 #' @param alias A character vector of the location alias(es). This is optional, leave NA if not needed.
-#' @param location_code A character vector of the location code(s). Note that in most cases this should be auto-generated when by adding a new location using the YGwater Shiny application!
+#' @param location_code A character vector of the location code(s). Note that in most cases this should be left NULL to auto-generate, or created when adding a new location using the YGwater Shiny application!
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
 #' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default public group is "public_reader".
@@ -122,9 +122,7 @@ addACLocation <- function(
       "network",
       "project"
     )
-    if (
-      !all(required_columns %in% colnames(df))
-    ) {
+    if (!all(required_columns %in% colnames(df))) {
       missing <- setdiff(required_columns, colnames(df))
       stop(
         "The data.frame provided does not contain all the necessary columns: missing column(s) ",
@@ -243,17 +241,27 @@ addACLocation <- function(
   elevation_details <- vector("list", length(conversion_m))
   if ("elevation_details" %in% names(df)) {
     supplied_details <- df$elevation_details
-    if (!is.list(supplied_details) || length(supplied_details) != length(conversion_m)) {
-      stop("The optional elevation_details column must contain one get_elevation() result per location.")
+    if (
+      !is.list(supplied_details) ||
+        length(supplied_details) != length(conversion_m)
+    ) {
+      stop(
+        "The optional elevation_details column must contain one get_elevation() result per location."
+      )
     }
     for (i in which(automatic_elevation)) {
       details <- supplied_details[[i]]
       if (
-        is.null(details) || length(details$elevation) != 1L ||
-          !is.finite(details$elevation) || length(details$vertical_datum) != 1L ||
-          is.na(details$vertical_datum) || !nzchar(trimws(details$vertical_datum))
+        is.null(details) ||
+          length(details$elevation) != 1L ||
+          !is.finite(details$elevation) ||
+          length(details$vertical_datum) != 1L ||
+          is.na(details$vertical_datum) ||
+          !nzchar(trimws(details$vertical_datum))
       ) {
-        stop("Supplied elevation_details must include a finite elevation and vertical datum.")
+        stop(
+          "Supplied elevation_details must include a finite elevation and vertical datum."
+        )
       }
       conversion_m[i] <- details$elevation
       elevation_details[[i]] <- details
@@ -262,7 +270,9 @@ addACLocation <- function(
     }
   }
   if (any(automatic_elevation)) {
-    for (i in which(automatic_elevation & vapply(elevation_details, is.null, logical(1)))) {
+    for (i in which(
+      automatic_elevation & vapply(elevation_details, is.null, logical(1))
+    )) {
       details <- get_elevation(
         lat = latitude[i],
         lon = longitude[i],

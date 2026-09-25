@@ -8,7 +8,8 @@ getImportResultFlagMappings(
   con,
   source_code = NULL,
   profile_code = NULL,
-  active = TRUE
+  active = TRUE,
+  include_draft = FALSE
 )
 }
 \arguments{
@@ -20,6 +21,10 @@ getImportResultFlagMappings(
 profile-specific mappings are returned, with profile mappings first.}
 
 \item{active}{Optional active filter. Use \code{NULL} for all rows.}
+
+\item{include_draft}{If \code{TRUE}, use the draft instead of the published set
+for any scope that has an open draft. Intended for mapping editors and
+upload previews; import runs should use published mappings.}
 }
 \value{
 A data.frame of result-flag mappings in precedence order.

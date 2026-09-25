@@ -9,7 +9,8 @@ upsertImportLocationMappings(
   source_code,
   mappings,
   profile_code = NULL,
-  source_name = source_code
+  source_name = source_code,
+  publish = TRUE
 )
 }
 \arguments{
@@ -24,6 +25,9 @@ and \code{location_id}. Optional fields are \code{source_location_name},
 \item{profile_code}{Optional profile code for a profile-specific override.}
 
 \item{source_name}{Human-readable source name, used if the source is new.}
+
+\item{publish}{If \code{FALSE}, leave the changes in the scope's editable draft.
+Call \code{\link[=publishImportMappings]{publishImportMappings()}} after staging changes to any mapping type.}
 }
 \value{
 Invisibly returns the normalized mapping table.
