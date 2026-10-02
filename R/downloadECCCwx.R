@@ -185,6 +185,15 @@ downloadECCCwx <- function(
   } else {
     data <- data.frame()
   }
+  
+  if (nrow(data) > 0) {
+    data$period <- switch(
+      interval,
+      hour  = "1 hour",
+      day   = "1 day",
+      month = "1 month"
+    )
+  }
 
   return(data)
 }
