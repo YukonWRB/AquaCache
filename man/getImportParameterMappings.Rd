@@ -9,7 +9,8 @@ getImportParameterMappings(
   source_code = NULL,
   profile_code = NULL,
   active = TRUE,
-  import_mapping_set_id = NULL
+  import_mapping_set_id = NULL,
+  include_draft = FALSE
 )
 }
 \arguments{
@@ -24,6 +25,10 @@ published source mappings and profile overrides are returned.}
 
 \item{import_mapping_set_id}{Optional exact mapping-set revision. When set,
 \code{source_code} and \code{profile_code} are ignored.}
+
+\item{include_draft}{If \code{TRUE}, use the draft instead of the published set
+for any scope that has an open draft. Intended for mapping editors and
+upload previews; import runs should use published mappings.}
 }
 \value{
 A data.frame of typed parameter mappings in resolution order.

@@ -39,7 +39,7 @@ for \code{con} must be left as their default values.}
 
 \item{alias}{A character vector of the location alias(es). This is optional, leave NA if not needed.}
 
-\item{location_code}{A character vector of the location code(s). Note that in most cases this should be auto-generated when by adding a new location using the YGwater Shiny application!}
+\item{location_code}{A character vector of the location code(s). Note that in most cases this should be left NULL to auto-generate, or created when adding a new location using the YGwater Shiny application!}
 
 \item{latitude}{A numeric vector of the latitude(s) as decimal degrees.}
 
