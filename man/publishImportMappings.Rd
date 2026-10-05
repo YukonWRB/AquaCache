@@ -17,8 +17,8 @@ mappings.}
 \value{
 Invisibly returns the active \code{import_mapping_set_id}. If no draft
 exists, the current published set is returned unchanged. Returns
-\code{NA_integer_} when the scope has no mapping set; publishing an empty
-scope is a no-op.
+\code{NA_integer_} when the scope has no mapping set; publishing an empty scope
+is a no-op.
 }
 \description{
 Publishes the draft mapping set for a source or source/profile scope. The
