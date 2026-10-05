@@ -639,6 +639,7 @@ addACTimeseries <- function(
           share_with = paste0("{", paste(share_with[i], collapse = ", "), "}"),
           default_owner = owner[i],
           note = note[i],
+          start_datetime = start_datetime[i],
           end_datetime = if (is.na(fetch_source_fx)) {
             NA
           } else {
@@ -651,7 +652,7 @@ addACTimeseries <- function(
           {
             new_tsid <- DBI::dbGetQuery(
               con,
-              "INSERT INTO continuous.timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, record_rate, share_with, default_owner, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12) RETURNING timeseries_id;",
+              "INSERT INTO continuous.timeseries (location_id, sub_location_id, z_id, parameter_id, media_id, matrix_state_id, sensor_priority, aggregation_type_id, start_datetime, record_rate, share_with, default_owner, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], $12, $13) RETURNING timeseries_id;",
               params = list(
                 add$location_id,
                 add$sub_location_id,
@@ -661,6 +662,7 @@ addACTimeseries <- function(
                 add$matrix_state_id,
                 add$sensor_priority,
                 add$aggregation_type_id,
+                add$start_datetime,
                 add$record_rate,
                 add$share_with,
                 add$default_owner,
