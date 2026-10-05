@@ -655,6 +655,10 @@ create_test_db <- function(
     "SELECT result_speciation_id FROM discrete.result_speciations WHERE result_speciation = 'as CaCO3' LIMIT 1",
     "CaCO3 result speciation"
   )
+  result_speciation_turb <- first_id(
+    "SELECT result_speciation_id FROM discrete.result_speciations WHERE result_speciation = 'as NTU' LIMIT 1",
+    "turbidity result speciation"
+  )
   protocol_method_id <- first_id(
     "SELECT protocol_id FROM discrete.protocols_methods ORDER BY protocol_id LIMIT 1",
     "protocol/method"
@@ -1557,7 +1561,7 @@ create_test_db <- function(
         '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
        (7, 4, %d, %d, NULL, 5.8, NULL, NULL, %d, NULL, NULL, NULL,
         '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
-       (8, 4, %d, %d, NULL, 3.4, NULL, NULL, %d, NULL, NULL, NULL,
+       (8, 4, %d, %d, NULL, 3.4, NULL, NULL, %d, %d, NULL, NULL,
         '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
        (9, 4, %d, %d, NULL, 129.6, NULL, NULL, %d, NULL, NULL, NULL,
         '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
@@ -1584,6 +1588,7 @@ create_test_db <- function(
       result_type_field,
       turbidity_param,
       result_value_estimated,
+      result_speciation_turb,
       matrix_liquid,
       result_type_field,
       conductance_param,
