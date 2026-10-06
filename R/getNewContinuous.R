@@ -155,6 +155,7 @@ getNewContinuous <- function(
         t.default_owner,
         t.default_data_sharing_agreement_id,
         t.active,
+        t.start_datetime,
         mc.last_data_point,
         transmission_route.platform_identifier
           AS transmission_platform_identifier
@@ -231,6 +232,7 @@ getNewContinuous <- function(
           t.default_owner,
           t.default_data_sharing_agreement_id,
           t.active,
+          t.start_datetime,
           mc.last_data_point,
           transmission_route.platform_identifier
             AS transmission_platform_identifier
@@ -654,7 +656,12 @@ getNewContinuous <- function(
       1
 
     if (is.na(last_data_point)) {
-      last_data_point <- origin_datetime
+      ts_start <- all_timeseries$start_datetime[i]
+      last_data_point <- if (length(ts_start) == 1L && !is.na(ts_start)) {
+        as.POSIXct(ts_start, tz = "UTC")
+      } else {
+        origin_datetime
+      }
     }
 
     args_list <- list(start_datetime = last_data_point, con = con)
