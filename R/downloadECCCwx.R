@@ -185,8 +185,59 @@ downloadECCCwx <- function(
   } else {
     data <- data.frame()
   }
+  
+  if (nrow(data) > 0) {
+    period <- dlECCCwx_period(parameter = parameter, interval = interval)
+    if (!is.na(period)) {
+      data$period <- period
+    }
+  }
 
   return(data)
+}
+
+#' downloadECCCwx helper
+#'
+#' Returns the period each value represents for a weathercan column. Returns NA
+#' for instantaneous readings and for unrecognised columns, leaving the period
+#' to getNewContinuous(): '00:00:00' for instantaneous timeseries, otherwise
+#' inferred with calculate_period().
+#' @keywords internal
+#' @noRd
+dlECCCwx_period <- function(parameter, interval) {
+  periods <- list(
+    hour = c(
+      wind_spd = "2 minutes",
+      wind_dir = "2 minutes"
+    ),
+    day = c(
+      max_temp = "1 day",
+      min_temp = "1 day",
+      mean_temp = "1 day",
+      heat_deg_days = "1 day",
+      cool_deg_days = "1 day",
+      total_rain = "1 day",
+      total_snow = "1 day",
+      total_precip = "1 day",
+      spd_max_gust = "1 day"
+    ),
+    month = c(
+      mean_max_temp = "1 month",
+      mean_min_temp = "1 month",
+      mean_temp = "1 month",
+      extr_max_temp = "1 month",
+      extr_min_temp = "1 month",
+      total_rain = "1 month",
+      total_snow = "1 month",
+      total_precip = "1 month",
+      spd_max_gust = "1 month"
+    )
+  )
+  period <- unname(periods[[interval]][parameter])
+  if (length(period) != 1L || is.na(period)) {
+    return(NA_character_)
+  }
+  period
 }
 
 #' downloadECCCwx helper

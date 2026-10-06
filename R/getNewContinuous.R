@@ -837,7 +837,11 @@ getNewContinuous <- function(
         )
       }
 
-      ts <- ts[, c("datetime", "value", "timeseries_id", "imputed")]
+      keep <- c("datetime", "value", "timeseries_id", "imputed")
+      if ("period" %in% names(ts)) {
+        keep <- c(keep, "period")
+      }
+      ts <- ts[, keep]
 
       if (aggregation_type == "instantaneous") {
         ts$period <- "00:00:00"
