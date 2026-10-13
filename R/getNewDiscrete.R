@@ -43,7 +43,7 @@
 #' - 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 #' - 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
-#' - 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+#' - 'result_descriptor_id': a numeric specifying the result_descriptor_id of the data point from table 'result_descriptors', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_descriptor' in table 'parameters' is TRUE for the parameter in question.
 #' - 'lab_report_no' and 'lab_sample_no': optional laboratory report and sample
 #'   identifiers.
 #' - 'grade_type_id' and 'approval_type_id': optional result-level quality and
@@ -652,11 +652,11 @@ getNewDiscrete <- function(
             }
           } # End of additional checks fs any NA values in 'result' column are returned
 
-          # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation_id and sample_fraction_id.
-          result_speciation <- DBI::dbGetQuery(
+          # Get the result_descriptor and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_descriptor_id and sample_fraction_id.
+          result_descriptor <- DBI::dbGetQuery(
             con,
             paste0(
-              "SELECT parameter_id, result_speciation AS result_speciation_bool FROM public.parameters WHERE parameter_id IN (",
+              "SELECT parameter_id, result_descriptor AS result_descriptor_bool FROM public.parameters WHERE parameter_id IN (",
               paste(unique(results$parameter_id), collapse = ", "),
               ");"
             )
@@ -669,8 +669,8 @@ getNewDiscrete <- function(
               ");"
             )
           )
-          if (any(result_speciation$result_speciation_bool)) {
-            if (!("result_speciation_id" %in% names_res)) {
+          if (any(result_descriptor$result_descriptor_bool)) {
+            if (!("result_descriptor_id" %in% names_res)) {
               warning(
                 "For sample_series_id ",
                 sid,
@@ -678,16 +678,16 @@ getNewDiscrete <- function(
                 j,
                 " (sample_datetime ",
                 sample$datetime,
-                ") the source function did not return a column 'result_speciation_id' but the database mandates this for at least one of the parameters. Skipping to next sample."
+                ") the source function did not return a column 'result_descriptor_id' but the database mandates this for at least one of the parameters. Skipping to next sample."
               )
               next
             } else {
-              # Check that values in the result_speciation_id column are not NA where necessary
-              merge <- merge(results, result_speciation, by = "parameter_id")
-              # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation_id column is not NA
+              # Check that values in the result_descriptor_id column are not NA where necessary
+              merge <- merge(results, result_descriptor, by = "parameter_id")
+              # For rows where result_descriptor_bool is TRUE, check that the corresponding result_descriptor_id column is not NA
               chk <- with(
                 merge,
-                result_speciation_bool & is.na(result_speciation_id)
+                result_descriptor_bool & is.na(result_descriptor_id)
               )
               if (any(chk)) {
                 params <- merge$parameter_id[chk]
@@ -698,7 +698,7 @@ getNewDiscrete <- function(
                   j,
                   " (sample_datetime ",
                   sample$datetime,
-                  ") the source function returned NA values in the column 'result_speciation_id' for parameter ",
+                  ") the source function returned NA values in the column 'result_descriptor_id' for parameter ",
                   paste(params, collapse = ", "),
                   " where the database mandates this value. Skipping to next sample."
                 )

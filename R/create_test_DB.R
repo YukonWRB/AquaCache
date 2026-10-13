@@ -302,7 +302,7 @@ create_test_db <- function(
     "discrete.collection_methods",
     "discrete.protocols_methods",
     "discrete.result_conditions",
-    "discrete.result_speciations",
+    "discrete.result_descriptors",
     "discrete.result_types",
     "discrete.result_value_types",
     "discrete.sample_fractions",
@@ -336,6 +336,7 @@ create_test_db <- function(
     "public.parameter_groups",
     "public.parameter_sub_groups",
     "public.parameters",
+    "public.parameter_descriptor_suggestions",
     "public.parameter_relationships",
     "public.qualifier_types",
     "public.source_adapter_capabilities",
@@ -651,13 +652,13 @@ create_test_db <- function(
     "SELECT result_condition_id FROM discrete.result_conditions ORDER BY result_condition_id LIMIT 1",
     "result condition"
   )
-  result_speciation_caco3 <- first_id(
-    "SELECT result_speciation_id FROM discrete.result_speciations WHERE result_speciation = 'as CaCO3' LIMIT 1",
-    "CaCO3 result speciation"
+  result_descriptor_caco3 <- first_id(
+    "SELECT result_descriptor_id FROM discrete.result_descriptors WHERE result_descriptor = 'as CaCO3' LIMIT 1",
+    "CaCO3 result descriptor"
   )
-  result_speciation_turb <- first_id(
-    "SELECT result_speciation_id FROM discrete.result_speciations WHERE result_speciation = 'as NTU' LIMIT 1",
-    "turbidity result speciation"
+  result_descriptor_turb <- first_id(
+    "SELECT result_descriptor_id FROM discrete.result_descriptors WHERE result_descriptor = 'as NTU' LIMIT 1",
+    "turbidity result descriptor"
   )
   protocol_method_id <- first_id(
     "SELECT protocol_id FROM discrete.protocols_methods ORDER BY protocol_id LIMIT 1",
@@ -775,7 +776,7 @@ create_test_db <- function(
          note, record_rate, location_id, z_id, active,
          share_with, default_owner, sensor_priority, sub_location_id,
          timezone_daily_calc, sync_remote, matrix_state_id,
-         timeseries_type, publicly_visible
+         timeseries_type, default_show
        ) VALUES
          (1, %d, %d, %d, NULL, NULL, NULL,
           'Synthetic 15-minute water level.', interval '15 minutes',
@@ -1553,7 +1554,7 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
-       result_value_type, result_speciation_id, protocol_method,
+       result_value_type, result_descriptor_id, protocol_method,
        laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
@@ -1588,7 +1589,7 @@ create_test_db <- function(
       result_type_field,
       turbidity_param,
       result_value_estimated,
-      result_speciation_turb,
+      result_descriptor_turb,
       matrix_liquid,
       result_type_field,
       conductance_param,
@@ -1598,7 +1599,7 @@ create_test_db <- function(
       alkalinity_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      result_descriptor_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1606,7 +1607,7 @@ create_test_db <- function(
       hardness_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      result_descriptor_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1642,7 +1643,7 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
-       result_value_type, result_speciation_id, protocol_method,
+       result_value_type, result_descriptor_id, protocol_method,
        laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
@@ -1696,7 +1697,7 @@ create_test_db <- function(
       alkalinity_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      result_descriptor_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1704,7 +1705,7 @@ create_test_db <- function(
       hardness_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      result_descriptor_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,

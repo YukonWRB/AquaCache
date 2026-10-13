@@ -5,6 +5,9 @@
 #' Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings loaded in `discrete.import_parameter_mappings`, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
 #'
 #' Note that ECCC's results are converted to the AquaCache database parameters and units using the requested database import key. Users should ensure that the import key has been loaded before importing ECCC data. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
+#' The ECCC laboratory is attached only to results whose active mapping uses
+#' the `lab` result type. Mappings using `field` do not receive laboratory
+#' metadata.
 #'
 #' @param location The location code associated with the ECCC monitoring site. Must be a valid location code in the `SITE_NO` field of the ECCC water quality .csv files.
 #' @param file Path (URL) to the ECCC water quality .csv file containing the data to be imported for the specified location.
@@ -209,6 +212,11 @@ downloadECCCwq <- function(
   if (identical(mode, "missing_mappings")) {
     return(downloadECCCwq_missing_mappings(all_results, key))
   }
+  result_types <- DBI::dbGetQuery(
+    con,
+    "SELECT result_type_id, lower(btrim(result_type)) AS result_type_name
+     FROM discrete.result_types"
+  )
   all_samples <- unique(all_results$DATE_TIME_HEURE)
 
   media_id <- DBI::dbGetQuery(
@@ -357,6 +365,14 @@ downloadECCCwq <- function(
       } else {
         NA_character_
       }
+      mapped_result_type <- result_types$result_type_name[
+        match(param_row$result_type[1], result_types$result_type_id)
+      ]
+      result_laboratory <- if (identical(mapped_result_type, "lab")) {
+        eccc_lab
+      } else {
+        NA_integer_
+      }
 
       # Build the result row
       result <- data.frame(
@@ -367,8 +383,8 @@ downloadECCCwq <- function(
         result_condition = result_condition,
         result_condition_value = result_condition_value,
         result_value_type = param_row$result_value_type[1],
-        result_speciation_id = param_row$result_speciation_id[1],
-        laboratory = eccc_lab,
+        result_descriptor_id = param_row$result_descriptor_id[1],
+        laboratory = result_laboratory,
         matrix_state_id = matrix_state_id,
         matrix_state = matrix_state,
         stringsAsFactors = FALSE

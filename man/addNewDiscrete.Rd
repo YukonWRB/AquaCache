@@ -85,7 +85,7 @@ Additionally, the following columns may need to be included:
 \item 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 \item 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
-\item 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+\item 'result_descriptor_id': a numeric specifying the result_descriptor_id of the data point from table 'result_descriptors', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_descriptor' in table 'parameters' is TRUE for the parameter in question.
 \item 'no_source_update': logical; \code{TRUE} preserves that result from later
 source-adapter synchronization while still allowing direct user edits.
 \item 'lab_report_no' and 'lab_sample_no': optional laboratory report and sample

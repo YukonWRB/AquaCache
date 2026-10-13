@@ -3,7 +3,7 @@
 #' This function can be used to append new continuous type data directly to the database without downloading it from a remote source. Differs from [getNewContinuous()] as the latter is used to pull data from a remote before append. New data can only be appended to basic timeseries.
 #'
 #' @param tsid The timeseries_id to which the data will be appended. This is a required parameter.
-#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'data_sharing_agreement_id', 'imputed', and 'no_source_update'. Independent interval protection can be supplied through 'grade_no_source_update', 'approval_no_source_update', and 'qualifier_no_source_update'; see the `adjust_` series of functions for details.
+#' @param df A data.frame containing the data. Must have columns named 'datetime' and 'value' at minimum. Other optional columns are 'period' (a PostgreSQL-compatible interval), 'owner', 'contributor', 'approval', 'grade', 'qualifier', 'data_sharing_agreement_id', 'imputed', and 'no_source_update'. Independent interval protection can be supplied through 'grade_no_source_update', 'approval_no_source_update', and 'qualifier_no_source_update'; see the `adjust_` series of functions for details.
 #' @param con A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. If left NULL, a connection will be attempted using AquaConnect() and closed afterwards.
 #' @param overwrite Select one of "no", "all", "conflict". Default is "no", which will not overwrite any existing data (and fail if there is a conflict). "all" will wipe and replace all database entries for the target timeseries in the temporal range of `df`, while "conflict" will overwrite only those entries that conflict with the data in `df` (i.e. have the same datetime or date).
 #'
@@ -226,26 +226,36 @@ addNewContinuous <- function(
         df[, c("datetime", "data_sharing_agreement_id")]
       )
     }
+    period_was_provided <- "period" %in% names(df)
     df$timeseries_id <- tsid
-    # Drop columns no longer necessary
-    df <- df[, c(
+    # Drop columns no longer necessary, but retain a caller-supplied period.
+    measurement_columns <- c(
       "datetime",
       "value",
       "timeseries_id",
       "imputed",
       "no_source_update"
-    )]
+    )
+    if (period_was_provided) {
+      measurement_columns <- c(measurement_columns, "period")
+    }
+    df <- df[, measurement_columns, drop = FALSE]
+    if (!period_was_provided) {
+      df$period <- NA_character_
+    }
+    df$period <- as.character(df$period)
 
-    # assign a period to the data
+    # Use caller values first, then time-ranged aggregation metadata.
+    df <- apply_timeseries_aggregation_periods(df, tsid, con)
+
+    # Calculate only rows for which neither source provided a period.
     if (info$aggregation_type == "instantaneous") {
-      # Period is always 0 for instantaneous data
-      df$period <- "00:00:00"
-    } else if (
-      (info$aggregation_type != "instantaneous") & !("period" %in% names(df))
-    ) {
-      # aggregation_types of mean, median, min, max should all have a period
+      missing_period <- is.na(df$period) | !nzchar(trimws(df$period))
+      df$period[missing_period] <- "PT0S"
+    } else if (any(is.na(df$period) | !nzchar(trimws(df$period)))) {
+      missing_period <- is.na(df$period) | !nzchar(trimws(df$period))
       df_period <- calculate_period(
-        data = df,
+        data = df[, c("datetime", "value", "timeseries_id"), drop = FALSE],
         timeseries_id = tsid,
         con = con
       )
@@ -263,11 +273,12 @@ addNewContinuous <- function(
       )
 
       # Update the period column in the database with the calculated periods from 'df_period' where there is a match with datetimes in no_period
-      if (nrow(no_period) > 0) {
+      if (nrow(no_period) > 0 && "period" %in% names(df_period)) {
         no_period$period <- df_period$period[match(
           no_period$datetime,
           df_period$datetime
         )]
+        no_period <- no_period[!is.na(no_period$period), , drop = FALSE]
         for (i in seq_len(nrow(no_period))) {
           DBI::dbExecute(
             con,
@@ -281,13 +292,16 @@ addNewContinuous <- function(
         }
       }
 
-      # Only retain rows in df_period that were in df (calculate_period could have added rows if it needed to pull extra data to calculate the period)
-      df <- df_period[df_period$datetime %in% df$datetime, ]
-    } else {
-      # Check to make sure that the supplied period can actually be coerced to a period
-      check <- lubridate::period(unique(df$period))
-      if (NA %in% check) {
-        df$period <- NA
+      # calculate_period can include extra database rows to determine cadence;
+      # copy its result only into rows still missing a caller or method period.
+      if ("period" %in% names(df_period)) {
+        fallback_period <- df_period$period[match(
+          df$datetime,
+          df_period$datetime
+        )]
+        df$period[missing_period] <- as.character(
+          fallback_period[missing_period]
+        )
       }
     }
 

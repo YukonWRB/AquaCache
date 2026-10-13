@@ -1138,7 +1138,7 @@ synchronize_discrete <- function(
                 names_inRemote_sub <- names(sub)
                 is_remote_aggregated <- k %in% aggregated_result_rows
                 resolved_sub_matrix_state_id <- sub$matrix_state_id
-                # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, matrix_state_id, sample_fraction_id, result_value_type, result_speciation_id, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
+                # Sort out if there's an equivalent row in inDB_result. There could be new results! Results are unique on result_type, parameter_id, matrix_state_id, sample_fraction_id, result_value_type, result_descriptor_id, protocol_method, laboratory, analysis_datetime, but not all columns might be populated in 'sub'
 
                 idx <- inDB_results$result_type == sub$result_type &
                   inDB_results$parameter_id == sub$parameter_id
@@ -1160,14 +1160,14 @@ synchronize_discrete <- function(
                   })
                 idx <- idx &
                   (if (
-                    "result_speciation_id" %in%
+                    "result_descriptor_id" %in%
                       names_inRemote_sub &&
-                      !is.na(sub$result_speciation_id)
+                      !is.na(sub$result_descriptor_id)
                   ) {
-                    inDB_results$result_speciation_id ==
-                      sub$result_speciation_id
+                    inDB_results$result_descriptor_id ==
+                      sub$result_descriptor_id
                   } else {
-                    is.na(inDB_results$result_speciation_id)
+                    is.na(inDB_results$result_descriptor_id)
                   })
                 idx <- idx &
                   (if (
@@ -1292,11 +1292,11 @@ synchronize_discrete <- function(
                     }
                   } # End of additional checks if any NA values in 'result' column are returned
 
-                  # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation_id and sample_fraction_id.
-                  result_speciation <- DBI::dbGetQuery(
+                  # Get the result_descriptor and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_descriptor_id and sample_fraction_id.
+                  result_descriptor <- DBI::dbGetQuery(
                     con,
                     paste0(
-                      "SELECT parameter_id, result_speciation AS result_speciation_bool FROM public.parameters WHERE parameter_id = ",
+                      "SELECT parameter_id, result_descriptor AS result_descriptor_bool FROM public.parameters WHERE parameter_id = ",
                       sub$parameter_id,
                       ";"
                     )
@@ -1309,10 +1309,10 @@ synchronize_discrete <- function(
                       ";"
                     )
                   )
-                  if (result_speciation$result_speciation_bool) {
-                    if (!("result_speciation_id" %in% names_inRemote_sub)) {
+                  if (result_descriptor$result_descriptor_bool) {
+                    if (!("result_descriptor_id" %in% names_inRemote_sub)) {
                       warning(
-                        "The source function did not return a column 'result_speciation_id' but the database mandates this for parameter ",
+                        "The source function did not return a column 'result_descriptor_id' but the database mandates this for parameter ",
                         sub$parameter_id,
                         ". Error occured on sample_series_id ",
                         sid,
@@ -1324,12 +1324,12 @@ synchronize_discrete <- function(
                       )
                       next
                     } else {
-                      # Check that value in result_speciation_id column of sub are not NA where necessary
-                      if (is.na(sub$result_speciation_id)) {
+                      # Check that value in result_descriptor_id column of sub are not NA where necessary
+                      if (is.na(sub$result_descriptor_id)) {
                         warning(
                           "For sample_series_id ",
                           sid,
-                          " the source function returned NA for 'result_speciation_id' for parameter ",
+                          " the source function returned NA for 'result_descriptor_id' for parameter ",
                           sub$parameter_id,
                           " where the database mandates this value. Error occured on sample_series_id ",
                           sid,
@@ -1729,11 +1729,11 @@ synchronize_discrete <- function(
                 }
               } # End of additional checks if any NA values in 'result' column are returned
 
-              # Get the result_speciation and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_speciation and sample_fraction_id.
-              result_speciation <- DBI::dbGetQuery(
+              # Get the result_descriptor and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_descriptor and sample_fraction_id.
+              result_descriptor <- DBI::dbGetQuery(
                 con,
                 paste0(
-                  "SELECT parameter_id, result_speciation AS result_speciation_bool FROM public.parameters WHERE parameter_id IN (",
+                  "SELECT parameter_id, result_descriptor AS result_descriptor_bool FROM public.parameters WHERE parameter_id IN (",
                   paste(unique(inRemote_results$parameter_id), collapse = ", "),
                   ");"
                 )
@@ -1746,8 +1746,8 @@ synchronize_discrete <- function(
                   ");"
                 )
               )
-              if (any(result_speciation$result_speciation_bool)) {
-                if (!("result_speciation_id" %in% names(inRemote_results))) {
+              if (any(result_descriptor$result_descriptor_bool)) {
+                if (!("result_descriptor_id" %in% names(inRemote_results))) {
                   warning(
                     "For sample_series_id ",
                     sid,
@@ -1755,20 +1755,20 @@ synchronize_discrete <- function(
                     j,
                     " (sample_datetime ",
                     inRemote_sample$datetime,
-                    ") the source function did not return a column 'result_speciation_id' but the database mandates this for at least one of the parameters. Skipping to next sample."
+                    ") the source function did not return a column 'result_descriptor_id' but the database mandates this for at least one of the parameters. Skipping to next sample."
                   )
                   next
                 } else {
-                  # Check that values in the result_speciation_id column are not NA where necessary
+                  # Check that values in the result_descriptor_id column are not NA where necessary
                   merge <- merge(
                     inRemote_results,
-                    result_speciation,
+                    result_descriptor,
                     by = "parameter_id"
                   )
-                  # For rows where result_speciation_bool is TRUE, check that the corresponding result_speciation_id column is not NA
+                  # For rows where result_descriptor_bool is TRUE, check that the corresponding result_descriptor_id column is not NA
                   chk <- with(
                     merge,
-                    result_speciation_bool & is.na(result_speciation_id)
+                    result_descriptor_bool & is.na(result_descriptor_id)
                   )
                   if (any(chk)) {
                     warning(
@@ -1778,7 +1778,7 @@ synchronize_discrete <- function(
                       j,
                       " (sample_datetime ",
                       inRemote_sample$datetime,
-                      ") the source function returned NA values in the column 'result_speciation_id' for at least one parameter where the database mandates this value. Skipping to next sample."
+                      ") the source function returned NA values in the column 'result_descriptor_id' for at least one parameter where the database mandates this value. Skipping to next sample."
                     )
                     next
                   }

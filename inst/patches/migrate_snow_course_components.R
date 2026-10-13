@@ -356,8 +356,8 @@ run_snow_component_migration <- function(
         solid.sample_fraction_id
       AND liquid.result_value_type IS NOT DISTINCT FROM
         solid.result_value_type
-      AND liquid.result_speciation_id IS NOT DISTINCT FROM
-        solid.result_speciation_id
+      AND liquid.result_descriptor_id IS NOT DISTINCT FROM
+        solid.result_descriptor_id
       AND liquid.protocol_method IS NOT DISTINCT FROM solid.protocol_method
       AND liquid.laboratory IS NOT DISTINCT FROM solid.laboratory
       AND liquid.analysis_datetime IS NOT DISTINCT FROM
@@ -550,8 +550,8 @@ run_snow_component_migration <- function(
              solid.sample_fraction_id
            AND liquid.result_value_type IS NOT DISTINCT FROM
              solid.result_value_type
-           AND liquid.result_speciation_id IS NOT DISTINCT FROM
-             solid.result_speciation_id
+           AND liquid.result_descriptor_id IS NOT DISTINCT FROM
+             solid.result_descriptor_id
            AND liquid.protocol_method IS NOT DISTINCT FROM
              solid.protocol_method
            AND liquid.laboratory IS NOT DISTINCT FROM solid.laboratory
@@ -729,7 +729,7 @@ run_snow_component_migration <- function(
        AND matrix_state_id IS NOT DISTINCT FROM $4
        AND sample_fraction_id IS NOT DISTINCT FROM $5
        AND result_value_type IS NOT DISTINCT FROM $6
-       AND result_speciation_id IS NOT DISTINCT FROM $7
+       AND result_descriptor_id IS NOT DISTINCT FROM $7
        AND protocol_method IS NOT DISTINCT FROM $8
        AND laboratory IS NOT DISTINCT FROM $9
        AND analysis_datetime IS NOT DISTINCT FROM $10"
@@ -817,7 +817,7 @@ run_snow_component_migration <- function(
             as.integer(identity_value("matrix_state_id")),
             as.integer(identity_value("sample_fraction_id")),
             as.integer(identity_value("result_value_type")),
-            as.integer(identity_value("result_speciation_id")),
+            as.integer(identity_value("result_descriptor_id")),
             as.integer(identity_value("protocol_method")),
             as.integer(identity_value("laboratory")),
             as.POSIXct(

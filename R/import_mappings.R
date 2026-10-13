@@ -88,11 +88,11 @@ import_mapping_prepare_revision <- function(
       con,
       "INSERT INTO discrete.import_parameter_mappings (
          import_mapping_set_id, source_match, parameter_id, result_type,
-         sample_fraction_id, result_value_type, result_speciation_id,
+         sample_fraction_id, result_value_type, result_descriptor_id,
          matrix_state_id, conversion, result_offset, priority, active, note
        )
        SELECT $1, source_match, parameter_id, result_type, sample_fraction_id,
-              result_value_type, result_speciation_id, matrix_state_id,
+              result_value_type, result_descriptor_id, matrix_state_id,
               conversion, result_offset, priority, active, note
        FROM discrete.import_parameter_mappings
        WHERE import_mapping_set_id = $2",
@@ -367,7 +367,7 @@ getImportParameterMappings <- function(
          mapping.result_type,
          mapping.sample_fraction_id,
          mapping.result_value_type,
-         mapping.result_speciation_id,
+         mapping.result_descriptor_id,
          mapping.matrix_state_id,
          mapping.conversion,
          mapping.result_offset,
@@ -413,7 +413,7 @@ getImportParameterMappings <- function(
 #' @param source_description Optional source description.
 #' @param target_columns Optional named list overriding which columns contain
 #'   AquaCache target values. Names can include `parameter`, `result_type`,
-#'   `sample_fraction`, `result_value_type`, `result_speciation`, and
+#'   `sample_fraction`, `result_value_type`, `result_descriptor`, and
 #'   `matrix_state`.
 #' @param profile_code Optional profile code. When supplied, mappings override
 #'   source-wide mappings only while that profile is being used.
@@ -435,7 +435,7 @@ getImportParameterMappings <- function(
 #'   result_type = 2,
 #'   sample_fraction_id = 19,
 #'   result_value_type = 1,
-#'   result_speciation_id = NA,
+#'   result_descriptor_id = NA,
 #'   matrix_state_id = 1,
 #'   conversion = 1, # The conversion to database units
 #'   result_offset = 0,
@@ -578,7 +578,7 @@ upsertImportParameterMappings <- function(
              result_type,
              sample_fraction_id,
              result_value_type,
-             result_speciation_id,
+             result_descriptor_id,
              matrix_state_id,
              conversion,
              result_offset,
@@ -596,7 +596,7 @@ upsertImportParameterMappings <- function(
                result_type = EXCLUDED.result_type,
                sample_fraction_id = EXCLUDED.sample_fraction_id,
                result_value_type = EXCLUDED.result_value_type,
-               result_speciation_id = EXCLUDED.result_speciation_id,
+               result_descriptor_id = EXCLUDED.result_descriptor_id,
                matrix_state_id = EXCLUDED.matrix_state_id,
                conversion = EXCLUDED.conversion,
                result_offset = EXCLUDED.result_offset,
@@ -610,7 +610,7 @@ upsertImportParameterMappings <- function(
             resolved$result_type[[i]],
             resolved$sample_fraction_id[[i]],
             resolved$result_value_type[[i]],
-            resolved$result_speciation_id[[i]],
+            resolved$result_descriptor_id[[i]],
             resolved$matrix_state_id[[i]],
             resolved$conversion[[i]],
             resolved$result_offset[[i]],
@@ -722,7 +722,7 @@ upsertImportProfile <- function(
     "matrix_state_id",
     "sample_fraction_id",
     "result_value_type",
-    "result_speciation_id",
+    "result_descriptor_id",
     "protocol_method",
     "laboratory",
     "analysis_datetime"
@@ -1981,7 +1981,7 @@ import_mapping_read_input <- function(mappings) {
 #' Default target columns for import mappings
 #'
 #' @description
-#' Provides the default candidate column names for each AquaCache target field in import mappings. This function returns a named list where each name corresponds to an AquaCache target field (e.g., `parameter`, `result_type`, `sample_fraction`, `result_value_type`, `result_speciation`, `matrix_state`) and each value is a character vector of candidate column names that the `import_mapping_resolve_targets()` function will look for in the input mapping table to identify the source of the target values. Users can override these defaults by providing a custom `target_columns` argument to the `upsertImportParameterMappings()` function.
+#' Provides the default candidate column names for each AquaCache target field in import mappings. This function returns a named list where each name corresponds to an AquaCache target field (e.g., `parameter`, `result_type`, `sample_fraction`, `result_value_type`, `result_descriptor`, `matrix_state`) and each value is a character vector of candidate column names that the `import_mapping_resolve_targets()` function will look for in the input mapping table to identify the source of the target values. Users can override these defaults by providing a custom `target_columns` argument to the `upsertImportParameterMappings()` function.
 #' @return A named list of default target column candidates for import mappings.
 #' @keywords internal
 #' @noRd
@@ -1991,7 +1991,7 @@ import_mapping_default_target_columns <- function() {
     result_type = c("result_type", "result_type_id"),
     sample_fraction = c("sample_fraction_id", "sample_fraction"),
     result_value_type = c("result_value_type", "result_value_type_id"),
-    result_speciation = c("result_speciation_id", "result_speciation"),
+    result_descriptor = c("result_descriptor_id", "result_descriptor"),
     matrix_state = c("matrix_state_id", "matrix_state")
   )
 }
@@ -2002,8 +2002,8 @@ import_mapping_default_target_columns <- function() {
 #' Resolves the target IDs for an import mapping table by looking up the corresponding values in the database. For example, it resolves `parameter_id` by looking up the `parameter` name in the `public.parameters` table, resolves `result_type` by looking up the `result_type` name in the `discrete.result_types` table, and so on. The function also handles various input formats for the target values, such as allowing either IDs or names, and converting logical values to IDs when appropriate. The resolved target IDs are added as new columns to the mapping table, and the function returns the updated table.
 #' @param con A connection to the AquaCache database.
 #' @param mappings A data.table of import mappings for a given source, with an additional list column `source_match_values` containing the parsed JSON values of the `source_match` column.
-#' @param target_columns A named list overriding which columns contain AquaCache target values. Names can include `parameter`, `result_type`, `sample_fraction`, `result_value_type`, `result_speciation`, and `matrix_state`. Each element should be a character vector of candidate column names to look for in the `mappings` table for that target.
-#' @return The input `mappings` data.table with additional columns for the resolved target IDs, such as `parameter_id`, `result_type`, `sample_fraction_id`, `result_value_type_id`, `result_speciation_id`, and `matrix_state_id`.
+#' @param target_columns A named list overriding which columns contain AquaCache target values. Names can include `parameter`, `result_type`, `sample_fraction`, `result_value_type`, `result_descriptor`, and `matrix_state`. Each element should be a character vector of candidate column names to look for in the `mappings` table for that target.
+#' @return The input `mappings` data.table with additional columns for the resolved target IDs, such as `parameter_id`, `result_type`, `sample_fraction_id`, `result_value_type_id`, `result_descriptor_id`, and `matrix_state_id`.
 #' @keywords internal
 #' @noRd
 import_mapping_resolve_targets <- function(
@@ -2141,13 +2141,13 @@ import_mapping_resolve_targets <- function(
     )
   ]
   result[,
-    result_speciation_id := import_mapping_resolve_lookup_vector(
+    result_descriptor_id := import_mapping_resolve_lookup_vector(
       con,
-      import_mapping_column(result, target_columns$result_speciation),
-      "result_speciation_id",
-      "discrete.result_speciations",
-      c("result_speciation"),
-      "result_speciation",
+      import_mapping_column(result, target_columns$result_descriptor),
+      "result_descriptor_id",
+      "discrete.result_descriptors",
+      c("result_descriptor"),
+      "result_descriptor",
       allow_na = TRUE
     )
   ]

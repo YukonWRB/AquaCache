@@ -29,7 +29,7 @@ upsertImportProfile(
   sample_identity = c("location_id", "sub_location_id", "media_id", "z", "datetime",
     "sample_type", "collection_method"),
   result_identity = c("result_type", "parameter_id", "matrix_state_id",
-    "sample_fraction_id", "result_value_type", "result_speciation_id", "protocol_method",
+    "sample_fraction_id", "result_value_type", "result_descriptor_id", "protocol_method",
     "laboratory", "analysis_datetime"),
   validation_rules = list(),
   active = TRUE,
