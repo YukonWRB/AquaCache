@@ -43,7 +43,17 @@
 #' - 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 #' - 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
-#' - 'result_descriptor_id': a numeric specifying the result_descriptor_id of the data point from table 'result_descriptors', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_descriptor' in table 'parameters' is TRUE for the parameter in question.
+#' - 'reporting_basis_id': numeric reporting expression from 'reporting_bases',
+#'   for example as CaCO3 or as N. Required when parameters.reporting_basis is TRUE.
+#' - 'result_speciation_id' and 'result_target_id': independently selected chemical
+#'   form/scope and analytical target/material catalogue IDs. Each is required
+#'   when the corresponding parameter requirement flag is TRUE.
+#' - 'endpoint_mode' and 'endpoint_ph': endpoint determination (fixed, inflection,
+#'   gran, or other) and finite pH. Fixed endpoints require a pH value.
+#' - 'analysis_conditions': a JSON object or named list for conditions such as
+#'   dry/wet mass basis, gas moisture basis, reference temperature/pressure, or
+#'   isotope reference standard. Missing values become {}. Required keys can be
+#'   configured per parameter and per matrix state.
 #' - 'lab_report_no' and 'lab_sample_no': optional laboratory report and sample
 #'   identifiers.
 #' - 'grade_type_id' and 'approval_type_id': optional result-level quality and
@@ -66,6 +76,11 @@
 #' does not update its sample row, group memberships, qualifiers, observers,
 #' results, aggregation configuration, or components. Use
 #' [synchronize_discrete()] when existing source records must be reconciled.
+#' Invalid result rows are warned about and skipped individually. Valid rows in
+#' the same sample are imported, with aggregation children remapped to their
+#' surviving parent rows. A sample with no valid results is skipped. After
+#' completing a previously incomplete mapping, use [synchronize_discrete()] over
+#' the original date range to recover skipped results and samples.
 #'
 #' Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 #' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
@@ -538,209 +553,19 @@ getNewDiscrete <- function(
             next
           }
 
-          results <- tryCatch(
-            {
-              normalize_discrete_result_matrix_states(
-                con = con,
-                sample_media_id = sample$media_id[1],
-                results = results
-              )
-            },
-            error = function(e) {
-              warning(
-                "For sample_series_id ",
-                sid,
-                " element ",
-                j,
-                " (sample_datetime ",
-                sample$datetime,
-                ") the source function returned an invalid matrix_state value: ",
-                e$message,
-                " Skipping to next sample."
-              )
-              NULL
-            }
+          prepared <- prepare_discrete_import_results(
+            con, sample$media_id[[1]], results, result_aggregations, result_components
           )
-          if (is.null(results)) {
-            next
+          if (any(nzchar(prepared$errors))) {
+            rejected <- which(nzchar(prepared$errors))
+            warning("For sample_series_id ", sid, ", sample ", j,
+              ", skipped result row(s): ", paste(sprintf("%s (%s)", rejected,
+                prepared$errors[rejected]), collapse = "; "), call. = FALSE)
           }
-          names_res <- names(results)
-
-          # More complex checks if 'result' is NA
-          # if there are NAs in the 'result' column, those rows with NAs should have a corresponding entry in the 'result_condition' column.
-          aggregated_result_rows <- if (
-            !is.null(result_aggregations) &&
-              "result_row" %in% names(result_aggregations)
-          ) {
-            unique(as.integer(result_aggregations$result_row))
-          } else {
-            integer()
-          }
-          direct_missing_result <- is.na(results$result) &
-            !seq_len(nrow(results)) %in% aggregated_result_rows
-          if (any(direct_missing_result)) {
-            if (!("result_condition" %in% names_res)) {
-              warning(
-                "For sample_series_id ",
-                sid,
-                ", sample ",
-                j,
-                " (sample_datetime ",
-                sample$datetime,
-                ") the source function returned NA values in the column 'result' but did not return a column called 'result_condition'. Skipping to next sample."
-              )
-              next
-            } else {
-              # Check that each NA in 'result' has a corresponding entry in 'result_condition'
-              sub.results <- results[direct_missing_result, ]
-              check_result_condition <- FALSE # prevents repeatedly checking for the same thing
-
-              next_flag <- FALSE
-              for (k in seq_len(nrow(sub.results))) {
-                if (
-                  is.na(sub.results$result[k]) &
-                    is.na(sub.results$result_condition[k])
-                ) {
-                  warning(
-                    "For sample_series_id ",
-                    sid,
-                    " element ",
-                    j,
-                    " (sample_datetime ",
-                    sample$datetime,
-                    ") the source function returned at least one NA result in the column 'result' but did not return a corresponding entry in the column 'result_condition'. Skipping to next sample."
-                  )
-                  next_flag <- TRUE
-                } else {
-                  if (!check_result_condition) {
-                    if (any(sub.results$result_condition %in% c(1, 2))) {
-                      if (!("result_condition_value" %in% names(results))) {
-                        warning(
-                          "For sample_series_id ",
-                          sid,
-                          " element ",
-                          j,
-                          " (sample_datetime ",
-                          sample$datetime,
-                          ") the source function returned at least one row where 'result_condition' is 1 or 2 (above/below detetion limit) but there is no column for the necessary result_condition_value. Skipping to next sample."
-                        )
-                        next_flag <- TRUE
-                      }
-                    }
-                    check_result_condition <- TRUE
-                  }
-
-                  if (sub.results$result_condition[k] %in% c(1, 2)) {
-                    if (is.na(sub.results$result_condition_value[k])) {
-                      warning(
-                        "For sample_series_id ",
-                        sid,
-                        " element ",
-                        j,
-                        " (sample_datetime ",
-                        sample$datetime,
-                        ") the source function returned a value of 1 or 2 in the column 'result_condition' (indicating above or below detection limit) but did not return a corresponding entry in the column 'result_condition_value'. Skipping to the next sample."
-                      )
-                      next_flag <- TRUE
-                    }
-                  }
-                }
-              } # End of looping over each row with NA in result column
-            }
-            if (next_flag) {
-              next
-            }
-          } # End of additional checks fs any NA values in 'result' column are returned
-
-          # Get the result_descriptor and sample_fraction boolean values for the parameters. If at least one TRUE then data must contain columns result_descriptor_id and sample_fraction_id.
-          result_descriptor <- DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT parameter_id, result_descriptor AS result_descriptor_bool FROM public.parameters WHERE parameter_id IN (",
-              paste(unique(results$parameter_id), collapse = ", "),
-              ");"
-            )
-          )
-          sample_fraction <- DBI::dbGetQuery(
-            con,
-            paste0(
-              "SELECT parameter_id, sample_fraction AS sample_fraction_bool FROM public.parameters WHERE parameter_id IN (",
-              paste(unique(results$parameter_id), collapse = ", "),
-              ");"
-            )
-          )
-          if (any(result_descriptor$result_descriptor_bool)) {
-            if (!("result_descriptor_id" %in% names_res)) {
-              warning(
-                "For sample_series_id ",
-                sid,
-                " element ",
-                j,
-                " (sample_datetime ",
-                sample$datetime,
-                ") the source function did not return a column 'result_descriptor_id' but the database mandates this for at least one of the parameters. Skipping to next sample."
-              )
-              next
-            } else {
-              # Check that values in the result_descriptor_id column are not NA where necessary
-              merge <- merge(results, result_descriptor, by = "parameter_id")
-              # For rows where result_descriptor_bool is TRUE, check that the corresponding result_descriptor_id column is not NA
-              chk <- with(
-                merge,
-                result_descriptor_bool & is.na(result_descriptor_id)
-              )
-              if (any(chk)) {
-                params <- merge$parameter_id[chk]
-                warning(
-                  "For sample_series_id ",
-                  sid,
-                  " element ",
-                  j,
-                  " (sample_datetime ",
-                  sample$datetime,
-                  ") the source function returned NA values in the column 'result_descriptor_id' for parameter ",
-                  paste(params, collapse = ", "),
-                  " where the database mandates this value. Skipping to next sample."
-                )
-                next
-              }
-            }
-          }
-          if (any(sample_fraction$sample_fraction_bool)) {
-            if (!("sample_fraction_id" %in% names_res)) {
-              warning(
-                "For sample_series_id ",
-                sid,
-                " element ",
-                j,
-                " (sample_datetime ",
-                sample$datetime,
-                ") the source function did not return a column 'sample_fraction_id' but the database mandates this for at least one of the parameters. Skipping to next sample."
-              )
-              next
-            } else {
-              # Check that all values in the sample_fraction_id column are not NA where necessary
-              merge <- merge(results, sample_fraction, by = "parameter_id")
-              # For rows where sample_fraction_bool is TRUE, check that the corresponding sample_fraction column is not NA
-              chk <- with(
-                merge,
-                sample_fraction_bool & is.na(sample_fraction_id)
-              )
-              if (any(chk)) {
-                warning(
-                  "For sample_series_id ",
-                  sid,
-                  " element ",
-                  j,
-                  " (sample_datetime ",
-                  sample$datetime,
-                  ") the source function returned NA values in the column 'sample_fraction_id' for at least one parameter where the database mandates this value. Skipping to next sample."
-                )
-                next
-              }
-            }
-          }
-
+          results <- prepared$results
+          result_aggregations <- prepared$result_aggregations
+          result_components <- prepared$result_components
+          if (!nrow(results)) next
           # Every adapter record carries a source ID. Patch 58 makes the source
           # pair unique for locationless samples, where location metadata
           # cannot provide a retry key.

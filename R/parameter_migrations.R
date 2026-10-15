@@ -1,9 +1,8 @@
 #' @title Revise a parameter catalogue entry
 #' @description
 #' Rename a parameter, merge it into another catalogue entry, update selected
-#' metadata, and carry parameter-level references across the database. When a
-#' result descriptor is supplied, it is written to result rows and import
-#' mappings that move from the source parameter.
+#' metadata, and carry parameter-level references across the database. Analytical
+#' metadata is preserved unless explicit replacements are supplied.
 #'
 #' @param con An active AquaCache database connection and transaction.
 #' @param source_name Current parameter name to revise.
@@ -14,10 +13,13 @@
 #' @param description English parameter description to set, if supplied.
 #' @param description_fr French parameter description to set, if supplied.
 #' @param plot_default_y_orientation Plot orientation to set, if supplied.
-#' @param sample_fraction Whether results require a sample fraction value. Accepts NULL (meaning 'can be specified or not'), TRUE (must be specified), or FALSE (must NOT be specified). Refers to column public.parameters.sample_fraction.
+#' @param sample_fraction Whether results require a sample fraction value.
+#'   `NULL` preserves the existing flag, `TRUE` requires a value, and `FALSE`
+#'   makes it optional. Refers to public.parameters.sample_fraction.
 #' @param mapping_fraction Optional label in `discrete.sample_fractions` to
 #'   apply to result rows and import mappings moved from the source.
-#' @param result_descriptor Whether results require a descriptor value. Accepts NULL (meaning 'can be specified or not'), TRUE (must be specified), or FALSE (must NOT be specified). Refers to column public.parameters.result_descriptor.
+#' @param result_descriptor Legacy staging requirement flag. `NULL` preserves
+#'   it, `TRUE` requires a value, and `FALSE` makes it optional.
 #' @param mapping_descriptor Optional label in `discrete.result_descriptors` to
 #'   apply to result rows and import mappings moved from the source.
 #' @param mapping_descriptor_by Optional named character vector of labels to
@@ -27,10 +29,27 @@
 #'   `mapping_descriptor_by`. Defaults to `"input_unit"`.
 #' @param preserve_existing_descriptor If `TRUE`, retain populated descriptor
 #'   values and fill only missing values with `mapping_descriptor`.
+#' @param reporting_basis,result_speciation,result_target,endpoint Optional logical
+#'   requirement flags for the revised analytical schema. NULL preserves a flag.
+#' @param mapping_reporting_basis,mapping_result_speciation,mapping_result_target
+#'   Optional existing catalogue ID, stable code, or label to apply to moved
+#'   references. Catalogue entries are resolved, never created implicitly.
+#' @param preserve_existing_chemistry Fill only missing analytical IDs when TRUE.
+#'   Defaults to TRUE; use FALSE for an explicit correction of populated IDs.
 #' @param delete_source Whether to delete a distinct source parameter after its
 #'   references have moved. Defaults to `FALSE`.
 #' @return The target `parameter_id`, invisibly.
 #' @details
+#' Descriptor arguments belong to Patch 65's temporary legacy staging schema,
+#' before the reporting-basis/speciation/target migration. For current databases,
+#' use the independent analytical arguments or omit them to preserve all existing
+#' metadata. Conflicting result identities abort the operation; no result is
+#' discarded. Shared advisory suggestions retain the lowest display order.
+#' Merges require matching physical-unit definitions; no numeric conversion is
+#' performed. The entire revision is protected by a savepoint, and the caller
+#' decides whether to commit or roll back its enclosing transaction. References
+#' embedded in SQL formulae or JSON payloads are not foreign keys and must be
+#' reviewed separately before merging parameters.
 #' This is a reviewed catalogue-migration tool, not the normal import-mapping
 #' editing workflow. It intentionally rewrites references in published and
 #' retired mapping snapshots when the source parameter identity was incorrect.
@@ -53,7 +72,15 @@ revise_parameter_catalogue_entry <- function(
   mapping_descriptor_by = NULL,
   mapping_descriptor_field = "input_unit",
   preserve_existing_descriptor = FALSE,
-  delete_source = FALSE
+  delete_source = FALSE,
+  reporting_basis = NULL,
+  result_speciation = NULL,
+  result_target = NULL,
+  endpoint = NULL,
+  mapping_reporting_basis = NULL,
+  mapping_result_speciation = NULL,
+  mapping_result_target = NULL,
+  preserve_existing_chemistry = TRUE
 ) {
   if (!isTRUE(dbTransCheck(con))) {
     stop("Parameter catalogue revisions must run inside an active transaction.")
@@ -126,6 +153,14 @@ revise_parameter_catalogue_entry <- function(
       stop("mapping_descriptor_field must be one non-empty JSON key.")
     }
   }
+  for (flag in c("reporting_basis", "result_speciation", "result_target", "endpoint")) {
+    value <- get(flag)
+    if (!is.null(value) && (!is.logical(value) || length(value) != 1L || is.na(value))) {
+      stop(flag, " must be TRUE, FALSE, or NULL.")
+    }
+  }
+  if (!is.logical(preserve_existing_chemistry) || length(preserve_existing_chemistry) != 1L ||
+      is.na(preserve_existing_chemistry)) stop("preserve_existing_chemistry must be TRUE or FALSE.")
   scalar_metadata <- list(
     source_description = source_description,
     param_name_fr = param_name_fr,
@@ -156,146 +191,183 @@ revise_parameter_catalogue_entry <- function(
     )
   }
 
-  source <- find_parameter(source_name)
-  target <- find_parameter(target_name)
-  if (nrow(source) > 1L || nrow(target) > 1L) {
-    stop("A parameter name resolved to more than one parameter row.")
-  }
-  if (nrow(source) == 0L && nrow(target) == 0L) {
-    stop("Could not find source or target parameter: ", source_name)
-  }
-  if (nrow(source) == 1L && !is.null(source_description)) {
-    actual_description <- source$description[[1]]
-    if (
-      is.na(actual_description) ||
-        tolower(trimws(actual_description)) !=
-          tolower(trimws(source_description))
-    ) {
-      stop(
-        "The source parameter description did not match the expected value for '",
-        source_name,
-        "'."
+  DBI::dbExecute(con, "SAVEPOINT parameter_catalogue_revision")
+  tryCatch({
+    source <- find_parameter(source_name)
+    target <- find_parameter(target_name)
+    if (nrow(source) > 1L || nrow(target) > 1L) {
+      stop("A parameter name resolved to more than one parameter row.")
+    }
+    if (nrow(source) == 0L && nrow(target) == 0L) {
+      stop("Could not find source or target parameter: ", source_name)
+    }
+    if (nrow(source) == 1L && !is.null(source_description)) {
+      actual_description <- source$description[[1]]
+      if (
+        is.na(actual_description) ||
+          tolower(trimws(actual_description)) !=
+            tolower(trimws(source_description))
+      ) {
+        stop(
+          "The source parameter description did not match the expected value for '",
+          source_name,
+          "'."
+        )
+      }
+    }
+
+    source_id <- if (nrow(source) == 1L) {
+      as.integer(source$parameter_id[[1]])
+    } else {
+      NA_integer_
+    }
+    target_id <- if (nrow(target) == 1L) {
+      as.integer(target$parameter_id[[1]])
+    } else {
+      source_id
+    }
+
+    ensure_fraction_id <- function(name) {
+      res <- DBI::dbGetQuery(
+        con,
+        "SELECT * FROM discrete.sample_fractions WHERE sample_fraction = $1",
+        params = list(name)
+      )
+
+      if (nrow(res) == 0) {
+        stop("The sample_fraction you specified does not exist")
+      }
+      if (nrow(res) > 1) {
+        stop(
+          "The sample_fraction you specified matches to more than one database entries."
+        )
+      }
+      return(res$sample_fraction_id)
+    }
+    fraction_id <- NA_integer_
+    if (!is.null(mapping_fraction)) {
+      if (
+        !is.character(mapping_fraction) ||
+          length(mapping_fraction) != 1L ||
+          is.na(mapping_fraction)
+      ) {
+        stop("mapping_fraction must be one non-missing label or NULL.")
+      }
+      fraction_id <- ensure_fraction_id(mapping_fraction)
+    }
+
+    ensure_descriptor_id <- function(name) {
+      DBI::dbGetQuery(
+        con,
+        "INSERT INTO discrete.result_descriptors (result_descriptor)
+         VALUES ($1)
+         ON CONFLICT (result_descriptor) DO UPDATE
+           SET result_descriptor = EXCLUDED.result_descriptor
+         RETURNING result_descriptor_id",
+        params = list(name)
+      )$result_descriptor_id[[1]]
+    }
+    descriptor_id <- NA_integer_
+    if (!is.null(mapping_descriptor)) {
+      if (
+        !is.character(mapping_descriptor) ||
+          length(mapping_descriptor) != 1L ||
+          is.na(mapping_descriptor)
+      ) {
+        stop("mapping_descriptor must be one non-missing label or NULL.")
+      }
+      descriptor_id <- ensure_descriptor_id(mapping_descriptor)
+    }
+
+    mapping_descriptor_ids <- NULL
+    if (!is.null(mapping_descriptor_by)) {
+      mapping_descriptor_ids <- vapply(
+        mapping_descriptor_by,
+        ensure_descriptor_id,
+        integer(1)
       )
     }
-  }
 
-  source_id <- if (nrow(source) == 1L) {
-    as.integer(source$parameter_id[[1]])
-  } else {
-    NA_integer_
-  }
-  target_id <- if (nrow(target) == 1L) {
-    as.integer(target$parameter_id[[1]])
-  } else {
-    source_id
-  }
-
-  ensure_fraction_id <- function(name) {
-    res <- DBI::dbGetQuery(
-      con,
-      "SELECT * FROM discrete.sample_fractions WHERE sample_fraction = $1",
-      params = list(name)
-    )
-
-    if (nrow(res) == 0) {
-      stop("The sample_fraction you specified does not exist")
+    dimensions <- list(reporting_basis = mapping_reporting_basis,
+      result_speciation = mapping_result_speciation, result_target = mapping_result_target)
+    dimension_ids <- stats::setNames(rep(NA_integer_, length(dimensions)), names(dimensions))
+    for (dimension in names(dimensions)) {
+      if (is.null(dimensions[[dimension]])) next
+      table <- switch(dimension, reporting_basis = "discrete.reporting_bases",
+        result_speciation = "discrete.result_speciations", result_target = "discrete.result_targets")
+      value <- dimensions[[dimension]]
+      id_column <- paste0(dimension, "_id")
+      if (is.numeric(value) || grepl("^[0-9]+$", as.character(value))) {
+        value <- suppressWarnings(as.numeric(value))
+        if (!is.finite(value) || value < 1 || value != trunc(value) || value > .Machine$integer.max) {
+          stop("Supply a valid catalogue ID for ", dimension, ".")
+        }
+        predicate <- paste0(id_column, " = $1")
+      } else {
+        predicate <- paste0("lower(", dimension, ") = lower($1) OR lower(", dimension, "_code) = lower($1)")
+        value <- trimws(as.character(value))
+      }
+      found <- DBI::dbGetQuery(con, paste0("SELECT ", id_column, " FROM ", table, " WHERE ", predicate), params = list(value))
+      if (nrow(found) != 1L) stop("Catalogue value did not resolve uniquely for ", dimension, ".")
+      dimension_ids[[dimension]] <- found[[id_column]][[1]]
     }
-    if (nrow(res) > 1) {
-      stop(
-        "The sample_fraction you specified matches to more than one database entries."
+    if (!is.na(source_id)) {
+      migrate_parameter_references(
+        con,
+        source_parameter_id = source_id,
+        target_parameter_id = target_id,
+        result_descriptor_id = descriptor_id,
+        sample_fraction_id = fraction_id,
+        mapping_descriptor_ids = mapping_descriptor_ids,
+        mapping_descriptor_field = mapping_descriptor_field,
+        preserve_existing_descriptor = preserve_existing_descriptor,
+        delete_source = delete_source && source_id != target_id,
+        reporting_basis_id = dimension_ids[["reporting_basis"]],
+        result_speciation_id = dimension_ids[["result_speciation"]],
+        result_target_id = dimension_ids[["result_target"]],
+        preserve_existing_chemistry = preserve_existing_chemistry
       )
     }
-    return(res$sample_fraction_id)
-  }
-  fraction_id <- NA_integer_
-  if (!is.null(mapping_fraction)) {
-    if (
-      !is.character(mapping_fraction) ||
-        length(mapping_fraction) != 1L ||
-        is.na(mapping_fraction)
-    ) {
-      stop("mapping_fraction must be one non-missing label or NULL.")
+
+    updates <- list(
+      param_name = target_name,
+      param_name_fr = param_name_fr,
+      description = description,
+      description_fr = description_fr,
+      plot_default_y_orientation = plot_default_y_orientation,
+      sample_fraction = sample_fraction,
+      result_descriptor = result_descriptor,
+      reporting_basis = reporting_basis, result_speciation = result_speciation,
+      result_target = result_target, endpoint = endpoint
+    )
+    updates <- updates[!vapply(updates, is.null, logical(1))]
+    if (length(updates) > 0L) {
+      columns <- vapply(
+        names(updates),
+        function(name) as.character(DBI::dbQuoteIdentifier(con, name)),
+        character(1)
+      )
+      assignments <- paste0(columns, " = $", seq_along(updates))
+      sql <- paste0(
+        "UPDATE public.parameters SET ",
+        paste(assignments, collapse = ", "),
+        " WHERE parameter_id = $",
+        length(updates) + 1L
+      )
+      DBI::dbExecute(
+        con,
+        sql,
+        params = c(unname(updates), list(target_id))
+      )
     }
-    fraction_id <- ensure_fraction_id(mapping_fraction)
-  }
 
-  ensure_descriptor_id <- function(name) {
-    DBI::dbGetQuery(
-      con,
-      "INSERT INTO discrete.result_descriptors (result_descriptor)
-       VALUES ($1)
-       ON CONFLICT (result_descriptor) DO UPDATE
-         SET result_descriptor = EXCLUDED.result_descriptor
-       RETURNING result_descriptor_id",
-      params = list(name)
-    )$result_descriptor_id[[1]]
-  }
-  descriptor_id <- NA_integer_
-  if (!is.null(mapping_descriptor)) {
-    if (
-      !is.character(mapping_descriptor) ||
-        length(mapping_descriptor) != 1L ||
-        is.na(mapping_descriptor)
-    ) {
-      stop("mapping_descriptor must be one non-missing label or NULL.")
-    }
-    descriptor_id <- ensure_descriptor_id(mapping_descriptor)
-  }
-
-  mapping_descriptor_ids <- NULL
-  if (!is.null(mapping_descriptor_by)) {
-    mapping_descriptor_ids <- vapply(
-      mapping_descriptor_by,
-      ensure_descriptor_id,
-      integer(1)
-    )
-  }
-
-  if (!is.na(source_id)) {
-    migrate_parameter_references(
-      con,
-      source_parameter_id = source_id,
-      target_parameter_id = target_id,
-      result_descriptor_id = descriptor_id,
-      sample_fraction_id = fraction_id,
-      mapping_descriptor_ids = mapping_descriptor_ids,
-      mapping_descriptor_field = mapping_descriptor_field,
-      preserve_existing_descriptor = preserve_existing_descriptor,
-      delete_source = delete_source && source_id != target_id
-    )
-  }
-
-  updates <- list(
-    param_name = target_name,
-    param_name_fr = param_name_fr,
-    description = description,
-    description_fr = description_fr,
-    plot_default_y_orientation = plot_default_y_orientation,
-    sample_fraction = sample_fraction,
-    result_descriptor = result_descriptor
-  )
-  updates <- updates[!vapply(updates, is.null, logical(1))]
-  if (length(updates) > 0L) {
-    columns <- vapply(
-      names(updates),
-      function(name) as.character(DBI::dbQuoteIdentifier(con, name)),
-      character(1)
-    )
-    assignments <- paste0(columns, " = $", seq_along(updates))
-    sql <- paste0(
-      "UPDATE public.parameters SET ",
-      paste(assignments, collapse = ", "),
-      " WHERE parameter_id = $",
-      length(updates) + 1L
-    )
-    DBI::dbExecute(
-      con,
-      sql,
-      params = c(unname(updates), list(target_id))
-    )
-  }
-
-  invisible(target_id)
+    DBI::dbExecute(con, "RELEASE SAVEPOINT parameter_catalogue_revision")
+    invisible(target_id)
+  }, error = function(e) {
+    try(DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT parameter_catalogue_revision"), silent = TRUE)
+    try(DBI::dbExecute(con, "RELEASE SAVEPOINT parameter_catalogue_revision"), silent = TRUE)
+    stop(e)
+  })
 }
 
 #' @title Move parameter references
@@ -312,6 +384,11 @@ revise_parameter_catalogue_entry <- function(
 #'   `mapping_descriptor_ids`. Defaults to `"input_unit"`.
 #' @param preserve_existing_descriptor If `TRUE`, only fill missing descriptor
 #'   values; otherwise replace them with the supplied descriptor ID(s).
+#' @param reporting_basis_id,result_speciation_id,result_target_id Optional
+#'   analytical catalogue IDs for referencing records that carry those columns.
+#'   NA preserves the column. Legacy descriptors and current analytical IDs
+#'   cannot be supplied together.
+#' @param preserve_existing_chemistry Fill only missing analytical IDs when TRUE.
 #' @param delete_source Whether to delete the source parameter after its
 #'   references move. Defaults to `FALSE`.
 #' @return `TRUE`, invisibly.
@@ -329,7 +406,11 @@ migrate_parameter_references <- function(
   mapping_descriptor_ids = NULL,
   mapping_descriptor_field = "input_unit",
   preserve_existing_descriptor = FALSE,
-  delete_source = FALSE
+  delete_source = FALSE,
+  reporting_basis_id = NA_integer_,
+  result_speciation_id = NA_integer_,
+  result_target_id = NA_integer_,
+  preserve_existing_chemistry = TRUE
 ) {
   coerce_id <- function(value, name, allow_na = FALSE) {
     if (length(value) != 1L || is.na(value)) {
@@ -343,7 +424,7 @@ migrate_parameter_references <- function(
     if (
       is.na(integer_value) ||
         is.na(numeric_value) ||
-        integer_value != numeric_value
+        !is.finite(numeric_value) || integer_value < 1L || integer_value != numeric_value
     ) {
       stop(name, " must be one valid integer.")
     }
@@ -364,6 +445,16 @@ migrate_parameter_references <- function(
     allow_na = TRUE
   )
 
+  chemistry_ids <- list(reporting_basis_id = reporting_basis_id,
+    result_speciation_id = result_speciation_id, result_target_id = result_target_id)
+  chemistry_ids <- lapply(names(chemistry_ids), function(field) coerce_id(chemistry_ids[[field]], field, allow_na = TRUE)) |>
+    stats::setNames(c("reporting_basis_id", "result_speciation_id", "result_target_id"))
+  chemistry_ids <- chemistry_ids[!vapply(chemistry_ids, is.na, logical(1))]
+  if (length(chemistry_ids) && (!is.na(result_descriptor_id) || !is.null(mapping_descriptor_ids))) {
+    stop("Use either legacy descriptors or current analytical IDs, not both.")
+  }
+  if (!is.logical(preserve_existing_chemistry) || length(preserve_existing_chemistry) != 1L ||
+      is.na(preserve_existing_chemistry)) stop("preserve_existing_chemistry must be TRUE or FALSE.")
   if (!is.null(mapping_descriptor_ids)) {
     if (
       !is.numeric(mapping_descriptor_ids) ||
@@ -508,6 +599,22 @@ migrate_parameter_references <- function(
     stop("No database references to public.parameters.parameter_id were found.")
   }
 
+  # Matching unit IDs are essential: relabelling a parameter never converts data.
+  units <- DBI::dbGetQuery(con, "SELECT parameter_id, units_liquid, units_solid, units_gas, units_na,
+      to_regclass('discrete.reporting_bases') IS NOT NULL AS chemistry_schema
+    FROM public.parameters WHERE parameter_id IN ($1,$2) ORDER BY parameter_id FOR UPDATE",
+    params = list(source_parameter_id, target_parameter_id))
+  if (source_parameter_id != target_parameter_id && any(units$chemistry_schema) && !identical(
+      unname(as.list(units[units$parameter_id == source_parameter_id, c("units_liquid", "units_solid", "units_gas", "units_na"), drop = FALSE])),
+      unname(as.list(units[units$parameter_id == target_parameter_id, c("units_liquid", "units_solid", "units_gas", "units_na"), drop = FALSE])))) {
+    stop("Source and target physical-unit definitions differ. Resolve unit conversions before merging.")
+  }
+  chemistry_columns <- DBI::dbGetQuery(con, "SELECT table_schema, table_name, column_name
+    FROM information_schema.columns WHERE column_name IN
+      ('reporting_basis_id','result_speciation_id','result_target_id')")
+  if (length(chemistry_ids) && any(!names(chemistry_ids) %in% chemistry_columns$column_name)) {
+    stop("The database does not have the requested analytical dimensions.")
+  }
   has_mapping_rows <- any(
     references$table_schema == "discrete" &
       references$table_name == "import_parameter_mappings"
@@ -545,9 +652,32 @@ migrate_parameter_references <- function(
            USING public.parameter_relationships target
            WHERE source.parameter_id = $1
              AND target.parameter_id = $2
-             AND target.group_id = source.group_id",
+             AND target.group_id = source.group_id
+             AND target.sub_group_id IS NOT DISTINCT FROM source.sub_group_id",
           params = list(source_parameter_id, target_parameter_id)
         )
+      }
+
+      # Suggestions are advisory associations, so duplicate links may safely
+      # coalesce; result rows and other constrained references never do.
+      suggestion_tables <- intersect(references$table_name[references$table_schema == "public"],
+        c("parameter_reporting_basis_suggestions", "parameter_speciation_suggestions",
+          "parameter_target_suggestions", "parameter_descriptor_suggestions"))
+      if (source_parameter_id != target_parameter_id) for (table in suggestion_tables) {
+        id <- DBI::dbGetQuery(con, "SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = $1
+            AND right(column_name, 3) = '_id' AND column_name <> 'parameter_id'",
+          params = list(table))$column_name
+        if (length(id) != 1L) stop("Review suggestion identity before merging: ", table)
+        table_sql <- as.character(DBI::dbQuoteIdentifier(con, DBI::Id(schema = "public", table = table)))
+        id_sql <- as.character(DBI::dbQuoteIdentifier(con, id))
+        DBI::dbExecute(con, sprintf("UPDATE %s target SET display_order = LEAST(target.display_order, source.display_order)
+          FROM %s source WHERE source.parameter_id = $1 AND target.parameter_id = $2
+          AND target.%s = source.%s", table_sql, table_sql, id_sql, id_sql),
+          params = list(source_parameter_id, target_parameter_id))
+        DBI::dbExecute(con, sprintf("DELETE FROM %s source USING %s target
+          WHERE source.parameter_id = $1 AND target.parameter_id = $2 AND target.%s = source.%s",
+          table_sql, table_sql, id_sql, id_sql), params = list(source_parameter_id, target_parameter_id))
       }
 
       if (has_mapping_rows) {
@@ -568,13 +698,16 @@ migrate_parameter_references <- function(
           !is.na(result_descriptor_id) &&
           isTRUE(references$has_result_descriptor[[i]]) ||
           (is_mapping_table && !is.null(mapping_descriptor_ids))
+        fields <- chemistry_columns$column_name[chemistry_columns$table_schema == table_schema &
+          chemistry_columns$table_name == table_name]
+        row_chemistry <- chemistry_ids[intersect(names(chemistry_ids), fields)]
         has_fraction_update <-
           !is.na(sample_fraction_id) &&
           isTRUE(references$has_sample_fraction[[i]])
         if (
           source_parameter_id == target_parameter_id &&
             !has_descriptor_update &&
-            !has_fraction_update
+            !has_fraction_update && !length(row_chemistry)
         ) {
           next
         }
@@ -588,6 +721,26 @@ migrate_parameter_references <- function(
         column_sql <- as.character(
           DBI::dbQuoteIdentifier(con, column_name)
         )
+
+        if (length(row_chemistry)) {
+          # Assign all supplied dimensions and the target parameter together,
+          # allowing the database guard to validate the complete final identity.
+          values <- c(list(target_parameter_id), unname(row_chemistry))
+          assignments <- c(paste0(column_sql, " = $1"), vapply(seq_along(row_chemistry), function(j) {
+            field_sql <- as.character(DBI::dbQuoteIdentifier(con, names(row_chemistry)[[j]]))
+            value_sql <- paste0("$", j + 1L)
+            if (preserve_existing_chemistry) value_sql <- paste0("COALESCE(", field_sql, ", ", value_sql, ")")
+            paste0(field_sql, " = ", value_sql)
+          }, character(1)))
+          if (has_fraction_update) {
+            values <- c(values, list(sample_fraction_id))
+            assignments <- c(assignments, paste0("sample_fraction_id = $", length(values)))
+          }
+          values <- c(values, list(source_parameter_id))
+          DBI::dbExecute(con, paste0("UPDATE ", table_sql, " SET ", paste(assignments, collapse = ", "),
+            " WHERE ", column_sql, " = $", length(values)), params = values)
+          next
+        }
 
         # Assign an existing sample fraction to referencing records.
         # This runs before changing the parameter ID.

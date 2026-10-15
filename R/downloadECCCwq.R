@@ -221,7 +221,8 @@ downloadECCCwq <- function(
 
   media_id <- DBI::dbGetQuery(
     con,
-    "SELECT media_id FROM public.media_types WHERE media_type = 'surface water';"
+    "SELECT media_id FROM public.media_types
+     WHERE lower(btrim(media_type)) IN ('surface water', 'freshwater (surface)');"
   )[1, 1]
   owner_contributor <- DBI::dbGetQuery(
     con,
@@ -346,7 +347,7 @@ downloadECCCwq <- function(
         ]
         result_condition_value <- result_value
         result_value <- NA
-      } else if (flag != "") {
+      } else if (!is.na(flag) && flag != "") {
         warning(paste0(
           "Unrecognized value for FLAG_MARQUEUR '",
           flag,
@@ -383,7 +384,12 @@ downloadECCCwq <- function(
         result_condition = result_condition,
         result_condition_value = result_condition_value,
         result_value_type = param_row$result_value_type[1],
-        result_descriptor_id = param_row$result_descriptor_id[1],
+        reporting_basis_id = param_row$reporting_basis_id[1],
+        result_speciation_id = param_row$result_speciation_id[1],
+        result_target_id = param_row$result_target_id[1],
+        endpoint_mode = param_row$endpoint_mode[1],
+        endpoint_ph = param_row$endpoint_ph[1],
+        analysis_conditions = param_row$analysis_conditions[1],
         laboratory = result_laboratory,
         matrix_state_id = matrix_state_id,
         matrix_state = matrix_state,
@@ -466,27 +472,42 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
   }
 
   source <- data.table::copy(data.table::as.data.table(all_results))
-  sample_col <- source_column(source, "SAMPLE_ID_\u00C9CHANTILLON", "SAMPLE_ID_")
+  sample_col <- source_column(
+    source,
+    "SAMPLE_ID_\u00C9CHANTILLON",
+    "SAMPLE_ID_"
+  )
   unit_col <- source_column(source, "UNIT_UNIT\u00C9", "UNIT_UNIT")
   source[, eccc_sample_id := as.character(source[[sample_col]])]
-  source[, input_param := data.table::fifelse(is.na(VARIABLE), "", as.character(VARIABLE))]
-  source[, input_unit := data.table::fifelse(
-    is.na(source[[unit_col]]),
-    "",
-    as.character(source[[unit_col]])
-  )]
+  source[,
+    input_param := data.table::fifelse(
+      is.na(VARIABLE),
+      "",
+      as.character(VARIABLE)
+    )
+  ]
+  source[,
+    input_unit := data.table::fifelse(
+      is.na(source[[unit_col]]),
+      "",
+      as.character(source[[unit_col]])
+    )
+  ]
   source <- source[nzchar(input_param)]
   if (nrow(source) == 0L) {
     return(empty_report)
   }
 
-  report <- source[, .(
-    n_results = .N,
-    n_samples = data.table::uniqueN(eccc_sample_id),
-    first_datetime = min_datetime(DATE_TIME_HEURE),
-    last_datetime = max_datetime(DATE_TIME_HEURE),
-    example_sample_id = first_non_missing(eccc_sample_id)
-  ), by = .(input_param, input_unit)]
+  report <- source[,
+    .(
+      n_results = .N,
+      n_samples = data.table::uniqueN(eccc_sample_id),
+      first_datetime = min_datetime(DATE_TIME_HEURE),
+      last_datetime = max_datetime(DATE_TIME_HEURE),
+      example_sample_id = first_non_missing(eccc_sample_id)
+    ),
+    by = .(input_param, input_unit)
+  ]
 
   statuses <- lapply(seq_len(nrow(report)), function(i) {
     import_mapping_match_status(
@@ -498,36 +519,45 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
     )
   })
   report[, missing_reason := vapply(statuses, `[[`, character(1), "status")]
-  report[, mapping_error := vapply(statuses, function(x) x$message, character(1))]
-  report[, import_mapping_id := vapply(
-    statuses,
-    function(x) {
-      if (is.null(x$mapping)) {
-        return(NA_integer_)
-      }
-      as.integer(x$mapping$import_mapping_id[[1]])
-    },
-    integer(1)
-  )]
+  report[,
+    mapping_error := vapply(statuses, function(x) x$message, character(1))
+  ]
+  report[,
+    import_mapping_id := vapply(
+      statuses,
+      function(x) {
+        if (is.null(x$mapping)) {
+          return(NA_integer_)
+        }
+        as.integer(x$mapping$import_mapping_id[[1]])
+      },
+      integer(1)
+    )
+  ]
   report <- report[missing_reason != "mapped"]
   if (nrow(report) == 0L) {
     return(empty_report)
   }
 
-  report[, source_match := vapply(
-    seq_len(.N),
-    function(i) {
-      jsonlite::toJSON(
-        list(
-          input_param = report$input_param[[i]],
-          input_unit = report$input_unit[[i]]
-        ),
-        auto_unbox = TRUE,
-        null = "null"
-      )
-    },
-    character(1)
-  )]
-  data.table::setorderv(report, c("missing_reason", "input_param", "input_unit"))
+  report[,
+    source_match := vapply(
+      seq_len(.N),
+      function(i) {
+        jsonlite::toJSON(
+          list(
+            input_param = report$input_param[[i]],
+            input_unit = report$input_unit[[i]]
+          ),
+          auto_unbox = TRUE,
+          null = "null"
+        )
+      },
+      character(1)
+    )
+  ]
+  data.table::setorderv(
+    report,
+    c("missing_reason", "input_param", "input_unit")
+  )
   report[, ..output_cols]
 }

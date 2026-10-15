@@ -1,0 +1,114 @@
+source	target	mode	speciation_code	speciation_label	endpoint_ph	conditions	expected_cas	reason
+Benzo{b&j}fluoranthene	benzo[b,j]fluoranthene	alias						Reviewed name alias; retain analytical metadata.
+Benzo[j,k]fluoranthenes	benzo(j+k)fluoranthene	alias						Reviewed name alias; retain analytical metadata.
+Colour, true	true color	alias						Reviewed name alias; retain analytical metadata.
+Tonalide	6-acetyl-1,1,2,4,4,7-hexamethyltetralin	alias						Reviewed name alias; retain analytical metadata.
+benzo[b,j,k]fluoranthene	benzo[b]fluoranthene, mixed with benzo[j]fluoranthene and benzo[k]fluoranthene	alias						Reviewed name alias; retain analytical metadata.
+2,4-dichlorophenol mixt. with 2,5-dichlorophenol	2,4- & 2,5-dichlorophenol	alias						Reviewed name alias; retain analytical metadata.
+sulfur total	sulfur	form	sulfur_all_species	Sulfur, all species				Total sulfur defines the chemical-form scope; preserve the physical sample fraction independently.
+Well Water Level as measured from Below the TOC	water level below top of casing	toc						Same below-casing reference; normalize mbTOC to m and not_applicable matrix.
+C1-Naphthalenes	methylnaphthalene	alias						CAS 1321-94-4 is methylnaphthalene all isomers; C1 pool is the same sum, not either individual isomer.
+pheophytin	pheophytin a	alias					603-17-8	Source explicitly identifies pheophytin a by CAS; reject conflicting definitions.
+arsenate	arsenic	form	arsenic_v	Arsenic(V)				Oxidation-state identity moves to explicit speciation; reporting basis stays unchanged/unknown.
+As-V	arsenic	form	arsenic_v	Arsenic(V)				Oxidation-state identity moves to explicit speciation; reporting basis stays unchanged/unknown.
+arsenite	arsenic	form	arsenic_iii	Arsenic(III)				Reviewed name alias; retain analytical metadata.
+As-III	arsenic	form	arsenic_iii	Arsenic(III)				Reviewed name alias; retain analytical metadata.
+selenite	selenium	form	selenium_iv	Selenium(IV)				Reviewed name alias; retain analytical metadata.
+Se-IV	selenium	form	selenium_iv	Selenium(IV)				Reviewed name alias; retain analytical metadata.
+selenate	selenium	form	selenium_vi	Selenium(VI)				Reviewed name alias; retain analytical metadata.
+Se-VI	selenium	form	selenium_vi	Selenium(VI)				Reviewed name alias; retain analytical metadata.
+chromium(iii)	chromium	form	chromium_iii	Chromium(III)				Reviewed name alias; retain analytical metadata.
+chromium(vi)	chromium	form	chromium_vi	Chromium(VI)				Reviewed name alias; retain analytical metadata.
+hexavalent chromium compounds	chromium	form	chromium_vi	Chromium(VI)				Retain recorded reporting expression and analytical method; identify the hexavalent form explicitly.
+ferric ion	iron	form	iron_iii	Iron(III)				Reviewed name alias; retain analytical metadata.
+ferrous ion	iron	form	iron_ii	Iron(II)				Reviewed name alias; retain analytical metadata.
+Acidity to pH 4.5	Acidity	endpoint			4.5			Preserve fixed titration endpoint independently; do not infer an unknown as-CaCO3 reporting basis.
+Acidity to pH 8.3	Acidity	endpoint			8.3			Reviewed name alias; retain analytical metadata.
+Carbon, Total Organic in sediments_%	organic carbon	solid						Same organic-carbon analyte in solid matrix; total fraction retained; unknown mass basis remains unknown.
+Nitrogen, Total, in sediment_%	nitrogen, total	solid						Same total-nitrogen analyte in solid matrix; unknown reporting/mass bases remain unknown.
+carbonaceous biochemical oxygen demand (cBOD), standard conditions	carbonaceous biochemical oxygen demand	conditions				{"incubation_duration_days":5,"reference_temperature_kelvin":293.15}		Standard CBOD is five days at 20 C; preserve those defining conditions.
+carbonaceous biochemical oxygen demand, non-standard conditions	carbonaceous biochemical oxygen demand	conditions				{"incubation_conditions":"non_standard"}		Same CBOD measurand; retain explicit non-standard incubation scope without guessing duration/temperature.
+Carbonaceous Biochemical Oxygen Demand, 5-day	carbonaceous biochemical oxygen demand	conditions				{"incubation_duration_days":5}		Five-day duration known; temperature not supplied, so do not infer standard conditions.
+6-acetyl-1,1,2,4,4,7-hexamethyltetralin	tonalide	rename						Reviewed name alias; retain analytical metadata.
+benzo[b]fluoranthene, mixed with benzo[j]fluoranthene and benzo[k]fluoranthene	benzo[b,j,k]fluoranthenes, sum	rename						Reviewed name alias; retain analytical metadata.
+benzo(j+k)fluoranthene	benzo[j,k]fluoranthenes, sum	rename						Reviewed name alias; retain analytical metadata.
+benzo[b,j]fluoranthene	benzo[b,j]fluoranthenes, sum	rename						Reviewed name alias; retain analytical metadata.
+2,4- & 2,5-dichlorophenol	2,4- and 2,5-dichlorophenol, sum	rename						Reviewed name alias; retain analytical metadata.
+methylnaphthalene	methylnaphthalenes, sum of isomers	rename						Reviewed name alias; retain analytical metadata.
+methylfluorene	methylfluorene, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
+methylacenaphthene	methylacenaphthene, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
+methyldibenzothiophene	methyldibenzothiophene, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
+methylchrysene	methylchrysene, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
+heroine	heroin	rename						Reviewed name alias; retain analytical metadata.
+propanolol	propranolol	rename						Reviewed name alias; retain analytical metadata.
+2-choro-6-ethylamino-4-amino-s-triazine	2-chloro-6-ethylamino-4-amino-s-triazine	rename						Reviewed name alias; retain analytical metadata.
+monochloroguaicols	monochloroguaiacols	rename						Reviewed name alias; retain analytical metadata.
+dichloroveretrols	dichloroveratroles	rename						Reviewed name alias; retain analytical metadata.
+perfluorovaleric acid	perfluoropentanoic acid	rename						Reviewed name alias; retain analytical metadata.
+4,4'-isopropylidenediphenol	bisphenol A	rename						Reviewed name alias; retain analytical metadata.
+benzeneacetic acid, .alpha.-methyl-4-(2-methylpropyl)-	ibuprofen	rename						Reviewed name alias; retain analytical metadata.
+benzene, 1-bromo-2-(trifluoromethyl)-	2-bromobenzotrifluoride	rename						Reviewed name alias; retain analytical metadata.
+benzene, 1,2-dichloro-4-methyl-	3,4-dichlorotoluene	rename						Reviewed name alias; retain analytical metadata.
+1-heptanesulfonic acid, 1,1,2,2,3,3,4,4,5,5,6,6,7,7,7-pentadecafluoro-	perfluoroheptanesulfonic acid	rename						Reviewed name alias; retain analytical metadata.
+n,n-diethyl-m-toluamide	DEET	rename						Reviewed name alias; retain analytical metadata.
+s-ethyl dipropylthiocarbamate	EPTC	rename						Reviewed name alias; retain analytical metadata.
+arsonium, (carboxymethyl)trimethyl-, inner salt	arsenobetaine	rename						Reviewed name alias; retain analytical metadata.
+p-bromofluorobenzene	4-bromofluorobenzene	rename						Reviewed name alias; retain analytical metadata.
+Naphthalene-d8, %	naphthalene-d8, surrogate recovery	rename						Reviewed name alias; retain analytical metadata.
+Phenanthrene-d10, %	phenanthrene-d10, surrogate recovery	rename						Reviewed name alias; retain analytical metadata.
+Chrysene-d12, %	chrysene-d12, surrogate recovery	rename						Reviewed name alias; retain analytical metadata.
+Bromofluorobenzene, 4-, %	4-bromofluorobenzene, surrogate recovery	rename						Reviewed name alias; retain analytical metadata.
+Difluorobenzene, 1,4-, %	1,4-difluorobenzene, surrogate recovery	rename						Reviewed name alias; retain analytical metadata.
+Bromobenzotrifluoride, 2-, %	2-bromobenzotrifluoride, surrogate recovery	rename						Reviewed name alias; retain analytical metadata.
+Dichlorotoluene, 3,4-, %	3,4-dichlorotoluene, surrogate recovery	rename						Reviewed name alias; retain analytical metadata.
+lead-210	lead-210, mass concentration	rename						Reviewed name alias; retain analytical metadata.
+Lead-210, Bq/L	lead-210, activity concentration	rename						Reviewed name alias; retain analytical metadata.
+radium-226	radium-226, mass concentration	rename						Reviewed name alias; retain analytical metadata.
+Radium-226, Bq/L	radium-226, activity concentration	rename						Reviewed name alias; retain analytical metadata.
+radium-228	radium-228, mass concentration	rename						Reviewed name alias; retain analytical metadata.
+Radium-228, Bq/L	radium-228, activity concentration	rename						Reviewed name alias; retain analytical metadata.
+Coliform Fecal, MPN technique, MPN/100mL	fecal coliform, most probable number	rename						Reviewed name alias; retain analytical metadata.
+Coliform, Total, MPN technique, MPN/100mL	total coliform, most probable number	rename						Reviewed name alias; retain analytical metadata.
+Cryptosporidium, oocysts/L	cryptosporidium, oocyst concentration	rename						Reviewed name alias; retain analytical metadata.
+Cryptosporidium-SWF, /100L	cryptosporidium, string-wound-filter enumeration	rename						Reviewed name alias; retain analytical metadata.
+Giardia, water sample sent for analysis, cysts/L	giardia, cyst concentration	rename						Reviewed name alias; retain analytical metadata.
+Giardia - string wound filter sent for analysis, /100L	giardia, string-wound-filter enumeration	rename						Reviewed name alias; retain analytical metadata.
+Heterotrophic Plate Count, cfu/1mL	heterotrophic plate count	rename						Reviewed name alias; retain analytical metadata.
+phaeophytin (brown algae)	pheophytin, type unspecified	rename						Reviewed name alias; retain analytical metadata.
+Se-Unk	selenium, unresolved chromatographic species	rename						Reviewed name alias; retain analytical metadata.
+Cadmium, dissolved, calculated load_mg/s	cadmium, dissolved mass load	rename						Reviewed name alias; retain analytical metadata.
+Transmittance, UV (@ 254nm)	UV transmittance at 254 nm	rename						Reviewed name alias; retain analytical metadata.
+Trichloroethane	trichloroethane, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
+Tetrachloroethane	tetrachloroethane, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
+avg particle size	average particle size	rename						Reviewed name alias; retain analytical metadata.
+Acidity	acidity	rename						Reviewed name alias; retain analytical metadata.
+.alpha.-hexachlorocyclohexane	alpha-hexachlorocyclohexane	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.alpha.,2,6-trichlorotoluene	alpha,2,6-trichlorotoluene	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.alpha.-amino-2,3-dihydro-5-methyl-3-oxo-4-isoxazolepropanoic acid	alpha-amino-2,3-dihydro-5-methyl-3-oxo-4-isoxazolepropanoic acid	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.alpha.-endosulfan	alpha-endosulfan	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.beta.-heptachlor epoxide	beta-heptachlor epoxide	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.beta.-endosulfan	beta-endosulfan	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.beta.-hexachlorocyclohexane	beta-hexachlorocyclohexane	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.delta.-hexachlorocyclohexane	delta-hexachlorocyclohexane	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.gamma.-hexachlorocyclohexane	gamma-hexachlorocyclohexane	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+.lambda.-cyhalothrin	lambda-cyhalothrin	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
+BDE-28L	BDE-28, 13C12-labelled	rename						EPA Method 1614A Table 1 identifies L-suffixed BDE standards as 13C12-labelled; retain separately from native congeners.
+BDE-47l	BDE-47, 13C12-labelled	rename						EPA Method 1614A Table 1 identifies L-suffixed BDE standards as 13C12-labelled; retain separately from native congeners.
+BDE-100l	BDE-100, 13C12-labelled	rename						EPA Method 1614A Table 1 identifies L-suffixed BDE standards as 13C12-labelled; retain separately from native congeners.
+BDE-153L	BDE-153, 13C12-labelled	rename						EPA Method 1614A Table 1 identifies L-suffixed BDE standards as 13C12-labelled; retain separately from native congeners.
+BDE-183l	BDE-183, 13C12-labelled	rename						EPA Method 1614A Table 1 identifies L-suffixed BDE standards as 13C12-labelled; retain separately from native congeners.
+BDE-209l	BDE-209, 13C12-labelled	rename						EPA Method 1614A Table 1 identifies L-suffixed BDE standards as 13C12-labelled; retain separately from native congeners.
+LC50 for Ceridubia;  Concentration for 50% Mortality ; result is the concentration needed to kill 50% of organism	LC50, Ceriodaphnia, duration unspecified	rename						Correct endpoint wording: LC50 is concentration, survival is percent; retain organism, duration and dilution scope.
+LC50 for Ceridubia;  Survival in 100% concentration @ X  hours ; result is a percentage of survival of organism	survival, Ceriodaphnia, undiluted sample, duration unspecified	rename						Correct endpoint wording: LC50 is concentration, survival is percent; retain organism, duration and dilution scope.
+LC50 for Daphnia magma; Concentration for 50% Mortality @ 48 hours; result is the concentration needed to kill 50% of organism	LC50, Daphnia magna, 48 h	rename						Correct endpoint wording: LC50 is concentration, survival is percent; retain organism, duration and dilution scope.
+LC50 for Daphnia magma; Survival in 100% concentration @ 48 hours; result is a percentage of survival of organism	survival, Daphnia magna, undiluted sample, 48 h	rename						Correct endpoint wording: LC50 is concentration, survival is percent; retain organism, duration and dilution scope.
+LC50 for Pimephales promelas; Survival in 100% concentration @ X  hours ; result is a percentage of survival of organism	survival, Pimephales promelas, undiluted sample, duration unspecified	rename						Correct endpoint wording: LC50 is concentration, survival is percent; retain organism, duration and dilution scope.
+LC50 for Rainbow Trout; Concentration for 50% Mortality @ 96 hours; result is the concentration needed to kill 50% of organism	LC50, rainbow trout, 96 h	rename						Correct endpoint wording: LC50 is concentration, survival is percent; retain organism, duration and dilution scope.
+LC50 for Rainbow Trout; Survival in 100% concentration @ 96 hours; result is a percentage of survival of organism	survival, rainbow trout, undiluted sample, 96 h	rename						Correct endpoint wording: LC50 is concentration, survival is percent; retain organism, duration and dilution scope.
+daphnia magma time required to kill 50% of organisms	LT50, Daphnia magna, exposure conditions unspecified	rename						Reviewed name alias; retain analytical metadata.
+rainbow trout time required to kill 50% of organisms	LT50, rainbow trout, exposure conditions unspecified	rename						Reviewed name alias; retain analytical metadata.
+Unknown Species, Lethal Concentration @ 50% Mortality	LC50, species and duration unspecified	rename						Reviewed name alias; retain analytical metadata.
+Unknown, LC@50% mortal, pH stabalized	LC50, species and duration unspecified, pH stabilized	rename						Reviewed name alias; retain analytical metadata.
+Lethal Time for 50% Mortality @ 100% Concentration (XLT50)	LT50, species unspecified, undiluted sample	rename						Reviewed name alias; retain analytical metadata.
+Daphnia LT50 48 hour @ 100 % conc.	LT50, Daphnia, undiluted sample, 48 h test	rename						Reviewed name alias; retain analytical metadata.
+Lethal Time for  50% Mortality @ 100% conc. pH stabilized	LT50, species unspecified, undiluted sample, pH stabilized	rename						Reviewed name alias; retain analytical metadata.

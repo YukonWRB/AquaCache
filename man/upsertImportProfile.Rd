@@ -29,8 +29,9 @@ upsertImportProfile(
   sample_identity = c("location_id", "sub_location_id", "media_id", "z", "datetime",
     "sample_type", "collection_method"),
   result_identity = c("result_type", "parameter_id", "matrix_state_id",
-    "sample_fraction_id", "result_value_type", "result_descriptor_id", "protocol_method",
-    "laboratory", "analysis_datetime"),
+    "sample_fraction_id", "result_value_type", "reporting_basis_id",
+    "result_speciation_id", "result_target_id", "endpoint_mode", "endpoint_ph",
+    "analysis_conditions", "protocol_method", "laboratory", "analysis_datetime"),
   validation_rules = list(),
   active = TRUE,
   note = NULL
@@ -106,4 +107,7 @@ Adds or updates a profile that describes how an uploaded spreadsheet or
 delimited file should be read and normalized before parameter mappings are
 applied. This is intended for Shiny upload workflows where users select or
 create a key/profile before previewing lab or field data.
+Empty scopes receive a published baseline for provenance. Existing mapping
+drafts are retained without publication. All changes are atomic and use the
+same scope locks as mapping editors and publication.
 }

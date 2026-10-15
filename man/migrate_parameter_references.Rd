@@ -13,7 +13,11 @@ migrate_parameter_references(
   mapping_descriptor_ids = NULL,
   mapping_descriptor_field = "input_unit",
   preserve_existing_descriptor = FALSE,
-  delete_source = FALSE
+  delete_source = FALSE,
+  reporting_basis_id = NA_integer_,
+  result_speciation_id = NA_integer_,
+  result_target_id = NA_integer_,
+  preserve_existing_chemistry = TRUE
 )
 }
 \arguments{
@@ -39,6 +43,13 @@ values; otherwise replace them with the supplied descriptor ID(s).}
 
 \item{delete_source}{Whether to delete the source parameter after its
 references move. Defaults to \code{FALSE}.}
+
+\item{reporting_basis_id, result_speciation_id, result_target_id}{Optional
+analytical catalogue IDs for referencing records that carry those columns.
+NA preserves the column. Legacy descriptors and current analytical IDs
+cannot be supplied together.}
+
+\item{preserve_existing_chemistry}{Fill only missing analytical IDs when TRUE.}
 }
 \value{
 \code{TRUE}, invisibly.

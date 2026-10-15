@@ -258,7 +258,12 @@ downloadEQWin <- function(
         result_condition = parsed$result_condition,
         result_condition_value = parsed$result_condition_value,
         result_value_type = param_row$result_value_type[[1]],
-        result_descriptor_id = param_row$result_descriptor_id[[1]],
+        reporting_basis_id = param_row$reporting_basis_id[[1]],
+        result_speciation_id = param_row$result_speciation_id[[1]],
+        result_target_id = param_row$result_target_id[[1]],
+        endpoint_mode = param_row$endpoint_mode[[1]],
+        endpoint_ph = param_row$endpoint_ph[[1]],
+        analysis_conditions = param_row$analysis_conditions[[1]],
         matrix_state_id = param_row$matrix_state_id[[1]],
         note = eqwin_collapse_note(c(
           source_row$ResultCode[[1]],
@@ -794,27 +799,10 @@ eqwin_parse_result <- function(
 }
 
 eqwin_drop_incomplete_required_targets <- function(con, results) {
-  params <- DBI::dbGetQuery(
-    con,
-    paste0(
-      "SELECT parameter_id, sample_fraction, result_descriptor
-       FROM public.parameters
-       WHERE parameter_id IN (",
-      paste(unique(results$parameter_id), collapse = ","),
-      ");"
-    )
-  )
-  results <- merge(results, params, by = "parameter_id", all.x = TRUE)
-  needs_fraction <- !is.na(results$sample_fraction) &
-    as.logical(results$sample_fraction)
-  needs_descriptor <- !is.na(results$result_descriptor) &
-    as.logical(results$result_descriptor)
-  keep <- !(needs_fraction & is.na(results$sample_fraction_id))
-  keep <- keep & !(needs_descriptor & is.na(results$result_descriptor_id))
-  results <- results[keep, ]
-  results$sample_fraction <- NULL
-  results$result_descriptor <- NULL
-  results
+  messages <- validateResultChemistry(con, results, error = FALSE)
+  if (any(nzchar(messages))) warning("EQWin results with incomplete analytical metadata were omitted: ",
+    paste(unique(messages[nzchar(messages)]), collapse = "; "))
+  results[!nzchar(messages), ]
 }
 
 eqwin_collapse_note <- function(x) {

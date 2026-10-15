@@ -70,7 +70,9 @@ tryCatch(
            ('discrete.laboratories'),
            ('discrete.protocols_methods'),
            ('discrete.result_conditions'),
-           ('discrete.result_descriptors'),
+           ('discrete.reporting_bases'),
+           ('discrete.result_speciations'),
+           ('discrete.result_targets'),
            ('discrete.result_types'),
            ('discrete.result_value_types'),
            ('discrete.sample_fractions'),
@@ -1173,8 +1175,9 @@ tryCatch(
          r.result_condition_value,
          r.result_value_type AS result_value_type_id,
          rvt.result_value_type,
-         r.result_descriptor_id,
-         rs.result_descriptor,
+         r.reporting_basis_id,
+         rs.reporting_basis, r.result_speciation_id, spec.result_speciation,
+         r.result_target_id, target.result_target, r.endpoint_mode, r.endpoint_ph, r.analysis_conditions, r.analysis_conditions_key,
          r.protocol_method AS protocol_method_id,
          pm.protocol_name AS protocol_method,
          pm.protocol_description,
@@ -1207,8 +1210,10 @@ tryCatch(
          ON r.result_condition = rc.result_condition_id
        LEFT JOIN discrete.result_value_types rvt
          ON r.result_value_type = rvt.result_value_type_id
-       LEFT JOIN discrete.result_descriptors rs
-         ON r.result_descriptor_id = rs.result_descriptor_id
+       LEFT JOIN discrete.reporting_bases rs
+         ON r.reporting_basis_id = rs.reporting_basis_id
+       LEFT JOIN discrete.result_speciations spec ON r.result_speciation_id = spec.result_speciation_id
+       LEFT JOIN discrete.result_targets target ON r.result_target_id = target.result_target_id
        LEFT JOIN discrete.protocols_methods pm
          ON r.protocol_method = pm.protocol_id
        LEFT JOIN discrete.laboratories lab

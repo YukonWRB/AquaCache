@@ -1,8 +1,23 @@
-# DEV_patch_65.R: repair Patch 64 parameter updates and field-result metadata,
-# migrate result speciations to descriptors, add time-ranged continuous
-# aggregation methods, classify ECCC wind reports from weathercan station
-# metadata, correct ECCC wind types and periods, and rename the
+# patch_65.R: repair Patch 64 parameter updates and field-result metadata,
+# separate reporting bases, chemical forms, targets, and numeric conditions,
+# preserve explicit endpoints and legacy interpretation, add time-ranged continuous
+# aggregation methods, bound ECCC recipes using station archive metadata,
+# correct ECCC wind types and periods, and rename the
 # timeseries default-show field.
+
+# Keep the one-time chemistry conversion beside this patch. Reusable parameter
+# maintenance tools remain in the package namespace.
+patch65_helpers <- new.env(parent = asNamespace("AquaCache"))
+helper_path <- system.file(
+  "patches",
+  "patch_65",
+  "result_chemistry.R",
+  package = "AquaCache"
+)
+if (!nzchar(helper_path)) {
+  stop("Missing Patch 65 chemistry migration helper.")
+}
+sys.source(helper_path, envir = patch65_helpers)
 
 check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 if (!identical(check$session_user[[1]], "postgres")) {
@@ -12,7 +27,7 @@ if (!identical(check$session_user[[1]], "postgres")) {
 }
 
 message(
-  "Working on DEV patch 65: revising parameter references, migrating result descriptors and sample fractions, preventing laboratory metadata on field results, correcting ECCC wind aggregation types, classifying hourly ECCC wind report windows from weathercan station metadata, adding time-ranged aggregation methods, back-correcting measurement periods from those methods, and renaming the timeseries default-show field. Changes are being made within a transaction, so an error will roll back the database."
+  "Working on DEV patch 65: revising parameter references; separating reporting bases, chemical forms, analytical targets, endpoints, and analysis conditions; migrating sample fractions; preventing laboratory metadata on field results; correcting ECCC wind aggregation types and windows; adding time-ranged aggregation methods; correcting measurement periods; and renaming the timeseries default-show field. Changes are made within one transaction and errors roll back the patch."
 )
 
 if (dbTransCheck(con)) {
@@ -54,6 +69,20 @@ tryCatch(
     if (length(last_patch) != 1L || last_patch != "64") {
       stop("DEV patch 65 must be applied to a database at Patch 64.")
     }
+
+    # Retain the original ID dictionaries before renaming or deleting anything.
+    # Old source payloads refer to both catalogues, not only to descriptors.
+    DBI::dbExecute(
+      con,
+      "CREATE TEMP TABLE patch65_legacy_sample_fractions ON COMMIT DROP AS
+       SELECT sample_fraction_id, sample_fraction FROM discrete.sample_fractions"
+    )
+    DBI::dbExecute(
+      con,
+      "CREATE TEMP TABLE patch65_legacy_result_speciations ON COMMIT DROP AS
+       SELECT result_speciation_id AS legacy_id, result_speciation AS legacy_label
+       FROM discrete.result_speciations"
+    )
 
     # The old lookup contains several kinds of result descriptor. Rename the
     # lookup and its referring columns without changing IDs. Then move the
@@ -359,11 +388,7 @@ tryCatch(
     sample_fraction_names_to_delete <- unique(c(
       explicitly_moved_sample_fraction_names,
       "inorganic",
-      "non-settleable",
-      "organic",
-      "supernate",
-      "unfiltered",
-      "volatile"
+      "unfiltered"
     ))
     sample_fraction_names_to_delete_sql <- paste(
       as.character(DBI::dbQuoteString(con, sample_fraction_names_to_delete)),
@@ -402,61 +427,16 @@ tryCatch(
       list(schema = "discrete", table = "import_parameter_mappings"),
       list(schema = "criteria", table = "guideline_rule_inputs")
     )
-    # Treat an unfiltered result as total by default. The Hach field cyanide
-    # color-comparator mapping is an exception: its method measures free
-    # cyanide unless the sample is distilled for total cyanide.
+    # Fractions describe the analyzed/prepared portion of a sample. Only the
+    # cyanide pools and arsenic form move into the staging descriptor lookup.
+    # Unfiltered is handled independently below as a total sample fraction;
+    # neither the fraction nor a manufacturer establishes a cyanide target.
     sample_fraction_descriptor_label_sql <- function(
       source_table,
       fraction_alias = "fraction",
       row_alias = "source_row"
     ) {
-      fraction_value <- paste0(fraction_alias, ".sample_fraction")
-      default_label <- paste0(
-        "CASE WHEN lower(btrim(",
-        fraction_value,
-        ")) = 'unfiltered' THEN 'total' ELSE ",
-        fraction_value,
-        " END"
-      )
-      is_hach_cyanide <- if (
-        source_table$schema == "discrete" &&
-          source_table$table == "import_parameter_mappings"
-      ) {
-        paste0(
-          "lower(btrim(",
-          fraction_value,
-          ")) = 'unfiltered'",
-          " AND lower(btrim(parameter.param_name)) LIKE '%cyanide%'",
-          " AND ",
-          row_alias,
-          ".source_match::text ILIKE '%HACH%'"
-        )
-      } else if (
-        source_table$schema == "discrete" &&
-          source_table$table == "results"
-      ) {
-        paste0(
-          "lower(btrim(",
-          fraction_value,
-          ")) = 'unfiltered'",
-          " AND lower(btrim(parameter.param_name)) LIKE '%cyanide%'",
-          " AND coalesce(",
-          row_alias,
-          ".protocol_method::text, '') ILIKE '%HACH%'"
-        )
-      } else {
-        NULL
-      }
-      if (is.null(is_hach_cyanide)) {
-        return(default_label)
-      }
-      paste0(
-        "CASE WHEN ",
-        is_hach_cyanide,
-        " THEN 'free' ELSE ",
-        default_label,
-        " END"
-      )
+      paste0(fraction_alias, ".sample_fraction")
     }
     sample_fraction_descriptor_joins_sql <- function(source_table, row_alias) {
       if (
@@ -559,7 +539,7 @@ tryCatch(
     }
     moved_sample_fraction_names <- unique(c(
       explicitly_moved_sample_fraction_names,
-      referenced_sample_fraction_names
+      setdiff(referenced_sample_fraction_names, "unfiltered")
     ))
     moved_sample_fraction_sql <- paste(
       as.character(DBI::dbQuoteString(con, moved_sample_fraction_names)),
@@ -795,87 +775,33 @@ tryCatch(
       )
     }
 
-    affected_descriptor_parameters <- DBI::dbGetQuery(
+    # Preserve parameter-level requirements. Old fraction guards cannot express
+    # a historical cyanide pool whose physical fraction was never recorded.
+    # The typed chemistry guard installed below permits unchanged historical
+    # unknowns while enforcing those requirements on new analytical identities.
+    patch65_fraction_guards <- DBI::dbGetQuery(
       con,
-      paste0(
-        "SELECT DISTINCT parameter_id
-         FROM (
-           SELECT result.parameter_id
-           FROM discrete.results result
-           JOIN discrete.sample_fractions fraction
-             ON fraction.sample_fraction_id = result.sample_fraction_id
-           WHERE lower(btrim(fraction.sample_fraction)) IN (",
-        moved_sample_fraction_sql,
-        ")
-           UNION
-           SELECT mapping.parameter_id
-           FROM discrete.import_parameter_mappings mapping
-           JOIN discrete.sample_fractions fraction
-             ON fraction.sample_fraction_id = mapping.sample_fraction_id
-           WHERE lower(btrim(fraction.sample_fraction)) IN (",
-        moved_sample_fraction_sql,
-        ") AND mapping.parameter_id IS NOT NULL
-           UNION
-           SELECT rule_input.parameter_id
-           FROM criteria.guideline_rule_inputs rule_input
-           JOIN discrete.sample_fractions fraction
-             ON fraction.sample_fraction_id = rule_input.sample_fraction_id
-           WHERE lower(btrim(fraction.sample_fraction)) IN (",
-        moved_sample_fraction_sql,
-        ") AND rule_input.parameter_id IS NOT NULL
-         ) affected
-         ORDER BY parameter_id"
-      )
-    )$parameter_id
-
-    if (length(affected_descriptor_parameters) > 0L) {
-      affected_descriptor_parameter_sql <- paste(
-        as.integer(affected_descriptor_parameters),
-        collapse = ", "
-      )
-      # The old parameter-level fraction flag meant every result required a
-      # sample_fractions row. Those rows become descriptors, so relax that
-      # global physical-fraction requirement for affected parameters. Existing
-      # physical fractions remain on any unaffected rows. Re-require a result
-      # descriptor only when all existing results and active mappings have one.
+      "SELECT n.nspname AS schema_name, c.relname AS table_name, t.tgname
+       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_proc p ON p.oid = t.tgfoid
+       WHERE NOT t.tgisinternal AND t.tgenabled = 'O'
+         AND p.proname IN ('enforce_sample_fraction',
+           'enforce_import_parameter_mapping_requirements')
+         AND t.tgrelid IN ('discrete.results'::regclass,
+           'discrete.import_parameter_mappings'::regclass)"
+    )
+    for (i in seq_len(nrow(patch65_fraction_guards))) {
       DBI::dbExecute(
         con,
-        paste0(
-          "UPDATE public.parameters
-           SET sample_fraction = FALSE
-           WHERE parameter_id IN (",
-          affected_descriptor_parameter_sql,
-          ")"
-        )
-      )
-      DBI::dbExecute(
-        con,
-        paste0(
-          "UPDATE public.parameters parameter
-           SET result_descriptor = TRUE
-           WHERE parameter.parameter_id IN (",
-          affected_descriptor_parameter_sql,
-          ")
-             AND parameter.result_descriptor IS DISTINCT FROM TRUE
-             AND NOT EXISTS (
-               SELECT 1 FROM discrete.results result
-               WHERE result.parameter_id = parameter.parameter_id
-                 AND result.result_descriptor_id IS NULL
-             )
-             AND NOT EXISTS (
-               SELECT 1
-               FROM discrete.import_parameter_mappings mapping
-               JOIN discrete.import_mapping_sets mapping_set
-                 USING (import_mapping_set_id)
-               WHERE mapping.parameter_id = parameter.parameter_id
-                 AND mapping.active IS TRUE
-                 AND mapping_set.status IN ('draft', 'published')
-                 AND mapping.result_descriptor_id IS NULL
-             )"
+        sprintf(
+          "ALTER TABLE %s.%s DISABLE TRIGGER %s",
+          DBI::dbQuoteIdentifier(con, patch65_fraction_guards$schema_name[[i]]),
+          DBI::dbQuoteIdentifier(con, patch65_fraction_guards$table_name[[i]]),
+          DBI::dbQuoteIdentifier(con, patch65_fraction_guards$tgname[[i]])
         )
       )
     }
-
     mapping_guard <- DBI::dbGetQuery(
       con,
       "SELECT tgenabled
@@ -912,6 +838,22 @@ tryCatch(
         DBI::dbQuoteIdentifier(
           con,
           DBI::Id(schema = source_table$schema, table = source_table$table)
+        )
+      )
+      # Retain the physical fraction and existing descriptor independently.
+      # A uniqueness/FK conflict aborts the transaction rather than coalescing
+      # historically distinct results. No cyanide target is inferred here.
+      DBI::dbExecute(
+        con,
+        paste0(
+          "UPDATE ",
+          table_sql,
+          " target SET sample_fraction_id = (
+           SELECT sample_fraction_id FROM discrete.sample_fractions
+           WHERE lower(btrim(sample_fraction)) = 'total')
+         WHERE sample_fraction_id IN (
+           SELECT sample_fraction_id FROM discrete.sample_fractions
+           WHERE lower(btrim(sample_fraction)) = 'unfiltered')"
         )
       )
       fraction_label_sql <- sample_fraction_descriptor_label_sql(
@@ -1223,106 +1165,84 @@ tryCatch(
     # Reviewed parameter catalogue migrations also rewrite historical mapping
     # snapshots and result references. The helper requires this patch's active
     # transaction and preserves distinct sources unless deletion is requested.
-    try(
-      {
-        AquaCache:::revise_parameter_catalogue_entry(
-          con,
-          source_name = "well depth",
-          target_name = "water level below top of casing",
-          source_description = "Well Depth in Meter below TOC",
-          param_name_fr = "niveau d'eau sous le haut du tubage",
-          description = "Water level measured below the top of the well casing.",
-          description_fr = "Niveau d'eau mesuré sous le haut du tubage du puits.",
-          plot_default_y_orientation = "inverted",
-          result_descriptor = FALSE,
-          delete_source = TRUE
-        )
-      },
-      silent = TRUE
+    catalogue_revisions <- list(
+      list(
+        source_name = "well depth",
+        target_name = "water level below top of casing",
+        source_description = "Well Depth in Meter below TOC",
+        param_name_fr = "niveau d'eau sous le haut du tubage",
+        description = "Water level measured below the top of the well casing.",
+        description_fr = "Niveau d'eau mesuré sous le haut du tubage du puits.",
+        plot_default_y_orientation = "inverted",
+        result_descriptor = FALSE,
+        delete_source = TRUE
+      ),
+      list(
+        source_name = "turbidity",
+        target_name = "turbidity",
+        param_name_fr = "turbidité",
+        result_descriptor = TRUE,
+        mapping_descriptor = "as NTU",
+        mapping_descriptor_by = c(NTU = "as NTU", FNU = "as FNU"),
+        preserve_existing_descriptor = TRUE
+      ),
+      list(
+        source_name = "Turbidity - FNU",
+        target_name = "turbidity",
+        mapping_descriptor = "as FNU",
+        delete_source = TRUE
+      ),
+      list(
+        source_name = "arsenic",
+        target_name = "arsenic",
+        param_name_fr = "arsenic"
+      ),
+      list(
+        source_name = "As-V",
+        target_name = "arsenic",
+        mapping_descriptor = "as arsenate (As-V)",
+        delete_source = TRUE
+      ),
+      list(
+        source_name = "As-III",
+        target_name = "arsenic",
+        mapping_descriptor = "as arsenite (As-III)",
+        delete_source = TRUE
+      ),
+      list(
+        source_name = "arsenite",
+        target_name = "arsenic",
+        mapping_descriptor = "as arsenite (As-III)",
+        delete_source = TRUE
+      )
     )
-
-    # Parameter consolidations can set a per-source result descriptor while
-    # preserving all other mapping fields and mapping-set identifiers.
-    try(
-      {
-        AquaCache:::revise_parameter_catalogue_entry(
-          con,
-          source_name = "turbidity",
-          target_name = "turbidity",
-          param_name_fr = "turbidité",
-          result_descriptor = TRUE,
-          mapping_descriptor = "as NTU",
-          mapping_descriptor_by = c(
-            NTU = "as NTU",
-            FNU = "as FNU"
-          ),
-          preserve_existing_descriptor = TRUE
-        )
-      },
-      silent = TRUE
-    )
-    try(
-      {
-        AquaCache:::revise_parameter_catalogue_entry(
-          con,
-          source_name = "Turbidity - FNU",
-          target_name = "turbidity",
-          mapping_descriptor = "as FNU",
-          delete_source = TRUE
-        )
-      },
-      silent = TRUE
-    )
-    try(
-      {
-        AquaCache:::revise_parameter_catalogue_entry(
-          con,
-          source_name = "arsenic",
-          target_name = "arsenic",
-          param_name_fr = "arsenic",
-          result_descriptor = TRUE,
-          mapping_descriptor = "as arsenic (all states)"
-        )
-      },
-      silent = TRUE
-    )
-    try(
-      {
-        AquaCache:::revise_parameter_catalogue_entry(
-          con,
-          source_name = "As-V",
-          target_name = "arsenic",
-          mapping_descriptor = "as arsenate (As-V)",
-          delete_source = TRUE
-        )
-      },
-      silent = TRUE
-    )
-    try(
-      {
-        AquaCache:::revise_parameter_catalogue_entry(
-          con,
-          source_name = "As-III",
-          target_name = "arsenic",
-          mapping_descriptor = "as arsenite (As-III)",
-          delete_source = TRUE
-        )
-      },
-      silent = TRUE
-    )
-    try(
-      {
-        AquaCache:::revise_parameter_catalogue_entry(
-          con,
-          source_name = "arsenite",
-          target_name = "arsenic",
-          mapping_descriptor = "as arsenite (As-III)",
-          delete_source = TRUE
-        )
-      },
-      silent = TRUE
-    )
-
+    if (
+      DBI::dbGetQuery(
+        con,
+        "SELECT count(*)::INTEGER AS n FROM discrete.sample_fractions
+       WHERE lower(btrim(sample_fraction)) = 'total'"
+      )$n[[1]] !=
+        1L
+    ) {
+      stop("Patch 65 requires exactly one total sample fraction.")
+    }
+    for (revision in catalogue_revisions) {
+      source_exists <- DBI::dbGetQuery(
+        con,
+        "SELECT EXISTS (SELECT 1 FROM public.parameters
+         WHERE lower(btrim(param_name)) = lower(btrim($1))) AS found",
+        params = list(revision$source_name)
+      )$found[[1]]
+      if (!source_exists) {
+        next
+      }
+      # A missing source is a normal cluster difference. Ambiguous names,
+      # incompatible definitions, and migration conflicts must roll back.
+      do.call(
+        AquaCache:::revise_parameter_catalogue_entry,
+        c(list(con = con), revision)
+      )
+    }
     # Keep known parameter/descriptor pairings as ordered UI suggestions.
     # This relation is advisory: unlisted descriptors remain selectable and
     # the parameter result_descriptor flag continues to control requiredness.
@@ -1561,6 +1481,57 @@ tryCatch(
       " advisory parameter/descriptor suggestion(s)."
     )
 
+    # The preceding steps preserve legacy labels in a transaction-local staging
+    # catalogue. Finish the representation migration with independent reporting
+    # bases, chemical speciations, and analytical targets before committing.
+    # Offer an explicit all-species scope without assigning it to historical
+    # arsenic results whose analytical scope was never recorded.
+    DBI::dbExecute(
+      con,
+      "INSERT INTO discrete.result_descriptors (result_descriptor)
+       SELECT 'as arsenic (all states)' WHERE NOT EXISTS (
+         SELECT 1 FROM discrete.result_descriptors
+         WHERE lower(btrim(result_descriptor)) = 'as arsenic (all states)')"
+    )
+    patch65_helpers$migrate_result_chemistry_dimensions(con)
+
+    # Catalogue policy may expose incomplete historical mapping definitions.
+    # Keep their identities and report the exact review work; an unknown
+    # endpoint or chemical scope must never be replaced by a guessed default.
+    mapping_requirements_to_review <- DBI::dbGetQuery(
+      con,
+      "SELECT m.import_mapping_id, p.param_name, array_to_string(array_remove(ARRAY[
+         CASE WHEN p.sample_fraction AND m.sample_fraction_id IS NULL THEN 'sample_fraction' END,
+         CASE WHEN p.reporting_basis AND m.reporting_basis_id IS NULL THEN 'reporting_basis' END,
+         CASE WHEN p.result_speciation AND m.result_speciation_id IS NULL THEN 'result_speciation' END,
+         CASE WHEN p.result_target AND m.result_target_id IS NULL THEN 'result_target' END,
+         CASE WHEN p.endpoint AND m.endpoint_mode IS NULL THEN 'endpoint' END
+       ], NULL), ', ') AS missing_fields
+       FROM discrete.import_parameter_mappings m
+       JOIN discrete.import_mapping_sets s USING (import_mapping_set_id)
+       JOIN public.parameters p USING (parameter_id)
+       WHERE m.active AND s.status = 'published' AND (
+         (p.sample_fraction AND m.sample_fraction_id IS NULL) OR
+         (p.reporting_basis AND m.reporting_basis_id IS NULL) OR
+         (p.result_speciation AND m.result_speciation_id IS NULL) OR
+         (p.result_target AND m.result_target_id IS NULL) OR
+         (p.endpoint AND m.endpoint_mode IS NULL)) ORDER BY p.param_name, m.import_mapping_id"
+    )
+    if (nrow(mapping_requirements_to_review)) {
+      message(
+        "Published mappings whose result rows will be skipped until analytical review: ",
+        paste(
+          sprintf(
+            "%s (%s: %s)",
+            mapping_requirements_to_review$import_mapping_id,
+            mapping_requirements_to_review$param_name,
+            mapping_requirements_to_review$missing_fields
+          ),
+          collapse = "; "
+        )
+      )
+    }
+
     # These IDs are used by the field visit parameter group below.
     DBI::dbExecute(
       con,
@@ -1688,6 +1659,8 @@ tryCatch(
            AS has_modified_function,
          to_regprocedure('public.user_modified()') IS NOT NULL
            AS has_modified_by_function,
+         to_regprocedure('continuous.refresh_calculated_daily_from_ranges()') IS NOT NULL
+           AS has_daily_range_refresh,
          EXISTS (
            SELECT 1 FROM pg_extension WHERE extname = 'btree_gist'
          ) AS has_btree_gist"
@@ -1826,6 +1799,8 @@ tryCatch(
                AND evaluation_anchor IS NULL
                AND evaluation_timezone IS NULL
                AND expected_input_interval IS NULL
+               AND input_weighting = 'equal'
+               AND minimum_coverage IS NULL
              )
            ),
          CONSTRAINT timeseries_aggregation_method_evaluation_valid
@@ -1972,7 +1947,7 @@ tryCatch(
          CONSTRAINT timeseries_aggregation_method_step_inputs_number_positive
            CHECK (input_number > 0),
          CONSTRAINT timeseries_aggregation_method_step_inputs_weight_positive
-           CHECK (component_weight > 0),
+           CHECK (component_weight > 0 AND component_weight <> 'NaN'::NUMERIC),
          CONSTRAINT timeseries_aggregation_method_step_inputs_distinct
            CHECK (step_id <> input_step_id)
        )"
@@ -2078,6 +2053,7 @@ tryCatch(
        AS $function$
        DECLARE
          v_method_id BIGINT;
+         v_method_ids BIGINT[];
          v_timeseries_id INTEGER;
          v_timeseries_aggregation_type_id INTEGER;
          v_operation_count INTEGER;
@@ -2086,18 +2062,63 @@ tryCatch(
          v_terminal_count INTEGER;
          v_final_aggregation_type_id INTEGER;
        BEGIN
-         IF TG_OP = 'DELETE' THEN
-           v_method_id := OLD.aggregation_method_id;
+         IF TG_OP = 'INSERT' THEN
+           v_method_ids := ARRAY[NEW.aggregation_method_id];
+         ELSIF TG_OP = 'DELETE' THEN
+           v_method_ids := ARRAY[OLD.aggregation_method_id];
          ELSE
-           v_method_id := NEW.aggregation_method_id;
+           v_method_ids := ARRAY[OLD.aggregation_method_id,
+             NEW.aggregation_method_id];
          END IF;
+         FOR v_method_id IN SELECT DISTINCT id FROM unnest(v_method_ids) id ORDER BY id LOOP
 
          SELECT timeseries_id
            INTO v_timeseries_id
            FROM continuous.timeseries_aggregation_methods
-          WHERE aggregation_method_id = v_method_id;
+          WHERE aggregation_method_id = v_method_id
+          FOR UPDATE;
          IF NOT FOUND THEN
-           RETURN NULL;
+           CONTINUE;
+         END IF;
+
+         IF EXISTS (
+           SELECT 1 FROM continuous.timeseries_aggregation_method_steps step
+           JOIN continuous.aggregation_types type USING (aggregation_type_id)
+           WHERE step.aggregation_method_id = v_method_id AND (
+             (step.operation_type = 'arithmetic_mean'
+               AND type.aggregation_type NOT IN ('mean', '(min+max)/2'))
+             OR (step.operation_type = 'window_aggregate'
+               AND type.aggregation_type IN ('instantaneous', '(min+max)/2'))
+           )
+         ) THEN
+           RAISE EXCEPTION USING ERRCODE = '23514',
+             CONSTRAINT = 'timeseries_aggregation_method_operation_type_valid',
+             MESSAGE = 'The aggregation type must describe the calculation operation.';
+         END IF;
+
+         IF EXISTS (
+           SELECT 1 FROM continuous.timeseries_aggregation_method_steps step
+           JOIN continuous.aggregation_types type USING (aggregation_type_id)
+           LEFT JOIN continuous.timeseries_aggregation_method_step_inputs input
+             ON input.aggregation_method_id = step.aggregation_method_id
+             AND input.step_id = step.step_id
+           LEFT JOIN continuous.timeseries_aggregation_method_steps source
+             ON source.aggregation_method_id = input.aggregation_method_id
+             AND source.step_id = input.input_step_id
+           LEFT JOIN continuous.aggregation_types source_type
+             ON source_type.aggregation_type_id = source.aggregation_type_id
+           WHERE step.aggregation_method_id = v_method_id
+             AND type.aggregation_type = '(min+max)/2'
+           GROUP BY step.step_id
+           HAVING count(input.input_step_id) <> 2
+             OR count(DISTINCT source_type.aggregation_type) <> 2
+             OR count(*) FILTER (WHERE source_type.aggregation_type IN ('minimum', 'maximum')) <> 2
+             OR min(input.component_weight) <> max(input.component_weight)
+             OR bool_or(step.missing_data_policy <> 'propagate')
+         ) THEN
+           RAISE EXCEPTION USING ERRCODE = '23514',
+             CONSTRAINT = 'timeseries_aggregation_method_extrema_mean_valid',
+             MESSAGE = '(min+max)/2 requires one minimum and one maximum with equal weights and propagated missing data.';
          END IF;
 
          SELECT count(*)::INTEGER,
@@ -2192,11 +2213,21 @@ tryCatch(
              MESSAGE = 'Operation input numbers must be contiguous from 1.';
          END IF;
 
+         -- UTC is a known valid timezone used by all ECCC seeds. Expanding
+         -- pg_timezone_names for every deferred step/edge event is expensive;
+         -- consult the server catalogue only when another name is present.
+         IF EXISTS (
+           SELECT 1 FROM continuous.timeseries_aggregation_method_steps step
+           WHERE step.aggregation_method_id = v_method_id
+             AND step.evaluation_timezone IS NOT NULL
+             AND step.evaluation_timezone <> 'UTC'
+         ) THEN
          IF EXISTS (
            SELECT 1
              FROM continuous.timeseries_aggregation_method_steps step
             WHERE step.aggregation_method_id = v_method_id
               AND step.evaluation_timezone IS NOT NULL
+              AND step.evaluation_timezone <> 'UTC'
               AND NOT EXISTS (
                 SELECT 1
                   FROM pg_catalog.pg_timezone_names tz
@@ -2207,6 +2238,7 @@ tryCatch(
              ERRCODE = '23514',
              CONSTRAINT = 'timeseries_aggregation_method_timezone_valid',
              MESSAGE = 'An evaluation_timezone must be a recognized PostgreSQL/IANA timezone name.';
+         END IF;
          END IF;
 
          SELECT count(*)::INTEGER, max(operation.aggregation_type_id)
@@ -2239,6 +2271,7 @@ tryCatch(
              MESSAGE = 'The final aggregation step must match the timeseries aggregation_type_id.';
          END IF;
 
+         END LOOP;
          RETURN NULL;
        END;
        $function$"
@@ -2260,11 +2293,18 @@ tryCatch(
        LANGUAGE plpgsql
        SET search_path = pg_catalog, continuous
        AS $function$
+       DECLARE
+         v_current_type INTEGER;
        BEGIN
          IF NEW.aggregation_type_id IS NOT DISTINCT FROM
             OLD.aggregation_type_id THEN
            RETURN NULL;
-         END IF;
+        END IF;
+
+         -- Deferred checks must inspect the final row, not an intermediate
+         -- NEW value from an earlier update in the same transaction.
+         SELECT aggregation_type_id INTO v_current_type
+         FROM continuous.timeseries WHERE timeseries_id = NEW.timeseries_id;
 
          IF EXISTS (
            SELECT 1
@@ -2281,7 +2321,7 @@ tryCatch(
                    AND input.input_step_id = final_step.step_id
               )
               AND final_step.aggregation_type_id IS DISTINCT FROM
-                NEW.aggregation_type_id
+                v_current_type
          ) THEN
            RAISE EXCEPTION USING
              ERRCODE = '23514',
@@ -2437,7 +2477,11 @@ tryCatch(
          ON ts.timeseries_id = adapter.timeseries_id
        WHERE adapter.source_fx = 'downloadECCCwx'
          AND adapter.active IS TRUE
-         AND jsonb_typeof(adapter.source_fx_args) = 'object'"
+         AND jsonb_typeof(adapter.source_fx_args) = 'object'
+         AND NOT EXISTS (
+           SELECT 1 FROM continuous.timeseries_source_adapters other
+           WHERE other.timeseries_id = ts.timeseries_id AND other.active
+             AND other.source_fx IS DISTINCT FROM 'downloadECCCwx')"
     )
     if (nrow(wind_sources) > 0L) {
       wind_sources <- unique(wind_sources)
@@ -2448,7 +2492,9 @@ tryCatch(
       )
       unambiguous_wind_sources <- wind_sources[
         wind_sources$timeseries_id %in%
-          as.integer(names(signatures_per_series[signatures_per_series == 1L])) &
+          as.integer(names(signatures_per_series[
+            signatures_per_series == 1L
+          ])) &
           wind_sources$source_parameter %in%
             c("wind_spd", "wind_dir", "wind_gust", "spd_max_gust"),
       ]
@@ -2468,7 +2514,9 @@ tryCatch(
            FROM continuous.aggregation_types
            WHERE aggregation_type IN ('mean', 'maximum')"
         )
-        if (!all(required_wind_types %in% wind_aggregation_types$aggregation_type)) {
+        if (
+          !all(required_wind_types %in% wind_aggregation_types$aggregation_type)
+        ) {
           stop(
             "DEV patch 65 requires the aggregation types used by active ECCC wind fetches: ",
             paste(required_wind_types, collapse = ", ")
@@ -2528,7 +2576,11 @@ tryCatch(
          ON aggregation.aggregation_type_id = ts.aggregation_type_id
        WHERE adapter.source_fx = 'downloadECCCwx'
          AND adapter.active IS TRUE
-         AND jsonb_typeof(adapter.source_fx_args) = 'object'"
+         AND jsonb_typeof(adapter.source_fx_args) = 'object'
+         AND NOT EXISTS (
+           SELECT 1 FROM continuous.timeseries_source_adapters other
+           WHERE other.timeseries_id = ts.timeseries_id AND other.active
+             AND other.source_fx IS DISTINCT FROM 'downloadECCCwx')"
     )
 
     if (nrow(eccc_sources) > 0L) {
@@ -2601,13 +2653,26 @@ tryCatch(
       # Match ECCC's numeric station_id against the weathercan station
       # catalogue. stations_search() searches by station name or coordinates,
       # so it is not an exact lookup for source adapter location IDs. Its
-      # results come from this same catalogue and include TC_id. A TC_id marks
-      # an airport observing site; a listed station without a TC_id is treated
-      # as synoptic. Missing or conflicting metadata is left unclassified.
+      # TC_id is an identifier, not proof of METAR/SYNOP reporting or its
+      # historical averaging window. Preserve it as provenance only. Wind
+      # methods require a separately reviewed report type and applicability
+      # period, so they remain unassigned rather than inferring 2/10 minutes.
       station_catalog <- weathercan::stations()
-      if (!all(c("station_id", "station_name", "TC_id") %in% names(station_catalog))) {
+      if (
+        !all(
+          c(
+            "station_id",
+            "station_name",
+            "TC_id",
+            "interval",
+            "start",
+            "end"
+          ) %in%
+            names(station_catalog)
+        )
+      ) {
         stop(
-          "DEV patch 65 requires weathercan station metadata with station_id, station_name, and TC_id columns."
+          "DEV patch 65 requires weathercan station IDs, names, interval, record years, and TC_id metadata."
         )
       }
       station_catalog$station_id_key <- trimws(
@@ -2650,10 +2715,8 @@ tryCatch(
             "unclassified"
           } else if (length(station_tc_ids) > 1L) {
             "ambiguous"
-          } else if (length(station_tc_ids) == 1L) {
-            "aviation"
           } else {
-            "synoptic"
+            "unclassified"
           }
           data.frame(
             station_id = station_id,
@@ -2684,11 +2747,11 @@ tryCatch(
       message(
         "Classified ECCC station metadata from weathercan: ",
         sum(station_metadata$wind_report_type == "aviation"),
-        " airport station(s) with TC_id, ",
+        " verified aviation station(s), ",
         sum(station_metadata$wind_report_type == "synoptic"),
-        " station(s) without TC_id, and ",
+        " verified synoptic station(s), and ",
         sum(!station_metadata$wind_report_type %in% c("aviation", "synoptic")),
-        " missing or conflicting station record(s)."
+        " station record(s) requiring wind-method review; TC_id alone does not classify a report."
       )
 
       # The fixed historical daily boundaries in ECCC's guidance apply to
@@ -2697,6 +2760,17 @@ tryCatch(
       # determine the local observation day and are reported for manual review.
       hourly_stations <- unique(
         eccc_sources$station_id[eccc_sources$interval == "hour"]
+      )
+      hourly_archive <- station_catalog[
+        as.character(station_catalog$interval) == "hour" &
+          is.finite(station_catalog$start) &
+          is.finite(station_catalog$end),
+        ,
+        drop = FALSE
+      ]
+      hourly_stations <- intersect(
+        hourly_stations,
+        hourly_archive$station_id_key
       )
       unmatched_daily_stations <- unique(
         eccc_sources$station_id[
@@ -2766,6 +2840,18 @@ tryCatch(
         operation_ids <- vector("list", length(operations))
         for (operation_index in seq_along(operations)) {
           operation <- operations[[operation_index]]
+          # RPostgres binds SQL NULL as a scalar NA, not a zero-length R NULL.
+          # Arithmetic operations omit all window/cadence fields by design.
+          for (field in c(
+            "window_start",
+            "window_end",
+            "evaluation_interval",
+            "evaluation_anchor",
+            "evaluation_timezone",
+            "expected_input_interval"
+          )) {
+            if (is.null(operation[[field]])) operation[[field]] <- NA_character_
+          }
           operation_parameters <- operation$calculation_parameters
           if (is.null(operation_parameters)) {
             operation_parameters_json <- "{}"
@@ -2789,10 +2875,11 @@ tryCatch(
                evaluation_anchor,
                evaluation_timezone,
                expected_input_interval,
-               calculation_parameters
+               calculation_parameters,
+               missing_data_policy
              ) VALUES (
                $1, $2, $3, $4, $5::interval, $6::interval,
-               $7::interval, $8::timestamp, $9, $10::interval, $11::jsonb
+               $7::interval, $8::timestamp, $9, $10::interval, $11::jsonb, $12
              )
              RETURNING step_id",
             params = list(
@@ -2806,7 +2893,12 @@ tryCatch(
               operation$evaluation_anchor,
               operation$evaluation_timezone,
               operation$expected_input_interval,
-              operation_parameters_json
+              operation_parameters_json,
+              if (operation$operation_type == "arithmetic_mean") {
+                "propagate"
+              } else {
+                "ignore"
+              }
             )
           )$step_id[[1]]
         }
@@ -2875,6 +2967,78 @@ tryCatch(
         aggregation <- series$aggregation_type[[1]]
         wind_report_type <- series$wind_report_type[[1]]
         methods <- list()
+
+        # The provider catalogue bounds historical applicability. A currently
+        # active adapter does not prove this station had hourly observations
+        # before its hourly archive began. Daily rules use the overlap of the
+        # daily and hourly record years, expressed in our stored UTC timestamps.
+        archive_rows <- station_catalog[
+          station_catalog$station_id_key == series$station_id_key[[1]] &
+            as.character(station_catalog$interval) == interval &
+            is.finite(station_catalog$start) &
+            is.finite(station_catalog$end),
+          ,
+          drop = FALSE
+        ]
+        if (!nrow(archive_rows)) {
+          unsupported_eccc <- c(
+            unsupported_eccc,
+            sprintf(
+              "%s/%s: no verified %s archive years",
+              series$timeseries_id,
+              series$station_id,
+              interval
+            )
+          )
+          next
+        }
+        first_year <- min(archive_rows$start)
+        last_year <- max(archive_rows$end)
+        if (interval == "day") {
+          hourly_rows <- hourly_archive[
+            hourly_archive$station_id_key == series$station_id_key[[1]],
+            ,
+            drop = FALSE
+          ]
+          if (!nrow(hourly_rows)) {
+            unsupported_eccc <- c(
+              unsupported_eccc,
+              sprintf(
+                "%s/%s: daily observation-day history needs review",
+                series$timeseries_id,
+                series$station_id
+              )
+            )
+            next
+          }
+          first_year <- max(first_year, min(hourly_rows$start))
+          last_year <- min(last_year, max(hourly_rows$end))
+        }
+        if (first_year > last_year) {
+          next
+        }
+        archive_from <- as.POSIXct(
+          sprintf(
+            "%d-01-%s",
+            as.integer(first_year),
+            if (interval == "day") "02 06:00:00" else "01 00:00:00"
+          ),
+          tz = "UTC"
+        )
+        archive_until <- if (
+          last_year >= as.integer(format(Sys.Date(), "%Y"))
+        ) {
+          Inf
+        } else {
+          as.numeric(as.POSIXct(
+            sprintf(
+              "%d-01-%s",
+              as.integer(last_year) + 1L,
+              if (interval == "day") "02 06:00:00" else "01 00:00:00"
+            ),
+            tz = "UTC"
+          ))
+        }
 
         # Instantaneous values have no aggregation window to record.
         if (aggregation == "instantaneous") {
@@ -3013,17 +3177,6 @@ https://www.canada.ca/en/environment-climate-change/services/weather-general-too
               operations <- NULL
               operation_inputs <- list()
               if (is_mean_temp) {
-                maximum_window_start <- if (
-                  period$label == "Before 1957-06-01 ECCC date"
-                ) {
-                  "-17 hours 30 minutes"
-                } else if (
-                  period$label == "1957-06-01 through 1961-06-30 ECCC dates"
-                ) {
-                  "-18 hours"
-                } else {
-                  "-24 hours"
-                }
                 operations <- list(
                   list(
                     stage_number = 1L,
@@ -3034,7 +3187,7 @@ https://www.canada.ca/en/environment-climate-change/services/weather-general-too
                     evaluation_interval = "1 day",
                     evaluation_anchor = "1970-01-02 06:00:00",
                     evaluation_timezone = "UTC",
-                    expected_input_interval = "1 day",
+                    expected_input_interval = NULL,
                     calculation_parameters = list(
                       source_parameter = "min_temp",
                       source_interval = interval,
@@ -3042,15 +3195,15 @@ https://www.canada.ca/en/environment-climate-change/services/weather-general-too
                     )
                   ),
                   list(
-                    stage_number = 2L,
+                    stage_number = 1L,
                     operation_type = "window_aggregate",
                     aggregation_type_id = maximum_aggregation_type_id,
-                    window_start = maximum_window_start,
-                    window_end = period$min_end,
+                    window_start = period$precip_start,
+                    window_end = period$precip_end,
                     evaluation_interval = "1 day",
                     evaluation_anchor = "1970-01-02 06:00:00",
                     evaluation_timezone = "UTC",
-                    expected_input_interval = "1 day",
+                    expected_input_interval = NULL,
                     calculation_parameters = list(
                       source_parameter = "max_temp",
                       source_interval = interval,
@@ -3058,9 +3211,11 @@ https://www.canada.ca/en/environment-climate-change/services/weather-general-too
                     )
                   ),
                   list(
-                    stage_number = 3L,
+                    stage_number = 2L,
                     operation_type = "arithmetic_mean",
-                    aggregation_type_id = as.integer(series$aggregation_type_id),
+                    aggregation_type_id = as.integer(
+                      series$aggregation_type_id
+                    ),
                     calculation_parameters = list(
                       formula = "(minimum + maximum) / 2",
                       daily_period = period$label
@@ -3098,12 +3253,14 @@ https://www.canada.ca/en/environment-climate-change/services/weather-general-too
                   source_parameter = parameter,
                   source_interval = interval,
                   daily_period = period$label,
-                  includes = if (parameter == "total_precip") {
+                  includes = if (is_maximum) {
+                    "air temperature observations"
+                  } else if (parameter == "total_precip") {
                     "rain and water-equivalent snowfall"
                   } else if (parameter == "total_rain") {
                     "rainfall"
                   } else {
-                    "water-equivalent snowfall"
+                    "fresh snowfall depth"
                   },
                   timestamp_basis = "downloadECCCwx stores the source date at 06:00 UTC on the following day."
                 )
@@ -3117,7 +3274,7 @@ https://www.canada.ca/en/environment-climate-change/services/weather-general-too
                 end = window_end,
                 evaluation_interval = "1 day",
                 evaluation_anchor = "1970-01-02 06:00:00",
-                expected_input_interval = "1 day",
+                expected_input_interval = NULL,
                 parameters = component_parameters,
                 operations = operations,
                 operation_inputs = operation_inputs,
@@ -3174,6 +3331,37 @@ https://climate.weather.gc.ca/glossary_e.html",
           next
         }
         for (method in methods) {
+          from_epoch <- max(
+            as.numeric(archive_from),
+            if (method$from == "-infinity") {
+              -Inf
+            } else {
+              as.numeric(as.POSIXct(method$from, tz = "UTC"))
+            }
+          )
+          until_epoch <- min(
+            archive_until,
+            if (method$until == "infinity") {
+              Inf
+            } else {
+              as.numeric(as.POSIXct(method$until, tz = "UTC"))
+            }
+          )
+          if (from_epoch >= until_epoch) {
+            next
+          }
+          method$from <- format(
+            as.POSIXct(from_epoch, origin = "1970-01-01", tz = "UTC"),
+            "%Y-%m-%d %H:%M:%S%z"
+          )
+          method$until <- if (is.infinite(until_epoch)) {
+            "infinity"
+          } else {
+            format(
+              as.POSIXct(until_epoch, origin = "1970-01-01", tz = "UTC"),
+              "%Y-%m-%d %H:%M:%S%z"
+            )
+          }
           add_eccc_aggregation_method(
             series = series,
             applicable_from = method$from,
@@ -3295,12 +3483,14 @@ https://climate.weather.gc.ca/glossary_e.html",
        ORDER BY timeseries_id"
     )
     if (nrow(period_timeseries) > 0L) {
-      # Period correction is a metadata backfill. Temporarily suppress only the
-      # row-audit and modified-by/timestamp triggers; keep integrity and
-      # calculated-data refresh triggers enabled.
+      # Period changes cannot alter series IDs or datetime bounds. Suppress the
+      # corresponding no-op metadata trigger and ordinary audit/stamp triggers.
+      # Capture changed ranges with UPDATE RETURNING, then use the existing
+      # daily refresh helper once, including downstream compound timeseries.
+      # This avoids expensive old/new transition-table joins during backfill.
       period_backfill_triggers <- DBI::dbGetQuery(
         con,
-        "SELECT trig.tgname
+        "SELECT trig.tgname, trig.tgenabled::TEXT AS enabled
          FROM pg_trigger trig
          JOIN pg_proc trigger_function
            ON trigger_function.oid = trig.tgfoid
@@ -3309,6 +3499,7 @@ https://climate.weather.gc.ca/glossary_e.html",
          WHERE trig.tgrelid =
            'continuous.measurements_continuous'::regclass
            AND NOT trig.tgisinternal
+           AND trig.tgenabled <> 'D'
            AND (
              (
                function_namespace.nspname = 'audit'
@@ -3319,10 +3510,12 @@ https://climate.weather.gc.ca/glossary_e.html",
                'user_modified',
                'update_modified'
              )
+             OR (function_namespace.nspname = 'continuous'
+               AND trigger_function.proname = 'refresh_basic_metadata_on_measurements_update')
            )
          ORDER BY trig.tgname"
-      )$tgname
-      for (trigger_name in period_backfill_triggers) {
+      )
+      for (trigger_name in period_backfill_triggers$tgname) {
         DBI::dbExecute(
           con,
           paste0(
@@ -3332,6 +3525,18 @@ https://climate.weather.gc.ca/glossary_e.html",
         )
       }
 
+      previous_daily_refresh <- DBI::dbGetQuery(
+        con,
+        "SELECT current_setting('continuous.skip_daily_refresh', TRUE) AS value"
+      )$value[[1]]
+      DBI::dbExecute(con, "SET LOCAL continuous.skip_daily_refresh = 'on'")
+      DBI::dbExecute(
+        con,
+        "CREATE TEMP TABLE calculated_daily_trigger_ranges (
+           timeseries_id INTEGER, start_dt TIMESTAMPTZ, end_dt TIMESTAMPTZ
+         ) ON COMMIT DROP"
+      )
+
       message(
         "Back-correcting measurement periods for ",
         nrow(period_timeseries),
@@ -3339,20 +3544,29 @@ https://climate.weather.gc.ca/glossary_e.html",
       )
       corrected_period_rows <- 0
       for (series_index in seq_len(nrow(period_timeseries))) {
-        corrected_period_rows <- corrected_period_rows + as.numeric(
-          DBI::dbExecute(
-            con,
-            "UPDATE continuous.measurements_continuous measurement
+        corrected_period_rows <- corrected_period_rows +
+          as.numeric(
+            DBI::dbGetQuery(
+              con,
+              "WITH changed AS (
+             UPDATE continuous.measurements_continuous measurement
              SET period = assignment.period
              FROM ac_patch65_measurement_periods assignment
              WHERE assignment.timeseries_id = $1
                AND measurement.timeseries_id = assignment.timeseries_id
                AND measurement.datetime >= assignment.applicable_from
                AND measurement.datetime < assignment.applicable_until
-               AND measurement.period IS DISTINCT FROM assignment.period",
-            params = list(period_timeseries$timeseries_id[[series_index]])
+               AND measurement.period IS DISTINCT FROM assignment.period
+             RETURNING measurement.timeseries_id, measurement.datetime
+             ), ranges AS (
+               INSERT INTO calculated_daily_trigger_ranges
+               SELECT timeseries_id, min(datetime), max(datetime)
+               FROM changed GROUP BY timeseries_id RETURNING timeseries_id
+             )
+             SELECT count(*)::DOUBLE PRECISION AS n FROM changed",
+              params = list(period_timeseries$timeseries_id[[series_index]])
+            )$n[[1]]
           )
-        )
         if (series_index %% 25L == 0L) {
           message(
             "Processed aggregation-period backfill for ",
@@ -3363,11 +3577,32 @@ https://climate.weather.gc.ca/glossary_e.html",
           )
         }
       }
-      for (trigger_name in period_backfill_triggers) {
+      DBI::dbGetQuery(
+        con,
+        "SELECT continuous.refresh_calculated_daily_from_ranges()"
+      )
+      DBI::dbExecute(con, "DROP TABLE calculated_daily_trigger_ranges")
+      DBI::dbGetQuery(
+        con,
+        "SELECT set_config('continuous.skip_daily_refresh', $1, TRUE)",
+        params = list(
+          if (is.na(previous_daily_refresh)) "off" else previous_daily_refresh
+        )
+      )
+      for (trigger_index in seq_len(nrow(period_backfill_triggers))) {
+        trigger_name <- period_backfill_triggers$tgname[[trigger_index]]
+        enable_mode <- switch(
+          period_backfill_triggers$enabled[[trigger_index]],
+          A = "ENABLE ALWAYS",
+          R = "ENABLE REPLICA",
+          O = "ENABLE"
+        )
         DBI::dbExecute(
           con,
           paste0(
-            "ALTER TABLE continuous.measurements_continuous ENABLE TRIGGER ",
+            "ALTER TABLE continuous.measurements_continuous ",
+            enable_mode,
+            " TRIGGER ",
             as.character(DBI::dbQuoteIdentifier(con, trigger_name))
           )
         )
@@ -3394,7 +3629,7 @@ https://climate.weather.gc.ca/glossary_e.html",
     DBI::dbExecute(con, "COMMIT")
     active <- FALSE
     message(
-      "DEV patch 65 applied successfully. Parameter references and result descriptors were revised, ECCC wind aggregation types and aviation/synoptic aggregation windows and existing measurement periods were corrected, continuous aggregation metadata was added, and the timeseries default-show field was renamed; new or modified field results cannot include laboratory metadata."
+      "DEV patch 65 applied successfully. Discrete chemistry now has independent reporting bases, chemical forms, analytical targets, endpoints, and analysis conditions, with preserved legacy interpretation and requiredness. Parameter references, ECCC wind aggregation types and windows, measurement periods, continuous aggregation metadata, and the timeseries default-show field were revised; new or modified field results cannot include laboratory metadata."
     )
   },
   error = function(e) {

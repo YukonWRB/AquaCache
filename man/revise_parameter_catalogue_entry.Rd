@@ -20,7 +20,15 @@ revise_parameter_catalogue_entry(
   mapping_descriptor_by = NULL,
   mapping_descriptor_field = "input_unit",
   preserve_existing_descriptor = FALSE,
-  delete_source = FALSE
+  delete_source = FALSE,
+  reporting_basis = NULL,
+  result_speciation = NULL,
+  result_target = NULL,
+  endpoint = NULL,
+  mapping_reporting_basis = NULL,
+  mapping_result_speciation = NULL,
+  mapping_result_target = NULL,
+  preserve_existing_chemistry = TRUE
 )
 }
 \arguments{
@@ -41,12 +49,15 @@ intended source row was selected.}
 
 \item{plot_default_y_orientation}{Plot orientation to set, if supplied.}
 
-\item{sample_fraction}{Whether results require a sample fraction value. Accepts NULL (meaning 'can be specified or not'), TRUE (must be specified), or FALSE (must NOT be specified). Refers to column public.parameters.sample_fraction.}
+\item{sample_fraction}{Whether results require a sample fraction value.
+\code{NULL} preserves the existing flag, \code{TRUE} requires a value, and \code{FALSE}
+makes it optional. Refers to public.parameters.sample_fraction.}
 
 \item{mapping_fraction}{Optional label in \code{discrete.sample_fractions} to
 apply to result rows and import mappings moved from the source.}
 
-\item{result_descriptor}{Whether results require a descriptor value. Accepts NULL (meaning 'can be specified or not'), TRUE (must be specified), or FALSE (must NOT be specified). Refers to column public.parameters.result_descriptor.}
+\item{result_descriptor}{Legacy staging requirement flag. \code{NULL} preserves
+it, \code{TRUE} requires a value, and \code{FALSE} makes it optional.}
 
 \item{mapping_descriptor}{Optional label in \code{discrete.result_descriptors} to
 apply to result rows and import mappings moved from the source.}
@@ -63,17 +74,35 @@ values and fill only missing values with \code{mapping_descriptor}.}
 
 \item{delete_source}{Whether to delete a distinct source parameter after its
 references have moved. Defaults to \code{FALSE}.}
+
+\item{reporting_basis, result_speciation, result_target, endpoint}{Optional logical
+requirement flags for the revised analytical schema. NULL preserves a flag.}
+
+\item{mapping_reporting_basis, mapping_result_speciation, mapping_result_target}{Optional existing catalogue ID, stable code, or label to apply to moved
+references. Catalogue entries are resolved, never created implicitly.}
+
+\item{preserve_existing_chemistry}{Fill only missing analytical IDs when TRUE.
+Defaults to TRUE; use FALSE for an explicit correction of populated IDs.}
 }
 \value{
 The target \code{parameter_id}, invisibly.
 }
 \description{
 Rename a parameter, merge it into another catalogue entry, update selected
-metadata, and carry parameter-level references across the database. When a
-result descriptor is supplied, it is written to result rows and import
-mappings that move from the source parameter.
+metadata, and carry parameter-level references across the database. Analytical
+metadata is preserved unless explicit replacements are supplied.
 }
 \details{
+Descriptor arguments belong to Patch 65's temporary legacy staging schema,
+before the reporting-basis/speciation/target migration. For current databases,
+use the independent analytical arguments or omit them to preserve all existing
+metadata. Conflicting result identities abort the operation; no result is
+discarded. Shared advisory suggestions retain the lowest display order.
+Merges require matching physical-unit definitions; no numeric conversion is
+performed. The entire revision is protected by a savepoint, and the caller
+decides whether to commit or roll back its enclosing transaction. References
+embedded in SQL formulae or JSON payloads are not foreign keys and must be
+reviewed separately before merging parameters.
 This is a reviewed catalogue-migration tool, not the normal import-mapping
 editing workflow. It intentionally rewrites references in published and
 retired mapping snapshots when the source parameter identity was incorrect.

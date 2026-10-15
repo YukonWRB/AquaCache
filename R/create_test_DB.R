@@ -302,7 +302,9 @@ create_test_db <- function(
     "discrete.collection_methods",
     "discrete.protocols_methods",
     "discrete.result_conditions",
-    "discrete.result_descriptors",
+    "discrete.reporting_bases",
+    "discrete.result_speciations",
+    "discrete.result_targets",
     "discrete.result_types",
     "discrete.result_value_types",
     "discrete.sample_fractions",
@@ -336,7 +338,10 @@ create_test_db <- function(
     "public.parameter_groups",
     "public.parameter_sub_groups",
     "public.parameters",
-    "public.parameter_descriptor_suggestions",
+    "public.parameter_reporting_basis_suggestions",
+    "public.parameter_speciation_suggestions",
+    "public.parameter_target_suggestions",
+    "information.patch65_result_descriptor_crosswalk",
     "public.parameter_relationships",
     "public.qualifier_types",
     "public.source_adapter_capabilities",
@@ -652,12 +657,12 @@ create_test_db <- function(
     "SELECT result_condition_id FROM discrete.result_conditions ORDER BY result_condition_id LIMIT 1",
     "result condition"
   )
-  result_descriptor_caco3 <- first_id(
-    "SELECT result_descriptor_id FROM discrete.result_descriptors WHERE result_descriptor = 'as CaCO3' LIMIT 1",
+  reporting_basis_caco3 <- first_id(
+    "SELECT reporting_basis_id FROM discrete.reporting_bases WHERE reporting_basis = 'as CaCO3' LIMIT 1",
     "CaCO3 result descriptor"
   )
-  result_descriptor_turb <- first_id(
-    "SELECT result_descriptor_id FROM discrete.result_descriptors WHERE result_descriptor = 'as NTU' LIMIT 1",
+  reporting_basis_turb <- first_id(
+    "SELECT reporting_basis_id FROM discrete.reporting_bases WHERE reporting_basis = 'as NTU' LIMIT 1",
     "turbidity result descriptor"
   )
   protocol_method_id <- first_id(
@@ -1554,7 +1559,7 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
-       result_value_type, result_descriptor_id, protocol_method,
+       result_value_type, reporting_basis_id, protocol_method,
        laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
@@ -1589,7 +1594,7 @@ create_test_db <- function(
       result_type_field,
       turbidity_param,
       result_value_estimated,
-      result_descriptor_turb,
+      reporting_basis_turb,
       matrix_liquid,
       result_type_field,
       conductance_param,
@@ -1599,7 +1604,7 @@ create_test_db <- function(
       alkalinity_param,
       sample_fraction_total,
       result_value_actual,
-      result_descriptor_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1607,7 +1612,7 @@ create_test_db <- function(
       hardness_param,
       sample_fraction_total,
       result_value_actual,
-      result_descriptor_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1643,7 +1648,7 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
-       result_value_type, result_descriptor_id, protocol_method,
+       result_value_type, reporting_basis_id, protocol_method,
        laboratory, analysis_datetime, share_with, no_source_update,
        matrix_state_id
      ) VALUES
@@ -1697,7 +1702,7 @@ create_test_db <- function(
       alkalinity_param,
       sample_fraction_total,
       result_value_actual,
-      result_descriptor_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1705,7 +1710,7 @@ create_test_db <- function(
       hardness_param,
       sample_fraction_total,
       result_value_actual,
-      result_descriptor_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
