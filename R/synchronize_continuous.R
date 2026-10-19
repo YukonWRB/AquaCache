@@ -852,6 +852,9 @@ synchronize_continuous <- function(
           )
         )
         finalize_transmission_runs(0L)
+        # apply_remote_attributes() replaced unprotected qualifiers over the
+        # remote span, graded ones included: re-apply the QC rules.
+        utils::getFromNamespace("grade_after_import", "AquaCache")(con, tsid, from = min(attribute_remote$datetime))
       })
       return()
     }
@@ -1097,6 +1100,8 @@ synchronize_continuous <- function(
           inDB
         )
         finalize_transmission_runs(measurements_inserted)
+        # Re-apply the QC rules from the start of the rewritten span.
+        utils::getFromNamespace("grade_after_import", "AquaCache")(con, tsid, from = cutoff)
       })
     } else {
       # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
@@ -1114,6 +1119,9 @@ synchronize_continuous <- function(
           )
         )
         finalize_transmission_runs(0L)
+        # Qualifiers were rewritten from the remote (UNK where it has none),
+        # even with no value mismatch: re-apply the QC rules.
+        utils::getFromNamespace("grade_after_import", "AquaCache")(con, tsid, from = min(attribute_remote$datetime))
 
         # Bounds are maintained by database triggers.
       })
