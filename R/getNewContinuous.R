@@ -901,6 +901,12 @@ getNewContinuous <- function(
     run_db_updates(function() {
       commit_fx(con, ts, tsid)
       finalize_transmission_runs(rows_added)
+      # Apply the series' QC rules (if any) to the new rows. A grading failure
+      # leaves them as imported (UNK or the adapter's qualifier) without
+      # losing the import.
+      # Resolved from the namespace like the transmission helpers, so it
+      # also works on parallel workers and in sourced deployment scripts.
+      utils::getFromNamespace("grade_after_import", "AquaCache")(con, tsid, from = min(ts$datetime))
     })
 
     build_status_row(
