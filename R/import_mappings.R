@@ -2237,11 +2237,13 @@ import_mapping_resolve_targets <- function(
   present_ph <- is.nan(parsed_ph) | (!is.na(raw_ph) & nzchar(trimws(as.character(raw_ph))))
   if (any(present_ph & (is.na(parsed_ph) | !is.finite(parsed_ph)))) stop("Endpoint pH must be a finite number.")
   result[, endpoint_ph := parsed_ph]
-  if (result[!is.na(endpoint_mode) & !endpoint_mode %in% c("fixed", "inflection", "gran", "other"), .N]) {
-    stop("Endpoint mode must be fixed, inflection, gran, other, or missing.")
+  if (result[!is.na(endpoint_mode) & !endpoint_mode %in% c("fixed", "inflection", "gran", "other", "unknown"), .N]) {
+    stop("Endpoint mode must be fixed, inflection, gran, other, unknown, or missing.")
   }
-  if (result[(is.na(endpoint_mode) & !is.na(endpoint_ph)) | (endpoint_mode == "fixed" & is.na(endpoint_ph)), .N]) {
-    stop("A fixed endpoint requires its pH, and a pH requires an endpoint mode.")
+  if (result[(is.na(endpoint_mode) & !is.na(endpoint_ph)) |
+      (endpoint_mode == "fixed" & is.na(endpoint_ph)) |
+      (endpoint_mode == "unknown" & !is.na(endpoint_ph)), .N]) {
+    stop("A fixed endpoint requires its pH; unknown endpoints must omit pH, and a pH requires an endpoint mode.")
   }
   if (any(!is.na(result$endpoint_ph) & !is.finite(result$endpoint_ph))) stop("Endpoint pH must be finite.")
   if (!"analysis_conditions" %in% names(result)) result[, analysis_conditions := "{}"]
@@ -2429,14 +2431,19 @@ import_mapping_resolve_match <- function(mappings, source_match) {
     mappings$source_match_values,
     function(criteria) {
       criteria_names <- names(criteria)
-      if (!all(criteria_names %in% names(source_match))) {
+      # The editor namespaces original source columns to distinguish them from
+      # assigned AquaCache fields, including result_type and sample_fraction.
+      source_names <- criteria_names
+      original_names <- startsWith(criteria_names, "source.") & !criteria_names %in% names(source_match)
+      source_names[original_names] <- substring(criteria_names[original_names], 8L)
+      if (!all(source_names %in% names(source_match))) {
         return(FALSE)
       }
       all(vapply(
-        criteria_names,
-        function(nm) {
-          !is.na(source_match[[nm]]) &&
-            identical(as.character(criteria[[nm]]), source_match[[nm]])
+        seq_along(criteria_names),
+        function(i) {
+          value <- source_match[[source_names[[i]]]]
+          !is.na(value) && identical(as.character(criteria[[criteria_names[[i]]]]), value)
         },
         logical(1)
       ))
@@ -2473,6 +2480,24 @@ import_mapping_resolve_match <- function(mappings, source_match) {
   }
 
   matched[1]
+}
+
+# Missing-mapping reports group by the complete source discriminator tuple,
+# so distinct fractions/species are not collapsed into one code/unit row.
+import_mapping_source_columns <- function(mappings, source, base) {
+  fields <- unique(unlist(lapply(mappings$source_match_values, names), use.names = FALSE))
+  original <- startsWith(fields, "source.") & !fields %in% names(source)
+  fields[original] <- substring(fields[original], 8L)
+  unique(c(base, intersect(fields, names(source))))
+}
+
+import_mapping_source_criteria <- function(record, base) {
+  values <- lapply(record, function(x) {
+    if (!length(x) || is.na(x[[1]])) "" else as.character(x[[1]])
+  })
+  extra <- !names(values) %in% base
+  names(values)[extra] <- paste0("source.", names(values)[extra])
+  values
 }
 
 import_mapping_match_status <- function(mappings, source_match) {

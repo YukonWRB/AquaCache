@@ -44,12 +44,14 @@
 #' - 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 #' - 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 #' - 'reporting_basis_id': numeric reporting expression from 'reporting_bases',
-#'   for example as CaCO3 or as N. Required when parameters.reporting_basis is TRUE.
+#'   for example as CaCO3 or as N; 'unknown / not reported' is an unresolved
+#'   state with no conversion meaning. Required when parameters.reporting_basis is TRUE.
 #' - 'result_speciation_id' and 'result_target_id': independently selected chemical
 #'   form/scope and analytical target/material catalogue IDs. Each is required
 #'   when the corresponding parameter requirement flag is TRUE.
 #' - 'endpoint_mode' and 'endpoint_ph': endpoint determination (fixed, inflection,
-#'   gran, or other) and finite pH. Fixed endpoints require a pH value.
+#'   gran, other, or unknown) and pH. Fixed endpoints require finite pH; unknown
+#'   means the source did not report an endpoint and requires missing pH.
 #' - 'analysis_conditions': a JSON object or named list for conditions such as
 #'   dry/wet mass basis, gas moisture basis, reference temperature/pressure, or
 #'   isotope reference standard. Missing values become {}. Required keys can be

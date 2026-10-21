@@ -81,7 +81,7 @@ Transmittance, UV (@ 254nm)	UV transmittance at 254 nm	rename						Reviewed name
 Trichloroethane	trichloroethane, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
 Tetrachloroethane	tetrachloroethane, isomer unspecified	rename						Reviewed name alias; retain analytical metadata.
 avg particle size	average particle size	rename						Reviewed name alias; retain analytical metadata.
-Acidity	acidity	rename						Reviewed name alias; retain analytical metadata.
+Acidity	acidity	rename						Reviewed name alias; retain typed analytical metadata and explicitly mark only unreported EQWin basis/endpoint values unknown.
 .alpha.-hexachlorocyclohexane	alpha-hexachlorocyclohexane	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
 .alpha.,2,6-trichlorotoluene	alpha,2,6-trichlorotoluene	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.
 .alpha.-amino-2,3-dihydro-5-methyl-3-oxo-4-isoxazolepropanoic acid	alpha-amino-2,3-dihydro-5-methyl-3-oxo-4-isoxazolepropanoic acid	rename						Replace legacy dotted Greek-letter spelling without changing stereochemistry.

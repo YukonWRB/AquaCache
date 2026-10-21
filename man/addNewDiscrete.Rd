@@ -85,10 +85,10 @@ Additionally, the following columns may need to be included:
 \item 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 \item 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
-\item 'reporting_basis_id': numeric reporting expression from \code{discrete.reporting_bases}, such as "as N" or "as CaCO3".
+\item 'reporting_basis_id': numeric reporting expression from \code{discrete.reporting_bases}, such as "as N" or "as CaCO3"; "unknown / not reported" is an unresolved state with no conversion meaning.
 \item 'result_speciation_id': chemical form or chemical-form scope from \code{discrete.result_speciations}.
 \item 'result_target_id': analyzed material or operational chemical pool from \code{discrete.result_targets}.
-\item 'endpoint_mode' and 'endpoint_ph': endpoint determination (\code{fixed}, \code{inflection}, \code{gran}, or \code{other}) and its pH. Fixed endpoints require a finite pH. Each dimension is independently required by parameter metadata.
+\item 'endpoint_mode' and 'endpoint_ph': endpoint determination (\code{fixed}, \code{inflection}, \code{gran}, \code{other}, or \code{unknown}) and its pH. Fixed endpoints require finite pH; unknown records an unreported endpoint and requires missing pH. Each dimension is independently required by parameter metadata.
 \item 'analysis_conditions': JSON object string or named-list column describing
 numeric interpretation, such as dry/wet mass, gas reference conditions,
 or an isotope reference standard. See \code{\link[=normalizeAnalysisConditions]{normalizeAnalysisConditions()}}.

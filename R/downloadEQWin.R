@@ -222,10 +222,7 @@ downloadEQWin <- function(
       source_row <- sample_results[j]
       param_row <- import_mapping_resolve_match(
         mapping,
-        list(
-          ParamCode = source_row$ParamCode[[1]],
-          input_unit = source_row$Units[[1]]
-        )
+        utils::modifyList(as.list(source_row), list(input_unit = source_row$Units[[1]]))
       )
       if (is.null(param_row) || is.na(param_row$parameter_id[[1]])) {
         next
@@ -468,6 +465,7 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     return(empty_report)
   }
 
+  match_columns <- import_mapping_source_columns(mapping, source, c("ParamCode", "input_unit"))
   report <- source[, .(
     ParamDesc = collapse_non_missing(ParamDesc),
     n_results = .N,
@@ -476,15 +474,12 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     first_collect_datetime = min_datetime(CollectDateTime),
     last_collect_datetime = max_datetime(CollectDateTime),
     example_result = first_non_missing(Result)
-  ), by = .(ParamCode, input_unit)]
+  ), by = match_columns]
 
   statuses <- lapply(seq_len(nrow(report)), function(i) {
     import_mapping_match_status(
       mapping,
-      list(
-        ParamCode = report$ParamCode[[i]],
-        input_unit = report$input_unit[[i]]
-      )
+      as.list(report[i, match_columns, with = FALSE])
     )
   })
   report[, missing_reason := vapply(statuses, `[[`, character(1), "status")]
@@ -508,10 +503,7 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     seq_len(.N),
     function(i) {
       jsonlite::toJSON(
-        list(
-          ParamCode = report$ParamCode[[i]],
-          input_unit = report$input_unit[[i]]
-        ),
+        import_mapping_source_criteria(as.list(report[i, match_columns, with = FALSE]), c("ParamCode", "input_unit")),
         auto_unbox = TRUE,
         null = "null"
       )

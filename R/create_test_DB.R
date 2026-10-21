@@ -341,7 +341,6 @@ create_test_db <- function(
     "public.parameter_reporting_basis_suggestions",
     "public.parameter_speciation_suggestions",
     "public.parameter_target_suggestions",
-    "information.patch65_result_descriptor_crosswalk",
     "public.parameter_relationships",
     "public.qualifier_types",
     "public.source_adapter_capabilities",

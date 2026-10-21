@@ -42,14 +42,14 @@ test_that("analysis conditions retain numeric meaning and reject malformed conte
     analysis_conditions = '{"mass_basis":"dry","reference_temperature_kelvin":293.15}'), parameters), "")
 })
 
-test_that("endpoint validation preserves extended pH and rejects incomplete definitions", {
+test_that("endpoint validation distinguishes unknown from measured endpoints", {
   parameters <- data.frame(parameter_id = 1L, endpoint = TRUE)
-  results <- data.frame(parameter_id = rep(1L, 6L),
-    endpoint_mode = c("fixed", "fixed", "gran", "fixed", NA, "gran"),
-    endpoint_ph = c(-1, 16, NA, NA, 4.5, NaN))
+  results <- data.frame(parameter_id = rep(1L, 8L),
+    endpoint_mode = c("fixed", "fixed", "gran", "fixed", NA, "gran", "unknown", "unknown"),
+    endpoint_ph = c(-1, 16, NA, NA, 4.5, NaN, NA, 5))
   messages <- validateResultChemistry(NULL, results, parameters, error = FALSE)
-  expect_identical(messages[1:3], rep("", 3))
-  expect_true(all(nzchar(messages[4:6])))
+  expect_identical(messages[c(1:3, 7)], rep("", 4))
+  expect_true(all(nzchar(messages[c(4:6, 8)])))
   expect_error(validateResultChemistry(NULL, results, parameters), "valid endpoint")
 })
 

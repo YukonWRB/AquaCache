@@ -19,6 +19,8 @@
 #' @details
 #' Advisory parameter suggestions do not restrict valid selections. Missing
 #' analytical metadata never implies an all-species scope or a fixed endpoint.
+#' The explicit endpoint mode `unknown` records an unreported endpoint and
+#' requires missing pH.
 #' pH values may lie outside 0--14, but must be finite. Physical-unit and
 #' reporting-basis conversions require an explicitly defined analytical target.
 #' @export
@@ -68,10 +70,14 @@ validateResultChemistry <- function(con, results, parameters = NULL, error = TRU
   raw_ph <- if ("endpoint_ph" %in% names(rows)) rows$endpoint_ph else rep(NA_real_, nrow(rows))
   ph <- suppressWarnings(as.numeric(raw_ph))
   ph_present <- is.nan(ph) | (!is.na(raw_ph) & trimws(as.character(raw_ph)) != "")
-  failed <- (!is.na(mode) & !mode %in% c("fixed", "inflection", "gran", "other")) |
-    (mode %in% "fixed" & !ph_present) | (is.na(mode) & ph_present) |
+  failed <- (!is.na(mode) & !mode %in% c("fixed", "inflection", "gran", "other", "unknown")) |
+    (mode %in% "fixed" & !ph_present) | (mode %in% "unknown" & ph_present) |
+    (is.na(mode) & ph_present) |
     (ph_present & (is.na(ph) | !is.finite(ph)))
-  message <- "Record a valid endpoint mode and a finite pH for a fixed endpoint."
+  message <- paste(
+    "Record a valid endpoint mode; fixed endpoints require finite pH,",
+    "and unknown endpoints must not include pH."
+  )
   messages[failed] <- ifelse(messages[failed] == "", message, paste(messages[failed], message))
   policies <- if ("analysis_conditions_required_keys_by_matrix" %in% names(parameters))
     lapply(parameters$analysis_conditions_required_keys_by_matrix, function(value) {

@@ -284,10 +284,10 @@ downloadECCCwq <- function(
       input_unit <- subset[["UNIT_UNIT\u00C9"]][j]
       param_row <- import_mapping_resolve_match(
         key,
-        list(
+        utils::modifyList(as.list(subset[j, , drop = FALSE]), list(
           input_param = var,
           input_unit = input_unit
-        )
+        ))
       )
       if (is.null(param_row) || nrow(param_row) == 0) {
         if (warn_unmapped) {
@@ -498,6 +498,7 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
     return(empty_report)
   }
 
+  match_columns <- import_mapping_source_columns(mapping, source, c("input_param", "input_unit"))
   report <- source[,
     .(
       n_results = .N,
@@ -506,16 +507,13 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
       last_datetime = max_datetime(DATE_TIME_HEURE),
       example_sample_id = first_non_missing(eccc_sample_id)
     ),
-    by = .(input_param, input_unit)
+    by = match_columns
   ]
 
   statuses <- lapply(seq_len(nrow(report)), function(i) {
     import_mapping_match_status(
       mapping,
-      list(
-        input_param = report$input_param[[i]],
-        input_unit = report$input_unit[[i]]
-      )
+      as.list(report[i, match_columns, with = FALSE])
     )
   })
   report[, missing_reason := vapply(statuses, `[[`, character(1), "status")]
@@ -544,10 +542,7 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
       seq_len(.N),
       function(i) {
         jsonlite::toJSON(
-          list(
-            input_param = report$input_param[[i]],
-            input_unit = report$input_unit[[i]]
-          ),
+          import_mapping_source_criteria(as.list(report[i, match_columns, with = FALSE]), c("input_param", "input_unit")),
           auto_unbox = TRUE,
           null = "null"
         )

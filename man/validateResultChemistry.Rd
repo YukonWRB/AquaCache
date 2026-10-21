@@ -40,6 +40,8 @@ database performs authoritative checks again when results are written.
 \details{
 Advisory parameter suggestions do not restrict valid selections. Missing
 analytical metadata never implies an all-species scope or a fixed endpoint.
+The explicit endpoint mode \code{unknown} records an unreported endpoint and
+requires missing pH.
 pH values may lie outside 0--14, but must be finite. Physical-unit and
 reporting-basis conversions require an explicitly defined analytical target.
 }
