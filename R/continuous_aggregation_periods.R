@@ -1,8 +1,40 @@
-# Fill missing per-measurement periods when the recipe records a support window.
-# Evaluation intervals describe output cadence, not measurement duration, so
-# they are deliberately not used as a period. Callers calculate any remaining
-# periods with the existing timestamp-based fallback.
-apply_timeseries_aggregation_periods <- function(data, timeseries_id, con) {
+#' Fill Missing Periods from Continuous Aggregation Methods
+#'
+#' Fill missing or blank measurement periods from the time-ranged aggregation
+#' methods configured for a continuous timeseries. Only recipe support windows
+#' are used as measurement periods; evaluation intervals describe output
+#' cadence and are not used as measurement duration.
+#'
+#' Existing nonblank periods are retained. Rows are matched to the aggregation
+#' method whose half-open applicability range includes their datetime (start
+#' inclusive, end exclusive). Any periods still missing after this function
+#' returns can be calculated by callers using [calculate_period()].
+#'
+#' @param data A data frame or data.table containing a `datetime` column in
+#'   POSIXct format. An optional `period` column may contain caller-supplied
+#'   measurement periods; blank or missing values are eligible for filling.
+#' @param timeseries_id The integer ID of the continuous timeseries whose
+#'   aggregation methods should be used.
+#' @param con An open DBI connection to the AquaCache database. The function
+#'   uses this connection to read aggregation-method metadata and does not open
+#'   or close it.
+#'
+#' @return The input data frame or data.table with a character `period` column.
+#'   The column is added if absent. Missing periods covered by an applicable
+#'   aggregation method are filled with that method's measurement support
+#'   duration; all other values remain missing or unchanged.
+#'
+#' @details
+#' For a `window_aggregate` recipe, the measurement period is the difference
+#' between its window end and start offsets. For an `arithmetic_mean` recipe,
+#' the period is inferred only when every leaf input has a resolvable support
+#' window and all leaf windows have the same duration. If the aggregation
+#' metadata table is unavailable, or no applicable method supplies a positive
+#' period, the data are returned with remaining periods unchanged.
+#'
+#' @seealso [calculate_period()]
+#' @export
+continuous_aggregation_periods <- function(data, timeseries_id, con) {
   if (!("period" %in% names(data))) {
     data$period <- NA_character_
   } else {

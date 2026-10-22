@@ -844,7 +844,7 @@ getNewContinuous <- function(
         ts$period <- NA_character_
       }
       ts$period <- as.character(ts$period)
-      ts <- apply_timeseries_aggregation_periods(ts, tsid, con)
+      ts <- continuous_aggregation_periods(ts, tsid, con)
 
       if (aggregation_type == "instantaneous") {
         missing_period <- is.na(ts$period) | !nzchar(trimws(ts$period))

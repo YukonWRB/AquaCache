@@ -126,7 +126,7 @@ addNewContinuous <- function(
   if (is.na(end_datetime_realtime) && is.na(end_datetime_daily)) {
     last_data_point <- NA
   } else {
-    last_data_point = max(
+    last_data_point <- max(
       end_datetime_realtime,
       end_datetime_daily,
       na.rm = TRUE
@@ -246,7 +246,7 @@ addNewContinuous <- function(
     df$period <- as.character(df$period)
 
     # Use caller values first, then time-ranged aggregation metadata.
-    df <- apply_timeseries_aggregation_periods(df, tsid, con)
+    df <- continuous_aggregation_periods(df, tsid, con)
 
     # Calculate only rows for which neither source provided a period.
     if (info$aggregation_type == "instantaneous") {
