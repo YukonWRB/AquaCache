@@ -302,10 +302,24 @@ patch66_unit_definition <- function(label, solid = FALSE) {
   )
 }
 
-patch66_parameter_cleanup <- function(con, plan_path) {
+patch66_parameter_cleanup <- function(
+  con,
+  plan_path,
+  preconverted_result_sources = character()
+) {
   if (!AquaCache:::dbTransCheck(con)) {
     stop("Patch 66 cleanup requires an active transaction.")
   }
+  if (
+    !is.character(preconverted_result_sources) ||
+      anyNA(preconverted_result_sources) ||
+      any(!nzchar(trimws(preconverted_result_sources))) ||
+      anyDuplicated(tolower(trimws(preconverted_result_sources)))
+  ) {
+    stop("Preconverted result sources must be unique, non-empty names.")
+  }
+  preconverted_result_sources <- tolower(trimws(preconverted_result_sources))
+  preconverted_result_sources_seen <- character()
   plan <- data.table::fread(
     plan_path,
     sep = "\t",
@@ -441,6 +455,8 @@ patch66_parameter_cleanup <- function(con, plan_path) {
       DBI::dbQuoteString(con, source_names),
       collapse = ", "
     )
+    # Retired sets are historical snapshots; only active mappings in current
+    # draft/published scopes can block import readiness.
     incomplete <- DBI::dbGetQuery(
       con,
       paste0(
@@ -448,6 +464,7 @@ patch66_parameter_cleanup <- function(con, plan_path) {
          string_agg(m.import_mapping_id::TEXT || ' (' || mapping_error.dimension || ')',
            '; ' ORDER BY m.import_mapping_id) AS mapping_details
        FROM discrete.import_parameter_mappings m
+       JOIN discrete.import_mapping_sets mapping_set USING (import_mapping_set_id)
        JOIN public.parameters p USING (parameter_id)
        CROSS JOIN LATERAL (
          SELECT discrete.import_parameter_mapping_error(m) AS dimension
@@ -455,6 +472,8 @@ patch66_parameter_cleanup <- function(con, plan_path) {
        WHERE lower(trim(p.param_name)) IN (",
         source_names_sql,
         ")
+         AND m.active
+         AND mapping_set.status IN ('draft', 'published')
          AND mapping_error.dimension IS NOT NULL
        GROUP BY p.parameter_id, p.param_name
        ORDER BY p.param_name"
@@ -623,6 +642,114 @@ patch66_parameter_cleanup <- function(con, plan_path) {
       }
       numeric_change <- numeric_change || old$scale != new$scale
     }
+    preconverted_result_source <- tolower(trimws(source$param_name[[1]])) %in%
+      preconverted_result_sources
+    if (preconverted_result_source) {
+      if (!numeric_change || !has_mappings || !is.null(matrix_override)) {
+        stop(
+          "Preconverted-result exception does not match the reviewed merge for ",
+          source$param_name[[1]],
+          "."
+        )
+      }
+      provenance <- DBI::dbGetQuery(
+        con,
+        "SELECT count(*)::INTEGER AS result_count,
+           count(*) FILTER (
+             WHERE sample.note LIKE 'Migrated from SARU EQWin sample %'
+           )::INTEGER AS saru_result_count,
+           count(*) FILTER (
+             WHERE matrix_state.matrix_state_code = 'liquid'
+           )::INTEGER AS liquid_result_count,
+           count(*) FILTER (
+             WHERE aggregation.result_id IS NOT NULL
+           )::INTEGER AS aggregate_count,
+           min(result.created) = max(result.created) AS one_import_batch
+         FROM discrete.results result
+         JOIN discrete.samples sample USING (sample_id)
+         JOIN public.matrix_states matrix_state USING (matrix_state_id)
+         LEFT JOIN discrete.result_aggregations aggregation USING (result_id)
+         WHERE result.parameter_id = $1",
+        params = list(source_id)
+      )
+      if (
+        provenance$result_count[[1]] < 1L ||
+          provenance$result_count[[1]] != provenance$saru_result_count[[1]] ||
+          provenance$result_count[[1]] != provenance$liquid_result_count[[1]] ||
+          provenance$aggregate_count[[1]] != 0L ||
+          !isTRUE(provenance$one_import_batch[[1]])
+      ) {
+        stop(
+          "Cannot verify SARU-preconverted result values for ",
+          source$param_name[[1]],
+          "."
+        )
+      }
+      conversion_mappings <- DBI::dbGetQuery(
+        con,
+        "SELECT source.source_code, mapping_set.status AS mapping_status,
+           mapping.source_match->>'input_unit' AS input_unit,
+           matrix_state.matrix_state_code, mapping.conversion, mapping.result_offset
+         FROM discrete.import_parameter_mappings mapping
+         JOIN discrete.import_mapping_sets mapping_set USING (import_mapping_set_id)
+         JOIN discrete.import_sources source USING (import_source_id)
+         JOIN public.matrix_states matrix_state USING (matrix_state_id)
+         WHERE mapping.parameter_id = $1 AND mapping.active
+           AND mapping_set.status IN ('draft', 'published')",
+        params = list(source_id)
+      )
+      if (
+        !nrow(conversion_mappings) ||
+          any(conversion_mappings$source_code != "EQWin") ||
+          !any(conversion_mappings$mapping_status == "published") ||
+          any(conversion_mappings$matrix_state_code != "liquid") ||
+          anyNA(conversion_mappings$input_unit) ||
+          anyNA(conversion_mappings$conversion) ||
+          anyNA(conversion_mappings$result_offset) ||
+          any(conversion_mappings$result_offset != 0)
+      ) {
+        stop(
+          "Cannot verify the active EQWin conversion mappings for ",
+          source$param_name[[1]],
+          "."
+        )
+      }
+      old_unit <- patch66_unit_definition(
+        units[unit_id == source$units_liquid[[1]], unit_name]
+      )
+      new_unit <- patch66_unit_definition(
+        units[unit_id == destination$units_liquid[[1]], unit_name]
+      )
+      if (old_unit$kind != new_unit$kind) {
+        stop("Preconverted results have incompatible source and target units.")
+      }
+      for (j in seq_len(nrow(conversion_mappings))) {
+        input_unit <- patch66_unit_definition(
+          conversion_mappings$input_unit[[j]]
+        )
+        expected_conversion <- input_unit$scale / new_unit$scale
+        if (
+          input_unit$kind != old_unit$kind ||
+            abs(conversion_mappings$conversion[[j]] - expected_conversion) >
+              1e-12 * max(abs(expected_conversion), .Machine$double.eps)
+        ) {
+          stop(
+            "SARU result values are not verified in target units for ",
+            source$param_name[[1]],
+            "."
+          )
+        }
+      }
+      message(
+        "Keeping SARU-preconverted result values in target units for ",
+        source$param_name[[1]],
+        "."
+      )
+      preconverted_result_sources_seen <- c(
+        preconverted_result_sources_seen,
+        tolower(trimws(source$param_name[[1]]))
+      )
+    }
     if (numeric_change) {
       for (j in seq_len(nrow(refs))) {
         ref <- refs[j, ]
@@ -654,6 +781,13 @@ patch66_parameter_cleanup <- function(con, plan_path) {
           params = list(source_id)
         )$used[[1]]
         if (used) {
+          if (
+            preconverted_result_source &&
+              ref$schema_name == "discrete" &&
+              ref$table_name == "results"
+          ) {
+            next
+          }
           stop(
             "Separate numeric migration required for ",
             plan$source[[i]],
@@ -738,6 +872,53 @@ patch66_parameter_cleanup <- function(con, plan_path) {
       }
     }
     if (merge) {
+      # The source row is deleted after references move. On a used source, only
+      # bridge its equivalent unit IDs inside this transaction; never commit a
+      # changed unit definition on a parameter that still owns measurements.
+      unit_state_in_use <- FALSE
+      matrix_by_field <- c(
+        units_liquid = "liquid",
+        units_solid = "solid",
+        units_gas = "gas",
+        units_na = "not_applicable"
+      )
+      for (field in unit_fields) {
+        old_id <- source[[field]][[1]]
+        new_id <- destination[[field]][[1]]
+        if (
+          is.na(old_id) || identical(as.integer(old_id), as.integer(new_id))
+        ) {
+          next
+        }
+        used <- DBI::dbGetQuery(
+          con,
+          "SELECT public.parameter_matrix_state_has_results($1, $2) AS used",
+          params = list(source_id, unname(matrix_by_field[[field]]))
+        )$used[[1]]
+        if (isTRUE(used)) {
+          unit_state_in_use <- TRUE
+          break
+        }
+      }
+      if (unit_state_in_use) {
+        unit_trigger <- DBI::dbGetQuery(
+          con,
+          "SELECT tgenabled::TEXT AS state FROM pg_trigger
+           WHERE tgrelid = 'public.parameters'::regclass
+             AND tgname = 'prevent_used_parameter_unit_update'
+             AND NOT tgisinternal"
+        )
+        if (nrow(unit_trigger) != 1L || unit_trigger$state[[1]] != "O") {
+          stop(
+            "Used-parameter unit guard must be enabled before the reviewed merge."
+          )
+        }
+        DBI::dbExecute(
+          con,
+          "ALTER TABLE public.parameters
+           DISABLE TRIGGER prevent_used_parameter_unit_update"
+        )
+      }
       DBI::dbExecute(
         con,
         "UPDATE public.parameters SET units_liquid=$1,units_solid=$2,units_gas=$3,units_na=$4 WHERE parameter_id=$5",
@@ -746,6 +927,13 @@ patch66_parameter_cleanup <- function(con, plan_path) {
           list(source_id)
         )
       )
+      if (unit_state_in_use) {
+        DBI::dbExecute(
+          con,
+          "ALTER TABLE public.parameters
+           ENABLE TRIGGER prevent_used_parameter_unit_update"
+        )
+      }
     }
 
     chemistry <- list()
@@ -947,6 +1135,16 @@ patch66_parameter_cleanup <- function(con, plan_path) {
     }
     message(plan$source[[i]], " -> ", plan$target[[i]], ": ", plan$action[[i]])
   }
+  unused_preconverted_sources <- setdiff(
+    preconverted_result_sources,
+    preconverted_result_sources_seen
+  )
+  if (length(unused_preconverted_sources)) {
+    stop(
+      "Preconverted-result exception was not used for: ",
+      paste(unused_preconverted_sources, collapse = ", ")
+    )
+  }
   for (j in seq_len(nrow(policy))) {
     DBI::dbExecute(
       con,
@@ -969,10 +1167,11 @@ patch66_parameter_cleanup <- function(con, plan_path) {
       )
     )
   }
-  # Match the catalogue audit: ignore case and non-alphanumeric separators.
+  # Keep plus/minus signs: they can distinguish scientifically different
+  # pools, such as hydrocarbon totals with versus excluding BTEX.
   duplicates <- DBI::dbGetQuery(
     con,
-    "SELECT regexp_replace(lower(param_name), '[^a-z0-9]', '', 'g') AS name,
+    "SELECT regexp_replace(lower(param_name), '[^a-z0-9+-]', '', 'g') AS name,
        count(*) FROM public.parameters GROUP BY 1 HAVING count(*)>1"
   )
   if (nrow(duplicates)) {
