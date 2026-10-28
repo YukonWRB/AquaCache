@@ -16,7 +16,7 @@ two-letter province or territory abbreviations as per the \href{https://www12.st
 to use their combined 300 km buffered boundary. Alternatively, supply an
 unnamed numeric EPSG:4326 vector in \code{north}, \code{west}, \code{south}, \code{east} order, a named
 numeric vector or named list using either those names or \code{xmin}, \code{xmax},
-\code{ymin}, and \code{ymax}, or a \link[terra:SpatExtent]{terra::SpatExtent}. JSON arrays and named JSON
+\code{ymin}, and \code{ymax}, or a \link[terra:SpatExtent-class]{terra::SpatExtent}. JSON arrays and named JSON
 objects passed through \code{source_fx_args} are supported. Set to \code{NULL} for
 no clip.}
 }
