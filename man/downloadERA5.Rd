@@ -29,7 +29,7 @@ territory abbreviations as per the \href{https://www12.statcan.gc.ca/census-rece
 to use their combined 300 km buffered extent. Alternatively, supply an
 unnamed numeric EPSG:4326 vector in CDS order (\code{north}, \code{west}, \code{south}, \code{east}), a
 named numeric vector or named list using either those names or \code{xmin},
-\code{xmax}, \code{ymin}, and \code{ymax}, or a \link[terra:SpatExtent]{terra::SpatExtent}. JSON arrays and named
+\code{xmax}, \code{ymin}, and \code{ymax}, or a \link[terra:SpatExtent-class]{terra::SpatExtent}. JSON arrays and named
 JSON objects passed through \code{source_fx_args} are supported. Set to \code{NULL}
 for no clip.}
 
@@ -51,7 +51,7 @@ from 0 to 23 specifying the hourly rasters to bring in from
 \code{"c(0:23)"} are also accepted without evaluating R code.}
 
 \item{batch}{Should requests be submitted in parallel with
-\code{\link[ecmwfr:wf_request_batch]{ecmwfr::wf_request_batch()}} or downloaded sequentially? Failed or timed
+\code{\link[ecmwfr:wf_request]{ecmwfr::wf_request_batch()}} or downloaded sequentially? Failed or timed
 out batch requests are retried sequentially. Both modes return only the
 longest complete chronological prefix, so later successful downloads can
 never advance a raster series past missing data.}
