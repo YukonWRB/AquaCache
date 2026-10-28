@@ -48,7 +48,7 @@ A data.frame of timeseries data with columns for datetime, value, grade, approva
 Pared-down and modified version of YGWater::aq_download.
 \subsection{Passwords and server credentials:}{
 
-To store credentials in \code{.Renviron}, call \code{\link[usethis:edit]{usethis::edit_r_environ()}} and
+To store credentials in \code{.Renviron}, call \code{\link[usethis:edit_r_environ]{usethis::edit_r_environ()}} and
 enter \code{AQUSER}, \code{AQPASS}, and \code{AQSERVER}. Credentials may instead be stored
 in a source assignment's \code{source_fx_args}, but are then unencrypted in the
 database.

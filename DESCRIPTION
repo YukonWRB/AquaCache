@@ -82,4 +82,3 @@ Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0
 LinkingTo: 
     Rcpp
-RoxygenNote: 7.3.3
