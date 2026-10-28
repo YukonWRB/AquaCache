@@ -79,13 +79,18 @@ prepare_discrete_import_results <- function(con, sample_media_id, results,
 #' are unchanged, and the pairing is unique across the entire source batch. This
 #' prevents source row order from assigning one unknown result to two distinct
 #' qualified measurements. Arrays in analysis conditions must remain identical;
-#' named objects can gain previously missing members.
+#' named objects can gain previously missing members. Values for remote rows
+#' that are derived aggregation parents are compared through their components,
+#' not against a stored recomputed value.
 #' @param database_results Stored result rows for the source-owned sample.
 #' @param remote_results Prepared result rows from that same source sample.
+#' @param aggregated_result_rows Row positions in `remote_results` that are
+#'   derived aggregation parents.
 #' @return Matched result IDs, an ambiguity flag per remote row, and stored IDs
 #'   to retain when ambiguous source rows cannot safely be reconciled.
 #' @noRd
-match_discrete_import_results <- function(database_results, remote_results) {
+match_discrete_import_results <- function(database_results, remote_results,
+  aggregated_result_rows = integer()) {
   database_results <- as.data.frame(database_results)
   remote_results <- as.data.frame(remote_results)
   keys <- c("parameter_id", "result_type", "matrix_state_id", "sample_fraction_id",
@@ -120,10 +125,16 @@ match_discrete_import_results <- function(database_results, remote_results) {
       compatible <- compatible & if (field %in% c("parameter_id", "result_type")) equal else is.na(old) | equal
     }
     exact[, i] <- same & old_conditions == new_conditions[[i]]
-    # Metadata enrichment is not evidence of a changed measurement or a new
-    # laboratory determination. Require the original value/censoring and any
-    # recorded laboratory sample/report identifiers to agree.
-    for (field in c("result", "result_condition", "result_condition_value", "lab_sample_no", "lab_report_no")) {
+    # For direct results, metadata enrichment is safe only when the original
+    # value/censoring and recorded laboratory identifiers agree. Aggregate
+    # parent values and censoring metadata are recomputed from components, so
+    # they cannot identify the stored parent during matching.
+    measurement_fields <- c("lab_sample_no", "lab_report_no")
+    if (!(i %in% aggregated_result_rows)) {
+      measurement_fields <- c("result", "result_condition", "result_condition_value",
+        measurement_fields)
+    }
+    for (field in measurement_fields) {
       old <- if (field %in% names(database_results)) database_results[[field]] else rep(NA, nrow(database_results))
       new <- if (field %in% names(remote_results)) remote_results[[field]][[i]] else NA
       compatible <- compatible & if (is.na(new)) is.na(old) else
