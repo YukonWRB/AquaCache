@@ -139,7 +139,7 @@ get_elevation <- function(
       units = "Meters",
       includeDate = "false"
     ) |>
-    httr2::req_timeout(seconds = 2) |>
+    httr2::req_timeout(seconds = 5) |>
     httr2::req_retry(max_tries = 3) |>
     httr2::req_perform() |>
     httr2::resp_body_json(simplifyVector = TRUE)
