@@ -285,10 +285,36 @@ create_test_db <- function(
     sprintf("SET search_path TO %s;", db_search_path)
   )
 
+  # RPostgres uses COPY FROM STDIN for dbAppendTable(), which cannot accept
+  # values for generated columns. Read the target schema once and omit those
+  # source values so PostgreSQL can compute them in the test database.
+  generated_columns <- DBI::dbGetQuery(
+    test_con,
+    "SELECT table_schema, table_name, column_name
+     FROM information_schema.columns
+     WHERE is_generated = 'ALWAYS'"
+  )
+
   append_if_rows <- function(tbl, data, label = tbl) {
     if (nrow(data) == 0) {
       return(invisible(FALSE))
     }
+
+    table_parts <- strsplit(tbl, ".", fixed = TRUE)[[1]]
+    generated <- generated_columns$column_name[
+      generated_columns$table_schema == table_parts[[1]] &
+        generated_columns$table_name == table_parts[[2]]
+    ]
+    generated <- intersect(names(data), generated)
+    if (length(generated) > 0) {
+      message(
+        "Skipping generated column(s) ",
+        paste(generated, collapse = ", "),
+        " while loading ", label, "."
+      )
+      data <- data[, !names(data) %in% generated, drop = FALSE]
+    }
+
     message("Loading table ", label, " into the test database...")
     DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
     invisible(TRUE)
