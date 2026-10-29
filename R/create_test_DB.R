@@ -1844,14 +1844,12 @@ create_test_db <- function(
              sample_fraction_id, result, result_condition,
              result_condition_value, result_value_type, analysis_datetime,
              share_with, no_source_update, matrix_state_id,
-             lab_report_no, lab_sample_no, grade_type_id, approval_type_id
+             grade_type_id, approval_type_id
            ) VALUES
              (27, 9, %d, %d, %d, NULL, NULL, NULL, %d,
-              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d,
-              'SYN-SNOW-2023-03', 'SYN-S9-SWE', %d, %d),
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d, %d, %d),
              (28, 9, %d, %d, %d, NULL, NULL, NULL, %d,
-              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d,
-              'SYN-SNOW-2023-03', 'SYN-S9-DEPTH', %d, %d)",
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d, %d, %d)",
            result_type_field,
            swe_param,
            sample_fraction_total,
@@ -1989,15 +1987,12 @@ create_test_db <- function(
             WHERE sample_id = 9
               AND result_id IN (27, 28)
               AND aggregation_type IS NOT NULL
-              AND lab_report_no = 'SYN-SNOW-2023-03'
+               AND lab_report_no IS NULL
+               AND lab_sample_no IS NULL
               AND result_grade_id IS NOT NULL
               AND result_grade_code IS NOT NULL
               AND result_approval_id IS NOT NULL
-              AND result_approval_code IS NOT NULL
-              AND (
-                (result_id = 27 AND lab_sample_no = 'SYN-S9-SWE') OR
-                (result_id = 28 AND lab_sample_no = 'SYN-S9-DEPTH')
-              ))
+               AND result_approval_code IS NOT NULL)
              AS valid"
       )$valid
       if (
