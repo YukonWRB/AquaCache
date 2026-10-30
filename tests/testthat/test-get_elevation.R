@@ -64,6 +64,9 @@ test_that("get_elevation returns the correct ArcticDEM result", {
 })
 
 test_that("get_elevation returns the correct usgs result", {
+  # USGS seems to presistently reject automated calls
+  skip_on_ci()
+  skip_on_cran()
   res <- expect_no_error(get_elevation(35, -100, source = "usgs"))
   expect_identical(round(res$elevation, 2), 560.97)
   res_direct <- expect_no_error(.elevation_usgs(35, -100))
