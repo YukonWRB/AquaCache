@@ -173,7 +173,10 @@ match_discrete_import_results <- function(
     if (is.null(old)) {
       return(TRUE)
     }
-    if (is.list(old) && length(old) && !is.null(names(old))) {
+    # jsonlite preserves an empty JSON object as a named, zero-length list,
+    # distinct from an empty array (an unnamed list). It can be refined just
+    # like any other object by adding fields.
+    if (is.list(old) && !is.null(names(old))) {
       return(
         is.list(new) &&
           !is.null(names(new)) &&
