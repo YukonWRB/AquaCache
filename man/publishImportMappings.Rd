@@ -17,12 +17,16 @@ mappings.}
 \value{
 Invisibly returns the active \code{import_mapping_set_id}. If no draft
 exists, the current published set is returned unchanged. Returns
-\code{NA_integer_} when the scope has no mapping set; publishing an empty
-scope is a no-op.
+\code{NA_integer_} when the scope has no mapping set; publishing an empty scope
+is a no-op.
 }
 \description{
 Publishes the draft mapping set for a source or source/profile scope. The
 draft can be amended through any of the three mapping upsert functions
 before it is published. Publishing makes the draft the active immutable
 snapshot and retires the previously published snapshot for that scope.
+Active parameter mappings must have assigned targets and satisfy all current
+analytical requirements and catalogue selections. Incomplete draft rows may
+be corrected or deactivated before publication; existing published history
+is preserved. Direct SQL publication is subject to the same database gate.
 }

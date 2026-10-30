@@ -5,7 +5,9 @@
 #' @param con A DBI connection.
 #' @param target A table identifier accepted by DBI (character, [DBI::Id()], or [DBI::SQL()]).
 #' @param value A data.frame or data.table containing rows to append.
-#' @param method One of `"auto"`, `"staging"`, or `"bind"`.
+#' @param method One of `"auto"`, `"staging"`, or `"bind"`. When `"auto"` is
+#'   selected, the `AquaCache.dbAppendTableRLS.method` option can override the
+#'   automatic method selection for the current R session.
 #' @param chunk_size Number of rows per batch for `method = "bind"` (not used for `method = "staging"`).
 #' @param on_conflict Conflict behavior: one of `"error"`, `"nothing"`, or `"update"`.
 #' @param conflict_cols Character vector of conflict key columns used for `on_conflict = "nothing"` or `"update"`.
@@ -49,6 +51,12 @@ dbAppendTableRLS <- function(
   # update_cols = NULL
 
   method <- match.arg(method)
+  if (identical(method, "auto")) {
+    option_method <- getOption("AquaCache.dbAppendTableRLS.method")
+    if (!is.null(option_method)) {
+      method <- match.arg(option_method, c("auto", "staging", "bind"))
+    }
+  }
   on_conflict <- match.arg(on_conflict)
 
   if (!inherits(value, "data.frame")) {

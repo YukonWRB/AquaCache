@@ -11,7 +11,7 @@
 #' @param name A character vector of the location name(s).
 #' @param name_fr A character vector of the location name(s) in French. You're highly encouraged to populate this field, but if left blank (or the corresponding column in `df` is missing or empty) it will be populated with 'Traduction requise!'.
 #' @param alias A character vector of the location alias(es). This is optional, leave NA if not needed.
-#' @param location_code A character vector of the location code(s). Note that in most cases this should be left NULL to auto-generate, or created when adding a new location using the YGwater Shiny application!
+#' @param location_code A character vector of the location code(s). Note that in most cases this should be left NA to auto-generate, or created when adding a new location using the YGwater Shiny application!
 #' @param latitude A numeric vector of the latitude(s) as decimal degrees.
 #' @param longitude A numeric vector of the longitude(s) as decimal degrees.
 #' @param share_with A character vector of the user group(s) with which to share the location(s), separated by a comma. Default public group is "public_reader".

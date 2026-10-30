@@ -356,8 +356,13 @@ run_snow_component_migration <- function(
         solid.sample_fraction_id
       AND liquid.result_value_type IS NOT DISTINCT FROM
         solid.result_value_type
-      AND liquid.result_speciation_id IS NOT DISTINCT FROM
-        solid.result_speciation_id
+      AND liquid.reporting_basis_id IS NOT DISTINCT FROM
+        solid.reporting_basis_id
+      AND liquid.result_speciation_id IS NOT DISTINCT FROM solid.result_speciation_id
+      AND liquid.result_target_id IS NOT DISTINCT FROM solid.result_target_id
+      AND liquid.endpoint_mode IS NOT DISTINCT FROM solid.endpoint_mode
+      AND liquid.endpoint_ph IS NOT DISTINCT FROM solid.endpoint_ph
+      AND liquid.analysis_conditions IS NOT DISTINCT FROM solid.analysis_conditions
       AND liquid.protocol_method IS NOT DISTINCT FROM solid.protocol_method
       AND liquid.laboratory IS NOT DISTINCT FROM solid.laboratory
       AND liquid.analysis_datetime IS NOT DISTINCT FROM
@@ -550,8 +555,13 @@ run_snow_component_migration <- function(
              solid.sample_fraction_id
            AND liquid.result_value_type IS NOT DISTINCT FROM
              solid.result_value_type
-           AND liquid.result_speciation_id IS NOT DISTINCT FROM
-             solid.result_speciation_id
+           AND liquid.reporting_basis_id IS NOT DISTINCT FROM
+             solid.reporting_basis_id
+           AND liquid.result_speciation_id IS NOT DISTINCT FROM solid.result_speciation_id
+           AND liquid.result_target_id IS NOT DISTINCT FROM solid.result_target_id
+           AND liquid.endpoint_mode IS NOT DISTINCT FROM solid.endpoint_mode
+           AND liquid.endpoint_ph IS NOT DISTINCT FROM solid.endpoint_ph
+           AND liquid.analysis_conditions IS NOT DISTINCT FROM solid.analysis_conditions
            AND liquid.protocol_method IS NOT DISTINCT FROM
              solid.protocol_method
            AND liquid.laboratory IS NOT DISTINCT FROM solid.laboratory
@@ -729,10 +739,15 @@ run_snow_component_migration <- function(
        AND matrix_state_id IS NOT DISTINCT FROM $4
        AND sample_fraction_id IS NOT DISTINCT FROM $5
        AND result_value_type IS NOT DISTINCT FROM $6
-       AND result_speciation_id IS NOT DISTINCT FROM $7
+       AND reporting_basis_id IS NOT DISTINCT FROM $7
        AND protocol_method IS NOT DISTINCT FROM $8
        AND laboratory IS NOT DISTINCT FROM $9
-       AND analysis_datetime IS NOT DISTINCT FROM $10"
+       AND analysis_datetime IS NOT DISTINCT FROM $10
+       AND result_speciation_id IS NOT DISTINCT FROM $11
+       AND result_target_id IS NOT DISTINCT FROM $12
+       AND endpoint_mode IS NOT DISTINCT FROM $13
+       AND endpoint_ph IS NOT DISTINCT FROM $14
+       AND analysis_conditions = $15::jsonb"
 
     for (sample_index in seq_len(nrow(remaining_samples))) {
       existing_sample <- remaining_samples[sample_index]
@@ -817,7 +832,7 @@ run_snow_component_migration <- function(
             as.integer(identity_value("matrix_state_id")),
             as.integer(identity_value("sample_fraction_id")),
             as.integer(identity_value("result_value_type")),
-            as.integer(identity_value("result_speciation_id")),
+            as.integer(identity_value("reporting_basis_id")),
             as.integer(identity_value("protocol_method")),
             as.integer(identity_value("laboratory")),
             as.POSIXct(
@@ -826,7 +841,10 @@ run_snow_component_migration <- function(
                 as.POSIXct(NA, tz = "UTC")
               ),
               tz = "UTC"
-            )
+            ),
+            as.integer(identity_value("result_speciation_id")), as.integer(identity_value("result_target_id")),
+            as.character(identity_value("endpoint_mode", NA_character_)), as.numeric(identity_value("endpoint_ph", NA_real_)),
+            AquaCache::normalizeAnalysisConditions(identity_value("analysis_conditions", "{}"))
           )
         )
         if (nrow(match) != 1L || match$no_source_update[[1L]]) {

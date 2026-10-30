@@ -74,9 +74,9 @@ continuous-data adapters.
 
 \subsection{Assigning measurement periods:}{
 
-With the exception of "instantaneous" timeseries which automatically receive a period of "00:00:00" (0 time), the period associated with measurements (ex: 1 hour precipitation sum) is derived from the interval between measurements UNLESS a period column is provided by the source function (column source_fx, may also depend on source_fx_args). This function typically fetches only a few hours of measurements at a time, so if the interval cannot be conclusively determined from the new data (i.e. hourly measurements over four hours with two measurements missed) then additional data points will be pulled from the database.
+With the exception of "instantaneous" timeseries, which receive a zero-length period, period assignment uses this order: a period supplied by the source function; a period derived from the applicable time-ranged aggregation method; then a period calculated from the interval between measurements. This function typically fetches only a few hours of measurements at a time, so if the interval cannot be conclusively determined from the new data (i.e. hourly measurements over four hours with two measurements missed) then additional data points will be pulled from the database.
 
-If a period supplied by any data fetch function cannot be coerced to an period object acceptable to "duration" data type, NULL values will be entered to differentiate from instantaneous periods of "00:00:00".
+A period supplied by a data fetch function must be acceptable to PostgreSQL's interval type. Missing periods are filled from the applicable aggregation method when available, or calculated from measurement timestamps otherwise.
 }
 
 \subsection{Sharing privileges and ownership}{

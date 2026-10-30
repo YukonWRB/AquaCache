@@ -285,10 +285,36 @@ create_test_db <- function(
     sprintf("SET search_path TO %s;", db_search_path)
   )
 
+  # RPostgres uses COPY FROM STDIN for dbAppendTable(), which cannot accept
+  # values for generated columns. Read the target schema once and omit those
+  # source values so PostgreSQL can compute them in the test database.
+  generated_columns <- DBI::dbGetQuery(
+    test_con,
+    "SELECT table_schema, table_name, column_name
+     FROM information_schema.columns
+     WHERE is_generated = 'ALWAYS'"
+  )
+
   append_if_rows <- function(tbl, data, label = tbl) {
     if (nrow(data) == 0) {
       return(invisible(FALSE))
     }
+
+    table_parts <- strsplit(tbl, ".", fixed = TRUE)[[1]]
+    generated <- generated_columns$column_name[
+      generated_columns$table_schema == table_parts[[1]] &
+        generated_columns$table_name == table_parts[[2]]
+    ]
+    generated <- intersect(names(data), generated)
+    if (length(generated) > 0) {
+      message(
+        "Skipping generated column(s) ",
+        paste(generated, collapse = ", "),
+        " while loading ", label, "."
+      )
+      data <- data[, !names(data) %in% generated, drop = FALSE]
+    }
+
     message("Loading table ", label, " into the test database...")
     DBI::dbAppendTable(test_con, DBI::SQL(tbl), data)
     invisible(TRUE)
@@ -302,7 +328,9 @@ create_test_db <- function(
     "discrete.collection_methods",
     "discrete.protocols_methods",
     "discrete.result_conditions",
+    "discrete.reporting_bases",
     "discrete.result_speciations",
+    "discrete.result_targets",
     "discrete.result_types",
     "discrete.result_value_types",
     "discrete.sample_fractions",
@@ -336,6 +364,9 @@ create_test_db <- function(
     "public.parameter_groups",
     "public.parameter_sub_groups",
     "public.parameters",
+    "public.parameter_reporting_basis_suggestions",
+    "public.parameter_speciation_suggestions",
+    "public.parameter_target_suggestions",
     "public.parameter_relationships",
     "public.qualifier_types",
     "public.source_adapter_capabilities",
@@ -651,9 +682,13 @@ create_test_db <- function(
     "SELECT result_condition_id FROM discrete.result_conditions ORDER BY result_condition_id LIMIT 1",
     "result condition"
   )
-  result_speciation_caco3 <- first_id(
-    "SELECT result_speciation_id FROM discrete.result_speciations WHERE result_speciation = 'as CaCO3' LIMIT 1",
-    "CaCO3 result speciation"
+  reporting_basis_caco3 <- first_id(
+    "SELECT reporting_basis_id FROM discrete.reporting_bases WHERE reporting_basis = 'as CaCO3' LIMIT 1",
+    "CaCO3 result descriptor"
+  )
+  reporting_basis_turb <- first_id(
+    "SELECT reporting_basis_id FROM discrete.reporting_bases WHERE reporting_basis = 'as NTU' LIMIT 1",
+    "turbidity result descriptor"
   )
   protocol_method_id <- first_id(
     "SELECT protocol_id FROM discrete.protocols_methods ORDER BY protocol_id LIMIT 1",
@@ -771,7 +806,7 @@ create_test_db <- function(
          note, record_rate, location_id, z_id, active,
          share_with, default_owner, sensor_priority, sub_location_id,
          timezone_daily_calc, sync_remote, matrix_state_id,
-         timeseries_type, publicly_visible
+         timeseries_type, default_show
        ) VALUES
          (1, %d, %d, %d, NULL, NULL, NULL,
           'Synthetic 15-minute water level.', interval '15 minutes',
@@ -1542,6 +1577,7 @@ create_test_db <- function(
     )
   )
 
+  # Synthetic alkalinity results use a fixed pH 4.5 titration endpoint.
   # Results 6-15
   DBI::dbExecute(
     test_con,
@@ -1549,30 +1585,30 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
-       result_value_type, result_speciation_id, protocol_method,
+       result_value_type, reporting_basis_id, protocol_method,
        laboratory, analysis_datetime, share_with, no_source_update,
-       matrix_state_id
+       matrix_state_id, endpoint_mode, endpoint_ph
      ) VALUES
        (6, 4, %d, %d, NULL, 7.1, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
+        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (7, 4, %d, %d, NULL, 5.8, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
-       (8, 4, %d, %d, NULL, 3.4, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
+        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d, NULL, NULL),
+       (8, 4, %d, %d, NULL, 3.4, NULL, NULL, %d, %d, NULL, NULL,
+        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (9, 4, %d, %d, NULL, 129.6, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d),
+        '2023-04-01 12:05+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (10, 4, %d, %d, %d, 68, NULL, NULL, %d, %d, %d, %d,
-        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d, 'fixed', 4.5),
        (11, 4, %d, %d, %d, 74, NULL, NULL, %d, %d, %d, %d,
-        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (12, 4, %d, %d, %d, 1.7, NULL, NULL, %d, NULL, %d, %d,
-        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (13, 4, %d, %d, %d, 3.6, NULL, NULL, %d, NULL, %d, %d,
-        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d),
+        '2023-04-02 09:00+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (14, 5, %d, %d, NULL, 7.0, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-04-01 12:10+00', ARRAY['public_reader'], false, %d),
+        '2023-04-01 12:10+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (15, 5, %d, %d, NULL, 127.9, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-04-01 12:10+00', ARRAY['public_reader'], false, %d)",
+        '2023-04-01 12:10+00', ARRAY['public_reader'], false, %d, NULL, NULL)",
       result_type_field,
       ph_param,
       result_value_actual,
@@ -1584,6 +1620,7 @@ create_test_db <- function(
       result_type_field,
       turbidity_param,
       result_value_estimated,
+      reporting_basis_turb,
       matrix_liquid,
       result_type_field,
       conductance_param,
@@ -1593,7 +1630,7 @@ create_test_db <- function(
       alkalinity_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1601,7 +1638,7 @@ create_test_db <- function(
       hardness_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1637,32 +1674,32 @@ create_test_db <- function(
       "INSERT INTO discrete.results (
        result_id, sample_id, result_type, parameter_id, sample_fraction_id,
        result, result_condition, result_condition_value,
-       result_value_type, result_speciation_id, protocol_method,
+       result_value_type, reporting_basis_id, protocol_method,
        laboratory, analysis_datetime, share_with, no_source_update,
-       matrix_state_id
+       matrix_state_id, endpoint_mode, endpoint_ph
      ) VALUES
        (16, 6, %d, %d, %d, NULL, %d, 0.02, %d, NULL, %d, %d,
-        '2023-04-02 09:30+00', ARRAY['public_reader'], true, %d),
+        '2023-04-02 09:30+00', ARRAY['public_reader'], true, %d, NULL, NULL),
        (17, 6, %d, %d, %d, NULL, %d, 0.05, %d, NULL, %d, %d,
-        '2023-04-02 09:30+00', ARRAY['public_reader'], true, %d),
+        '2023-04-02 09:30+00', ARRAY['public_reader'], true, %d, NULL, NULL),
        (18, 7, %d, %d, NULL, 6.8, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-05-15 18:15+00', ARRAY['public_reader'], false, %d),
+        '2023-05-15 18:15+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (19, 7, %d, %d, NULL, 412, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-05-15 18:15+00', ARRAY['public_reader'], false, %d),
+        '2023-05-15 18:15+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (20, 7, %d, %d, %d, 182, NULL, NULL, %d, %d, %d, %d,
-        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d, 'fixed', 4.5),
        (21, 7, %d, %d, %d, 96, NULL, NULL, %d, %d, %d, %d,
-        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (22, 7, %d, %d, %d, 12.4, NULL, NULL, %d, NULL, %d, %d,
-        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (23, 7, %d, %d, %d, 18.1, NULL, NULL, %d, NULL, %d, %d,
-        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d),
+        '2023-05-16 10:00+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (24, 8, %d, %d, NULL, 5.6, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-06-01 09:15+00', ARRAY['public_reader'], false, %d),
+        '2023-06-01 09:15+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (25, 8, %d, %d, NULL, 22.5, NULL, NULL, %d, NULL, NULL, NULL,
-        '2023-06-01 09:15+00', ARRAY['public_reader'], false, %d),
+        '2023-06-01 09:15+00', ARRAY['public_reader'], false, %d, NULL, NULL),
        (26, 8, %d, %d, %d, NULL, %d, 0.02, %d, NULL, %d, %d,
-        '2023-06-02 08:00+00', ARRAY['public_reader'], false, %d)",
+        '2023-06-02 08:00+00', ARRAY['public_reader'], false, %d, NULL, NULL)",
       result_type_lab,
       chloride_param,
       sample_fraction_dissolved,
@@ -1691,7 +1728,7 @@ create_test_db <- function(
       alkalinity_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1699,7 +1736,7 @@ create_test_db <- function(
       hardness_param,
       sample_fraction_total,
       result_value_actual,
-      result_speciation_caco3,
+      reporting_basis_caco3,
       protocol_method_id,
       laboratory_id,
       matrix_liquid,
@@ -1807,14 +1844,12 @@ create_test_db <- function(
              sample_fraction_id, result, result_condition,
              result_condition_value, result_value_type, analysis_datetime,
              share_with, no_source_update, matrix_state_id,
-             lab_report_no, lab_sample_no, grade_type_id, approval_type_id
+             grade_type_id, approval_type_id
            ) VALUES
              (27, 9, %d, %d, %d, NULL, NULL, NULL, %d,
-              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d,
-              'SYN-SNOW-2023-03', 'SYN-S9-SWE', %d, %d),
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d, %d, %d),
              (28, 9, %d, %d, %d, NULL, NULL, NULL, %d,
-              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d,
-              'SYN-SNOW-2023-03', 'SYN-S9-DEPTH', %d, %d)",
+              '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d, %d, %d)",
            result_type_field,
            swe_param,
            sample_fraction_total,
@@ -1952,15 +1987,12 @@ create_test_db <- function(
             WHERE sample_id = 9
               AND result_id IN (27, 28)
               AND aggregation_type IS NOT NULL
-              AND lab_report_no = 'SYN-SNOW-2023-03'
+               AND lab_report_no IS NULL
+               AND lab_sample_no IS NULL
               AND result_grade_id IS NOT NULL
               AND result_grade_code IS NOT NULL
               AND result_approval_id IS NOT NULL
-              AND result_approval_code IS NOT NULL
-              AND (
-                (result_id = 27 AND lab_sample_no = 'SYN-S9-SWE') OR
-                (result_id = 28 AND lab_sample_no = 'SYN-S9-DEPTH')
-              ))
+               AND result_approval_code IS NOT NULL)
              AS valid"
       )$valid
       if (

@@ -139,7 +139,7 @@ get_elevation <- function(
       units = "Meters",
       includeDate = "false"
     ) |>
-    httr2::req_timeout(seconds = 10) |>
+    httr2::req_timeout(seconds = 5) |>
     httr2::req_retry(max_tries = 3) |>
     httr2::req_perform() |>
     httr2::resp_body_json(simplifyVector = TRUE)
@@ -181,30 +181,7 @@ get_elevation <- function(
 }
 
 .elevation_arcticdem <- function(lat, lon, source = NULL) {
-  geometry <- sprintf(
-    paste0(
-      '{"x":%.10f,"y":%.10f,',
-      '"spatialReference":{"wkid":4326}}'
-    ),
-    lon,
-    lat
-  )
-
-  response <- httr2::request(
-    paste0(
-      "https://di-pgc.img.arcgis.com/arcgis/rest/services/",
-      "arcticdem_latest/ImageServer/identify"
-    )
-  ) |>
-    httr2::req_url_query(
-      geometry = geometry,
-      geometryType = "esriGeometryPoint",
-      returnGeometry = "false",
-      renderingRule = '{"rasterFunction":"Height Orthometric"}',
-      f = "json"
-    ) |>
-    httr2::req_timeout(seconds = 10) |>
-    httr2::req_retry(max_tries = 3) |>
+  response <- .elevation_arcticdem_request(lat, lon) |>
     httr2::req_perform() |>
     httr2::resp_body_json(simplifyVector = TRUE)
 
@@ -231,6 +208,38 @@ get_elevation <- function(
 }
 
 
+.elevation_arcticdem_request <- function(lat, lon) {
+  geometry <- sprintf(
+    paste0(
+      '{"x":%.10f,"y":%.10f,',
+      '"spatialReference":{"wkid":4326}}'
+    ),
+    lon,
+    lat
+  )
+
+  response <- httr2::request(
+    paste0(
+      "https://di-pgc.img.arcgis.com/arcgis/rest/services/",
+      "arcticdem_latest/ImageServer/identify"
+    )
+  ) |>
+    httr2::req_url_query(
+      geometry = geometry,
+      geometryType = "esriGeometryPoint",
+      returnGeometry = "false",
+      renderingRule = '{"rasterFunction":"Height Orthometric"}',
+      f = "json"
+    ) |>
+    httr2::req_timeout(seconds = 2) |>
+    # Retry curl-level failures as well as transient HTTP status codes.
+    httr2::req_retry(
+      max_tries = 3,
+      retry_on_failure = TRUE
+    )
+}
+
+
 .elevation_geogratis <- function(
   lat,
   lon,
@@ -249,7 +258,7 @@ get_elevation <- function(
       lat = lat,
       lon = lon
     ) |>
-    httr2::req_timeout(seconds = 10) |>
+    httr2::req_timeout(seconds = 2) |>
     httr2::req_retry(max_tries = 3) |>
     httr2::req_perform() |>
     httr2::resp_body_json(simplifyVector = TRUE)

@@ -77,7 +77,19 @@ Additionally, the following columns may need to be included:
 \item 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 \item 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
-\item 'result_speciation_id': a numeric specifying the result_speciation_id of the data point from table 'result_speciations', such as 3 (as CaCO3), 5 (as CN), or 44 (of S). Required if the column 'result_speciation' in table 'parameters' is TRUE for the parameter in question.
+\item 'reporting_basis_id': numeric reporting expression from 'reporting_bases',
+for example as CaCO3 or as N; 'unknown / not reported' is an unresolved
+state with no conversion meaning. Required when parameters.reporting_basis is TRUE.
+\item 'result_speciation_id' and 'result_target_id': independently selected chemical
+form/scope and analytical target/material catalogue IDs. Each is required
+when the corresponding parameter requirement flag is TRUE.
+\item 'endpoint_mode' and 'endpoint_ph': endpoint determination (fixed, inflection,
+gran, other, or unknown) and pH. Fixed endpoints require finite pH; unknown
+means the source did not report an endpoint and requires missing pH.
+\item 'analysis_conditions': a JSON object or named list for conditions such as
+dry/wet mass basis, gas moisture basis, reference temperature/pressure, or
+isotope reference standard. Missing values become {}. Required keys can be
+configured per parameter and per matrix state.
 \item 'lab_report_no' and 'lab_sample_no': optional laboratory report and sample
 identifiers.
 \item 'grade_type_id' and 'approval_type_id': optional result-level quality and
@@ -101,6 +113,11 @@ imported, the function reports that sample with \code{action = "existing"} but
 does not update its sample row, group memberships, qualifiers, observers,
 results, aggregation configuration, or components. Use
 \code{\link[=synchronize_discrete]{synchronize_discrete()}} when existing source records must be reconciled.
+Invalid result rows are warned about and skipped individually. Valid rows in
+the same sample are imported, with aggregation children remapped to their
+surviving parent rows. A sample with no valid results is skipped. After
+completing a previously incomplete mapping, use \code{\link[=synchronize_discrete]{synchronize_discrete()}} over
+the original date range to recover skipped results and samples.
 
 Additionally, functions must be able to handle the case where no new data is available and return an empty list.
 If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.

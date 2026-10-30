@@ -90,7 +90,12 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
   )
   results <- DBI::dbGetQuery(
     con,
-    "SELECT * FROM discrete.results WHERE result IS NOT NULL LIMIT 1"
+    "SELECT r.*
+     FROM discrete.results r
+     JOIN discrete.result_types rt ON rt.result_type_id = r.result_type
+     WHERE r.result IS NOT NULL
+       AND lower(rt.result_type) = 'lab'
+     LIMIT 1"
   )
   qualifier <- DBI::dbGetQuery(
     con,
@@ -710,6 +715,7 @@ test_that("synchronization replaces and removes result aggregation detail", {
   on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
   dbTransBegin(con)
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
+  DBI::dbExecute(con, "SET LOCAL ROLE admin")
 
   sample <- DBI::dbGetQuery(
     con,
@@ -897,6 +903,7 @@ test_that("synchronization replaces and removes result aggregation detail", {
     ))
     DBI::dbExecute(con, "RELEASE SAVEPOINT reject_non_admin_conversion")
     DBI::dbExecute(con, "RESET ROLE")
+    DBI::dbExecute(con, "SET LOCAL ROLE admin")
   }
 
   normalized_replacement <- normalize_discrete_result_aggregations(

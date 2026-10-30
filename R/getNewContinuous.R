@@ -33,9 +33,9 @@
 #' continuous-data adapters.
 #'
 #' ## Assigning measurement periods:
-#' With the exception of "instantaneous" timeseries which automatically receive a period of "00:00:00" (0 time), the period associated with measurements (ex: 1 hour precipitation sum) is derived from the interval between measurements UNLESS a period column is provided by the source function (column source_fx, may also depend on source_fx_args). This function typically fetches only a few hours of measurements at a time, so if the interval cannot be conclusively determined from the new data (i.e. hourly measurements over four hours with two measurements missed) then additional data points will be pulled from the database.
+#' With the exception of "instantaneous" timeseries, which receive a zero-length period, period assignment uses this order: a period supplied by the source function; a period derived from the applicable time-ranged aggregation method; then a period calculated from the interval between measurements. This function typically fetches only a few hours of measurements at a time, so if the interval cannot be conclusively determined from the new data (i.e. hourly measurements over four hours with two measurements missed) then additional data points will be pulled from the database.
 #'
-#' If a period supplied by any data fetch function cannot be coerced to an period object acceptable to "duration" data type, NULL values will be entered to differentiate from instantaneous periods of "00:00:00".
+#' A period supplied by a data fetch function must be acceptable to PostgreSQL's interval type. Missing periods are filled from the applicable aggregation method when available, or calculated from measurement timestamps otherwise.
 #'
 #' ## Sharing privileges and ownership
 #' This is dictated by the timeseries table, and checked prior to passing data through view tables to public users.
@@ -837,16 +837,30 @@ getNewContinuous <- function(
         )
       }
 
-      ts <- ts[, c("datetime", "value", "timeseries_id", "imputed")]
+      measurement_columns <- c(
+        "datetime",
+        "value",
+        "timeseries_id",
+        "imputed"
+      )
+      if ("period" %in% names(ts)) {
+        measurement_columns <- c(measurement_columns, "period")
+      }
+      ts <- ts[, measurement_columns, drop = FALSE]
+      if (!("period" %in% names(ts))) {
+        ts$period <- NA_character_
+      }
+      ts$period <- as.character(ts$period)
+      ts <- continuous_aggregation_periods(ts, tsid, con)
 
       if (aggregation_type == "instantaneous") {
-        ts$period <- "00:00:00"
-      } else if (
-        (aggregation_type != "instantaneous") && !("period" %in% names(ts))
-      ) {
+        missing_period <- is.na(ts$period) | !nzchar(trimws(ts$period))
+        ts$period[missing_period] <- "PT0S"
+      } else if (any(is.na(ts$period) | !nzchar(trimws(ts$period)))) {
+        missing_period <- is.na(ts$period) | !nzchar(trimws(ts$period))
         requested_datetimes <- ts$datetime
         ts_period <- calculate_period(
-          data = ts,
+          data = ts[, c("datetime", "value", "timeseries_id"), drop = FALSE],
           timeseries_id = tsid,
           con = con
         )
@@ -882,15 +896,14 @@ getNewContinuous <- function(
             }
           }
         }
-        ts <- ts_period[
-          ts_period$datetime %in% requested_datetimes,
-          ,
-          drop = FALSE
-        ]
-      } else {
-        check <- lubridate::period(unique(ts$period))
-        if (NA %in% check) {
-          ts$period <- NA
+        if ("period" %in% names(ts_period)) {
+          fallback_period <- ts_period$period[match(
+            requested_datetimes,
+            ts_period$datetime
+          )]
+          ts$period[missing_period] <- as.character(
+            fallback_period[missing_period]
+          )
         }
       }
 

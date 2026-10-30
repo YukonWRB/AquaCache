@@ -33,8 +33,9 @@ identify the source-side result.}
 
 \item{target_columns}{Optional named list overriding which columns contain
 AquaCache target values. Names can include \code{parameter}, \code{result_type},
-\code{sample_fraction}, \code{result_value_type}, \code{result_speciation}, and
-\code{matrix_state}.}
+\code{sample_fraction}, \code{result_value_type}, \code{reporting_basis}, and
+\code{matrix_state}, \code{result_speciation}, or \code{result_target}. Endpoint and
+analysis-condition values use their explicit column names.}
 
 \item{profile_code}{Optional profile code. When supplied, mappings override
 source-wide mappings only while that profile is being used.}
@@ -64,7 +65,7 @@ new_mapping <- data.frame(
   result_type = 2,
   sample_fraction_id = 19,
   result_value_type = 1,
-  result_speciation_id = NA,
+  reporting_basis_id = NA,
   matrix_state_id = 1,
   conversion = 1, # The conversion to database units
   result_offset = 0,

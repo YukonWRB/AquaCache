@@ -22,7 +22,9 @@ dbAppendTableRLS(
 
 \item{value}{A data.frame or data.table containing rows to append.}
 
-\item{method}{One of \code{"auto"}, \code{"staging"}, or \code{"bind"}.}
+\item{method}{One of \code{"auto"}, \code{"staging"}, or \code{"bind"}. When \code{"auto"} is
+selected, the \code{AquaCache.dbAppendTableRLS.method} option can override the
+automatic method selection for the current R session.}
 
 \item{chunk_size}{Number of rows per batch for \code{method = "bind"} (not used for \code{method = "staging"}).}
 

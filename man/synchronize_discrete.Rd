@@ -64,4 +64,12 @@ Locationless remote samples are matched by their database-enforced
 \code{source_adapter_function} and \code{external_sample_id} identity. Located samples retain
 location and collection-context matching because source IDs may legitimately
 recur at different locations.
+Invalid source result rows are skipped without deleting their stored
+counterparts, including with \code{delete = TRUE}. Compatible enrichment of
+historical unknown metadata preserves \code{result_id} when the pairing is unique
+across the source batch and identifies the same measurement. Recorded,
+conflicting chemistry is not treated as enrichment. Ambiguous pairings are
+retained for review, and \code{no_source_update} is respected.
+Named-list analysis conditions are normalized to JSON before matching and
+writing. Result reconciliation and child updates use one transaction.
 }

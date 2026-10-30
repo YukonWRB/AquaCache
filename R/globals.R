@@ -1,11 +1,14 @@
 #globals for downloadAquarius
 utils::globalVariables(c("timeseries")) #This is not fixable otherwise because it comes from a sourced file which lives in /inst
 
-# data.table and foreach non-standard evaluation used by transmission imports.
+# data.table and foreach non-standard evaluation used by data imports.
 utils::globalVariables(c(
   ".",
+  "DATE_TIME_HEURE",
   "datetime",
+  "eccc_sample_id",
   "i",
+  "input_param",
   "is_missing_source",
   "last_query_until",
   "max_days",

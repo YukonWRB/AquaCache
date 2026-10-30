@@ -5,6 +5,9 @@
 #' Brings in water quality data from ECCC long-term monitoring sites and transforms them into the aquacache database format. The data is read from an ECCC water quality .csv file available from their open data portal. The function filters the data for the specified location and datetime range, applies parameter mappings loaded in `discrete.import_parameter_mappings`, and prepares the data for insertion into the aquacache database. The function returns a list of samples and their associated results ready for import.
 #'
 #' Note that ECCC's results are converted to the AquaCache database parameters and units using the requested database import key. Users should ensure that the import key has been loaded before importing ECCC data. In addition, users should verify that the datetime values in the ECCC data file are correctly interpreted, as they may be provided in a local time zone and need to be converted to UTC for proper storage in AquaCache.
+#' The ECCC laboratory is attached only to results whose active mapping uses
+#' the `lab` result type. Mappings using `field` do not receive laboratory
+#' metadata.
 #'
 #' @param location The location code associated with the ECCC monitoring site. Must be a valid location code in the `SITE_NO` field of the ECCC water quality .csv files.
 #' @param file Path (URL) to the ECCC water quality .csv file containing the data to be imported for the specified location.
@@ -209,11 +212,17 @@ downloadECCCwq <- function(
   if (identical(mode, "missing_mappings")) {
     return(downloadECCCwq_missing_mappings(all_results, key))
   }
+  result_types <- DBI::dbGetQuery(
+    con,
+    "SELECT result_type_id, lower(btrim(result_type)) AS result_type_name
+     FROM discrete.result_types"
+  )
   all_samples <- unique(all_results$DATE_TIME_HEURE)
 
   media_id <- DBI::dbGetQuery(
     con,
-    "SELECT media_id FROM public.media_types WHERE media_type = 'surface water';"
+    "SELECT media_id FROM public.media_types
+     WHERE lower(btrim(media_type)) IN ('surface water', 'freshwater (surface)');"
   )[1, 1]
   owner_contributor <- DBI::dbGetQuery(
     con,
@@ -275,10 +284,10 @@ downloadECCCwq <- function(
       input_unit <- subset[["UNIT_UNIT\u00C9"]][j]
       param_row <- import_mapping_resolve_match(
         key,
-        list(
+        utils::modifyList(as.list(subset[j, , drop = FALSE]), list(
           input_param = var,
           input_unit = input_unit
-        )
+        ))
       )
       if (is.null(param_row) || nrow(param_row) == 0) {
         if (warn_unmapped) {
@@ -338,7 +347,7 @@ downloadECCCwq <- function(
         ]
         result_condition_value <- result_value
         result_value <- NA
-      } else if (flag != "") {
+      } else if (!is.na(flag) && flag != "") {
         warning(paste0(
           "Unrecognized value for FLAG_MARQUEUR '",
           flag,
@@ -357,6 +366,14 @@ downloadECCCwq <- function(
       } else {
         NA_character_
       }
+      mapped_result_type <- result_types$result_type_name[
+        match(param_row$result_type[1], result_types$result_type_id)
+      ]
+      result_laboratory <- if (identical(mapped_result_type, "lab")) {
+        eccc_lab
+      } else {
+        NA_integer_
+      }
 
       # Build the result row
       result <- data.frame(
@@ -367,8 +384,13 @@ downloadECCCwq <- function(
         result_condition = result_condition,
         result_condition_value = result_condition_value,
         result_value_type = param_row$result_value_type[1],
+        reporting_basis_id = param_row$reporting_basis_id[1],
         result_speciation_id = param_row$result_speciation_id[1],
-        laboratory = eccc_lab,
+        result_target_id = param_row$result_target_id[1],
+        endpoint_mode = param_row$endpoint_mode[1],
+        endpoint_ph = param_row$endpoint_ph[1],
+        analysis_conditions = param_row$analysis_conditions[1],
+        laboratory = result_laboratory,
         matrix_state_id = matrix_state_id,
         matrix_state = matrix_state,
         stringsAsFactors = FALSE
@@ -450,68 +472,87 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
   }
 
   source <- data.table::copy(data.table::as.data.table(all_results))
-  sample_col <- source_column(source, "SAMPLE_ID_\u00C9CHANTILLON", "SAMPLE_ID_")
+  sample_col <- source_column(
+    source,
+    "SAMPLE_ID_\u00C9CHANTILLON",
+    "SAMPLE_ID_"
+  )
   unit_col <- source_column(source, "UNIT_UNIT\u00C9", "UNIT_UNIT")
   source[, eccc_sample_id := as.character(source[[sample_col]])]
-  source[, input_param := data.table::fifelse(is.na(VARIABLE), "", as.character(VARIABLE))]
-  source[, input_unit := data.table::fifelse(
-    is.na(source[[unit_col]]),
-    "",
-    as.character(source[[unit_col]])
-  )]
+  source[,
+    input_param := data.table::fifelse(
+      is.na(VARIABLE),
+      "",
+      as.character(VARIABLE)
+    )
+  ]
+  source[,
+    input_unit := data.table::fifelse(
+      is.na(source[[unit_col]]),
+      "",
+      as.character(source[[unit_col]])
+    )
+  ]
   source <- source[nzchar(input_param)]
   if (nrow(source) == 0L) {
     return(empty_report)
   }
 
-  report <- source[, .(
-    n_results = .N,
-    n_samples = data.table::uniqueN(eccc_sample_id),
-    first_datetime = min_datetime(DATE_TIME_HEURE),
-    last_datetime = max_datetime(DATE_TIME_HEURE),
-    example_sample_id = first_non_missing(eccc_sample_id)
-  ), by = .(input_param, input_unit)]
+  match_columns <- import_mapping_source_columns(mapping, source, c("input_param", "input_unit"))
+  report <- source[,
+    .(
+      n_results = .N,
+      n_samples = data.table::uniqueN(eccc_sample_id),
+      first_datetime = min_datetime(DATE_TIME_HEURE),
+      last_datetime = max_datetime(DATE_TIME_HEURE),
+      example_sample_id = first_non_missing(eccc_sample_id)
+    ),
+    by = match_columns
+  ]
 
   statuses <- lapply(seq_len(nrow(report)), function(i) {
     import_mapping_match_status(
       mapping,
-      list(
-        input_param = report$input_param[[i]],
-        input_unit = report$input_unit[[i]]
-      )
+      as.list(report[i, match_columns, with = FALSE])
     )
   })
   report[, missing_reason := vapply(statuses, `[[`, character(1), "status")]
-  report[, mapping_error := vapply(statuses, function(x) x$message, character(1))]
-  report[, import_mapping_id := vapply(
-    statuses,
-    function(x) {
-      if (is.null(x$mapping)) {
-        return(NA_integer_)
-      }
-      as.integer(x$mapping$import_mapping_id[[1]])
-    },
-    integer(1)
-  )]
+  report[,
+    mapping_error := vapply(statuses, function(x) x$message, character(1))
+  ]
+  report[,
+    import_mapping_id := vapply(
+      statuses,
+      function(x) {
+        if (is.null(x$mapping)) {
+          return(NA_integer_)
+        }
+        as.integer(x$mapping$import_mapping_id[[1]])
+      },
+      integer(1)
+    )
+  ]
   report <- report[missing_reason != "mapped"]
   if (nrow(report) == 0L) {
     return(empty_report)
   }
 
-  report[, source_match := vapply(
-    seq_len(.N),
-    function(i) {
-      jsonlite::toJSON(
-        list(
-          input_param = report$input_param[[i]],
-          input_unit = report$input_unit[[i]]
-        ),
-        auto_unbox = TRUE,
-        null = "null"
-      )
-    },
-    character(1)
-  )]
-  data.table::setorderv(report, c("missing_reason", "input_param", "input_unit"))
+  report[,
+    source_match := vapply(
+      seq_len(.N),
+      function(i) {
+        jsonlite::toJSON(
+          import_mapping_source_criteria(as.list(report[i, match_columns, with = FALSE]), c("input_param", "input_unit")),
+          auto_unbox = TRUE,
+          null = "null"
+        )
+      },
+      character(1)
+    )
+  ]
+  data.table::setorderv(
+    report,
+    c("missing_reason", "input_param", "input_unit")
+  )
   report[, ..output_cols]
 }

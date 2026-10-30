@@ -180,6 +180,7 @@ tryCatch(
        FOR EACH ROW
        EXECUTE FUNCTION discrete.enforce_import_parameter_mapping_requirements()"
     )
+
     DBI::dbExecute(
       con,
       "CREATE OR REPLACE FUNCTION public.enforce_parameter_import_mapping_requirements()
@@ -190,6 +191,7 @@ tryCatch(
        AS $function$
        BEGIN
          IF NEW.sample_fraction IS TRUE
+            AND OLD.sample_fraction IS DISTINCT FROM TRUE
             AND EXISTS (
              SELECT 1
              FROM discrete.import_parameter_mappings mapping
@@ -198,7 +200,7 @@ tryCatch(
              WHERE mapping.parameter_id = NEW.parameter_id
                AND mapping.active IS TRUE
                AND mapping_set.status IN ('draft', 'published')
-                AND mapping.sample_fraction_id IS NULL
+               AND mapping.sample_fraction_id IS NULL
             ) THEN
            RAISE EXCEPTION USING
              ERRCODE = '23514',
@@ -207,6 +209,7 @@ tryCatch(
          END IF;
 
          IF NEW.result_speciation IS TRUE
+            AND OLD.result_speciation IS DISTINCT FROM TRUE
             AND EXISTS (
               SELECT 1
               FROM discrete.import_parameter_mappings mapping
@@ -227,6 +230,7 @@ tryCatch(
        END;
        $function$"
     )
+
     DBI::dbExecute(
       con,
       "DROP TRIGGER IF EXISTS parameters_import_mapping_required_descriptors

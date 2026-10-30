@@ -222,10 +222,7 @@ downloadEQWin <- function(
       source_row <- sample_results[j]
       param_row <- import_mapping_resolve_match(
         mapping,
-        list(
-          ParamCode = source_row$ParamCode[[1]],
-          input_unit = source_row$Units[[1]]
-        )
+        utils::modifyList(as.list(source_row), list(input_unit = source_row$Units[[1]]))
       )
       if (is.null(param_row) || is.na(param_row$parameter_id[[1]])) {
         next
@@ -258,7 +255,12 @@ downloadEQWin <- function(
         result_condition = parsed$result_condition,
         result_condition_value = parsed$result_condition_value,
         result_value_type = param_row$result_value_type[[1]],
+        reporting_basis_id = param_row$reporting_basis_id[[1]],
         result_speciation_id = param_row$result_speciation_id[[1]],
+        result_target_id = param_row$result_target_id[[1]],
+        endpoint_mode = param_row$endpoint_mode[[1]],
+        endpoint_ph = param_row$endpoint_ph[[1]],
+        analysis_conditions = param_row$analysis_conditions[[1]],
         matrix_state_id = param_row$matrix_state_id[[1]],
         note = eqwin_collapse_note(c(
           source_row$ResultCode[[1]],
@@ -463,6 +465,7 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     return(empty_report)
   }
 
+  match_columns <- import_mapping_source_columns(mapping, source, c("ParamCode", "input_unit"))
   report <- source[, .(
     ParamDesc = collapse_non_missing(ParamDesc),
     n_results = .N,
@@ -471,15 +474,12 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     first_collect_datetime = min_datetime(CollectDateTime),
     last_collect_datetime = max_datetime(CollectDateTime),
     example_result = first_non_missing(Result)
-  ), by = .(ParamCode, input_unit)]
+  ), by = match_columns]
 
   statuses <- lapply(seq_len(nrow(report)), function(i) {
     import_mapping_match_status(
       mapping,
-      list(
-        ParamCode = report$ParamCode[[i]],
-        input_unit = report$input_unit[[i]]
-      )
+      as.list(report[i, match_columns, with = FALSE])
     )
   })
   report[, missing_reason := vapply(statuses, `[[`, character(1), "status")]
@@ -503,10 +503,7 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     seq_len(.N),
     function(i) {
       jsonlite::toJSON(
-        list(
-          ParamCode = report$ParamCode[[i]],
-          input_unit = report$input_unit[[i]]
-        ),
+        import_mapping_source_criteria(as.list(report[i, match_columns, with = FALSE]), c("ParamCode", "input_unit")),
         auto_unbox = TRUE,
         null = "null"
       )
@@ -794,27 +791,10 @@ eqwin_parse_result <- function(
 }
 
 eqwin_drop_incomplete_required_targets <- function(con, results) {
-  params <- DBI::dbGetQuery(
-    con,
-    paste0(
-      "SELECT parameter_id, sample_fraction, result_speciation
-       FROM public.parameters
-       WHERE parameter_id IN (",
-      paste(unique(results$parameter_id), collapse = ","),
-      ");"
-    )
-  )
-  results <- merge(results, params, by = "parameter_id", all.x = TRUE)
-  needs_fraction <- !is.na(results$sample_fraction) &
-    as.logical(results$sample_fraction)
-  needs_speciation <- !is.na(results$result_speciation) &
-    as.logical(results$result_speciation)
-  keep <- !(needs_fraction & is.na(results$sample_fraction_id))
-  keep <- keep & !(needs_speciation & is.na(results$result_speciation_id))
-  results <- results[keep, ]
-  results$sample_fraction <- NULL
-  results$result_speciation <- NULL
-  results
+  messages <- validateResultChemistry(con, results, error = FALSE)
+  if (any(nzchar(messages))) warning("EQWin results with incomplete analytical metadata were omitted: ",
+    paste(unique(messages[nzchar(messages)]), collapse = "; "))
+  results[!nzchar(messages), ]
 }
 
 eqwin_collapse_note <- function(x) {

@@ -50,6 +50,11 @@ mock_getnew_db_get_query <- function(
   )
 ) {
   function(con, statement, params = NULL, ...) {
+    if (grepl("timeseries_aggregation_methods", statement, fixed = TRUE) &&
+        grepl("to_regclass", statement, fixed = TRUE)) {
+      # This mock has no aggregation-method table; exercise the legacy fallback.
+      return(data.frame(available = FALSE))
+    }
     if (
       grepl(
         "FROM public.source_adapter_capabilities",

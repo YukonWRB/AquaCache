@@ -241,7 +241,7 @@ update_hydat <- function(
     )[1, 1]
     media_id <- DBI::dbGetQuery(
       con,
-      "SELECT media_id FROM public.media_types WHERE media_type = 'surface water'"
+      "SELECT media_id FROM public.media_types WHERE lower(btrim(media_type)) IN ('surface water', 'freshwater (surface)')"
     )[1, 1]
 
     tsid <- DBI::dbGetQuery(
