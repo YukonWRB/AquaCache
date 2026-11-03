@@ -52,6 +52,11 @@ treated as missing. Each reading gets at most one rule qualifier, by
 severity: ERROR > SSM > PSM > CT > SUS.
 }
 \details{
+\strong{One managed code per reading.} After grading, every reading in the
+window carries exactly one of the codes the grader manages: a new code
+replaces the old one rather than being added beside it, e.g. a reading
+first left UNS for lack of "ahead" context and later judged ERROR.
+
 \strong{Which ranges are replaced.} Only stored qualifiers of the codes the
 grader manages (\code{baseline}, \code{replace} and the codes its rules emit), inside
 the graded window, and only if not protected (\code{no_source_update = TRUE}).

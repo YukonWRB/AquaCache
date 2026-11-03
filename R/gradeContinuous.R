@@ -245,6 +245,11 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' severity: ERROR > SSM > PSM > CT > SUS.
 #'
 #' @details
+#' **One managed code per reading.** After grading, every reading in the
+#' window carries exactly one of the codes the grader manages: a new code
+#' replaces the old one rather than being added beside it, e.g. a reading
+#' first left UNS for lack of "ahead" context and later judged ERROR.
+#'
 #' **Which ranges are replaced.** Only stored qualifiers of the codes the
 #' grader manages (`baseline`, `replace` and the codes its rules emit), inside
 #' the graded window, and only if not protected (`no_source_update = TRUE`).
