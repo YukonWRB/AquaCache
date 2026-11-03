@@ -165,6 +165,14 @@ qc_rule_registry <- list(
 # --- Plumbing ----------------------------------------------------------------
 
 qc_pg_int_array <- function(x) paste0("{", paste(as.integer(x), collapse = ","), "}")
+qc_pg_text_array <- function(x) paste0("{", paste0('"', gsub('(["\\\\])', "\\\\\\1", x), '"', collapse = ","), "}")
+
+# TRUE for each datetime inside any [start_dt, end_dt] row of `ranges`.
+qc_covered <- function(datetime, ranges) {
+  held <- rep(FALSE, length(datetime))
+  for (i in seq_len(nrow(ranges))) held <- held | (datetime >= ranges$start_dt[i] & datetime <= ranges$end_dt[i])
+  held
+}
 
 # Defaults come from the catalogue's argument_schema - one source of truth,
 # the one YGwater would build its form from - overridden by rule_args.
@@ -242,15 +250,15 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' the graded window, and only if not protected (`no_source_update = TRUE`).
 #' Codes it does not manage are left alone. Ranges it writes are
 #' source-managed (`no_source_update = FALSE`), so later runs can replace
-#' them; protected ranges are never changed, and new ranges of the same type
-#' overlapping one are skipped with a warning.
+#' them.
 #'
-#' **Cutoff.** Nothing is written before the latest `apply_from` of the
-#' series' active rules, even when `from` is NULL. Rules only reproduce what
-#' they detect, so a flag set some other way (by hand, or by a legacy
-#' system) would otherwise become `baseline` on a regrade. With no
-#' `apply_from` and `from = NULL` the whole record is regraded, with a
-#' warning.
+#' **Protected readings.** A reading covered by a protected range of a
+#' managed code gets no new code of any type: the protected range is never
+#' changed, and the grader writes around it. Rules only reproduce what they
+#' detect, so this is how a flag set some other way (by hand, or loaded from
+#' a legacy QC system) survives a regrade, and also a re-sync, which replaces
+#' unprotected qualifiers. With `from = NULL` the whole record is regraded,
+#' with a warning.
 #'
 #' **Windows.** Rules that look at neighbouring readings are given enough
 #' context either side of the graded readings, and readings near the start
@@ -269,9 +277,10 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' @param write FALSE returns what would be written, without writing.
 #'
 #' @return Invisibly. With `write = FALSE`, a list: `ranges` (what would be
-#'   written, after the cutoff), `readings` (one code per reading over the
-#'   whole window, for comparison with stored qualifiers), `window` and
-#'   `cutoff`. With `write = TRUE`, a data.frame of readings and ranges per
+#'   written, around protected readings), `readings` (one code per reading
+#'   over the whole window, for comparison with stored qualifiers), `window`
+#'   and `protected` (the number of readings held by protected ranges). With
+#'   `write = TRUE`, a data.frame of readings and ranges per
 #'   code. NULL if the series has no active rules or nothing to write.
 #' @seealso [adjust_qualifier()]
 #' @export
@@ -280,7 +289,7 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
   stopifnot(length(tsid) == 1, !is.na(tsid))
   full_regrade <- is.null(from)
 
-  rules <- DBI::dbGetQuery(con, "SELECT r.rule_fx, r.rule_args::text AS rule_args, r.apply_from, array_to_string(c.emits, ',') AS emits, array_to_string(c.companion_roles, ',') AS roles, c.argument_schema::text AS argument_schema FROM continuous.timeseries_qc_rules r JOIN public.qc_rule_capabilities c ON c.rule_fx = r.rule_fx WHERE r.timeseries_id = $1 AND r.active AND c.enabled ORDER BY r.run_order", params = list(tsid))
+  rules <- DBI::dbGetQuery(con, "SELECT r.rule_fx, r.rule_args::text AS rule_args, array_to_string(c.emits, ',') AS emits, array_to_string(c.companion_roles, ',') AS roles, c.argument_schema::text AS argument_schema FROM continuous.timeseries_qc_rules r JOIN public.qc_rule_capabilities c ON c.rule_fx = r.rule_fx WHERE r.timeseries_id = $1 AND r.active AND c.enabled ORDER BY r.run_order", params = list(tsid))
   if (nrow(rules) == 0) return(invisible(NULL))
   unknown <- setdiff(rules$rule_fx, names(qc_rule_registry))
   if (length(unknown)) stop("gradeContinuous: no R implementation for rule(s) ", paste(unknown, collapse = ", "))
@@ -328,17 +337,21 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
   if (nrow(w) == 0) return(invisible(NULL))
   w$code[is.na(w$code)] <- baseline
 
-  # The cutoff: never write before the latest apply_from (see details).
-  cutoff <- if (all(is.na(rules$apply_from))) NULL else max(rules$apply_from, na.rm = TRUE)
-  if (is.null(cutoff) && write && full_regrade) warning("gradeContinuous: timeseries ", tsid, " has no apply_from, so the WHOLE record is being regraded; stored ", paste(unique(unlist(strsplit(rules$emits, ","))), collapse = "/"), " flags that no rule reproduces (e.g. manual ones) will become ", baseline)
-  ww <- if (is.null(cutoff)) w else w[w$datetime >= cutoff, ]
-  ranges <- if (nrow(ww)) qc_runs_to_ranges(ww$datetime, ww$code) else qc_runs_to_ranges(ww$datetime[0], character(0))
-
-  if (!write) return(invisible(list(ranges = ranges, readings = w, window = c(eval_start = eval_start, write_start = write_start, write_end = to), cutoff = cutoff)))
-  if (nrow(ranges) == 0) return(invisible(NULL))   # everything is before the cutoff
-
   emitted <- unique(c(unlist(strsplit(rules$emits, ",")), unlist(lapply(args, function(a) c(a$qualifier, a$zero_qualifier)))))
-  qc_write_ranges(con, tsid, ranges, managed = unique(c(baseline, replace, emitted)))
+  managed <- unique(c(baseline, replace, emitted))
+  if (write && full_regrade) warning("gradeContinuous: timeseries ", tsid, ": the WHOLE record is being regraded; unprotected ", paste(managed, collapse = "/"), " flags that no rule reproduces (e.g. manual ones) will become ", baseline)
+
+  # Protected readings keep their code (see details). Masking them to NA
+  # before building ranges also breaks runs there, so no new range spans one.
+  prot <- DBI::dbGetQuery(con, "SELECT q.start_dt, q.end_dt FROM continuous.qualifiers q JOIN public.qualifier_types t ON t.qualifier_type_id = q.qualifier_type_id WHERE q.timeseries_id = $1 AND q.no_source_update AND t.qualifier_type_code = ANY($2::text[]) AND q.start_dt <= $4 AND q.end_dt >= $3", params = list(tsid, qc_pg_text_array(managed), min(w$datetime), max(w$datetime)))
+  held <- qc_covered(w$datetime, prot)
+  ranges <- qc_runs_to_ranges(w$datetime, ifelse(held, NA_character_, w$code))
+  ranges <- ranges[!is.na(ranges$code), ]
+
+  if (!write) return(invisible(list(ranges = ranges, readings = w, window = c(eval_start = eval_start, write_start = write_start, write_end = to), protected = sum(held))))
+  if (nrow(ranges) == 0) return(invisible(NULL))   # every reading is protected
+
+  qc_write_ranges(con, tsid, ranges, managed = managed)
 
   summary <- stats::aggregate(n ~ code, data = ranges, FUN = sum)
   summary$ranges <- as.vector(table(ranges$code)[summary$code])
@@ -354,8 +367,9 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
 #     when they carry the same code, so a daily run extends yesterday's UNS
 #     instead of starting a new one;
 #   - PROTECTED ranges (no_source_update = TRUE - a person set them) are
-#     never changed, and new ranges of the same type overlapping one are
-#     dropped with a warning;
+#     never changed. gradeContinuous() already leaves their readings out of
+#     the new ranges; a new range of the same type that still overlaps one
+#     is dropped with a warning;
 #   - a range reaching the window from before is cut at the last reading
 #     before the window that no later-starting range of another managed code
 #     covers, not simply at the reading before the window. When no stored range of the import's code
@@ -364,7 +378,7 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
 #     them (bridge_latest_extension), straight across later ranges of other
 #     codes, which would leave those readings double-coded. Shortening a
 #     bridged range undoes the import rather than regrading, so it may reach
-#     before apply_from.
+#     before the graded window.
 # Codes the grader does not manage (e.g. a manual GW or a source qualifier)
 # are left alone; the overlap trigger only checks within a type.
 qc_write_ranges <- function(con, tsid, ranges, managed) {

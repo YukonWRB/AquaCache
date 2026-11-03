@@ -254,7 +254,6 @@ tryCatch(
            REFERENCES public.qc_rule_capabilities(rule_fx),
          rule_args JSONB,
          run_order SMALLINT NOT NULL DEFAULT 1,
-         apply_from TIMESTAMPTZ,
          active BOOLEAN NOT NULL DEFAULT TRUE,
          note TEXT,
          created_by TEXT DEFAULT CURRENT_USER NOT NULL,
@@ -292,11 +291,6 @@ tryCatch(
       con,
       "COMMENT ON COLUMN continuous.timeseries_qc_rules.rule_args IS
        'Arguments overriding the catalogue defaults, as a JSON object. companions: {\"air_temp\": <timeseries_id>} names a companion series explicitly instead of resolving it from the location.'"
-    )
-    DBI::dbExecute(
-      con,
-      "COMMENT ON COLUMN continuous.timeseries_qc_rules.apply_from IS
-       'gradeContinuous() never writes qualifiers before the latest apply_from among a series'' active rules, even when regrading the whole record. Protects flags the rules cannot reproduce, e.g. those loaded from a legacy QC system. NULL = no cutoff.'"
     )
 
     DBI::dbExecute(

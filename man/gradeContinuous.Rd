@@ -33,9 +33,10 @@ supplies no qualifier, so new readings arrive as UNK and leave as
 }
 \value{
 Invisibly. With \code{write = FALSE}, a list: \code{ranges} (what would be
-written, after the cutoff), \code{readings} (one code per reading over the
-whole window, for comparison with stored qualifiers), \code{window} and
-\code{cutoff}. With \code{write = TRUE}, a data.frame of readings and ranges per
+written, around protected readings), \code{readings} (one code per reading
+over the whole window, for comparison with stored qualifiers), \code{window}
+and \code{protected} (the number of readings held by protected ranges). With
+\code{write = TRUE}, a data.frame of readings and ranges per
 code. NULL if the series has no active rules or nothing to write.
 }
 \description{
@@ -56,15 +57,15 @@ grader manages (\code{baseline}, \code{replace} and the codes its rules emit), i
 the graded window, and only if not protected (\code{no_source_update = TRUE}).
 Codes it does not manage are left alone. Ranges it writes are
 source-managed (\code{no_source_update = FALSE}), so later runs can replace
-them; protected ranges are never changed, and new ranges of the same type
-overlapping one are skipped with a warning.
+them.
 
-\strong{Cutoff.} Nothing is written before the latest \code{apply_from} of the
-series' active rules, even when \code{from} is NULL. Rules only reproduce what
-they detect, so a flag set some other way (by hand, or by a legacy
-system) would otherwise become \code{baseline} on a regrade. With no
-\code{apply_from} and \code{from = NULL} the whole record is regraded, with a
-warning.
+\strong{Protected readings.} A reading covered by a protected range of a
+managed code gets no new code of any type: the protected range is never
+changed, and the grader writes around it. Rules only reproduce what they
+detect, so this is how a flag set some other way (by hand, or loaded from
+a legacy QC system) survives a regrade, and also a re-sync, which replaces
+unprotected qualifiers. With \code{from = NULL} the whole record is regraded,
+with a warning.
 
 \strong{Windows.} Rules that look at neighbouring readings are given enough
 context either side of the graded readings, and readings near the start

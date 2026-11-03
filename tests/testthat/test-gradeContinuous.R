@@ -64,6 +64,20 @@ test_that("runs become ranges, single readings included", {
   expect_equal(nrow(qc_runs_to_ranges(dt[0], character(0))), 0L)
 })
 
+test_that("protected readings get no new range, and break runs", {
+  dt <- hourly(6)
+  prot <- data.frame(start_dt = dt[3], end_dt = dt[4])
+  held <- qc_covered(dt, prot)
+  expect_equal(held, c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE))
+  expect_equal(qc_covered(dt, prot[0, ]), rep(FALSE, 6))
+  # All UNS: without the mask this would be one range over the protected pair.
+  r <- qc_runs_to_ranges(dt, ifelse(held, NA_character_, "UNS"))
+  r <- r[!is.na(r$code), ]
+  expect_equal(r$start_dt, dt[c(1, 5)])
+  expect_equal(r$end_dt, dt[c(2, 6)])
+  expect_equal(qc_pg_text_array(c("UNS", 'a"b')), '{"UNS","a\\"b"}')
+})
+
 test_that("rain while cold is CT", {
   x <- data.frame(
     datetime = hourly(4),
