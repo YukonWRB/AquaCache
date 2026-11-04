@@ -5,11 +5,11 @@ check <- DBI::dbGetQuery(con, "SELECT SESSION_USER")
 if (!identical(check$session_user[[1]], "postgres")) {
   stop("Patch 67 requires a postgres maintenance connection.")
 }
-if (getFromNamespace("dbTransCheck", "AquaCache")(con)) {
+if (utils::getFromNamespace("dbTransCheck", "AquaCache")(con)) {
   stop("A transaction is already in progress. Commit or roll it back first.")
 }
 
-active <- getFromNamespace("dbTransBegin", "AquaCache")(con)
+active <- utils::getFromNamespace("dbTransBegin", "AquaCache")(con)
 tryCatch(
   {
     DBI::dbExecute(con, "SET LOCAL lock_timeout = '30s'")
@@ -52,7 +52,10 @@ tryCatch(
 
     # Keep the empty-table check and replacement atomic with respect to writers.
     # Taking the lock only at DROP TABLE could discard a just-committed insert.
-    DBI::dbExecute(con, "LOCK TABLE continuous.extrema IN ACCESS EXCLUSIVE MODE")
+    DBI::dbExecute(
+      con,
+      "LOCK TABLE continuous.extrema IN ACCESS EXCLUSIVE MODE"
+    )
     extrema_rows <- DBI::dbGetQuery(
       con,
       "SELECT count(*)::TEXT AS n FROM continuous.extrema"
@@ -392,8 +395,11 @@ tryCatch(
         DBI::dbExecute(
           con,
           paste(
-            "REVOKE ALL PRIVILEGES ON TABLE", table_sql,
-            "FROM", grantee_sql, "CASCADE"
+            "REVOKE ALL PRIVILEGES ON TABLE",
+            table_sql,
+            "FROM",
+            grantee_sql,
+            "CASCADE"
           )
         )
       }
@@ -412,8 +418,13 @@ tryCatch(
         DBI::dbExecute(
           con,
           paste(
-            "GRANT", timeseries_acl$privilege_type[[acl_idx]],
-            "ON TABLE", table_sql, "TO", grantee_sql, grant_option
+            "GRANT",
+            timeseries_acl$privilege_type[[acl_idx]],
+            "ON TABLE",
+            table_sql,
+            "TO",
+            grantee_sql,
+            grant_option
           )
         )
       }
@@ -443,7 +454,9 @@ tryCatch(
         con,
         paste(
           "REVOKE ALL PRIVILEGES ON SEQUENCE",
-          "continuous.extrema_extremum_id_seq FROM", grantee_sql, "CASCADE"
+          "continuous.extrema_extremum_id_seq FROM",
+          grantee_sql,
+          "CASCADE"
         )
       )
     }
@@ -480,12 +493,18 @@ tryCatch(
          ORDER BY grantee, privilege_type, is_grantable",
         params = list(table)
       )
-      if (!isTRUE(all.equal(
-        timeseries_acl,
-        actual_acl,
-        check.attributes = FALSE
-      ))) {
-        stop(paste("Privileges on", table, "do not match continuous.timeseries."))
+      if (
+        !isTRUE(all.equal(
+          timeseries_acl,
+          actual_acl,
+          check.attributes = FALSE
+        ))
+      ) {
+        stop(paste(
+          "Privileges on",
+          table,
+          "do not match continuous.timeseries."
+        ))
       }
     }
 
