@@ -17,7 +17,7 @@ getNewContinuous(
 )
 }
 \arguments{
-\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using the utility function \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. If you wish to run this function in parallel you MUST leave this argument NULL. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.}
+\item{con}{A connection to the database, created with \code{\link[DBI:dbConnect]{DBI::dbConnect()}} or using \code{\link[=AquaConnect]{AquaConnect()}}. NULL will create a connection and close it afterwards; otherwise, close the supplied connection yourself. Parallel mode requires \code{con = NULL} and keeps one connection open per worker until that worker finishes its assigned tasks. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.}
 
 \item{timeseries_id}{The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.}
 

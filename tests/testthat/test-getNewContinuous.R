@@ -287,7 +287,8 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
       port = Sys.getenv("aquacachePort"),
       username = Sys.getenv("aquacacheAdminUser"),
       password = Sys.getenv("aquacacheAdminPass"),
-      silent = FALSE
+      silent = FALSE,
+      check = TRUE
     ) {
       connect_calls <<- connect_calls + 1L
       captured$connect_args[[length(captured$connect_args) + 1L]] <- list(
@@ -336,12 +337,17 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     ),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
+    dbIsValid = function(con, ...) TRUE,
     .package = "DBI"
   )
   local_mocked_bindings(
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
+    clusterEvalQ = function(cl, expr) {
+      eval(substitute(expr), envir = parent.frame())
+      invisible(list(NULL))
+    },
     clusterExport = function(cl, varlist, envir) {
       captured$cluster_exports <- varlist
       invisible(TRUE)
@@ -376,7 +382,7 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
 
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
-  expect_equal(connect_calls, 3L)
+  expect_equal(connect_calls, 2L)
   expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
   expect_true("source_adapter_args_decode" %in% captured$cluster_exports)
   expect_true(
@@ -440,7 +446,8 @@ test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID
       port = Sys.getenv("aquacachePort"),
       username = Sys.getenv("aquacacheAdminUser"),
       password = Sys.getenv("aquacacheAdminPass"),
-      silent = FALSE
+      silent = FALSE,
+      check = TRUE
     ) {
       connect_calls <<- connect_calls + 1L
       structure(list(), class = "mock_con")
@@ -487,12 +494,17 @@ test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID
     ),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
+    dbIsValid = function(con, ...) TRUE,
     .package = "DBI"
   )
   local_mocked_bindings(
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
+    clusterEvalQ = function(cl, expr) {
+      eval(substitute(expr), envir = parent.frame())
+      invisible(list(NULL))
+    },
     clusterExport = function(cl, varlist, envir) invisible(TRUE),
     .package = "parallel"
   )
@@ -524,7 +536,7 @@ test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID
 
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
-  expect_equal(connect_calls, 3L)
+  expect_equal(connect_calls, 2L)
   expect_equal(captured$timeseries_ids, c(1322L, 1323L, 2000L))
   expect_equal(captured$route_ids, c(72L, 71L, 73L))
 })
@@ -770,7 +782,8 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
       port = Sys.getenv("aquacachePort"),
       username = Sys.getenv("aquacacheAdminUser"),
       password = Sys.getenv("aquacacheAdminPass"),
-      silent = FALSE
+      silent = FALSE,
+      check = TRUE
     ) {
       connect_calls <<- connect_calls + 1L
       captured$connect_args[[length(captured$connect_args) + 1L]] <- list(
@@ -816,12 +829,17 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
     ),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
+    dbIsValid = function(con, ...) TRUE,
     .package = "DBI"
   )
   local_mocked_bindings(
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
+    clusterEvalQ = function(cl, expr) {
+      eval(substitute(expr), envir = parent.frame())
+      invisible(list(NULL))
+    },
     clusterExport = function(cl, varlist, envir) invisible(TRUE),
     .package = "parallel"
   )
@@ -853,7 +871,7 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
 
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
-  expect_equal(connect_calls, 4L)
+  expect_equal(connect_calls, 2L)
   expect_equal(captured$parameters, c("temp", "wind_spd", "temp"))
   expect_true(all(vapply(
     captured$connect_args,

@@ -40,7 +40,7 @@
 #' ## Sharing privileges and ownership
 #' This is dictated by the timeseries table, and checked prior to passing data through view tables to public users.
 #'
-#' @param con  A connection to the database, created with [DBI::dbConnect()] or using the utility function [AquaConnect()]. NULL will create a connection and close it afterwards, otherwise it's up to you to close it after. If you wish to run this function in parallel you MUST leave this argument NULL. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.
+#' @param con A connection to the database, created with [DBI::dbConnect()] or using [AquaConnect()]. NULL will create a connection and close it afterwards; otherwise, close the supplied connection yourself. Parallel mode requires `con = NULL` and keeps one connection open per worker until that worker finishes its assigned tasks. If you also specify connection parameters in later arguments they will be used, otherwise the function will use the AquaConnect defaults.
 #' @param timeseries_id The timeseries_ids you wish to have updated, as character or numeric vector. Defaults to "all", which means all timeseries of category 'continuous'.
 #' @param active Sets behavior for import of new data. If set to 'default', the function will look to the column 'active' in the 'timeseries' table to determine if new data should be fetched. If set to 'all', the function will ignore the 'active' column and import all data.
 #' @param dbName The name of the database to connect to. If left NULL, the function will use the default database name from the .Renviron file as per [AquaConnect()].
@@ -386,17 +386,30 @@ getNewContinuous <- function(
       return(NULL)
     }
 
-    tryCatch(
-      {
-        args <- source_adapter_args_decode(source_fx_args)
-        if (!length(args)) {
-          return(NULL)
-        }
-        args
-      },
+    args_json <- as.character(source_fx_args[[1]])
+    if (!nzchar(args_json)) {
+      return(NULL)
+    }
+    if (exists(args_json, envir = decoded_source_fx_args, inherits = FALSE)) {
+      return(get(
+        args_json,
+        envir = decoded_source_fx_args,
+        inherits = FALSE
+      )[[1]])
+    }
+
+    args <- tryCatch(
+      source_adapter_args_decode(args_json),
       error = function(e) NULL
     )
+    if (!length(args)) {
+      args <- NULL
+    }
+    assign(args_json, list(args), envir = decoded_source_fx_args)
+    args
   }
+
+  decoded_source_fx_args <- new.env(parent = emptyenv())
 
   get_source_fx_arg <- function(args, name, default = NULL) {
     if (is.null(args) || is.null(args[[name]]) || length(args[[name]]) == 0) {
@@ -412,9 +425,8 @@ getNewContinuous <- function(
   }
 
   get_adapter_capability <- function(source_fx) {
-    matches <- adapter_capabilities$source_fx == source_fx
-    rows <- adapter_capabilities[which(matches), , drop = FALSE]
-    if (nrow(rows) != 1L) {
+    capability_index <- match(source_fx, adapter_capabilities$source_fx)
+    if (is.na(capability_index)) {
       stop(
         "getNewContinuous: Source-adapter registry lookup failed for ",
         source_fx,
@@ -422,7 +434,7 @@ getNewContinuous <- function(
       )
     }
 
-    rows
+    adapter_capabilities[capability_index, , drop = FALSE]
   }
 
   get_row_last_data_point <- function(i) {
@@ -436,11 +448,11 @@ getNewContinuous <- function(
 
   get_parallel_group_key <- function(i) {
     source_fx <- all_timeseries$source_fx[[i]]
-    args <- parse_source_fx_args_safe(all_timeseries$source_fx_args[[i]])
     capability <- get_adapter_capability(source_fx)
 
     strategy <- capability$parallel_group_strategy[[1]]
     if (identical(strategy, "source_args")) {
+      args <- parse_source_fx_args_safe(all_timeseries$source_fx_args[[i]])
       group_args <- capability$parallel_group_args[[1]]
       group_values <- vapply(
         group_args,
@@ -987,7 +999,33 @@ getNewContinuous <- function(
     message("Iterating in parallel with ", n.cores, " CPU cores")
 
     cl <- parallel::makeCluster(n.cores)
-    on.exit(parallel::stopCluster(cl), add = TRUE)
+    on.exit(
+      {
+        try(
+          parallel::clusterEvalQ(cl, {
+            worker_connection_name <- ".aquacache_getNewContinuous_con"
+            if (exists(
+              worker_connection_name,
+              envir = .GlobalEnv,
+              inherits = FALSE
+            )) {
+              worker_con <- get(
+                worker_connection_name,
+                envir = .GlobalEnv,
+                inherits = FALSE
+              )
+              if (DBI::dbIsValid(worker_con)) {
+                DBI::dbDisconnect(worker_con)
+              }
+              rm(list = worker_connection_name, envir = .GlobalEnv)
+            }
+          }),
+          silent = TRUE
+        )
+        parallel::stopCluster(cl)
+      },
+      add = TRUE
+    )
     parallel::clusterExport(
       cl,
       c(
@@ -1009,7 +1047,6 @@ getNewContinuous <- function(
       ),
       envir = environment()
     )
-
     doSNOW::registerDoSNOW(cl)
     if (interactive()) {
       progress <- function(n) {
@@ -1023,89 +1060,54 @@ getNewContinuous <- function(
           )
         }
       }
-      opts <- list(progress = progress)
-
-      status_rows <- foreach::foreach(
-        i = seq_along(task_groups),
-        .packages = c(
-          "DBI",
-          "jsonlite",
-          "lubridate",
-          "AquaCache",
-          "data.table",
-          "utils"
-        ),
-        .options.snow = opts,
-        .combine = rbind,
-        .errorhandling = "pass"
-      ) %dopar%
-        {
-          parcon <- NULL
-          tryCatch(
-            {
-              parcon <- AquaConnect(
-                name = dbName,
-                host = dbHost,
-                port = dbPort,
-                username = dbUser,
-                password = dbPass,
-                silent = TRUE
-              )
-              DBI::dbExecute(parcon, "SET timezone = 'UTC'")
-              run_worker_group(
-                task_groups[[i]],
-                con = parcon,
-                parallel = TRUE
-              )
-            },
-            finally = {
-              if (!is.null(parcon)) {
-                DBI::dbDisconnect(parcon)
-              }
-            }
-          )
-        }
-    } else {
-      status_rows <- foreach::foreach(
-        i = seq_along(task_groups),
-        .packages = c(
-          "DBI",
-          "jsonlite",
-          "lubridate",
-          "AquaCache",
-          "data.table",
-          "utils"
-        ),
-        .combine = rbind,
-        .errorhandling = "pass"
-      ) %dopar%
-        {
-          parcon <- NULL
-          tryCatch(
-            {
-              parcon <- AquaConnect(
-                name = dbName,
-                host = dbHost,
-                port = dbPort,
-                username = dbUser,
-                password = dbPass,
-                silent = TRUE
-              )
-              DBI::dbExecute(parcon, "SET timezone = 'UTC'")
-              run_worker_group(
-                task_groups[[i]],
-                con = parcon,
-                parallel = TRUE
-              )
-            },
-            finally = {
-              if (!is.null(parcon)) {
-                DBI::dbDisconnect(parcon)
-              }
-            }
-          )
-        }
     }
+
+    opts <- if (interactive()) list(progress = progress) else list()
+    status_rows <- foreach::foreach(
+      i = seq_along(task_groups),
+      .packages = c(
+        "DBI",
+        "jsonlite",
+        "lubridate",
+        "AquaCache",
+        "data.table",
+        "utils"
+      ),
+      .options.snow = opts,
+      .combine = rbind,
+      .errorhandling = "pass"
+    ) %dopar%
+      {
+        worker_connection_name <- ".aquacache_getNewContinuous_con"
+        if (exists(
+          worker_connection_name,
+          envir = .GlobalEnv,
+          inherits = FALSE
+        )) {
+          parcon <- get(
+            worker_connection_name,
+            envir = .GlobalEnv,
+            inherits = FALSE
+          )
+        } else {
+          parcon <- AquaConnect(
+            name = dbName,
+            host = dbHost,
+            port = dbPort,
+            username = dbUser,
+            password = dbPass,
+            silent = TRUE,
+            check = FALSE
+          )
+          assign(worker_connection_name, parcon, envir = .GlobalEnv)
+          DBI::dbExecute(parcon, "SET timezone = 'UTC'")
+        }
+        run_worker_group(
+          task_groups[[i]],
+          con = parcon,
+          parallel = TRUE
+        )
+      }
   } else {
     if (identical(parallel_disabled_reason, "missing_packages")) {
       message(
