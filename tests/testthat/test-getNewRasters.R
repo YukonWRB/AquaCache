@@ -400,3 +400,134 @@ test_that("getNewRasters stops a reanalysis series after an append failure", {
   expect_equal(nrow(append_errors), 1L)
   expect_equal(append_errors$raster_index, 2L)
 })
+
+test_that("getNewRasters imports raster series in parallel with reused connections", {
+  skip_if_not_installed("foreach")
+  skip_if_not_installed("doSNOW")
+
+  connect_calls <- 0L
+  captured_starts <- as.POSIXct(character(), tz = "UTC")
+  insert_calls <- 0L
+  series_ids <- c(7001L, 7002L)
+  start <- as.POSIXct("2026-11-01 00:00:00", tz = "UTC")
+  raster <- list(
+    rast = structure(list(), class = "mock_raster"),
+    valid_from = start,
+    valid_to = start + 3600,
+    issued = NULL,
+    source = "parallel-test",
+    flag = NA_character_,
+    units = "mm",
+    model = "HRDPS"
+  )
+
+  mock_dopar <- function(obj, expr) {
+    expr_sub <- substitute(expr)
+    parent_env <- parent.frame()
+    results <- lapply(
+      obj$iter,
+      function(i) {
+        eval(expr_sub, envir = list2env(list(i = i), parent = parent_env))
+      }
+    )
+    do.call(obj$combine, results)
+  }
+
+  local_mocked_bindings(
+    AquaConnect = function(
+      name = Sys.getenv("aquacacheName"),
+      host = Sys.getenv("aquacacheHost"),
+      port = Sys.getenv("aquacachePort"),
+      username = Sys.getenv("aquacacheAdminUser"),
+      password = Sys.getenv("aquacacheAdminPass"),
+      silent = FALSE,
+      check = TRUE
+    ) {
+      connect_calls <<- connect_calls + 1L
+      structure(list(id = connect_calls), class = "mock_con")
+    },
+    getSourceAdapterCapabilities = function(...) {
+      data.frame(source_fx = "downloadHRDPS")
+    },
+    advisory_lock_acquire = function(...) TRUE,
+    advisory_lock_release = function(...) TRUE,
+    dbTransBegin = function(...) TRUE,
+    downloadHRDPS = function(start_datetime, ...) {
+      captured_starts <<- c(captured_starts, start_datetime)
+      list(raster, forecast = FALSE)
+    },
+    insertACModelRaster = function(...) {
+      insert_calls <<- insert_calls + 1L
+      100L + insert_calls
+    },
+    .package = "AquaCache"
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, ...) {
+      if (grepl("FROM spatial.raster_series_index", statement, fixed = TRUE)) {
+        return(data.frame(
+          raster_series_id = series_ids,
+          end_datetime = rep(as.POSIXct(NA, tz = "UTC"), 2),
+          last_issue = rep(as.POSIXct(NA, tz = "UTC"), 2),
+          type = rep("forecast", 2),
+          source_fx = rep("downloadHRDPS", 2),
+          source_fx_args = rep(NA_character_, 2),
+          fetch_priority = rep(1L, 2),
+          parameter_name = rep("precipitation", 2),
+          active = rep(TRUE, 2)
+        ))
+      }
+      if (grepl("SELECT reference_id", statement, fixed = TRUE)) {
+        return(data.frame(reference_id = NA_integer_))
+      }
+      if (grepl("AS is_identical", statement, fixed = TRUE)) {
+        return(data.frame(
+          reference_id = integer(),
+          is_identical = logical()
+        ))
+      }
+      stop("Unexpected query in parallel getNewRasters test: ", statement)
+    },
+    dbExecute = function(...) 1L,
+    dbDisconnect = function(...) invisible(TRUE),
+    dbIsValid = function(...) TRUE,
+    .package = "DBI"
+  )
+  local_mocked_bindings(
+    detectCores = function(...) 4L,
+    makeCluster = function(...) structure(list(), class = "mock_cluster"),
+    stopCluster = function(cl) invisible(TRUE),
+    clusterExport = function(...) invisible(TRUE),
+    clusterEvalQ = function(cl, expr) {
+      eval(substitute(expr), envir = parent.frame())
+      invisible(list(NULL))
+    },
+    .package = "parallel"
+  )
+  local_mocked_bindings(
+    registerDoSNOW = function(cl) invisible(TRUE),
+    .package = "doSNOW"
+  )
+  local_mocked_bindings(
+    foreach = function(i, .combine = c, ...) {
+      list(iter = i, combine = .combine)
+    },
+    `%dopar%` = mock_dopar,
+    .package = "foreach"
+  )
+
+  expect_message(
+    result <- getNewRasters(
+      raster_series_ids = "all",
+      con = NULL,
+      start_datetime = start,
+      keep_forecasts = "all"
+    ),
+    "raster series in parallel with 2 workers"
+  )
+
+  expect_identical(result, as.character(series_ids))
+  expect_equal(connect_calls, 2L)
+  expect_equal(insert_calls, 2L)
+  expect_equal(captured_starts, rep(start, 2L))
+})
