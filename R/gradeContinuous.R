@@ -21,10 +21,6 @@
 # QC_CT-type condition. Keeping that order marks future data like the past.
 qc_severity <- c("ERROR", "SSM", "PSM", "CT", "SUS")
 
-# Companion role -> parameter, used when rule_args gives no explicit id.
-qc_companion_parameters <- c(air_temp = "temperature, air",
-                             wind_speed = "velocity, wind")
-
 # --- Rolling helpers (centred, by READING not by time, NA if any reading in
 # the window is NA or the window runs off either end - same as zoo with
 # fill = NA, which flag_data() used) -----------------------------------------
@@ -155,12 +151,84 @@ qc_snowmelt_tips <- function(x, a, ctx) {
 
 # window(): how many READINGS of context a rule needs before (back) and after
 # (ahead) a reading, and whether it needs the calendar year from January 1.
+qc_validate_integer_arg <- function(args, name, min_value) {
+  value <- args[[name]]
+  if (
+    length(value) != 1L ||
+      !is.numeric(value) ||
+      is.na(value) ||
+      !is.finite(value) ||
+      value < min_value ||
+      value > .Machine$integer.max ||
+      value != floor(value)
+  ) {
+    stop(
+      "gradeContinuous: argument '", name,
+      "' must be an integer greater than or equal to ", min_value
+    )
+  }
+  as.integer(value)
+}
+
 qc_rule_registry <- list(
-  qc_rain_cold = list(fx = qc_rain_cold, window = function(a) list(back = 0, ahead = 0, year_start = FALSE)),
-  qc_stuck_sensor = list(fx = qc_stuck_sensor, window = function(a) list(back = (a$width - 1) %/% 2, ahead = a$width %/% 2, year_start = FALSE)),
-  qc_dir_calm = list(fx = qc_dir_calm, window = function(a) list(back = 0, ahead = 0, year_start = FALSE)),
-  qc_snowmelt_tips = list(fx = qc_snowmelt_tips, window = function(a) if (identical(a$cold_align, "centred")) list(back = (a$cold_window - 1) %/% 2, ahead = a$cold_window %/% 2, year_start = TRUE) else list(back = a$cold_window - 1, ahead = 0, year_start = TRUE))
+  "qc_rain_cold@1" = list(
+    fx = qc_rain_cold,
+    window = function(a) list(back = 0, ahead = 0, year_start = FALSE),
+    primary_parameters = "precipitation, rain"
+  ),
+  "qc_stuck_sensor@1" = list(
+    fx = qc_stuck_sensor,
+    window = function(a) {
+      width <- qc_validate_integer_arg(a, "width", 2L)
+      list(
+        back = (width - 1L) %/% 2L,
+        ahead = width %/% 2L,
+        year_start = FALSE
+      )
+    }
+  ),
+  "qc_dir_calm@1" = list(
+    fx = qc_dir_calm,
+    window = function(a) list(back = 0, ahead = 0, year_start = FALSE),
+    primary_parameters =
+      "wind direction (direction from, expressed 0-360 deg)"
+  ),
+  "qc_snowmelt_tips@1" = list(
+    fx = qc_snowmelt_tips,
+    primary_parameters = c("precipitation, rain", "precipitation, total"),
+    window = function(a) {
+      cold_window <- qc_validate_integer_arg(a, "cold_window", 1L)
+      qc_validate_integer_arg(a, "first_warm_days", 0L)
+      if (
+        length(a$cold_align) != 1L ||
+          is.na(a$cold_align) ||
+          !a$cold_align %in% c("trailing", "centred")
+      ) {
+        stop(
+          "gradeContinuous: argument 'cold_align' must be 'trailing' or 'centred'"
+        )
+      }
+      if (identical(a$cold_align, "centred")) {
+        list(
+          back = (cold_window - 1L) %/% 2L,
+          ahead = cold_window %/% 2L,
+          year_start = TRUE
+        )
+      } else {
+        list(back = cold_window - 1L, ahead = 0L, year_start = TRUE)
+      }
+    }
+  )
 )
+
+qc_rule_primary_parameters <- function(rule_fx, rule_version) {
+  key <- qc_rule_capability_key(rule_fx, rule_version)
+  definition <- qc_rule_registry[[key]]
+  if (is.null(definition) || is.null(definition$primary_parameters)) {
+    return(character())
+  }
+  as.character(definition$primary_parameters)
+}
 
 # --- Plumbing ----------------------------------------------------------------
 
@@ -178,24 +246,49 @@ qc_covered <- function(datetime, ranges) {
 # the one YGwater would build its form from - overridden by rule_args.
 qc_merge_rule_args <- function(schema_json, args_json) {
   schema <- jsonlite::fromJSON(schema_json, simplifyVector = FALSE)
-  defaults <- stats::setNames(lapply(schema$arguments, `[[`, "default"), vapply(schema$arguments, `[[`, character(1), "name"))
-  given <- if (is.na(args_json)) list() else jsonlite::fromJSON(args_json, simplifyVector = FALSE)
-  utils::modifyList(defaults, given)
+  validateQCRuleArgumentSchema(schema)
+  qc_rule_effective_args(schema, args_json)
 }
 
-# Explicit rule_args$companions$<role> wins; otherwise the same location's
-# series of the role's parameter with the lowest sensor_priority.
-qc_resolve_companions <- function(con, location_id, roles, args) {
+# Explicit assignment overrides win; otherwise use the schema's same-location
+# selection strategy. Runtime checks catch companion series that were later
+# disabled or moved after the assignment was saved.
+qc_resolve_companions <- function(
+  con,
+  location_id,
+  target_timeseries_id,
+  descriptors,
+  overrides
+) {
   out <- list()
-  for (role in roles) {
-    explicit <- unlist(lapply(args, function(a) a$companions[[role]]))
+  for (descriptor in descriptors) {
+    role <- descriptor$role
+    explicit <- overrides[[role]]
+    candidates <- getQCRuleCompanionCandidates(
+      con,
+      location_id,
+      descriptor$parameter_name,
+      exclude_timeseries_id = target_timeseries_id
+    )
     if (length(explicit)) {
-      out[[role]] <- as.integer(explicit[1])
-      next
+      if (!isTRUE(descriptor$allow_explicit_override)) {
+        stop("gradeContinuous: companion role '", role, "' does not allow overrides")
+      }
+      if (!explicit %in% candidates$timeseries_id) {
+        stop(
+          "gradeContinuous: configured companion '", role,
+          "' is no longer an active same-location series for '",
+          descriptor$parameter_name, "'. Update the QC assignment."
+        )
+      }
+      out[[role]] <- as.integer(explicit)
+    } else {
+      out[[role]] <- if (nrow(candidates)) {
+        candidates$timeseries_id[[1L]]
+      } else {
+        NA_integer_
+      }
     }
-    if (!role %in% names(qc_companion_parameters)) stop("gradeContinuous: no parameter known for companion role '", role, "'")
-    id <- DBI::dbGetQuery(con, "SELECT t.timeseries_id FROM continuous.timeseries t JOIN public.parameters p ON p.parameter_id = t.parameter_id WHERE t.location_id = $1 AND p.param_name = $2 ORDER BY t.sensor_priority LIMIT 1", params = list(location_id, qc_companion_parameters[[role]]))$timeseries_id
-    out[[role]] <- if (length(id)) id else NA_integer_
   }
   out
 }
@@ -270,7 +363,8 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' of the window are re-graded once later readings exist. A rolling window
 #' that spans a gap in the record gives no result.
 #'
-#' @param con A connection with write access to `continuous.qualifiers`.
+#' @param con An open AquaCache connection. Write access is needed only when
+#'   `write = TRUE`.
 #' @param timeseries_id One timeseries_id.
 #' @param from,to Datetimes (UTC) of the readings to grade, usually the new
 #'   data. NULL means the start / end of the record.
@@ -280,6 +374,9 @@ qc_runs_to_ranges <- function(datetime, code) {
 #'   supplies no qualifier, so new readings arrive as UNK and leave as
 #'   `baseline` or a rule's code.
 #' @param write FALSE returns what would be written, without writing.
+#' @param assignments Optional desired QC assignments for a read-only preview.
+#'   When supplied, these values are validated and graded without saving them.
+#'   This is allowed only with `write = FALSE`.
 #'
 #' @return Invisibly. With `write = FALSE`, a list: `ranges` (what would be
 #'   written, around protected readings), `readings` (one code per reading
@@ -289,16 +386,75 @@ qc_runs_to_ranges <- function(datetime, code) {
 #'   code. NULL if the series has no active rules or nothing to write.
 #' @seealso [adjust_qualifier()]
 #' @export
-gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline = "UNS", replace = "UNK", write = TRUE) {
+gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline = "UNS", replace = "UNK", write = TRUE, assignments = NULL) {
   tsid <- as.integer(timeseries_id)
   stopifnot(length(tsid) == 1, !is.na(tsid))
   full_regrade <- is.null(from)
 
-  rules <- DBI::dbGetQuery(con, "SELECT r.rule_fx, r.rule_args::text AS rule_args, array_to_string(c.emits, ',') AS emits, array_to_string(c.companion_roles, ',') AS roles, c.argument_schema::text AS argument_schema FROM continuous.timeseries_qc_rules r JOIN public.qc_rule_capabilities c ON c.rule_fx = r.rule_fx WHERE r.timeseries_id = $1 AND r.active AND c.enabled ORDER BY r.run_order", params = list(tsid))
+  if (is.null(assignments)) {
+    rules <- DBI::dbGetQuery(
+      con,
+      "SELECT r.rule_fx, r.rule_version, r.rule_args::text AS rule_args,
+         r.companion_timeseries::text AS companion_timeseries,
+         array_to_string(c.emits, ',') AS emits,
+         c.argument_schema::text AS argument_schema
+       FROM continuous.timeseries_qc_rules r
+       JOIN public.qc_rule_capabilities c
+         ON c.rule_fx = r.rule_fx AND c.rule_version = r.rule_version
+       WHERE r.timeseries_id = $1 AND r.active
+       ORDER BY r.run_order, r.timeseries_qc_rule_id",
+      params = list(tsid)
+    )
+  } else {
+    if (write) {
+      stop(
+        "gradeContinuous: assignments can only be supplied with write = FALSE."
+      )
+    }
+    rules <- qc_rule_assignments_normalize(con, tsid, assignments)
+    rules <- rules[rules$active, , drop = FALSE]
+    if (nrow(rules)) {
+      rule_capabilities <- DBI::dbGetQuery(
+        con,
+        "SELECT rule_fx, rule_version,
+           array_to_string(emits, ',') AS emits,
+           argument_schema::text AS argument_schema
+         FROM public.qc_rule_capabilities"
+      )
+      capability_index <- match(
+        qc_rule_capability_key(rules$rule_fx, rules$rule_version),
+        qc_rule_capability_key(
+          rule_capabilities$rule_fx,
+          rule_capabilities$rule_version
+        )
+      )
+      if (anyNA(capability_index)) {
+        stop("gradeContinuous: a preview assignment has no rule definition.")
+      }
+      rules$emits <- rule_capabilities$emits[capability_index]
+      rules$argument_schema <-
+        rule_capabilities$argument_schema[capability_index]
+      rules <- rules[order(rules$run_order, seq_len(nrow(rules))), , drop = FALSE]
+    }
+  }
   if (nrow(rules) == 0) return(invisible(NULL))
-  unknown <- setdiff(rules$rule_fx, names(qc_rule_registry))
-  if (length(unknown)) stop("gradeContinuous: no R implementation for rule(s) ", paste(unknown, collapse = ", "))
-  args <- unname(Map(qc_merge_rule_args, rules$argument_schema, rules$rule_args))
+  rules$rule_key <- qc_rule_capability_key(rules$rule_fx, rules$rule_version)
+  unknown <- setdiff(rules$rule_key, names(qc_rule_registry))
+  if (length(unknown)) {
+    stop(
+      "gradeContinuous: no R implementation for rule version(s) ",
+      paste(unknown, collapse = ", ")
+    )
+  }
+  schemas <- lapply(rules$argument_schema, qc_rule_schema_decode)
+  args <- Map(qc_merge_rule_args, rules$argument_schema, rules$rule_args)
+  companion_overrides <- Map(
+    qc_rule_companion_overrides,
+    rules$companion_timeseries,
+    schemas,
+    args
+  )
+  active_companions <- Map(qc_rule_active_companions, schemas, args)
 
   meta <- DBI::dbGetQuery(con, "SELECT t.location_id, COALESCE(t.timezone_daily_calc, 0) AS utc_offset, EXTRACT(EPOCH FROM t.record_rate::interval) AS rate_s, (SELECT min(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1) AS first_dt, (SELECT max(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1) AS last_dt FROM continuous.timeseries t WHERE t.timeseries_id = $1", params = list(tsid))
   if (nrow(meta) == 0 || is.na(meta$first_dt)) return(invisible(NULL))
@@ -310,7 +466,9 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
   # count readings but the query selects by time.
   rate <- if (is.na(meta$rate_s) || meta$rate_s <= 0) 3600 else meta$rate_s
   ctx <- list(utc_offset = meta$utc_offset, rate_s = rate)
-  win <- lapply(seq_len(nrow(rules)), function(i) qc_rule_registry[[rules$rule_fx[i]]]$window(args[[i]]))
+  win <- lapply(seq_len(nrow(rules)), function(i) {
+    qc_rule_registry[[rules$rule_key[i]]]$window(args[[i]])
+  })
   back <- 2 * rate * max(vapply(win, function(w) w$back, numeric(1)))
   ahead <- 2 * rate * max(vapply(win, function(w) w$ahead, numeric(1)))
   from <- if (is.null(from)) meta$first_dt else as.POSIXct(from, tz = "UTC")
@@ -324,19 +482,44 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
 
   # Readings, corrected, plus companions joined on exact datetime.
   x <- qc_read_corrected(con, tsid, eval_start, to + ahead)
-  roles <- unique(unlist(strsplit(rules$roles[nzchar(rules$roles)], ",")))
-  comp <- qc_resolve_companions(con, meta$location_id, roles, args)
-  for (role in names(comp)) {
-    if (is.na(comp[[role]])) {
-      warning("gradeContinuous: timeseries ", tsid, " has no '", role, "' companion; rules needing it see NA")
-      x[[role]] <- NA_real_
-      next
-    }
-    cx <- qc_read_corrected(con, comp[[role]], eval_start, to + ahead)
-    x[[role]] <- cx$value[match(as.numeric(x$datetime), as.numeric(cx$datetime))]
-  }
+  companion_values <- list()
+  warned_missing_roles <- character()
+  codes <- vector("list", nrow(rules))
+  for (i in seq_len(nrow(rules))) {
+    rule <- qc_rule_registry[[rules$rule_key[i]]]
+    rule_x <- x
+    comp <- qc_resolve_companions(
+      con,
+      meta$location_id,
+      tsid,
+      active_companions[[i]],
+      companion_overrides[[i]]
+    )
+    for (role in names(comp)) {
+      companion_id <- comp[[role]]
+      if (is.na(companion_id)) {
+        if (!role %in% warned_missing_roles) {
+          warning(
+            "gradeContinuous: timeseries ", tsid, " has no '", role,
+            "' companion; rules needing it see NA"
+          )
+          warned_missing_roles <- c(warned_missing_roles, role)
+        }
+        rule_x[[role]] <- rep(NA_real_, nrow(x))
+        next
+      }
 
-  codes <- lapply(seq_len(nrow(rules)), function(i) qc_rule_registry[[rules$rule_fx[i]]]$fx(x, args[[i]], ctx))
+      cache_key <- as.character(companion_id)
+      if (is.null(companion_values[[cache_key]])) {
+        cx <- qc_read_corrected(con, companion_id, eval_start, to + ahead)
+        companion_values[[cache_key]] <- cx$value[
+          match(as.numeric(x$datetime), as.numeric(cx$datetime))
+        ]
+      }
+      rule_x[[role]] <- companion_values[[cache_key]]
+    }
+    codes[[i]] <- rule$fx(rule_x, args[[i]], ctx)
+  }
   x$code <- qc_combine_codes(codes)
   w <- x[x$datetime >= write_start & x$datetime <= to, c("datetime", "code")]
   if (nrow(w) == 0) return(invisible(NULL))
@@ -465,17 +648,34 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
     for (r in seq_len(nrow(upd))) DBI::dbExecute(con, "UPDATE continuous.qualifiers SET start_dt = $2, end_dt = $3 WHERE qualifier_id = $1", params = list(upd$qualifier_id[r], upd$start_dt[r], upd$end_dt[r]))
     if (nrow(ins)) dbAppendTableRLS(con, "continuous.qualifiers", data.frame(timeseries_id = tsid, qualifier_type_id = ins$qualifier_type_id, start_dt = ins$start_dt, end_dt = ins$end_dt, no_source_update = FALSE))
     if (active) {
-      # Fire the deferred overlap triggers now, while a failure can still be
-      # rolled back cleanly. Only when we own the transaction: inside an
-      # import, the import's own writes may rely on deferral.
+      # Fire deferred constraints now, while a failure can still be rolled
+      # back cleanly. Only when we own the transaction.
       DBI::dbExecute(con, "SET CONSTRAINTS ALL IMMEDIATE")
       DBI::dbExecute(con, "COMMIT;")
+    } else {
+      # Keep unrelated import constraints deferred, but surface QC range
+      # conflicts before grade_after_import releases its savepoint.
+      qc_validate_qualifier_overlaps(con)
     }
   }, error = function(e) {
     if (active) DBI::dbExecute(con, "ROLLBACK;")
     stop(e)
   })
   invisible(list(deleted = length(del), updated = nrow(upd), inserted = nrow(ins)))
+}
+
+# Validate the qualifier exclusion constraint without changing the mode of
+# unrelated deferred constraints in a caller-owned transaction.
+qc_validate_qualifier_overlaps <- function(con) {
+  DBI::dbExecute(
+    con,
+    "SET CONSTRAINTS continuous.qualifiers_no_overlap IMMEDIATE"
+  )
+  DBI::dbExecute(
+    con,
+    "SET CONSTRAINTS continuous.qualifiers_no_overlap DEFERRED"
+  )
+  invisible(TRUE)
 }
 
 #' Grade newly imported data inside an import's transaction
@@ -494,10 +694,35 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
 #' @noRd
 #' @keywords internal
 grade_after_import <- function(con, timeseries_id, from) {
+  qc_schema_available <- DBI::dbGetQuery(
+    con,
+    "SELECT to_regclass('public.qc_rule_capabilities') IS NOT NULL
+              AND to_regclass('continuous.timeseries_qc_rules') IS NOT NULL
+       AS available"
+  )$available[[1L]]
+  if (!isTRUE(qc_schema_available)) return(invisible(FALSE))
+
   DBI::dbExecute(con, "SAVEPOINT grade_after_import")
   ok <- tryCatch({
+    automatic <- populateTimeseriesQCRules(
+      con,
+      location_ids = DBI::dbGetQuery(
+        con,
+        "SELECT location_id FROM continuous.timeseries WHERE timeseries_id = $1",
+        params = list(as.integer(timeseries_id))
+      )$location_id[[1L]],
+      dry_run = FALSE
+    )
+    newly_configured <- if (nrow(automatic)) {
+      automatic$timeseries_id[automatic$action == "created"]
+    } else {
+      integer()
+    }
+    grade_ids <- unique(c(as.integer(timeseries_id), newly_configured))
     withCallingHandlers(
-      gradeContinuous(con, timeseries_id, from = from),
+      for (grade_id in grade_ids) {
+        gradeContinuous(con, grade_id, from = from)
+      },
       warning = function(w) {
         message(conditionMessage(w))
         invokeRestart("muffleWarning")
@@ -510,4 +735,13 @@ grade_after_import <- function(con, timeseries_id, from) {
   })
   DBI::dbExecute(con, "RELEASE SAVEPOINT grade_after_import")
   invisible(ok)
+}
+
+# Skip the hook when an adapter has no datetimes to write. In particular,
+# synchronize_continuous() promotes warnings inside its write transaction to
+# errors, so min(character(0)) must not be evaluated at the call site.
+grade_after_import_if_data <- function(con, timeseries_id, datetimes) {
+  datetimes <- datetimes[!is.na(datetimes)]
+  if (!length(datetimes)) return(invisible(FALSE))
+  grade_after_import(con, timeseries_id, from = min(datetimes))
 }

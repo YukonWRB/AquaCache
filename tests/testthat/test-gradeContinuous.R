@@ -126,9 +126,257 @@ test_that("snowmelt: trailing mean flags warm rain after a cold spell", {
   expect_true(all(is.na(out_gap)))
 })
 
+test_that("automatic QC policies use conservative, rate-aware settings", {
+  policy <- qc_auto_rule_policy()
+  rules <- stats::setNames(policy, vapply(policy, `[[`, character(1), "rule_fx"))
+
+  expect_equal(
+    rules$qc_rain_cold$arguments(data.frame(rate_s = 3600))$max_air_temp,
+    -0.3
+  )
+  expect_equal(
+    rules$qc_dir_calm$arguments(data.frame(rate_s = 3600))$max_wind_speed,
+    0
+  )
+  expect_equal(
+    rules$qc_snowmelt_tips$arguments(data.frame(rate_s = 3600))$cold_window,
+    720L
+  )
+  expect_equal(
+    rules$qc_snowmelt_tips$arguments(data.frame(rate_s = 86400))$cold_window,
+    30L
+  )
+  expect_null(rules$qc_snowmelt_tips$arguments(data.frame(rate_s = NA_real_)))
+  expect_false("qc_stuck_sensor" %in% names(rules))
+})
+
+test_that("QC rule versions declare compatible primary parameters", {
+  expect_identical(
+    qc_rule_primary_parameters("qc_rain_cold", 1L),
+    "precipitation, rain"
+  )
+  expect_identical(
+    qc_rule_primary_parameters("qc_dir_calm", 1L),
+    "wind direction (direction from, expressed 0-360 deg)"
+  )
+  expect_setequal(
+    qc_rule_primary_parameters("qc_snowmelt_tips", 1L),
+    c("precipitation, rain", "precipitation, total")
+  )
+  expect_length(qc_rule_primary_parameters("qc_stuck_sensor", 1L), 0L)
+})
+
 test_that("rule arguments merge catalogue defaults with assignment overrides", {
   skip_if_not_installed("jsonlite")
-  schema <- '{"schema_version":1,"arguments":[{"name":"width","type":"integer","default":5},{"name":"min_sd","type":"number","default":0.001}]}'
+  schema <- jsonlite::toJSON(
+    list(
+      schema_version = 2L,
+      arguments = list(
+        list(
+          name = "width",
+          source = "user",
+          label = "Window width",
+          help = "Number of readings in the rolling window.",
+          value_type = "integer",
+          control = "numeric",
+          required = TRUE,
+          default = 5L,
+          minimum = 2,
+          step = 1
+        ),
+        list(
+          name = "min_sd",
+          source = "user",
+          label = "Minimum SD",
+          help = "Standard deviation threshold.",
+          value_type = "numeric",
+          control = "numeric",
+          required = TRUE,
+          default = 0.001,
+          minimum = 0,
+          step = 0.001
+        )
+      ),
+      companions = list()
+    ),
+    auto_unbox = TRUE,
+    null = "null"
+  )
   expect_equal(qc_merge_rule_args(schema, NA), list(width = 5L, min_sd = 0.001))
   expect_equal(qc_merge_rule_args(schema, '{"min_sd":0.1}'), list(width = 5L, min_sd = 0.1))
+  expect_error(
+    qc_merge_rule_args(schema, '{"unknown":1}'),
+    "Unknown QC argument"
+  )
+  expect_error(
+    qc_merge_rule_args(schema, '{"width":1.5}'),
+    "invalid value"
+  )
+})
+
+
+test_that("companion roles are schema-declared and conditional", {
+  schema <- list(
+    schema_version = 2L,
+    arguments = list(list(
+      name = "zero_split",
+      source = "user",
+      label = "Split zero readings",
+      help = "Use air temperature for stuck zero readings.",
+      value_type = "logical",
+      control = "checkbox",
+      required = TRUE,
+      default = FALSE
+    )),
+    companions = list(list(
+      role = "air_temp",
+      label = "Air temperature",
+      parameter_name = "temperature, air",
+      selection_strategy = "same_location_lowest_sensor_priority",
+      allow_explicit_override = TRUE,
+      missing_behavior = "warn_and_use_na",
+      help = "Used when zero-splitting is enabled.",
+      when = list(argument = "zero_split", equals = TRUE)
+    ))
+  )
+  validateQCRuleArgumentSchema(schema)
+  expect_length(qc_rule_active_companions(schema, list(zero_split = FALSE)), 0L)
+  expect_identical(
+    vapply(
+      qc_rule_active_companions(schema, list(zero_split = TRUE)),
+      `[[`,
+      character(1),
+      "role"
+    ),
+    "air_temp"
+  )
+  expect_equal(
+    qc_rule_companion_overrides(
+      '{"air_temp":101}',
+      schema,
+      list(zero_split = TRUE)
+    ),
+    list(air_temp = 101L)
+  )
+  expect_error(
+    qc_rule_companion_overrides(
+      '{"air_temp":101}',
+      schema,
+      list(zero_split = FALSE)
+    ),
+    "Unknown or inactive"
+  )
+  expect_error(
+    qc_rule_companion_overrides(
+      '{"air_temp":1.5}',
+      schema,
+      list(zero_split = TRUE)
+    ),
+    "one positive integer"
+  )
+})
+
+test_that("rule dependencies and rolling-window arguments are validated", {
+  stuck <- qc_rule_registry[["qc_stuck_sensor@1"]]
+  expect_error(stuck$window(list(width = 1)), "integer greater than or equal to 2")
+  expect_error(
+    qc_validate_integer_arg(list(width = 2147483648), "width", 2L),
+    "integer greater than or equal to 2"
+  )
+
+  snowmelt <- qc_rule_registry[["qc_snowmelt_tips@1"]]
+  expect_error(
+    snowmelt$window(list(cold_window = 0, first_warm_days = 0, cold_align = "trailing")),
+    "cold_window"
+  )
+  expect_error(
+    snowmelt$window(list(cold_window = 1, first_warm_days = -1, cold_align = "trailing")),
+    "first_warm_days"
+  )
+  expect_error(
+    snowmelt$window(list(cold_window = 1, first_warm_days = 0, cold_align = "centered")),
+    "cold_align"
+  )
+})
+
+test_that("empty import datetime vectors skip the grading hook", {
+  expect_identical(
+    grade_after_import_if_data(NULL, 1L, as.POSIXct(character(), tz = "UTC")),
+    FALSE
+  )
+  expect_identical(grade_after_import_if_data(NULL, 1L, NULL), FALSE)
+  expect_identical(
+    grade_after_import_if_data(
+      NULL, 1L, as.POSIXct(NA_real_, origin = "1970-01-01", tz = "UTC")
+    ),
+    FALSE
+  )
+})
+
+test_that("qualifier exclusion validation is scoped to the QC constraint", {
+  skip_if(Sys.getenv("AQUACACHE_INTEGRATION_DATABASE") != "testdb", "testdb integration opt-in required")
+  skip_if_not_installed("RPostgres")
+  con <- DBI::dbConnect(
+    RPostgres::Postgres(),
+    dbname = "testdb",
+    host = "10.250.12.154",
+    port = Sys.getenv("aquacachePort", "5432"),
+    user = Sys.getenv("aquacacheAdminUser"),
+    password = Sys.getenv("aquacacheAdminPass")
+  )
+  on.exit(DBI::dbDisconnect(con))
+  identity <- DBI::dbGetQuery(
+    con,
+    "SELECT current_database() AS db,
+            inet_server_addr()::text AS host"
+  )
+  expect_identical(identity$db, "testdb")
+  expect_identical(identity$host, "10.250.12.154/32")
+  constraint <- DBI::dbGetQuery(
+    con,
+    "SELECT condeferrable, condeferred
+     FROM pg_constraint
+     WHERE conrelid = 'continuous.qualifiers'::regclass
+       AND conname = 'qualifiers_no_overlap'"
+  )
+  skip_if(nrow(constraint) != 1L, "qualifier exclusion constraint is unavailable")
+  expect_true(constraint$condeferrable)
+  expect_true(constraint$condeferred)
+
+  tsid <- DBI::dbGetQuery(
+    con,
+    "SELECT timeseries_id
+     FROM continuous.timeseries
+     ORDER BY timeseries_id
+     LIMIT 1"
+  )$timeseries_id
+  qualifier_type_id <- DBI::dbGetQuery(
+    con,
+    "SELECT qualifier_type_id
+     FROM public.qualifier_types
+     WHERE qualifier_type_code = 'UNS'"
+  )$qualifier_type_id
+  skip_if(!length(tsid) || !length(qualifier_type_id), "testdb lacks qualifier fixtures")
+
+  DBI::dbExecute(con, "BEGIN")
+  on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
+  DBI::dbExecute(
+    con,
+    "INSERT INTO continuous.qualifiers
+       (timeseries_id, qualifier_type_id, start_dt, end_dt, no_source_update)
+     VALUES ($1, $2, '2999-01-01 00:00:00+00', '2999-01-01 01:00:00+00', FALSE)",
+    params = list(tsid, qualifier_type_id)
+  )
+  DBI::dbExecute(con, "SAVEPOINT qc_overlap_probe")
+  DBI::dbExecute(
+    con,
+    "INSERT INTO continuous.qualifiers
+       (timeseries_id, qualifier_type_id, start_dt, end_dt, no_source_update)
+     VALUES ($1, $2, '2999-01-01 00:30:00+00', '2999-01-01 01:30:00+00', FALSE)",
+    params = list(tsid, qualifier_type_id)
+  )
+  expect_error(qc_validate_qualifier_overlaps(con), "qualifiers_no_overlap")
+  DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT qc_overlap_probe")
+  DBI::dbExecute(con, "RELEASE SAVEPOINT qc_overlap_probe")
+  expect_true(qc_validate_qualifier_overlaps(con))
 })

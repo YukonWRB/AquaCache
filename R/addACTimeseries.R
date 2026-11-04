@@ -507,6 +507,7 @@ addACTimeseries <- function(
   }
 
   #Add the timeseries #######################################################################################################
+  qc_locations_to_populate <- integer()
 
   for (i in 1:length(location)) {
     loc_id <- location[i]
@@ -888,6 +889,10 @@ addACTimeseries <- function(
             new_tsid
           )
         }
+        qc_locations_to_populate <- unique(c(
+          qc_locations_to_populate,
+          as.integer(loc_id)
+        ))
       },
       error = function(e) {
         warning(
@@ -901,4 +906,19 @@ addACTimeseries <- function(
       }
     )
   } #End of loop iterating over each new  timeseries entry
+
+  if (length(qc_locations_to_populate)) {
+    tryCatch(
+      populateTimeseriesQCRules(
+        con,
+        location_ids = qc_locations_to_populate,
+        dry_run = FALSE
+      ),
+      error = function(e) warning(
+        "Failed to add automatic QC assignments: ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    )
+  }
 }

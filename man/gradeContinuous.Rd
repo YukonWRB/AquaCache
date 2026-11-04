@@ -11,11 +11,13 @@ gradeContinuous(
   to = NULL,
   baseline = "UNS",
   replace = "UNK",
-  write = TRUE
+  write = TRUE,
+  assignments = NULL
 )
 }
 \arguments{
-\item{con}{A connection with write access to \code{continuous.qualifiers}.}
+\item{con}{An open AquaCache connection. Write access is needed only when
+\code{write = TRUE}.}
 
 \item{timeseries_id}{One timeseries_id.}
 
@@ -30,6 +32,10 @@ supplies no qualifier, so new readings arrive as UNK and leave as
 \code{baseline} or a rule's code.}
 
 \item{write}{FALSE returns what would be written, without writing.}
+
+\item{assignments}{Optional desired QC assignments for a read-only preview.
+When supplied, these values are validated and graded without saving them.
+This is allowed only with \code{write = FALSE}.}
 }
 \value{
 Invisibly. With \code{write = FALSE}, a list: \code{ranges} (what would be
