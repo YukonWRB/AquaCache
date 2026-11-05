@@ -633,7 +633,22 @@ synchronize_continuous <- function(
           }
         )
       } else {
-        execute_write_fx()
+        # Keep the caller's transaction open while ensuring that a failed
+        # timeseries update cannot leave attributes or measurements partially
+        # written if the caller later commits its transaction.
+        savepoint <- "synchronize_continuous_update"
+        DBI::dbExecute(con, paste("SAVEPOINT", savepoint))
+        tryCatch(
+          {
+            execute_write_fx()
+            DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
+          },
+          error = function(e) {
+            DBI::dbExecute(con, paste("ROLLBACK TO SAVEPOINT", savepoint))
+            DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
+            stop(e)
+          }
+        )
       }
     }
 
@@ -852,6 +867,9 @@ synchronize_continuous <- function(
           )
         )
         finalize_transmission_runs(0L)
+        # apply_remote_attributes() replaced unprotected qualifiers over the
+        # remote span, graded ones included: re-apply the QC rules.
+        utils::getFromNamespace("grade_after_import_if_data", "AquaCache")(con, tsid, attribute_remote$datetime)
       })
       return()
     }
@@ -1097,6 +1115,8 @@ synchronize_continuous <- function(
           inDB
         )
         finalize_transmission_runs(measurements_inserted)
+        # Re-apply the QC rules from the start of the rewritten span.
+        utils::getFromNamespace("grade_after_import", "AquaCache")(con, tsid, from = cutoff)
       })
     } else {
       # mismatch is FALSE: there was data in the remote but no mismatch. Do basic checks and update the last_synchronize date.
@@ -1114,6 +1134,9 @@ synchronize_continuous <- function(
           )
         )
         finalize_transmission_runs(0L)
+        # Qualifiers were rewritten from the remote (UNK where it has none),
+        # even with no value mismatch: re-apply the QC rules.
+        utils::getFromNamespace("grade_after_import_if_data", "AquaCache")(con, tsid, attribute_remote$datetime)
 
         # Bounds are maintained by database triggers.
       })

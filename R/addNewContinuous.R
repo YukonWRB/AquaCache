@@ -389,6 +389,10 @@ addNewContinuous <- function(
     tryCatch(
       {
         commit_fx(con, df, last_data_point, tsid)
+        utils::getFromNamespace(
+          "grade_after_import_if_data",
+          "AquaCache"
+        )(con, tsid, df$datetime)
         DBI::dbExecute(con, "COMMIT;")
       },
       error = function(e) {
@@ -402,6 +406,10 @@ addNewContinuous <- function(
     )
   } else {
     commit_fx(con, df, last_data_point, tsid)
+    utils::getFromNamespace(
+      "grade_after_import_if_data",
+      "AquaCache"
+    )(con, tsid, df$datetime)
   }
   message(
     "addNewContinuous: Successfully added new data to timeseries_id ",

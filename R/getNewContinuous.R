@@ -811,7 +811,23 @@ getNewContinuous <- function(
           }
         )
       } else {
-        write_fx()
+        # Preserve the caller's transaction, but make this series update
+        # atomic. A worker error is caught outside this function, so without a
+        # savepoint any earlier attribute writes could otherwise be committed
+        # even though the measurement append failed.
+        savepoint <- "get_new_continuous_update"
+        DBI::dbExecute(con, paste("SAVEPOINT", savepoint))
+        tryCatch(
+          {
+            write_fx()
+            DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
+          },
+          error = function(e) {
+            DBI::dbExecute(con, paste("ROLLBACK TO SAVEPOINT", savepoint))
+            DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
+            stop(e)
+          }
+        )
       }
     }
 
@@ -858,7 +874,11 @@ getNewContinuous <- function(
       if ("period" %in% names(ts)) {
         measurement_columns <- c(measurement_columns, "period")
       }
-      ts <- ts[, measurement_columns, drop = FALSE]
+      ts <- if (data.table::is.data.table(ts)) {
+        ts[, ..measurement_columns]
+      } else {
+        ts[, measurement_columns, drop = FALSE]
+      }
       if (!("period" %in% names(ts))) {
         ts$period <- NA_character_
       }
@@ -926,6 +946,12 @@ getNewContinuous <- function(
     run_db_updates(function() {
       commit_fx(con, ts, tsid)
       finalize_transmission_runs(rows_added)
+      # Apply the series' QC rules (if any) to the new rows. A grading failure
+      # leaves them as imported (UNK or the adapter's qualifier) without
+      # losing the import.
+      # Resolved from the namespace like the transmission helpers, so it
+      # also works on parallel workers and in sourced deployment scripts.
+      utils::getFromNamespace("grade_after_import_if_data", "AquaCache")(con, tsid, ts$datetime)
     })
 
     build_status_row(
