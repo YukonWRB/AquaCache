@@ -2,7 +2,7 @@
 % Please edit documentation in R/qc_rule_assignments.R
 \name{getQCRuleCompanionCandidates}
 \alias{getQCRuleCompanionCandidates}
-\title{List compatible timeseries for an automatic QC companion role}
+\title{List compatible companion timeseries for an automatic QC rule}
 \usage{
 getQCRuleCompanionCandidates(
   con,
@@ -14,16 +14,23 @@ getQCRuleCompanionCandidates(
 \arguments{
 \item{con}{An open AquaCache database connection.}
 
-\item{location_id}{Location whose timeseries may be selected.}
+\item{location_id}{Location whose series can be companions.}
 
-\item{parameter_name}{Exact parameter name declared by the rule schema.}
+\item{parameter_name}{Exact parameter name from the rule schema.}
 
-\item{exclude_timeseries_id}{Optional target timeseries to exclude.}
+\item{exclude_timeseries_id}{Optional target \code{timeseries_id} to exclude.}
 }
 \value{
-A data.frame of active, compatible timeseries ordered by sensor priority.
+A data frame with \code{timeseries_id}, \code{param_name},
+\code{sensor_priority}, \code{record_rate}, and \code{timeseries_type} columns. Rows are
+ordered by sensor priority (missing priorities last), then by timeseries
+id.
 }
 \description{
-Finds active timeseries at the selected location with the exact parameter
-required by a QC companion role.
+Finds active timeseries at the requested location with the exact parameter
+name required by a companion role. The target series can be excluded so it
+cannot be selected as its own companion.
+}
+\seealso{
+\code{\link[=getQCRuleCapabilities]{getQCRuleCapabilities()}}, \code{\link[=setTimeseriesQCRules]{setTimeseriesQCRules()}}
 }

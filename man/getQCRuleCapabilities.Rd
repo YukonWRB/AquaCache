@@ -9,15 +9,24 @@ getQCRuleCapabilities(con, enabled_only = TRUE)
 \arguments{
 \item{con}{An open AquaCache database connection.}
 
-\item{enabled_only}{Whether to omit disabled rule versions.}
+\item{enabled_only}{If \code{TRUE} (the default), return only enabled rule
+versions. Set to \code{FALSE} to include disabled versions, for example when
+displaying an existing assignment pinned to an older version.}
 }
 \value{
-A data.frame with one row per rule version and parsed
-\code{argument_schema} and \code{primary_parameters} list-columns. Empty
-primary-parameter values indicate rules that accept any parameter.
+A data frame with one row per selected rule version. It includes
+catalogue fields (\code{rule_fx}, \code{rule_version}, \code{description}, \code{emits},
+\code{enabled}, and \code{note}) and two list columns: \code{argument_schema} contains
+each parsed schema, and \code{primary_parameters} contains the character
+vector of compatible primary parameter names. An empty parameter vector
+means the rule accepts any primary parameter.
 }
 \description{
-Returns versioned QC rule definitions and the schema used by clients to render
-argument and companion-timeseries controls. Every returned definition must
-have a corresponding R implementation in AquaCache.
+Reads the versioned rule catalogue used by automatic grading and by the
+AquaLink assignment editor. The argument schema describes rule arguments,
+their control metadata, and companion-series roles. A selected catalogue
+version must also have a matching implementation registered in AquaCache.
+}
+\seealso{
+\code{\link[=getTimeseriesQCRules]{getTimeseriesQCRules()}}, \code{\link[=setTimeseriesQCRules]{setTimeseriesQCRules()}}
 }

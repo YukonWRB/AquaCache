@@ -27,8 +27,14 @@ qc_severity <- c("ERROR", "SSM", "PSM", "CT", "SUS")
 
 qc_shift <- function(x, s) {
   n <- length(x)
-  if (abs(s) >= n) return(rep(NA_real_, n))
-  if (s >= 0) c(x[(s + 1):n], rep(NA_real_, s)) else c(rep(NA_real_, -s), x[1:(n + s)])
+  if (abs(s) >= n) {
+    return(rep(NA_real_, n))
+  }
+  if (s >= 0) {
+    c(x[(s + 1):n], rep(NA_real_, s))
+  } else {
+    c(rep(NA_real_, -s), x[1:(n + s)])
+  }
 }
 
 qc_window_matrix <- function(x, k) {
@@ -85,7 +91,10 @@ qc_window_span_ok <- function(datetime, k, align = "center", rate_s) {
 # a qualifier code, or NA for no flag.
 
 qc_rain_cold <- function(x, a, ctx) {
-  hit <- !is.na(x$value) & x$value > 0 & !is.na(x$air_temp) & x$air_temp < a$max_air_temp
+  hit <- !is.na(x$value) &
+    x$value > 0 &
+    !is.na(x$air_temp) &
+    x$air_temp < a$max_air_temp
   ifelse(hit, a$qualifier, NA_character_)
 }
 
@@ -95,7 +104,9 @@ qc_rain_cold <- function(x, a, ctx) {
 # -> ERROR.
 qc_stuck_sensor <- function(x, a, ctx) {
   s <- qc_roll_sd(x$value, a$width)
-  stuck <- !is.na(s) & s < a$min_sd & qc_window_span_ok(x$datetime, a$width, "center", ctx$rate_s)
+  stuck <- !is.na(s) &
+    s < a$min_sd &
+    qc_window_span_ok(x$datetime, a$width, "center", ctx$rate_s)
   out <- ifelse(stuck, a$qualifier, NA_character_)
   if (isTRUE(a$zero_split)) {
     tair <- if ("air_temp" %in% names(x)) x$air_temp else NA_real_
@@ -108,7 +119,9 @@ qc_stuck_sensor <- function(x, a, ctx) {
 }
 
 qc_dir_calm <- function(x, a, ctx) {
-  hit <- !is.na(x$value) & !is.na(x$wind_speed) & x$wind_speed <= a$max_wind_speed
+  hit <- !is.na(x$value) &
+    !is.na(x$wind_speed) &
+    x$wind_speed <= a$max_wind_speed
   ifelse(hit, a$qualifier, NA_character_)
 }
 
@@ -144,7 +157,9 @@ qc_snowmelt_tips <- function(x, a, ctx) {
   } else {
     qc_roll_mean(x$air_temp, a$cold_window, align = "right")
   }
-  cold_mean[!qc_window_span_ok(x$datetime, a$cold_window, align, ctx$rate_s)] <- NA
+  cold_mean[
+    !qc_window_span_ok(x$datetime, a$cold_window, align, ctx$rate_s)
+  ] <- NA
   thaw <- rain & warm & !is.na(cold_mean) & cold_mean < 0
   ifelse(early | thaw, a$qualifier, NA_character_)
 }
@@ -163,13 +178,27 @@ qc_validate_integer_arg <- function(args, name, min_value) {
       value != floor(value)
   ) {
     stop(
-      "gradeContinuous: argument '", name,
-      "' must be an integer greater than or equal to ", min_value
+      "gradeContinuous: argument '",
+      name,
+      "' must be an integer greater than or equal to ",
+      min_value
     )
   }
   as.integer(value)
 }
 
+#' Registry of implemented continuous QC rule versions
+#'
+#' Each catalogue key has the form `rule_fx@rule_version` and must match a
+#' versioned row in `public.qc_rule_capabilities`. Its `fx` implementation
+#' accepts the grading data, merged arguments, and time context, and returns
+#' one qualifier code or `NA` per reading. Its `window` function describes
+#' required context as counts of preceding and following readings plus whether
+#' context must extend to the calendar-year start. `primary_parameters` lists
+#' compatible parameter names; an omitted or empty value accepts any
+#' parameter. Additions must keep the database schema, registry entry, and
+#' implementation version aligned.
+#' @keywords internal
 qc_rule_registry <- list(
   "qc_rain_cold@1" = list(
     fx = qc_rain_cold,
@@ -190,8 +219,7 @@ qc_rule_registry <- list(
   "qc_dir_calm@1" = list(
     fx = qc_dir_calm,
     window = function(a) list(back = 0, ahead = 0, year_start = FALSE),
-    primary_parameters =
-      "wind direction (direction from, expressed 0-360 deg)"
+    primary_parameters = "wind direction (direction from, expressed 0-360 deg)"
   ),
   "qc_snowmelt_tips@1" = list(
     fx = qc_snowmelt_tips,
@@ -232,13 +260,24 @@ qc_rule_primary_parameters <- function(rule_fx, rule_version) {
 
 # --- Plumbing ----------------------------------------------------------------
 
-qc_pg_int_array <- function(x) paste0("{", paste(as.integer(x), collapse = ","), "}")
-qc_pg_text_array <- function(x) paste0("{", paste0('"', gsub('(["\\\\])', "\\\\\\1", x), '"', collapse = ","), "}")
+qc_pg_int_array <- function(x) {
+  paste0("{", paste(as.integer(x), collapse = ","), "}")
+}
+qc_pg_text_array <- function(x) {
+  paste0(
+    "{",
+    paste0('"', gsub('(["\\\\])', "\\\\\\1", x), '"', collapse = ","),
+    "}"
+  )
+}
 
 # TRUE for each datetime inside any [start_dt, end_dt] row of `ranges`.
 qc_covered <- function(datetime, ranges) {
   held <- rep(FALSE, length(datetime))
-  for (i in seq_len(nrow(ranges))) held <- held | (datetime >= ranges$start_dt[i] & datetime <= ranges$end_dt[i])
+  for (i in seq_len(nrow(ranges))) {
+    held <- held |
+      (datetime >= ranges$start_dt[i] & datetime <= ranges$end_dt[i])
+  }
   held
 }
 
@@ -272,13 +311,19 @@ qc_resolve_companions <- function(
     )
     if (length(explicit)) {
       if (!isTRUE(descriptor$allow_explicit_override)) {
-        stop("gradeContinuous: companion role '", role, "' does not allow overrides")
+        stop(
+          "gradeContinuous: companion role '",
+          role,
+          "' does not allow overrides"
+        )
       }
       if (!explicit %in% candidates$timeseries_id) {
         stop(
-          "gradeContinuous: configured companion '", role,
+          "gradeContinuous: configured companion '",
+          role,
           "' is no longer an active same-location series for '",
-          descriptor$parameter_name, "'. Update the QC assignment."
+          descriptor$parameter_name,
+          "'. Update the QC assignment."
         )
       }
       out[[role]] <- as.integer(explicit)
@@ -297,13 +342,23 @@ qc_resolve_companions <- function(
 # ends inclusive), not the old view. Trimmed readings come back with
 # value_corrected NULL.
 qc_read_corrected <- function(con, tsid, from, to) {
-  DBI::dbGetQuery(con, "SELECT datetime, value_corrected::double precision AS value FROM continuous.measurements_continuous_corrected($1::integer, $2::timestamptz, $3::timestamptz) ORDER BY datetime", params = list(tsid, from, to))
+  DBI::dbGetQuery(
+    con,
+    "SELECT datetime, value_corrected::double precision AS value FROM continuous.measurements_continuous_corrected($1::integer, $2::timestamptz, $3::timestamptz) ORDER BY datetime",
+    params = list(tsid, from, to)
+  )
 }
 
 # Fold rule outputs into one code per reading by qc_severity; codes not in
 # qc_severity (custom qualifier arguments) rank last.
 qc_combine_codes <- function(codes) {
-  rank_of <- function(v) ifelse(is.na(v), NA_integer_, match(v, qc_severity, nomatch = length(qc_severity) + 1L))
+  rank_of <- function(v) {
+    ifelse(
+      is.na(v),
+      NA_integer_,
+      match(v, qc_severity, nomatch = length(qc_severity) + 1L)
+    )
+  }
   out <- codes[[1]]
   for (v in codes[-1]) {
     take <- !is.na(v) & (is.na(out) | rank_of(v) < rank_of(out))
@@ -318,7 +373,13 @@ qc_runs_to_ranges <- function(datetime, code) {
   r <- rle(code)
   end <- cumsum(r$lengths)
   start <- end - r$lengths + 1L
-  data.frame(code = r$values, start_dt = datetime[start], end_dt = datetime[end], n = r$lengths, stringsAsFactors = FALSE)
+  data.frame(
+    code = r$values,
+    start_dt = datetime[start],
+    end_dt = datetime[end],
+    n = r$lengths,
+    stringsAsFactors = FALSE
+  )
 }
 
 # --- Main --------------------------------------------------------------------
@@ -386,7 +447,16 @@ qc_runs_to_ranges <- function(datetime, code) {
 #'   code. NULL if the series has no active rules or nothing to write.
 #' @seealso [adjust_qualifier()]
 #' @export
-gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline = "UNS", replace = "UNK", write = TRUE, assignments = NULL) {
+gradeContinuous <- function(
+  con,
+  timeseries_id,
+  from = NULL,
+  to = NULL,
+  baseline = "UNS",
+  replace = "UNK",
+  write = TRUE,
+  assignments = NULL
+) {
   tsid <- as.integer(timeseries_id)
   stopifnot(length(tsid) == 1, !is.na(tsid))
   full_regrade <- is.null(from)
@@ -434,10 +504,16 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
       rules$emits <- rule_capabilities$emits[capability_index]
       rules$argument_schema <-
         rule_capabilities$argument_schema[capability_index]
-      rules <- rules[order(rules$run_order, seq_len(nrow(rules))), , drop = FALSE]
+      rules <- rules[
+        order(rules$run_order, seq_len(nrow(rules))),
+        ,
+        drop = FALSE
+      ]
     }
   }
-  if (nrow(rules) == 0) return(invisible(NULL))
+  if (nrow(rules) == 0) {
+    return(invisible(NULL))
+  }
   rules$rule_key <- qc_rule_capability_key(rules$rule_fx, rules$rule_version)
   unknown <- setdiff(rules$rule_key, names(qc_rule_registry))
   if (length(unknown)) {
@@ -456,8 +532,14 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
   )
   active_companions <- Map(qc_rule_active_companions, schemas, args)
 
-  meta <- DBI::dbGetQuery(con, "SELECT t.location_id, COALESCE(t.timezone_daily_calc, 0) AS utc_offset, EXTRACT(EPOCH FROM t.record_rate::interval) AS rate_s, (SELECT min(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1) AS first_dt, (SELECT max(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1) AS last_dt FROM continuous.timeseries t WHERE t.timeseries_id = $1", params = list(tsid))
-  if (nrow(meta) == 0 || is.na(meta$first_dt)) return(invisible(NULL))
+  meta <- DBI::dbGetQuery(
+    con,
+    "SELECT t.location_id, COALESCE(t.timezone_daily_calc, 0) AS utc_offset, EXTRACT(EPOCH FROM t.record_rate::interval) AS rate_s, (SELECT min(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1) AS first_dt, (SELECT max(datetime) FROM continuous.measurements_continuous WHERE timeseries_id = $1) AS last_dt FROM continuous.timeseries t WHERE t.timeseries_id = $1",
+    params = list(tsid)
+  )
+  if (nrow(meta) == 0 || is.na(meta$first_dt)) {
+    return(invisible(NULL))
+  }
 
   # Windows. Rows in [from - ahead, from) were graded last time without the
   # readings that follow them, so they are graded again; rows at the very
@@ -477,7 +559,11 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
   eval_start <- write_start - back
   if (any(vapply(win, function(w) w$year_start, logical(1)))) {
     local_year <- format(write_start + ctx$utc_offset * 3600, "%Y", tz = "UTC")
-    eval_start <- min(eval_start, as.POSIXct(paste0(local_year, "-01-01"), tz = "UTC") - ctx$utc_offset * 3600)
+    eval_start <- min(
+      eval_start,
+      as.POSIXct(paste0(local_year, "-01-01"), tz = "UTC") -
+        ctx$utc_offset * 3600
+    )
   }
 
   # Readings, corrected, plus companions joined on exact datetime.
@@ -500,7 +586,10 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
       if (is.na(companion_id)) {
         if (!role %in% warned_missing_roles) {
           warning(
-            "gradeContinuous: timeseries ", tsid, " has no '", role,
+            "gradeContinuous: timeseries ",
+            tsid,
+            " has no '",
+            role,
             "' companion; rules needing it see NA"
           )
           warned_missing_roles <- c(warned_missing_roles, role)
@@ -522,22 +611,58 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
   }
   x$code <- qc_combine_codes(codes)
   w <- x[x$datetime >= write_start & x$datetime <= to, c("datetime", "code")]
-  if (nrow(w) == 0) return(invisible(NULL))
+  if (nrow(w) == 0) {
+    return(invisible(NULL))
+  }
   w$code[is.na(w$code)] <- baseline
 
-  emitted <- unique(c(unlist(strsplit(rules$emits, ",")), unlist(lapply(args, function(a) c(a$qualifier, a$zero_qualifier)))))
+  emitted <- unique(c(
+    unlist(strsplit(rules$emits, ",")),
+    unlist(lapply(args, function(a) c(a$qualifier, a$zero_qualifier)))
+  ))
   managed <- unique(c(baseline, replace, emitted))
-  if (write && full_regrade) warning("gradeContinuous: timeseries ", tsid, ": the WHOLE record is being regraded; unprotected ", paste(managed, collapse = "/"), " flags that no rule reproduces (e.g. manual ones) will become ", baseline)
+  if (write && full_regrade) {
+    warning(
+      "gradeContinuous: timeseries ",
+      tsid,
+      ": the WHOLE record is being regraded; unprotected ",
+      paste(managed, collapse = "/"),
+      " flags that no rule reproduces (e.g. manual ones) will become ",
+      baseline
+    )
+  }
 
   # Protected readings keep their code (see details). Masking them to NA
   # before building ranges also breaks runs there, so no new range spans one.
-  prot <- DBI::dbGetQuery(con, "SELECT q.start_dt, q.end_dt FROM continuous.qualifiers q JOIN public.qualifier_types t ON t.qualifier_type_id = q.qualifier_type_id WHERE q.timeseries_id = $1 AND q.no_source_update AND t.qualifier_type_code = ANY($2::text[]) AND q.start_dt <= $4 AND q.end_dt >= $3", params = list(tsid, qc_pg_text_array(managed), min(w$datetime), max(w$datetime)))
+  prot <- DBI::dbGetQuery(
+    con,
+    "SELECT q.start_dt, q.end_dt FROM continuous.qualifiers q JOIN public.qualifier_types t ON t.qualifier_type_id = q.qualifier_type_id WHERE q.timeseries_id = $1 AND q.no_source_update AND t.qualifier_type_code = ANY($2::text[]) AND q.start_dt <= $4 AND q.end_dt >= $3",
+    params = list(
+      tsid,
+      qc_pg_text_array(managed),
+      min(w$datetime),
+      max(w$datetime)
+    )
+  )
   held <- qc_covered(w$datetime, prot)
   ranges <- qc_runs_to_ranges(w$datetime, ifelse(held, NA_character_, w$code))
   ranges <- ranges[!is.na(ranges$code), ]
 
-  if (!write) return(invisible(list(ranges = ranges, readings = w, window = c(eval_start = eval_start, write_start = write_start, write_end = to), protected = sum(held))))
-  if (nrow(ranges) == 0) return(invisible(NULL))   # every reading is protected
+  if (!write) {
+    return(invisible(list(
+      ranges = ranges,
+      readings = w,
+      window = c(
+        eval_start = eval_start,
+        write_start = write_start,
+        write_end = to
+      ),
+      protected = sum(held)
+    )))
+  }
+  if (nrow(ranges) == 0) {
+    return(invisible(NULL))
+  } # every reading is protected
 
   qc_write_ranges(con, tsid, ranges, managed = managed)
 
@@ -570,29 +695,77 @@ gradeContinuous <- function(con, timeseries_id, from = NULL, to = NULL, baseline
 # Codes the grader does not manage (e.g. a manual GW or a source qualifier)
 # are left alone; the overlap trigger only checks within a type.
 qc_write_ranges <- function(con, tsid, ranges, managed) {
-  types <- DBI::dbGetQuery(con, "SELECT qualifier_type_id, qualifier_type_code FROM public.qualifier_types")
+  types <- DBI::dbGetQuery(
+    con,
+    "SELECT qualifier_type_id, qualifier_type_code FROM public.qualifier_types"
+  )
   missing_types <- setdiff(managed, types$qualifier_type_code)
-  if (length(missing_types)) stop("gradeContinuous: qualifier type(s) not in public.qualifier_types: ", paste(missing_types, collapse = ", "))
-  ranges$qualifier_type_id <- types$qualifier_type_id[match(ranges$code, types$qualifier_type_code)]
+  if (length(missing_types)) {
+    stop(
+      "gradeContinuous: qualifier type(s) not in public.qualifier_types: ",
+      paste(missing_types, collapse = ", ")
+    )
+  }
+  ranges$qualifier_type_id <- types$qualifier_type_id[match(
+    ranges$code,
+    types$qualifier_type_code
+  )]
   managed_ids <- types$qualifier_type_id[types$qualifier_type_code %in% managed]
 
   ws <- min(ranges$start_dt)
   we <- max(ranges$end_dt)
-  prev_dt <- DBI::dbGetQuery(con, "SELECT max(datetime) AS d FROM continuous.measurements_continuous WHERE timeseries_id = $1 AND datetime < $2", params = list(tsid, ws))$d
-  next_dt <- DBI::dbGetQuery(con, "SELECT min(datetime) AS d FROM continuous.measurements_continuous WHERE timeseries_id = $1 AND datetime > $2", params = list(tsid, we))$d
+  prev_dt <- DBI::dbGetQuery(
+    con,
+    "SELECT max(datetime) AS d FROM continuous.measurements_continuous WHERE timeseries_id = $1 AND datetime < $2",
+    params = list(tsid, ws)
+  )$d
+  next_dt <- DBI::dbGetQuery(
+    con,
+    "SELECT min(datetime) AS d FROM continuous.measurements_continuous WHERE timeseries_id = $1 AND datetime > $2",
+    params = list(tsid, we)
+  )$d
   lo <- if (is.na(prev_dt)) ws else prev_dt
   hi <- if (is.na(next_dt)) we else next_dt
 
   # Overlapping [lo, hi] also catches ranges that merely touch the window
   # (ending at prev_dt / starting at next_dt): those are merge candidates.
-  existing <- DBI::dbGetQuery(con, "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt, no_source_update FROM continuous.qualifiers WHERE timeseries_id = $1 AND qualifier_type_id = ANY($2::int[]) AND start_dt <= $4 AND end_dt >= $3", params = list(tsid, qc_pg_int_array(managed_ids), lo, hi))
+  existing <- DBI::dbGetQuery(
+    con,
+    "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt, no_source_update FROM continuous.qualifiers WHERE timeseries_id = $1 AND qualifier_type_id = ANY($2::int[]) AND start_dt <= $4 AND end_dt >= $3",
+    params = list(tsid, qc_pg_int_array(managed_ids), lo, hi)
+  )
   prot <- existing[existing$no_source_update %in% TRUE, ]
   edit <- existing[!existing$no_source_update %in% TRUE, ]
 
-  new <- data.frame(qualifier_id = NA_integer_, qualifier_type_id = ranges$qualifier_type_id, start_dt = ranges$start_dt, end_dt = ranges$end_dt, role = "new", stringsAsFactors = FALSE)
+  new <- data.frame(
+    qualifier_id = NA_integer_,
+    qualifier_type_id = ranges$qualifier_type_id,
+    start_dt = ranges$start_dt,
+    end_dt = ranges$end_dt,
+    role = "new",
+    stringsAsFactors = FALSE
+  )
   if (nrow(prot)) {
-    blocked <- vapply(seq_len(nrow(new)), function(i) any(prot$qualifier_type_id == new$qualifier_type_id[i] & new$start_dt[i] <= prot$end_dt & new$end_dt[i] >= prot$start_dt), logical(1))
-    if (any(blocked)) warning("gradeContinuous: timeseries ", tsid, ": ", sum(blocked), " new range(s) overlap protected qualifiers of the same type and were not written")
+    blocked <- vapply(
+      seq_len(nrow(new)),
+      function(i) {
+        any(
+          prot$qualifier_type_id == new$qualifier_type_id[i] &
+            new$start_dt[i] <= prot$end_dt &
+            new$end_dt[i] >= prot$start_dt
+        )
+      },
+      logical(1)
+    )
+    if (any(blocked)) {
+      warning(
+        "gradeContinuous: timeseries ",
+        tsid,
+        ": ",
+        sum(blocked),
+        " new range(s) overlap protected qualifiers of the same type and were not written"
+      )
+    }
     new <- new[!blocked, ]
   }
 
@@ -608,11 +781,36 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
       # another managed code (see the bridge note above): a bridge stretches
       # an older range over newer ones, never the reverse, so the newer
       # ranges keep their readings. Usually prev_dt itself.
-      left_end <- DBI::dbGetQuery(con, "SELECT m.datetime FROM continuous.measurements_continuous m WHERE m.timeseries_id = $1 AND m.datetime >= $2 AND m.datetime < $3 AND NOT EXISTS (SELECT 1 FROM continuous.qualifiers q WHERE q.timeseries_id = $1 AND q.qualifier_type_id = ANY($4::int[]) AND q.start_dt > $2 AND m.datetime BETWEEN q.start_dt AND q.end_dt) ORDER BY m.datetime DESC LIMIT 1", params = list(tsid, e$start_dt, ws, qc_pg_int_array(setdiff(managed_ids, e$qualifier_type_id))))$datetime
+      left_end <- DBI::dbGetQuery(
+        con,
+        "SELECT m.datetime FROM continuous.measurements_continuous m WHERE m.timeseries_id = $1 AND m.datetime >= $2 AND m.datetime < $3 AND NOT EXISTS (SELECT 1 FROM continuous.qualifiers q WHERE q.timeseries_id = $1 AND q.qualifier_type_id = ANY($4::int[]) AND q.start_dt > $2 AND m.datetime BETWEEN q.start_dt AND q.end_dt) ORDER BY m.datetime DESC LIMIT 1",
+        params = list(
+          tsid,
+          e$start_dt,
+          ws,
+          qc_pg_int_array(setdiff(managed_ids, e$qualifier_type_id))
+        )
+      )$datetime
       has_left <- length(left_end) == 1 && !is.na(left_end)
     }
-    if (has_left) parts[[length(parts) + 1]] <- data.frame(qualifier_id = e$qualifier_id, qualifier_type_id = e$qualifier_type_id, start_dt = e$start_dt, end_dt = min(e$end_dt, left_end), role = "left")
-    if (has_right) parts[[length(parts) + 1]] <- data.frame(qualifier_id = if (has_left) NA_integer_ else e$qualifier_id, qualifier_type_id = e$qualifier_type_id, start_dt = max(e$start_dt, next_dt), end_dt = e$end_dt, role = "right")
+    if (has_left) {
+      parts[[length(parts) + 1]] <- data.frame(
+        qualifier_id = e$qualifier_id,
+        qualifier_type_id = e$qualifier_type_id,
+        start_dt = e$start_dt,
+        end_dt = min(e$end_dt, left_end),
+        role = "left"
+      )
+    }
+    if (has_right) {
+      parts[[length(parts) + 1]] <- data.frame(
+        qualifier_id = if (has_left) NA_integer_ else e$qualifier_id,
+        qualifier_type_id = e$qualifier_type_id,
+        start_dt = max(e$start_dt, next_dt),
+        end_dt = e$end_dt,
+        role = "right"
+      )
+    }
   }
   final <- do.call(rbind, c(parts, list(new)))
 
@@ -632,7 +830,9 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
   k <- k[final$qualifier_type_id[k] %in% final$qualifier_type_id[i]]
   if (length(i) == 1 && length(k) == 1) {
     final$end_dt[i] <- final$end_dt[k]
-    if (is.na(final$qualifier_id[i])) final$qualifier_id[i] <- final$qualifier_id[k]
+    if (is.na(final$qualifier_id[i])) {
+      final$qualifier_id[i] <- final$qualifier_id[k]
+    }
     final <- final[-k, ]
   }
 
@@ -643,25 +843,58 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
   ins <- final[is.na(final$qualifier_id), ]
 
   active <- dbTransBegin(con)
-  tryCatch({
-    if (length(del)) DBI::dbExecute(con, "DELETE FROM continuous.qualifiers WHERE qualifier_id = ANY($1::int[])", params = list(qc_pg_int_array(del)))
-    for (r in seq_len(nrow(upd))) DBI::dbExecute(con, "UPDATE continuous.qualifiers SET start_dt = $2, end_dt = $3 WHERE qualifier_id = $1", params = list(upd$qualifier_id[r], upd$start_dt[r], upd$end_dt[r]))
-    if (nrow(ins)) dbAppendTableRLS(con, "continuous.qualifiers", data.frame(timeseries_id = tsid, qualifier_type_id = ins$qualifier_type_id, start_dt = ins$start_dt, end_dt = ins$end_dt, no_source_update = FALSE))
-    if (active) {
-      # Fire deferred constraints now, while a failure can still be rolled
-      # back cleanly. Only when we own the transaction.
-      DBI::dbExecute(con, "SET CONSTRAINTS ALL IMMEDIATE")
-      DBI::dbExecute(con, "COMMIT;")
-    } else {
-      # Keep unrelated import constraints deferred, but surface QC range
-      # conflicts before grade_after_import releases its savepoint.
-      qc_validate_qualifier_overlaps(con)
+  tryCatch(
+    {
+      if (length(del)) {
+        DBI::dbExecute(
+          con,
+          "DELETE FROM continuous.qualifiers WHERE qualifier_id = ANY($1::int[])",
+          params = list(qc_pg_int_array(del))
+        )
+      }
+      for (r in seq_len(nrow(upd))) {
+        DBI::dbExecute(
+          con,
+          "UPDATE continuous.qualifiers SET start_dt = $2, end_dt = $3 WHERE qualifier_id = $1",
+          params = list(upd$qualifier_id[r], upd$start_dt[r], upd$end_dt[r])
+        )
+      }
+      if (nrow(ins)) {
+        dbAppendTableRLS(
+          con,
+          "continuous.qualifiers",
+          data.frame(
+            timeseries_id = tsid,
+            qualifier_type_id = ins$qualifier_type_id,
+            start_dt = ins$start_dt,
+            end_dt = ins$end_dt,
+            no_source_update = FALSE
+          )
+        )
+      }
+      if (active) {
+        # Fire deferred constraints now, while a failure can still be rolled
+        # back cleanly. Only when we own the transaction.
+        DBI::dbExecute(con, "SET CONSTRAINTS ALL IMMEDIATE")
+        DBI::dbExecute(con, "COMMIT;")
+      } else {
+        # Keep unrelated import constraints deferred, but surface QC range
+        # conflicts before grade_after_import releases its savepoint.
+        qc_validate_qualifier_overlaps(con)
+      }
+    },
+    error = function(e) {
+      if (active) {
+        DBI::dbExecute(con, "ROLLBACK;")
+      }
+      stop(e)
     }
-  }, error = function(e) {
-    if (active) DBI::dbExecute(con, "ROLLBACK;")
-    stop(e)
-  })
-  invisible(list(deleted = length(del), updated = nrow(upd), inserted = nrow(ins)))
+  )
+  invisible(list(
+    deleted = length(del),
+    updated = nrow(upd),
+    inserted = nrow(ins)
+  ))
 }
 
 # Validate the qualifier exclusion constraint without changing the mode of
@@ -690,7 +923,8 @@ qc_validate_qualifier_overlaps <- function(con) {
 #' @param con A connection with an open transaction.
 #' @param timeseries_id The timeseries just written to.
 #' @param from Earliest datetime written or rewritten.
-#' @return Invisibly, TRUE if grading succeeded.
+#' @return Invisibly returns `TRUE` when grading succeeds and `FALSE` when it
+#'   is skipped or rolls back after an error.
 #' @noRd
 #' @keywords internal
 grade_after_import <- function(con, timeseries_id, from) {
@@ -700,48 +934,71 @@ grade_after_import <- function(con, timeseries_id, from) {
               AND to_regclass('continuous.timeseries_qc_rules') IS NOT NULL
        AS available"
   )$available[[1L]]
-  if (!isTRUE(qc_schema_available)) return(invisible(FALSE))
+  if (!isTRUE(qc_schema_available)) {
+    return(invisible(FALSE))
+  }
 
   DBI::dbExecute(con, "SAVEPOINT grade_after_import")
-  ok <- tryCatch({
-    automatic <- populateTimeseriesQCRules(
-      con,
-      location_ids = DBI::dbGetQuery(
+  ok <- tryCatch(
+    {
+      automatic <- populateTimeseriesQCRules(
         con,
-        "SELECT location_id FROM continuous.timeseries WHERE timeseries_id = $1",
-        params = list(as.integer(timeseries_id))
-      )$location_id[[1L]],
-      dry_run = FALSE
-    )
-    newly_configured <- if (nrow(automatic)) {
-      automatic$timeseries_id[automatic$action == "created"]
-    } else {
-      integer()
+        location_ids = DBI::dbGetQuery(
+          con,
+          "SELECT location_id FROM continuous.timeseries WHERE timeseries_id = $1",
+          params = list(as.integer(timeseries_id))
+        )$location_id[[1L]],
+        dry_run = FALSE
+      )
+      newly_configured <- if (nrow(automatic)) {
+        automatic$timeseries_id[automatic$action == "created"]
+      } else {
+        integer()
+      }
+      grade_ids <- unique(c(as.integer(timeseries_id), newly_configured))
+      withCallingHandlers(
+        for (grade_id in grade_ids) {
+          gradeContinuous(con, grade_id, from = from)
+        },
+        warning = function(w) {
+          message(conditionMessage(w))
+          invokeRestart("muffleWarning")
+        }
+      )
+      TRUE
+    },
+    error = function(e) {
+      DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT grade_after_import")
+      message(
+        "gradeContinuous failed for timeseries ",
+        timeseries_id,
+        "; its new data keep their imported qualifier: ",
+        conditionMessage(e)
+      )
+      FALSE
     }
-    grade_ids <- unique(c(as.integer(timeseries_id), newly_configured))
-    withCallingHandlers(
-      for (grade_id in grade_ids) {
-        gradeContinuous(con, grade_id, from = from)
-      },
-      warning = function(w) {
-        message(conditionMessage(w))
-        invokeRestart("muffleWarning")
-      })
-    TRUE
-  }, error = function(e) {
-    DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT grade_after_import")
-    message("gradeContinuous failed for timeseries ", timeseries_id, "; its new data keep their imported qualifier: ", conditionMessage(e))
-    FALSE
-  })
+  )
   DBI::dbExecute(con, "RELEASE SAVEPOINT grade_after_import")
   invisible(ok)
 }
 
-# Skip the hook when an adapter has no datetimes to write. In particular,
-# synchronize_continuous() promotes warnings inside its write transaction to
-# errors, so min(character(0)) must not be evaluated at the call site.
+#' Skip the grading hook when an adapter has no datetimes to write
+#'
+#' Import paths call this helper after writing or synchronizing a series. It
+#' avoids invoking the grading savepoint for empty writes and derives the
+#' grading start from the earliest non-missing written datetime.
+#'
+#' @param con A connection with an open import transaction.
+#' @param timeseries_id The timeseries just written to.
+#' @param datetimes Datetimes written or rewritten by the import.
+#' @return Invisibly returns `FALSE` for empty input; otherwise returns the
+#'   logical result from the internal grading hook.
+#' @noRd
+#' @keywords internal
 grade_after_import_if_data <- function(con, timeseries_id, datetimes) {
   datetimes <- datetimes[!is.na(datetimes)]
-  if (!length(datetimes)) return(invisible(FALSE))
+  if (!length(datetimes)) {
+    return(invisible(FALSE))
+  }
   grade_after_import(con, timeseries_id, from = min(datetimes))
 }

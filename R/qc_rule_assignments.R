@@ -11,7 +11,8 @@ qc_rule_capability_key <- function(rule_fx, rule_version) {
 qc_rule_integer_id <- function(value, label, nullable = FALSE) {
   if (
     nullable &&
-      (is.null(value) || !length(value) ||
+      (is.null(value) ||
+        !length(value) ||
         (length(value) == 1L && is.na(value)))
   ) {
     return(NA_integer_)
@@ -49,6 +50,18 @@ qc_rule_schema_decode <- function(value) {
   schema
 }
 
+#' Validate a QC rule argument schema
+#'
+#' Checks a version 2 QC schema before it is exposed to an editor or used to
+#' validate an assignment. Argument descriptors use the source-adapter field
+#' format; QC schemas also define companion roles, selection rules, and
+#' conditional visibility.
+#'
+#' @param argument_schema A named R list or one JSON object containing the
+#'   schema.
+#' @return Invisibly returns the validated schema. Invalid schemas raise an
+#'   error describing the failed constraint.
+#' @keywords internal
 validateQCRuleArgumentSchema <- function(argument_schema) {
   schema <- qc_rule_schema_decode(argument_schema)
   if (
@@ -68,7 +81,9 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
     (length(schema$arguments) && !is.null(names(schema$arguments))) ||
       (length(schema$companions) && !is.null(names(schema$companions)))
   ) {
-    stop("QC argument_schema arguments and companions must be arrays, not objects.")
+    stop(
+      "QC argument_schema arguments and companions must be arrays, not objects."
+    )
   }
 
   # Reuse the source-adapter descriptor validator for labels, controls, types,
@@ -90,17 +105,20 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
   for (argument in schema$arguments) {
     if (!argument$source %in% c("user", "internal")) {
       stop(
-        "QC argument '", argument$name,
+        "QC argument '",
+        argument$name,
         "' must use source 'user' or 'internal'."
       )
     }
     if (is.null(argument$default)) {
       stop("QC argument '", argument$name, "' requires a default.")
     }
-    if (!is.null(argument$units) &&
+    if (
+      !is.null(argument$units) &&
         (!is.character(argument$units) ||
-         length(argument$units) != 1L ||
-         is.na(argument$units))) {
+          length(argument$units) != 1L ||
+          is.na(argument$units))
+    ) {
       stop("QC argument '", argument$name, "' has invalid units metadata.")
     }
     if (identical(argument$source, "user")) {
@@ -108,17 +126,20 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
         value <- argument[[numeric_field]]
         if (
           !is.null(value) &&
-            (!is.numeric(value) || length(value) != 1L ||
-              !is.finite(value))
+            (!is.numeric(value) || length(value) != 1L || !is.finite(value))
         ) {
           stop(
-            "QC argument '", argument$name, "' has an invalid ",
-            numeric_field, "."
+            "QC argument '",
+            argument$name,
+            "' has an invalid ",
+            numeric_field,
+            "."
           )
         }
       }
       if (
-        !is.null(argument$minimum) && !is.null(argument$maximum) &&
+        !is.null(argument$minimum) &&
+          !is.null(argument$maximum) &&
           argument$minimum > argument$maximum
       ) {
         stop("QC argument '", argument$name, "' has minimum above maximum.")
@@ -138,7 +159,8 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
           is.na(condition$equals)
       ) {
         stop(
-          "QC argument '", argument$name,
+          "QC argument '",
+          argument$name,
           "' has an invalid visible_when condition."
         )
       }
@@ -150,7 +172,8 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
           condition_argument$value_type != "logical"
       ) {
         stop(
-          "QC argument '", argument$name,
+          "QC argument '",
+          argument$name,
           "' visibility may depend only on a logical user argument."
         )
       }
@@ -161,8 +184,13 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
   for (i in seq_along(schema$companions)) {
     companion <- schema$companions[[i]]
     required <- c(
-      "role", "label", "parameter_name", "selection_strategy",
-      "allow_explicit_override", "missing_behavior", "help"
+      "role",
+      "label",
+      "parameter_name",
+      "selection_strategy",
+      "allow_explicit_override",
+      "missing_behavior",
+      "help"
     )
     if (!is.list(companion) || length(setdiff(required, names(companion)))) {
       stop(
@@ -205,7 +233,8 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
           is.na(condition$equals)
       ) {
         stop(
-          "QC companion role '", companion$role,
+          "QC companion role '",
+          companion$role,
           "' has an invalid when condition."
         )
       }
@@ -217,7 +246,8 @@ validateQCRuleArgumentSchema <- function(argument_schema) {
           !isTRUE(condition_argument$source == "user")
       ) {
         stop(
-          "QC companion role '", companion$role,
+          "QC companion role '",
+          companion$role,
           "' may only depend on a logical user argument."
         )
       }
@@ -251,7 +281,9 @@ qc_rule_decode_object <- function(value, label) {
     return(list())
   }
   if (is.character(value) && length(value) == 1L) {
-    if (is.na(value) || !nzchar(trimws(value))) return(list())
+    if (is.na(value) || !nzchar(trimws(value))) {
+      return(list())
+    }
     value <- tryCatch(
       jsonlite::fromJSON(value, simplifyVector = FALSE),
       error = function(e) {
@@ -272,7 +304,9 @@ qc_rule_decode_object <- function(value, label) {
 }
 
 qc_rule_json_object <- function(value) {
-  if (!length(value)) return("{}")
+  if (!length(value)) {
+    return("{}")
+  }
   as.character(jsonlite::toJSON(
     value,
     auto_unbox = TRUE,
@@ -286,7 +320,9 @@ qc_rule_validate_value <- function(value, argument) {
   type <- argument$value_type
   if (is.list(value) && type %in% c("character_vector", "numeric_vector")) {
     value <- unlist(value, recursive = TRUE, use.names = FALSE)
-    if (type == "character_vector") value <- as.character(value)
+    if (type == "character_vector") {
+      value <- as.character(value)
+    }
     if (type == "numeric_vector") {
       value <- suppressWarnings(as.numeric(value))
     }
@@ -300,35 +336,54 @@ qc_rule_validate_value <- function(value, argument) {
 
   valid <- switch(
     type,
-    character = is.character(value) && length(value) == 1L &&
-      !is.na(value) && nzchar(trimws(value)),
-    numeric = is.numeric(value) && length(value) == 1L &&
-      !is.na(value) && is.finite(value),
-    integer = is.numeric(value) && length(value) == 1L &&
-      !is.na(value) && is.finite(value) && value == floor(value) &&
+    character = is.character(value) &&
+      length(value) == 1L &&
+      !is.na(value) &&
+      nzchar(trimws(value)),
+    numeric = is.numeric(value) &&
+      length(value) == 1L &&
+      !is.na(value) &&
+      is.finite(value),
+    integer = is.numeric(value) &&
+      length(value) == 1L &&
+      !is.na(value) &&
+      is.finite(value) &&
+      value == floor(value) &&
       abs(value) <= .Machine$integer.max,
     logical = is.logical(value) && length(value) == 1L && !is.na(value),
-    character_vector = is.character(value) && length(value) > 0L &&
+    character_vector = is.character(value) &&
+      length(value) > 0L &&
       !anyNA(value),
-    numeric_vector = is.numeric(value) && length(value) > 0L &&
+    numeric_vector = is.numeric(value) &&
+      length(value) > 0L &&
       all(is.finite(value)),
     FALSE
   )
-  if (!valid) stop(label, " has an invalid value for type ", type, ".")
+  if (!valid) {
+    stop(label, " has an invalid value for type ", type, ".")
+  }
 
-  choices <- if (is.null(argument$choices)) NULL else {
+  choices <- if (is.null(argument$choices)) {
+    NULL
+  } else {
     unlist(argument$choices, recursive = TRUE, use.names = FALSE)
   }
-  if (!is.null(choices) &&
-      any(!as.character(value) %in% as.character(choices))) {
+  if (
+    !is.null(choices) &&
+      any(!as.character(value) %in% as.character(choices))
+  ) {
     stop(label, " is outside its allowed choices.")
   }
-  if (!is.null(argument$minimum) &&
-      any(value < argument$minimum)) {
+  if (
+    !is.null(argument$minimum) &&
+      any(value < argument$minimum)
+  ) {
     stop(label, " is below its minimum.")
   }
-  if (!is.null(argument$maximum) &&
-      any(value > argument$maximum)) {
+  if (
+    !is.null(argument$maximum) &&
+      any(value > argument$maximum)
+  ) {
     stop(label, " is above its maximum.")
   }
   value
@@ -366,8 +421,7 @@ qc_rule_effective_args <- function(schema, value) {
     name <- argument$name
     if (identical(argument$source, "internal")) {
       if (
-        name %in% names(given) &&
-          !identical(given[[name]], argument$default)
+        name %in% names(given) && !identical(given[[name]], argument$default)
       ) {
         stop("QC argument '", name, "' is managed by the rule.")
       }
@@ -413,7 +467,8 @@ qc_rule_companion_overrides <- function(value, schema, args) {
         id != floor(id)
     ) {
       stop(
-        "QC companion '", role,
+        "QC companion '",
+        role,
         "' must be one positive integer timeseries_id."
       )
     }
@@ -422,16 +477,24 @@ qc_rule_companion_overrides <- function(value, schema, args) {
   overrides
 }
 
-#' Read the available automatic QC rule definitions
+#' Read automatic QC rule definitions
 #'
-#' Returns enabled, versioned rule definitions and the schema AquaLink uses to
-#' build argument and companion-series controls.
+#' Reads the versioned rule catalogue used by automatic grading and by the
+#' AquaLink assignment editor. The argument schema describes rule arguments,
+#' their control metadata, and companion-series roles. A selected catalogue
+#' version must also have a matching implementation registered in AquaCache.
 #'
 #' @param con An open AquaCache database connection.
-#' @param enabled_only Whether to omit disabled definitions.
-#' @return A data.frame with one row per rule version and a parsed
-#'   \code{argument_schema} and \code{primary_parameters} list-columns.
-#'   Empty primary-parameter values indicate rules that accept any parameter.
+#' @param enabled_only If `TRUE` (the default), return only enabled rule
+#'   versions. Set to `FALSE` to include disabled versions, for example when
+#'   displaying an existing assignment pinned to an older version.
+#' @return A data frame with one row per selected rule version. It includes
+#'   catalogue fields (`rule_fx`, `rule_version`, `description`, `emits`,
+#'   `enabled`, and `note`) and two list columns: `argument_schema` contains
+#'   each parsed schema, and `primary_parameters` contains the character
+#'   vector of compatible primary parameter names. An empty parameter vector
+#'   means the rule accepts any primary parameter.
+#' @seealso [getTimeseriesQCRules()], [setTimeseriesQCRules()]
 #' @export
 getQCRuleCapabilities <- function(con, enabled_only = TRUE) {
   if (
@@ -461,10 +524,12 @@ getQCRuleCapabilities <- function(con, enabled_only = TRUE) {
   )
   capabilities$primary_parameters <- lapply(
     seq_len(nrow(capabilities)),
-    function(i) qc_rule_primary_parameters(
-      capabilities$rule_fx[[i]],
-      capabilities$rule_version[[i]]
-    )
+    function(i) {
+      qc_rule_primary_parameters(
+        capabilities$rule_fx[[i]],
+        capabilities$rule_version[[i]]
+      )
+    }
   )
   capabilities$argument_schema_json <- NULL
 
@@ -485,10 +550,18 @@ getQCRuleCapabilities <- function(con, enabled_only = TRUE) {
 
 #' List QC rule assignments for a continuous timeseries
 #'
+#' Returns active and inactive assignments in run order. JSON values are
+#' decoded to list columns so callers can display or edit rule arguments and
+#' companion overrides without parsing database strings.
+#'
 #' @param con An open AquaCache database connection.
-#' @param timeseries_id One continuous timeseries_id.
-#' @return A data.frame with parsed argument schema and effective assignment
-#'   values in list-columns.
+#' @param timeseries_id One continuous `timeseries_id`.
+#' @return A data frame with one row per saved assignment. It includes the
+#'   assignment and rule metadata, `active`, `run_order`, and `enabled` flags,
+#'   plus list columns `argument_schema`, `rule_args`, and
+#'   `companion_timeseries`. The latter two contain the values stored for that
+#'   assignment; `argument_schema` describes their fields.
+#' @seealso [getQCRuleCapabilities()], [setTimeseriesQCRules()]
 #' @export
 getTimeseriesQCRules <- function(con, timeseries_id) {
   tsid <- qc_rule_integer_id(timeseries_id, "timeseries_id")
@@ -534,11 +607,19 @@ getTimeseriesQCRules <- function(con, timeseries_id) {
 
 #' List compatible companion timeseries for an automatic QC rule
 #'
+#' Finds active timeseries at the requested location with the exact parameter
+#' name required by a companion role. The target series can be excluded so it
+#' cannot be selected as its own companion.
+#'
 #' @param con An open AquaCache database connection.
 #' @param location_id Location whose series can be companions.
 #' @param parameter_name Exact parameter name from the rule schema.
-#' @param exclude_timeseries_id Optional target timeseries to exclude.
-#' @return Compatible active timeseries ordered by sensor priority.
+#' @param exclude_timeseries_id Optional target `timeseries_id` to exclude.
+#' @return A data frame with `timeseries_id`, `param_name`,
+#'   `sensor_priority`, `record_rate`, and `timeseries_type` columns. Rows are
+#'   ordered by sensor priority (missing priorities last), then by timeseries
+#'   id.
+#' @seealso [getQCRuleCapabilities()], [setTimeseriesQCRules()]
 #' @export
 getQCRuleCompanionCandidates <- function(
   con,
@@ -587,9 +668,13 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
     ),
     params = list(tsid)
   )
-  if (nrow(series) != 1L) stop("No visible continuous timeseries ", tsid, ".")
+  if (nrow(series) != 1L) {
+    stop("No visible continuous timeseries ", tsid, ".")
+  }
 
-  if (is.null(assignments)) assignments <- data.frame()
+  if (is.null(assignments)) {
+    assignments <- data.frame()
+  }
   if (!is.data.frame(assignments)) {
     stop("assignments must be a data.frame.")
   }
@@ -655,10 +740,13 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
   )))
   if (
     length(ids_numeric) != n ||
-      any(!is.na(ids_numeric) &
-        (!is.finite(ids_numeric) | ids_numeric < 1 |
-          ids_numeric > .Machine$integer.max |
-          ids_numeric != floor(ids_numeric)))
+      any(
+        !is.na(ids_numeric) &
+          (!is.finite(ids_numeric) |
+            ids_numeric < 1 |
+            ids_numeric > .Machine$integer.max |
+            ids_numeric != floor(ids_numeric))
+      )
   ) {
     stop("Invalid timeseries_qc_rule_id values.")
   }
@@ -668,23 +756,32 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
   }
 
   fx <- trimws(as.character(assignments$rule_fx))
-  if (anyNA(fx) || any(!nzchar(fx))) stop("Every QC assignment needs rule_fx.")
+  if (anyNA(fx) || any(!nzchar(fx))) {
+    stop("Every QC assignment needs rule_fx.")
+  }
   version_numeric <- suppressWarnings(as.numeric(as.character(
     assignments$rule_version
   )))
   if (
     length(version_numeric) != n ||
-      any(!is.na(version_numeric) &
-        (!is.finite(version_numeric) | version_numeric < 1 |
-          version_numeric > .Machine$integer.max |
-          version_numeric != floor(version_numeric)))
+      any(
+        !is.na(version_numeric) &
+          (!is.finite(version_numeric) |
+            version_numeric < 1 |
+            version_numeric > .Machine$integer.max |
+            version_numeric != floor(version_numeric))
+      )
   ) {
     stop("Invalid rule_version values.")
   }
   version <- as.integer(version_numeric)
   out <- vector("list", n)
   for (i in seq_len(n)) {
-    capability_rows <- capabilities[capabilities$rule_fx == fx[[i]], , drop = FALSE]
+    capability_rows <- capabilities[
+      capabilities$rule_fx == fx[[i]],
+      ,
+      drop = FALSE
+    ]
     if (is.na(version[[i]])) {
       existing_row <- match(
         ids[[i]],
@@ -703,7 +800,11 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
         version[[i]] <- max(enabled_rows$rule_version)
       }
     }
-    capability <- capability_rows[capability_rows$rule_version == version[[i]], , drop = FALSE]
+    capability <- capability_rows[
+      capability_rows$rule_version == version[[i]],
+      ,
+      drop = FALSE
+    ]
     if (nrow(capability) != 1L) {
       stop("No QC rule definition ", fx[[i]], "@", version[[i]], ".")
     }
@@ -714,9 +815,13 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
         !series$param_name[[1L]] %in% primary_parameters
     ) {
       stop(
-        "QC rule '", fx[[i]], "@", version[[i]],
+        "QC rule '",
+        fx[[i]],
+        "@",
+        version[[i]],
         "' is not compatible with primary parameter '",
-        series$param_name[[1L]], "'."
+        series$param_name[[1L]],
+        "'."
       )
     }
     validateQCRuleArgumentSchema(schema)
@@ -731,7 +836,11 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
     for (role in names(companion_overrides)) {
       role_index <- match(
         role,
-        vapply(active_companions, function(companion) companion$role, character(1))
+        vapply(
+          active_companions,
+          function(companion) companion$role,
+          character(1)
+        )
       )
       descriptor <- active_companions[[role_index]]
       candidate <- getQCRuleCompanionCandidates(
@@ -742,9 +851,11 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
       )
       if (!companion_overrides[[role]] %in% candidate$timeseries_id) {
         stop(
-          "QC companion '", role,
+          "QC companion '",
+          role,
           "' must be an active timeseries at the same location with parameter '",
-          descriptor$parameter_name, "'."
+          descriptor$parameter_name,
+          "'."
         )
       }
     }
@@ -767,11 +878,12 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
       stop("active must be TRUE or FALSE for every QC assignment.")
     }
     if (!isTRUE(capability$enabled[[1L]]) && is_active) {
-      retained_disabled_version <- !is.na(ids[[i]]) && any(
-        existing_assignments$timeseries_qc_rule_id == ids[[i]] &
-          existing_assignments$rule_fx == fx[[i]] &
-          existing_assignments$rule_version == version[[i]]
-      )
+      retained_disabled_version <- !is.na(ids[[i]]) &&
+        any(
+          existing_assignments$timeseries_qc_rule_id == ids[[i]] &
+            existing_assignments$rule_fx == fx[[i]] &
+            existing_assignments$rule_version == version[[i]]
+        )
       if (!retained_disabled_version) {
         stop(
           "Disabled QC rule versions cannot be added or reactivated; an",
@@ -780,15 +892,22 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
       }
     }
     note <- assignments$note[[i]]
-    if (length(note) != 1L) stop("note must be one character value or NA.")
-    if (!is.na(note) && !is.character(note)) stop("note must be character or NA.")
+    if (length(note) != 1L) {
+      stop("note must be one character value or NA.")
+    }
+    if (!is.na(note) && !is.character(note)) {
+      stop("note must be character or NA.")
+    }
 
     out[[i]] <- data.frame(
       timeseries_qc_rule_id = ids[[i]],
       rule_fx = fx[[i]],
       rule_version = version[[i]],
       rule_args = as.character(jsonlite::toJSON(
-        args, auto_unbox = TRUE, null = "null", digits = NA
+        args,
+        auto_unbox = TRUE,
+        null = "null",
+        digits = NA
       )),
       companion_timeseries = qc_rule_json_object(companion_overrides),
       run_order = as.integer(order_value),
@@ -813,19 +932,30 @@ qc_rule_assignments_normalize <- function(con, timeseries_id, assignments) {
 
 #' Save the complete QC assignment set for one continuous timeseries
 #'
-#' The supplied data.frame is the desired assignment set. Omitted existing
-#' rows are deactivated, preserving assignment identity and its audit trail.
-#' Effective argument values are materialized from schema defaults before
-#' saving.
+#' The supplied data frame is the complete desired set, including inactive
+#' rows to retain. Existing rows omitted from it are deactivated so their ids
+#' and audit history remain available. Effective arguments are validated and
+#' materialized from schema defaults before saving.
 #'
 #' @param con An open AquaCache database connection.
-#' @param timeseries_id One continuous timeseries_id.
-#' @param assignments Desired assignments with rule_fx, rule_args,
-#'   companion_timeseries, run_order, active, and note columns. The optional
-#'   rule_version is retained for an existing assignment when omitted; for a
-#'   new assignment, the highest enabled version is selected. The optional
-#'   \code{timeseries_qc_rule_id} identifies rows to edit; omit it for new rows.
-#' @return Assignment ids invisibly.
+#' @param timeseries_id One continuous `timeseries_id`.
+#' @param assignments A data frame with one row per desired assignment.
+#'   `rule_fx` is required. Optional columns are `timeseries_qc_rule_id`,
+#'   `rule_version`, `rule_args`, `companion_timeseries`, `run_order`,
+#'   `active`, and `note`. The argument and companion columns may contain
+#'   decoded list objects or JSON objects. New rows default to the highest
+#'   enabled rule version, active status, schema argument defaults, no
+#'   companion override, and no note. `run_order` defaults to the input row
+#'   order (1 through the number of rows). When editing an existing row,
+#'   omitting `rule_version` retains its pinned version if `rule_fx` is
+#'   unchanged; a new rule function or new row uses the highest enabled
+#'   version. An empty data frame deactivates all existing assignments. Supply
+#'   `timeseries_qc_rule_id` to update an existing row; omit it for a new row.
+#' @return An invisible integer vector of assignment ids, in input-row order.
+#' @details The function owns and commits a transaction when called outside a
+#'   transaction. Inside a caller-owned transaction, it uses a savepoint and
+#'   leaves the outer transaction open.
+#' @seealso [getTimeseriesQCRules()], [getQCRuleCapabilities()]
 #' @export
 setTimeseriesQCRules <- function(con, timeseries_id, assignments) {
   normalized <- qc_rule_assignments_normalize(
@@ -839,79 +969,84 @@ setTimeseriesQCRules <- function(con, timeseries_id, assignments) {
     DBI::dbExecute(con, "SAVEPOINT set_timeseries_qc_rules")
   }
 
-  saved_ids <- tryCatch({
-    DBI::dbExecute(
-      con,
-      "UPDATE continuous.timeseries_qc_rules
+  saved_ids <- tryCatch(
+    {
+      DBI::dbExecute(
+        con,
+        "UPDATE continuous.timeseries_qc_rules
        SET active = FALSE
        WHERE timeseries_id = $1",
-      params = list(tsid)
-    )
-    ids <- integer(nrow(normalized))
-    for (i in seq_len(nrow(normalized))) {
-      row <- normalized[i, ]
-      id <- row$timeseries_qc_rule_id[[1L]]
-      if (is.na(id)) {
-        ids[[i]] <- DBI::dbGetQuery(
-          con,
-          "INSERT INTO continuous.timeseries_qc_rules
+        params = list(tsid)
+      )
+      ids <- integer(nrow(normalized))
+      for (i in seq_len(nrow(normalized))) {
+        row <- normalized[i, ]
+        id <- row$timeseries_qc_rule_id[[1L]]
+        if (is.na(id)) {
+          ids[[i]] <- DBI::dbGetQuery(
+            con,
+            "INSERT INTO continuous.timeseries_qc_rules
              (timeseries_id, rule_fx, rule_version, rule_args,
               companion_timeseries, run_order, active, note)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, FALSE, $7)
            RETURNING timeseries_qc_rule_id",
-          params = list(
-            tsid,
-            row$rule_fx[[1L]],
-            row$rule_version[[1L]],
-            row$rule_args[[1L]],
-            row$companion_timeseries[[1L]],
-            row$run_order[[1L]],
-            row$note[[1L]]
-          )
-        )$timeseries_qc_rule_id[[1L]]
-      } else {
-        updated <- DBI::dbExecute(
-          con,
-          "UPDATE continuous.timeseries_qc_rules
+            params = list(
+              tsid,
+              row$rule_fx[[1L]],
+              row$rule_version[[1L]],
+              row$rule_args[[1L]],
+              row$companion_timeseries[[1L]],
+              row$run_order[[1L]],
+              row$note[[1L]]
+            )
+          )$timeseries_qc_rule_id[[1L]]
+        } else {
+          updated <- DBI::dbExecute(
+            con,
+            "UPDATE continuous.timeseries_qc_rules
            SET rule_fx = $2, rule_version = $3, rule_args = $4::jsonb,
                companion_timeseries = $5::jsonb, run_order = $6, note = $7
            WHERE timeseries_id = $1 AND timeseries_qc_rule_id = $8",
-          params = list(
-            tsid,
-            row$rule_fx[[1L]],
-            row$rule_version[[1L]],
-            row$rule_args[[1L]],
-            row$companion_timeseries[[1L]],
-            row$run_order[[1L]],
-            row$note[[1L]],
-            id
+            params = list(
+              tsid,
+              row$rule_fx[[1L]],
+              row$rule_version[[1L]],
+              row$rule_args[[1L]],
+              row$companion_timeseries[[1L]],
+              row$run_order[[1L]],
+              row$note[[1L]],
+              id
+            )
           )
-        )
-        if (updated != 1L) stop("QC assignment update did not affect one row.")
-        ids[[i]] <- id
+          if (updated != 1L) {
+            stop("QC assignment update did not affect one row.")
+          }
+          ids[[i]] <- id
+        }
       }
-    }
-    for (i in seq_len(nrow(normalized))) {
-      if (isTRUE(normalized$active[[i]])) {
-        DBI::dbExecute(
-          con,
-          "UPDATE continuous.timeseries_qc_rules
+      for (i in seq_len(nrow(normalized))) {
+        if (isTRUE(normalized$active[[i]])) {
+          DBI::dbExecute(
+            con,
+            "UPDATE continuous.timeseries_qc_rules
            SET active = TRUE
            WHERE timeseries_id = $1 AND timeseries_qc_rule_id = $2",
-          params = list(tsid, ids[[i]])
-        )
+            params = list(tsid, ids[[i]])
+          )
+        }
       }
+      ids
+    },
+    error = function(e) {
+      if (active_transaction) {
+        DBI::dbExecute(con, "ROLLBACK")
+      } else {
+        DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT set_timeseries_qc_rules")
+        DBI::dbExecute(con, "RELEASE SAVEPOINT set_timeseries_qc_rules")
+      }
+      stop(e)
     }
-    ids
-  }, error = function(e) {
-    if (active_transaction) {
-      DBI::dbExecute(con, "ROLLBACK")
-    } else {
-      DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT set_timeseries_qc_rules")
-      DBI::dbExecute(con, "RELEASE SAVEPOINT set_timeseries_qc_rules")
-    }
-    stop(e)
-  })
+  )
 
   if (active_transaction) {
     DBI::dbExecute(con, "COMMIT")

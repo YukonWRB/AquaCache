@@ -11,7 +11,7 @@ qc_auto_rule_policy <- function() {
       rule_fx = "qc_rain_cold",
       rule_version = 1L,
       primary_parameter_names = "precipitation, rain",
-      arguments = function(series) list(max_air_temp = -0.3)
+      arguments = function(series) list(max_air_temp = -0.1)
     ),
     list(
       rule_fx = "qc_snowmelt_tips",
@@ -22,7 +22,9 @@ qc_auto_rule_policy <- function() {
       ),
       arguments = function(series) {
         rate_s <- series$rate_s[[1L]]
-        if (!is.finite(rate_s) || rate_s <= 0) return(NULL)
+        if (!is.finite(rate_s) || rate_s <= 0) {
+          return(NULL)
+        }
         # Use a 30-day cold spell at the series' configured recording rate.
         cold_window <- ceiling(30 * 24 * 60 * 60 / rate_s)
         if (!is.finite(cold_window) || cold_window > .Machine$integer.max) {
@@ -38,8 +40,7 @@ qc_auto_rule_policy <- function() {
     list(
       rule_fx = "qc_dir_calm",
       rule_version = 1L,
-      primary_parameter_names =
-        "wind direction (direction from, expressed 0-360 deg)",
+      primary_parameter_names = "wind direction (direction from, expressed 0-360 deg)",
       arguments = function(series) list(max_wind_speed = 0)
     )
   )
@@ -84,30 +85,32 @@ qc_auto_assignment_result <- function(
 #' catalogue defaults are materialized and are pinned to their rule version;
 #' existing assignments, including inactive ones, are never changed.
 #'
-#' Current policy:
-#' describe{
-#'   \item{Rain below cold threshold}{Assigns \code{qc_rain_cold@1} to
-#'     \code{precipitation, rain} series with same-location air temperature,
-#'     using -0.3 degrees C.}
-#'   \item{Possible snowmelt tips}{Assigns \code{qc_snowmelt_tips@1} to rain
-#'     and total precipitation series with same-location air temperature,
-#'     using a trailing 30-day cold window derived from the recording rate.}
-#'   \item{Wind direction in calm conditions}{Assigns \code{qc_dir_calm@1}
-#'     to wind-direction series with same-location wind speed, flagging speed
-#'     at or below 0 m/s.}
+#' @details The current policy assigns:
+#' \describe{
+#'   \item{Cold rain}{`qc_rain_cold@1` to rain precipitation with same-location
+#'     air temperature, using a -0.1 degrees C threshold.}
+#'   \item{Possible snowmelt tips}{`qc_snowmelt_tips@1` to rain and total
+#'     precipitation with same-location air temperature, using a trailing
+#'     30-day cold window derived from the recording rate.}
+#'   \item{Wind direction during calm conditions}{`qc_dir_calm@1` to
+#'     wind-direction series with same-location wind speed at or below 0 m/s.}
 #' }
-#'
 #' Stuck-sensor rules remain manual because their thresholds depend on units,
-#' sensor resolution, and site conditions.
+#' sensor resolution, recording rate, and site conditions.
 #'
 #' @param con An open AquaCache connection.
 #' @param location_ids Optional location ids to scan. NULL scans all locations
 #'   with an eligible active primary series.
 #' @param dry_run If TRUE, return proposed actions without writing. Set FALSE
 #'   to create assignments.
-#' @return A data.frame with one row per eligible primary rule. The `action`
-#'   column can be `would_create`, `created`, `already_configured`,
-#'   `missing_companion`, `not_eligible`, or `order_limit`.
+#' @return A data frame with one row per matching primary-series/rule policy
+#'   considered. It has `timeseries_id`, `location_id`, `parameter_name`,
+#'   `rule_fx`, `rule_version`, `action`, and `reason` columns. `action` is one of
+#'   `would_create`, `created`, `already_configured`, `missing_companion`,
+#'   `not_eligible`, or `order_limit`. No eligible candidates produces a
+#'   zero-row data frame with the same columns.
+#' @seealso [getTimeseriesQCRules()], [setTimeseriesQCRules()],
+#'   [gradeContinuous()]
 #' @export
 populateTimeseriesQCRules <- function(
   con,
@@ -118,7 +121,9 @@ populateTimeseriesQCRules <- function(
     stop("populateTimeseriesQCRules: dry_run must be TRUE or FALSE.")
   }
   if (!is.null(location_ids)) {
-    if (!length(location_ids)) return(qc_auto_empty_result())
+    if (!length(location_ids)) {
+      return(qc_auto_empty_result())
+    }
     location_ids <- vapply(
       location_ids,
       qc_rule_integer_id,
@@ -134,14 +139,19 @@ populateTimeseriesQCRules <- function(
               AND to_regclass('continuous.timeseries_qc_rules') IS NOT NULL
        AS available"
   )$available[[1L]]
-  if (!isTRUE(schema_exists)) return(qc_auto_empty_result())
+  if (!isTRUE(schema_exists)) {
+    return(qc_auto_empty_result())
+  }
 
   policies <- qc_auto_rule_policy()
-  parameter_names <- unique(unlist(lapply(
-    policies,
-    `[[`,
-    "primary_parameter_names"
-  ), use.names = FALSE))
+  parameter_names <- unique(unlist(
+    lapply(
+      policies,
+      `[[`,
+      "primary_parameter_names"
+    ),
+    use.names = FALSE
+  ))
   series_sql <- paste(
     "SELECT t.timeseries_id, t.location_id, p.param_name,",
     "EXTRACT(EPOCH FROM t.record_rate::interval)::double precision AS rate_s",
@@ -158,21 +168,28 @@ populateTimeseriesQCRules <- function(
     series_params[[2L]] <- qc_pg_int_array(location_ids)
   }
   series <- DBI::dbGetQuery(con, series_sql, params = series_params)
-  if (!nrow(series)) return(qc_auto_empty_result())
+  if (!nrow(series)) {
+    return(qc_auto_empty_result())
+  }
 
   capabilities <- getQCRuleCapabilities(con, enabled_only = TRUE)
   capability_key <- qc_rule_capability_key(
     capabilities$rule_fx,
     capabilities$rule_version
   )
-  companion_parameters <- unique(unlist(lapply(
-    capabilities$argument_schema,
-    function(schema) vapply(
-      schema$companions,
-      function(companion) companion$parameter_name,
-      character(1)
-    )
-  ), use.names = FALSE))
+  companion_parameters <- unique(unlist(
+    lapply(
+      capabilities$argument_schema,
+      function(schema) {
+        vapply(
+          schema$companions,
+          function(companion) companion$parameter_name,
+          character(1)
+        )
+      }
+    ),
+    use.names = FALSE
+  ))
   companions <- if (length(companion_parameters)) {
     DBI::dbGetQuery(
       con,
@@ -203,7 +220,9 @@ populateTimeseriesQCRules <- function(
   for (policy in policies) {
     key <- qc_rule_capability_key(policy$rule_fx, policy$rule_version)
     capability_index <- match(key, capability_key)
-    if (is.na(capability_index)) next
+    if (is.na(capability_index)) {
+      next
+    }
     schema <- capabilities$argument_schema[[capability_index]]
     target_rows <- which(series$param_name %in% policy$primary_parameter_names)
     for (i in target_rows) {
@@ -223,12 +242,16 @@ populateTimeseriesQCRules <- function(
       }
       effective <- qc_rule_effective_args(schema, arguments)
       required_companions <- qc_rule_active_companions(schema, effective)
-      missing <- vapply(required_companions, function(descriptor) {
-        !any(
-          companions$location_id == target$location_id[[1L]] &
-            companions$param_name == descriptor$parameter_name
-        )
-      }, logical(1))
+      missing <- vapply(
+        required_companions,
+        function(descriptor) {
+          !any(
+            companions$location_id == target$location_id[[1L]] &
+              companions$param_name == descriptor$parameter_name
+          )
+        },
+        logical(1)
+      )
       if (any(missing)) {
         labels <- vapply(
           required_companions[missing],
@@ -241,8 +264,11 @@ populateTimeseriesQCRules <- function(
             target,
             policy,
             "missing_companion",
-            paste0("No active same-location companion: ",
-                   paste(labels, collapse = ", "), ".")
+            paste0(
+              "No active same-location companion: ",
+              paste(labels, collapse = ", "),
+              "."
+            )
           ),
           arguments = NULL
         )
@@ -259,12 +285,16 @@ populateTimeseriesQCRules <- function(
       )
     }
   }
-  if (!length(proposals)) return(qc_auto_empty_result())
+  if (!length(proposals)) {
+    return(qc_auto_empty_result())
+  }
 
   results <- do.call(rbind, lapply(proposals, `[[`, "result"))
   proposal_args <- lapply(proposals, `[[`, "arguments")
   candidate_rows <- which(results$action == "would_create")
-  if (!length(candidate_rows)) return(results)
+  if (!length(candidate_rows)) {
+    return(results)
+  }
 
   existing_rule_pairs <- function(rows) {
     if (!length(rows)) {
@@ -290,131 +320,160 @@ populateTimeseriesQCRules <- function(
   }
 
   existing <- existing_rule_pairs(candidate_rows)
-  already <- candidate_rows[vapply(candidate_rows, function(i) {
-    any(
-      existing$timeseries_id == results$timeseries_id[[i]] &
-        existing$rule_fx == results$rule_fx[[i]]
-    )
-  }, logical(1))]
+  already <- candidate_rows[vapply(
+    candidate_rows,
+    function(i) {
+      any(
+        existing$timeseries_id == results$timeseries_id[[i]] &
+          existing$rule_fx == results$rule_fx[[i]]
+      )
+    },
+    logical(1)
+  )]
   results$action[already] <- "already_configured"
   results$reason[already] <-
     "An assignment already exists; automatic setup leaves it unchanged."
   create_rows <- setdiff(candidate_rows, already)
-  if (dry_run || !length(create_rows)) return(results)
+  if (dry_run || !length(create_rows)) {
+    return(results)
+  }
 
   owns_transaction <- dbTransBegin(con)
   savepoint <- "populate_timeseries_qc_rules"
-  if (!owns_transaction) DBI::dbExecute(con, paste("SAVEPOINT", savepoint))
-  tryCatch({
-    target_ids <- unique(results$timeseries_id[create_rows])
-    locked <- DBI::dbGetQuery(
-      con,
-      "SELECT timeseries_id FROM continuous.timeseries
+  if (!owns_transaction) {
+    DBI::dbExecute(con, paste("SAVEPOINT", savepoint))
+  }
+  tryCatch(
+    {
+      target_ids <- unique(results$timeseries_id[create_rows])
+      locked <- DBI::dbGetQuery(
+        con,
+        "SELECT timeseries_id FROM continuous.timeseries
        WHERE timeseries_id = ANY($1::integer[]) AND active FOR UPDATE",
-      params = list(qc_pg_int_array(target_ids))
-    )$timeseries_id
-    inactive <- create_rows[!results$timeseries_id[create_rows] %in% locked]
-    if (length(inactive)) {
-      results$action[inactive] <- "not_eligible"
-      results$reason[inactive] <-
-        "The primary series became inactive before the assignment was saved."
-      create_rows <- setdiff(create_rows, inactive)
-    }
-    if (!length(create_rows)) {
+        params = list(qc_pg_int_array(target_ids))
+      )$timeseries_id
+      inactive <- create_rows[!results$timeseries_id[create_rows] %in% locked]
+      if (length(inactive)) {
+        results$action[inactive] <- "not_eligible"
+        results$reason[inactive] <-
+          "The primary series became inactive before the assignment was saved."
+        create_rows <- setdiff(create_rows, inactive)
+      }
+      if (!length(create_rows)) {
+        if (owns_transaction) {
+          DBI::dbExecute(con, "COMMIT")
+        } else {
+          DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
+        }
+        return(results)
+      }
+      target_ids <- unique(results$timeseries_id[create_rows])
+
+      # Recheck after locking the target series so concurrent import hooks do
+      # not create duplicate assignments for the same rule.
+      existing <- existing_rule_pairs(create_rows)
+      for (id in target_ids) {
+        rows <- create_rows[results$timeseries_id[create_rows] == id]
+        already_locked <- rows[vapply(
+          rows,
+          function(i) {
+            any(
+              existing$timeseries_id == results$timeseries_id[[i]] &
+                existing$rule_fx == results$rule_fx[[i]]
+            )
+          },
+          logical(1)
+        )]
+        if (length(already_locked)) {
+          results$action[already_locked] <- "already_configured"
+          results$reason[already_locked] <-
+            "An assignment already exists; automatic setup leaves it unchanged."
+        }
+        rows <- setdiff(rows, already_locked)
+        if (!length(rows)) {
+          next
+        }
+
+        stored <- getTimeseriesQCRules(con, id)
+        assignments <- if (nrow(stored)) {
+          stored[, c(
+            "timeseries_qc_rule_id",
+            "rule_fx",
+            "rule_version",
+            "run_order",
+            "active",
+            "note",
+            "rule_args",
+            "companion_timeseries"
+          )]
+        } else {
+          data.frame(
+            timeseries_qc_rule_id = integer(),
+            rule_fx = character(),
+            rule_version = integer(),
+            run_order = integer(),
+            active = logical(),
+            note = character(),
+            stringsAsFactors = FALSE
+          ) |>
+            transform(rule_args = I(list()), companion_timeseries = I(list()))
+        }
+        next_order <- if (nrow(assignments) && any(assignments$active)) {
+          max(assignments$run_order[assignments$active]) + 1L
+        } else {
+          1L
+        }
+        if (next_order + length(rows) - 1L > 32767L) {
+          results$action[rows] <- "order_limit"
+          results$reason[rows] <-
+            "No active run_order is available for another QC assignment."
+          next
+        }
+        for (i in rows) {
+          new_assignment <- data.frame(
+            timeseries_qc_rule_id = NA_integer_,
+            rule_fx = results$rule_fx[[i]],
+            rule_version = results$rule_version[[i]],
+            run_order = next_order,
+            active = TRUE,
+            note = paste(
+              "Automatically configured by qc_auto_policy_v1.",
+              "Edit or deactivate in AquaLink to tune this rule."
+            ),
+            stringsAsFactors = FALSE
+          )
+          new_assignment$rule_args <- I(list(proposal_args[[i]]))
+          new_assignment$companion_timeseries <- I(list(list()))
+          assignments <- rbind(assignments, new_assignment)
+          next_order <- next_order + 1L
+        }
+        setTimeseriesQCRules(con, id, assignments)
+        results$action[rows] <- "created"
+        results$reason[rows] <-
+          "Added by qc_auto_policy_v1; existing assignments were preserved."
+      }
+
       if (owns_transaction) {
         DBI::dbExecute(con, "COMMIT")
       } else {
         DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
       }
-      return(results)
-    }
-    target_ids <- unique(results$timeseries_id[create_rows])
-
-    # Recheck after locking the target series so concurrent import hooks do
-    # not create duplicate assignments for the same rule.
-    existing <- existing_rule_pairs(create_rows)
-    for (id in target_ids) {
-      rows <- create_rows[results$timeseries_id[create_rows] == id]
-      already_locked <- rows[vapply(rows, function(i) {
-        any(
-          existing$timeseries_id == results$timeseries_id[[i]] &
-            existing$rule_fx == results$rule_fx[[i]]
-        )
-      }, logical(1))]
-      if (length(already_locked)) {
-        results$action[already_locked] <- "already_configured"
-        results$reason[already_locked] <-
-          "An assignment already exists; automatic setup leaves it unchanged."
-      }
-      rows <- setdiff(rows, already_locked)
-      if (!length(rows)) next
-
-      stored <- getTimeseriesQCRules(con, id)
-      assignments <- if (nrow(stored)) {
-        stored[, c(
-          "timeseries_qc_rule_id", "rule_fx", "rule_version", "run_order",
-          "active", "note", "rule_args", "companion_timeseries"
-        )]
+    },
+    error = function(e) {
+      if (owns_transaction) {
+        try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
       } else {
-        data.frame(
-          timeseries_qc_rule_id = integer(),
-          rule_fx = character(),
-          rule_version = integer(),
-          run_order = integer(),
-          active = logical(),
-          note = character(),
-          stringsAsFactors = FALSE
-        ) |>
-          transform(rule_args = I(list()), companion_timeseries = I(list()))
-      }
-      next_order <- if (nrow(assignments) && any(assignments$active)) {
-        max(assignments$run_order[assignments$active]) + 1L
-      } else {
-        1L
-      }
-      if (next_order + length(rows) - 1L > 32767L) {
-        results$action[rows] <- "order_limit"
-        results$reason[rows] <-
-          "No active run_order is available for another QC assignment."
-        next
-      }
-      for (i in rows) {
-        new_assignment <- data.frame(
-          timeseries_qc_rule_id = NA_integer_,
-          rule_fx = results$rule_fx[[i]],
-          rule_version = results$rule_version[[i]],
-          run_order = next_order,
-          active = TRUE,
-          note = paste(
-            "Automatically configured by qc_auto_policy_v1.",
-            "Edit or deactivate in AquaLink to tune this rule."
-          ),
-          stringsAsFactors = FALSE
+        try(
+          DBI::dbExecute(con, paste("ROLLBACK TO SAVEPOINT", savepoint)),
+          silent = TRUE
         )
-        new_assignment$rule_args <- I(list(proposal_args[[i]]))
-        new_assignment$companion_timeseries <- I(list(list()))
-        assignments <- rbind(assignments, new_assignment)
-        next_order <- next_order + 1L
+        try(
+          DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint)),
+          silent = TRUE
+        )
       }
-      setTimeseriesQCRules(con, id, assignments)
-      results$action[rows] <- "created"
-      results$reason[rows] <-
-        "Added by qc_auto_policy_v1; existing assignments were preserved."
+      stop(e)
     }
-
-    if (owns_transaction) {
-      DBI::dbExecute(con, "COMMIT")
-    } else {
-      DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
-    }
-  }, error = function(e) {
-    if (owns_transaction) {
-      try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
-    } else {
-      try(DBI::dbExecute(con, paste("ROLLBACK TO SAVEPOINT", savepoint)), silent = TRUE)
-      try(DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint)), silent = TRUE)
-    }
-    stop(e)
-  })
+  )
   results
 }

@@ -10,29 +10,53 @@ ctx_hourly <- list(utc_offset = -7, rate_s = 3600)
 test_that("rolling helpers match brute force and zoo's alignment", {
   x <- c(1, 4, 2, 8, 5, 7, NA, 3, 6, 9, 2, 4)
   k <- 5
-  centred <- vapply(seq_along(x), function(i) {
-    if (i - 2 < 1 || i + 2 > length(x)) return(NA_real_)
-    mean(x[(i - 2):(i + 2)])
-  }, numeric(1))
-  trailing <- vapply(seq_along(x), function(i) {
-    if (i < k) return(NA_real_)
-    mean(x[(i - k + 1):i])
-  }, numeric(1))
+  centred <- vapply(
+    seq_along(x),
+    function(i) {
+      if (i - 2 < 1 || i + 2 > length(x)) {
+        return(NA_real_)
+      }
+      mean(x[(i - 2):(i + 2)])
+    },
+    numeric(1)
+  )
+  trailing <- vapply(
+    seq_along(x),
+    function(i) {
+      if (i < k) {
+        return(NA_real_)
+      }
+      mean(x[(i - k + 1):i])
+    },
+    numeric(1)
+  )
   expect_equal(qc_roll_mean(x, k), centred)
   expect_equal(qc_roll_mean(x, k, align = "right"), trailing)
 
   # Even width: zoo's centre is offsets -(k/2 - 1) .. k/2.
   k <- 4
-  even <- vapply(seq_along(x), function(i) {
-    if (i - 1 < 1 || i + 2 > length(x)) return(NA_real_)
-    mean(x[(i - 1):(i + 2)])
-  }, numeric(1))
+  even <- vapply(
+    seq_along(x),
+    function(i) {
+      if (i - 1 < 1 || i + 2 > length(x)) {
+        return(NA_real_)
+      }
+      mean(x[(i - 1):(i + 2)])
+    },
+    numeric(1)
+  )
   expect_equal(qc_roll_mean(x, k), even)
 
-  sd_bf <- vapply(seq_along(x), function(i) {
-    if (i - 2 < 1 || i + 2 > length(x)) return(NA_real_)
-    stats::sd(x[(i - 2):(i + 2)])
-  }, numeric(1))
+  sd_bf <- vapply(
+    seq_along(x),
+    function(i) {
+      if (i - 2 < 1 || i + 2 > length(x)) {
+        return(NA_real_)
+      }
+      stats::sd(x[(i - 2):(i + 2)])
+    },
+    numeric(1)
+  )
   expect_equal(qc_roll_sd(x, 5), sd_bf)
 })
 
@@ -89,8 +113,14 @@ test_that("rain while cold is CT", {
 })
 
 test_that("stuck sensor flags the middle of a constant run, splitting zeros", {
-  a <- list(width = 5, min_sd = 0.001, qualifier = "ERROR", zero_split = TRUE,
-            zero_max_air_temp = 0, zero_qualifier = "SUS")
+  a <- list(
+    width = 5,
+    min_sd = 0.001,
+    qualifier = "ERROR",
+    zero_split = TRUE,
+    zero_max_air_temp = 0,
+    zero_qualifier = "SUS"
+  )
   x <- data.frame(
     datetime = hourly(16),
     value = c(1, 2, 3, 3, 3, 3, 3, 3, 4, 5, 0, 0, 0, 0, 0, 0),
@@ -104,7 +134,11 @@ test_that("stuck sensor flags the middle of a constant run, splitting zeros", {
 })
 
 test_that("direction while calm is ERROR", {
-  x <- data.frame(datetime = hourly(3), value = c(90, 180, 270), wind_speed = c(0, 1.5, NA))
+  x <- data.frame(
+    datetime = hourly(3),
+    value = c(90, 180, 270),
+    wind_speed = c(0, 1.5, NA)
+  )
   a <- list(max_wind_speed = 0, qualifier = "ERROR")
   expect_equal(qc_dir_calm(x, a, ctx_hourly), c("ERROR", NA, NA))
 })
@@ -117,7 +151,12 @@ test_that("snowmelt: trailing mean flags warm rain after a cold spell", {
     air_temp = c(rep(-10, 50), rep(3, 10))
   )
   x$value[55] <- 1.2
-  a <- list(first_warm_days = 0, cold_window = 24, cold_align = "trailing", qualifier = "PSM")
+  a <- list(
+    first_warm_days = 0,
+    cold_window = 24,
+    cold_align = "trailing",
+    qualifier = "PSM"
+  )
   out <- qc_snowmelt_tips(x, a, ctx_hourly)
   expect_equal(which(!is.na(out)), 55L)
   # A gap inside the window means no mean, so no flag.
@@ -128,11 +167,14 @@ test_that("snowmelt: trailing mean flags warm rain after a cold spell", {
 
 test_that("automatic QC policies use conservative, rate-aware settings", {
   policy <- qc_auto_rule_policy()
-  rules <- stats::setNames(policy, vapply(policy, `[[`, character(1), "rule_fx"))
+  rules <- stats::setNames(
+    policy,
+    vapply(policy, `[[`, character(1), "rule_fx")
+  )
 
   expect_equal(
     rules$qc_rain_cold$arguments(data.frame(rate_s = 3600))$max_air_temp,
-    -0.3
+    -0.1
   )
   expect_equal(
     rules$qc_dir_calm$arguments(data.frame(rate_s = 3600))$max_wind_speed,
@@ -203,7 +245,10 @@ test_that("rule arguments merge catalogue defaults with assignment overrides", {
     null = "null"
   )
   expect_equal(qc_merge_rule_args(schema, NA), list(width = 5L, min_sd = 0.001))
-  expect_equal(qc_merge_rule_args(schema, '{"min_sd":0.1}'), list(width = 5L, min_sd = 0.1))
+  expect_equal(
+    qc_merge_rule_args(schema, '{"min_sd":0.1}'),
+    list(width = 5L, min_sd = 0.1)
+  )
   expect_error(
     qc_merge_rule_args(schema, '{"unknown":1}'),
     "Unknown QC argument"
@@ -278,7 +323,10 @@ test_that("companion roles are schema-declared and conditional", {
 
 test_that("rule dependencies and rolling-window arguments are validated", {
   stuck <- qc_rule_registry[["qc_stuck_sensor@1"]]
-  expect_error(stuck$window(list(width = 1)), "integer greater than or equal to 2")
+  expect_error(
+    stuck$window(list(width = 1)),
+    "integer greater than or equal to 2"
+  )
   expect_error(
     qc_validate_integer_arg(list(width = 2147483648), "width", 2L),
     "integer greater than or equal to 2"
@@ -286,15 +334,27 @@ test_that("rule dependencies and rolling-window arguments are validated", {
 
   snowmelt <- qc_rule_registry[["qc_snowmelt_tips@1"]]
   expect_error(
-    snowmelt$window(list(cold_window = 0, first_warm_days = 0, cold_align = "trailing")),
+    snowmelt$window(list(
+      cold_window = 0,
+      first_warm_days = 0,
+      cold_align = "trailing"
+    )),
     "cold_window"
   )
   expect_error(
-    snowmelt$window(list(cold_window = 1, first_warm_days = -1, cold_align = "trailing")),
+    snowmelt$window(list(
+      cold_window = 1,
+      first_warm_days = -1,
+      cold_align = "trailing"
+    )),
     "first_warm_days"
   )
   expect_error(
-    snowmelt$window(list(cold_window = 1, first_warm_days = 0, cold_align = "centered")),
+    snowmelt$window(list(
+      cold_window = 1,
+      first_warm_days = 0,
+      cold_align = "centered"
+    )),
     "cold_align"
   )
 })
@@ -307,14 +367,19 @@ test_that("empty import datetime vectors skip the grading hook", {
   expect_identical(grade_after_import_if_data(NULL, 1L, NULL), FALSE)
   expect_identical(
     grade_after_import_if_data(
-      NULL, 1L, as.POSIXct(NA_real_, origin = "1970-01-01", tz = "UTC")
+      NULL,
+      1L,
+      as.POSIXct(NA_real_, origin = "1970-01-01", tz = "UTC")
     ),
     FALSE
   )
 })
 
 test_that("qualifier exclusion validation is scoped to the QC constraint", {
-  skip_if(Sys.getenv("AQUACACHE_INTEGRATION_DATABASE") != "testdb", "testdb integration opt-in required")
+  skip_if(
+    Sys.getenv("AQUACACHE_INTEGRATION_DATABASE") != "testdb",
+    "testdb integration opt-in required"
+  )
   skip_if_not_installed("RPostgres")
   con <- DBI::dbConnect(
     RPostgres::Postgres(),
@@ -339,7 +404,10 @@ test_that("qualifier exclusion validation is scoped to the QC constraint", {
      WHERE conrelid = 'continuous.qualifiers'::regclass
        AND conname = 'qualifiers_no_overlap'"
   )
-  skip_if(nrow(constraint) != 1L, "qualifier exclusion constraint is unavailable")
+  skip_if(
+    nrow(constraint) != 1L,
+    "qualifier exclusion constraint is unavailable"
+  )
   expect_true(constraint$condeferrable)
   expect_true(constraint$condeferred)
 
@@ -356,7 +424,10 @@ test_that("qualifier exclusion validation is scoped to the QC constraint", {
      FROM public.qualifier_types
      WHERE qualifier_type_code = 'UNS'"
   )$qualifier_type_id
-  skip_if(!length(tsid) || !length(qualifier_type_id), "testdb lacks qualifier fixtures")
+  skip_if(
+    !length(tsid) || !length(qualifier_type_id),
+    "testdb lacks qualifier fixtures"
+  )
 
   DBI::dbExecute(con, "BEGIN")
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)

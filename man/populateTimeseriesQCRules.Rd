@@ -16,10 +16,12 @@ with an eligible active primary series.}
 to create assignments.}
 }
 \value{
-A data.frame with one row per eligible primary rule, and an
-\code{action} of \code{would_create}, \code{created},
-\code{already_configured}, \code{missing_companion},
-\code{not_eligible}, or \code{order_limit}.
+A data frame with one row per matching primary-series/rule policy
+considered. It has \code{timeseries_id}, \code{location_id}, \code{parameter_name},
+\code{rule_fx}, \code{rule_version}, \code{action}, and \code{reason} columns. \code{action} is one of
+\code{would_create}, \code{created}, \code{already_configured}, \code{missing_companion},
+\code{not_eligible}, or \code{order_limit}. No eligible candidates produces a
+zero-row data frame with the same columns.
 }
 \description{
 Idempotently adds configured rules when an eligible primary series and its
@@ -29,13 +31,20 @@ catalogue defaults are materialized and are pinned to their rule version;
 existing assignments, including inactive ones, are never changed.
 }
 \details{
-The policy assigns \code{qc_rain_cold@1} to rain series with air temperature
-using a -0.3 degree C threshold, \code{qc_snowmelt_tips@1} to rain and total
-precipitation series with air temperature using a trailing 30-day cold
-window, and \code{qc_dir_calm@1} to wind-direction series with wind speed at
-or below 0 m/s.
-
+The current policy assigns:
+\describe{
+\item{Cold rain}{\verb{qc_rain_cold@1} to rain precipitation with same-location
+air temperature, using a -0.1 degrees C threshold.}
+\item{Possible snowmelt tips}{\verb{qc_snowmelt_tips@1} to rain and total
+precipitation with same-location air temperature, using a trailing
+30-day cold window derived from the recording rate.}
+\item{Wind direction during calm conditions}{\verb{qc_dir_calm@1} to
+wind-direction series with same-location wind speed at or below 0 m/s.}
+}
 Stuck-sensor rules remain manual because their thresholds depend on units,
-sensor resolution, sampling interval, and site conditions. Existing
-assignments, including inactive ones, are left intact.
+sensor resolution, recording rate, and site conditions.
+}
+\seealso{
+\code{\link[=getTimeseriesQCRules]{getTimeseriesQCRules()}}, \code{\link[=setTimeseriesQCRules]{setTimeseriesQCRules()}},
+\code{\link[=gradeContinuous]{gradeContinuous()}}
 }

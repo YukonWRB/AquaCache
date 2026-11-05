@@ -9,13 +9,20 @@ getTimeseriesQCRules(con, timeseries_id)
 \arguments{
 \item{con}{An open AquaCache database connection.}
 
-\item{timeseries_id}{One continuous timeseries_id.}
+\item{timeseries_id}{One continuous \code{timeseries_id}.}
 }
 \value{
-A data.frame with parsed schema, effective rule arguments, and companion
-overrides in list-columns.
+A data frame with one row per saved assignment. It includes the
+assignment and rule metadata, \code{active}, \code{run_order}, and \code{enabled} flags,
+plus list columns \code{argument_schema}, \code{rule_args}, and
+\code{companion_timeseries}. The latter two contain the values stored for that
+assignment; \code{argument_schema} describes their fields.
 }
 \description{
-Returns the version-pinned QC assignments ordered by run_order for one
-continuous timeseries.
+Returns active and inactive assignments in run order. JSON values are
+decoded to list columns so callers can display or edit rule arguments and
+companion overrides without parsing database strings.
+}
+\seealso{
+\code{\link[=getQCRuleCapabilities]{getQCRuleCapabilities()}}, \code{\link[=setTimeseriesQCRules]{setTimeseriesQCRules()}}
 }
