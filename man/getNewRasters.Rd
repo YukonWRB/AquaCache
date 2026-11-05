@@ -16,7 +16,7 @@ getNewRasters(
 \arguments{
 \item{raster_series_ids}{A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.}
 
-\item{con}{A connection to the database. Default is NULL, which will use the package default connection settings and close the connection afterwards.}
+\item{con}{A connection to the database. Default is NULL, which uses the package default connection settings and closes the connection afterwards. Parallel processing requires \code{con = NULL}; a supplied connection is used sequentially.}
 
 \item{keep_forecasts}{Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'}
 
@@ -41,6 +41,10 @@ in \code{spatial.raster_series_source_adapters} for each raster series. See
 \code{\link[=addACRasterSeries]{addACRasterSeries()}} for creating a series and its assignments.
 Every source function must have an enabled raster-domain entry in
 \code{public.source_adapter_capabilities}.
+When \code{con = NULL}, independent raster series are processed in parallel when
+the parallel backend is available. Each worker opens a connection on its
+first assigned series and reuses it until the worker exits. Supplying \code{con}
+keeps processing sequential.
 
 If you are a developer, note that download or source functions MUST be registered in AquaCache using function \code{\link[=registerSourceAdapterArguments]{registerSourceAdapterArguments()}}, and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 }

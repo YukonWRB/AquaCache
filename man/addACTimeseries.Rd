@@ -81,6 +81,10 @@ For continuous data:
 The data.frame must contain a 'datetime' (POSIXct) OR 'date' (date) column. If specifying 'date' then the data is entered to \code{measurements_continuous} as one-day-period rows and database triggers maintain \code{measurements_calculated_daily}. 'value' (numeric) is also required, and optionally 'owner', 'contributor', 'share_with', 'approval', 'grade', 'qualifier'. Function \code{\link[=addNewContinuous]{addNewContinuous()}} will be called to add this data to the database. If a fetch source adapter is also specified it will be called to fetch more recent data than that in this data.frame.
 
 Source adapters are supplied in \code{source_adapters}. Each assignment may be used for fetching, synchronization, or both, and may be retained while temporarily inactive. The highest active priority (lowest number) is selected for each operation.
+
+QC rules are not assigned automatically when a timeseries is added. Use
+\code{\link[=populateTimeseriesQCRules]{populateTimeseriesQCRules()}} to apply the automatic policy defaults in
+bulk, or \code{\link[=setTimeseriesQCRules]{setTimeseriesQCRules()}} to save a customized assignment.
 }
 \examples{
 \dontrun{

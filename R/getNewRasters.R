@@ -6,11 +6,15 @@
 #' [addACRasterSeries()] for creating a series and its assignments.
 #' Every source function must have an enabled raster-domain entry in
 #' `public.source_adapter_capabilities`.
+#' When `con = NULL`, independent raster series are processed in parallel when
+#' the parallel backend is available. Each worker opens a connection on its
+#' first assigned series and reuses it until the worker exits. Supplying `con`
+#' keeps processing sequential.
 #'
 #' If you are a developer, note that download or source functions MUST be registered in AquaCache using function [registerSourceAdapterArguments()], and that this operation would normally be completed using the 'patch' system. See patch_56.R for examples.
 #'
 #' @param raster_series_ids A vector of raster_series_id's. Default 'all' fetches all ids in the raster_series_index table.
-#' @param con A connection to the database. Default is NULL, which will use the package default connection settings and close the connection afterwards.
+#' @param con A connection to the database. Default is NULL, which uses the package default connection settings and closes the connection afterwards. Parallel processing requires `con = NULL`; a supplied connection is used sequentially.
 #' @param keep_forecasts Should forecasts be kept or replaced? Default is 'selective', which keeps only rasters for which there is no new forecast. 'all' keeps all forecasts, and 'none' replaces all forecasts. This does not apply to raster series labelled as 'reanalysis'
 #' @param active Sets behavior for import of new rasters for raster series. If set to 'default', the column 'active' in the raster_series_index table will determine whether to get new raster or not. If set to 'all', all raster series will be fetched regardless of the 'active' column.
 #' @param start_datetime A start datetime to fetch rasters from. By default, fetches from the last raster end_datetime + 1 second, however this parameter is provided for flexibility. If combined with `replace = TRUE`, could be used to replace rasters from a specific datetime to `end_datetime`. Specify as POSIXct or something coercible to POSIXct; coercion will be done with to UTC time zone. Existing forecast series continue from `last_issue`; this value is used only to initialize a forecast series that has no issue metadata yet.
@@ -64,9 +68,18 @@ getNewRasters <- function(
     }
   }
 
+  parallel <- FALSE
+  parallel_disabled_reason <- NULL
   if (is.null(con)) {
     con <- AquaConnect(silent = TRUE)
     on.exit(DBI::dbDisconnect(con))
+    parallel <- requireNamespace("foreach", quietly = TRUE) &&
+      requireNamespace("doSNOW", quietly = TRUE)
+    if (!parallel) {
+      parallel_disabled_reason <- "missing_packages"
+    }
+  } else {
+    parallel_disabled_reason <- "connection_provided"
   }
 
   DBI::dbExecute(con, "SET timezone = 'UTC'")
@@ -165,15 +178,28 @@ getNewRasters <- function(
 
   message("Fetching new rasters with getNewRasters")
 
-  count <- 0 #counter for number of successful new pulls
-  raster_count <- 0
-  success <- character(0)
-  append_errors <- list()
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(meta_ids), style = 3)
   }
-  for (i in 1:nrow(meta_ids)) {
+
+  process_raster_series <- function(i, con) {
+    count <- 0L
+    raster_count <- 0L
+    success <- character(0)
+    append_errors <- list()
+    series_error <- NULL
     id <- meta_ids[i, "raster_series_id"]
+    make_series_result <- function(locked = FALSE) {
+      list(
+        raster_series_id = as.character(id),
+        count = as.integer(count),
+        success = success,
+        raster_count = as.integer(raster_count),
+        append_errors = append_errors,
+        locked = locked,
+        error = series_error
+      )
+    }
     message(
       "Working on raster_series_id ",
       id,
@@ -191,12 +217,7 @@ getNewRasters <- function(
       wait = FALSE
     )
     if (!isTRUE(lock_acquired)) {
-      warning(
-        "getNewRasters: Skipping raster_series_id ",
-        id,
-        " because it is locked by another process."
-      )
-      next
+      return(make_series_result(locked = TRUE))
     }
 
     source_fx <- meta_ids[i, "source_fx"]
@@ -297,7 +318,7 @@ getNewRasters <- function(
 
           if (length(rasters) == 0) {
             # No new rasters found
-            next
+            return(make_series_result())
           }
           if (!inherits(rasters, "list")) {
             warning(
@@ -305,7 +326,7 @@ getNewRasters <- function(
               id,
               " did not return a list. See documentation for details."
             )
-            next
+            return(make_series_result())
           }
 
           # Extract forecast and issued_datetime from the list
@@ -619,26 +640,210 @@ getNewRasters <- function(
         }
       ),
       error = function(e) {
-        warning(
-          "getNewRasters: Failed to get new rasters or to append new rasters for raster_series_id ",
-          id,
-          " with error message: ",
-          e$message
-        )
+        series_error <<- conditionMessage(e)
       },
       finally = {
         advisory_lock_release(con, lock_namespace, id)
       }
     )
 
-    if (interactive()) {
-      utils::setTxtProgressBar(pb, i)
+    make_series_result()
+  }
+
+  # Keep worker functions and their data separate from the preflight connection.
+  worker_env <- new.env(parent = asNamespace("AquaCache"))
+  worker_env$meta_ids <- meta_ids
+  worker_env$keep_forecasts <- keep_forecasts
+  worker_env$start_datetime <- start_datetime
+  worker_env$end_datetime <- end_datetime
+  environment(process_raster_series) <- worker_env
+  run_env <- new.env(parent = worker_env)
+  run_env$process_raster_series <- process_raster_series
+
+  run_raster_series <- function(i, con) {
+    tryCatch(
+      process_raster_series(i, con),
+      error = function(e) {
+        list(
+          raster_series_id = as.character(meta_ids$raster_series_id[[i]]),
+          count = 0L,
+          success = character(0),
+          raster_count = 0L,
+          append_errors = list(),
+          locked = FALSE,
+          error = conditionMessage(e)
+        )
+      }
+    )
+  }
+  environment(run_raster_series) <- run_env
+
+  if (parallel && nrow(meta_ids) > 1L) {
+    n_cores <- parallel::detectCores() - 2L
+    if (is.na(n_cores) || n_cores < 1L) {
+      n_cores <- 1L
+      warning(
+        "getNewRasters: Parallel mode requested but only 2 or fewer CPU cores were detected. Running with one worker."
+      )
     }
-  } # End of for loop
+    n_cores <- min(n_cores, nrow(meta_ids))
+    message(
+      "Iterating through ",
+      nrow(meta_ids),
+      " raster series in parallel with ",
+      n_cores,
+      " workers."
+    )
+
+    cl <- parallel::makeCluster(n_cores)
+    on.exit(
+      {
+        try(
+          parallel::clusterEvalQ(cl, {
+            worker_connection_name <- ".aquacache_getNewRasters_con"
+            if (exists(
+              worker_connection_name,
+              envir = .GlobalEnv,
+              inherits = FALSE
+            )) {
+              worker_con <- get(
+                worker_connection_name,
+                envir = .GlobalEnv,
+                inherits = FALSE
+              )
+              if (DBI::dbIsValid(worker_con)) {
+                DBI::dbDisconnect(worker_con)
+              }
+              rm(list = worker_connection_name, envir = .GlobalEnv)
+            }
+          }),
+          silent = TRUE
+        )
+        parallel::stopCluster(cl)
+      },
+      add = TRUE
+    )
+    parallel::clusterExport(
+      cl,
+      "run_raster_series",
+      envir = environment()
+    )
+    doSNOW::registerDoSNOW(cl)
+    if (interactive()) {
+      progress <- function(n) {
+        utils::setTxtProgressBar(
+          pb,
+          min(as.integer(n), nrow(meta_ids))
+        )
+      }
+    }
+    opts <- if (interactive()) list(progress = progress) else list()
+    `%dopar%` <- foreach::`%dopar%`
+    worker_results <- foreach::foreach(
+      i = seq_len(nrow(meta_ids)),
+      .packages = c("DBI", "AquaCache", "data.table", "jsonlite"),
+      .options.snow = opts,
+      .combine = "c",
+      .multicombine = TRUE,
+      .errorhandling = "pass"
+    ) %dopar% {
+      task_result <- tryCatch(
+        {
+          worker_connection_name <- ".aquacache_getNewRasters_con"
+          if (exists(
+            worker_connection_name,
+            envir = .GlobalEnv,
+            inherits = FALSE
+          )) {
+            worker_con <- get(
+              worker_connection_name,
+              envir = .GlobalEnv,
+              inherits = FALSE
+            )
+          } else {
+            worker_con <- AquaConnect(silent = TRUE, check = FALSE)
+            assign(worker_connection_name, worker_con, envir = .GlobalEnv)
+            DBI::dbExecute(worker_con, "SET timezone = 'UTC'")
+          }
+          run_raster_series(i, con = worker_con)
+        },
+        error = function(e) {
+          list(
+            raster_series_id = as.character(meta_ids$raster_series_id[[i]]),
+            count = 0L,
+            success = character(0),
+            raster_count = 0L,
+            append_errors = list(),
+            locked = FALSE,
+            error = conditionMessage(e)
+          )
+        }
+      )
+      list(task_result)
+    }
+  } else {
+    if (identical(parallel_disabled_reason, "missing_packages")) {
+      message(
+        "Parallel packages 'foreach' and 'doSNOW' are not available; running in sequence."
+      )
+    } else if (identical(parallel_disabled_reason, "connection_provided")) {
+      message("A connection was supplied; raster series will be processed in sequence.")
+    }
+    worker_results <- vector("list", nrow(meta_ids))
+    for (i in seq_len(nrow(meta_ids))) {
+      worker_results[[i]] <- run_raster_series(i, con = con)
+      if (interactive()) {
+        utils::setTxtProgressBar(pb, i)
+      }
+    }
+  }
 
   if (interactive()) {
     close(pb)
   }
+
+  locked <- vapply(worker_results, function(result) result$locked, logical(1))
+  if (any(locked)) {
+    for (raster_series_id in vapply(
+      worker_results[locked],
+      function(result) result$raster_series_id,
+      character(1)
+    )) {
+      warning(
+        "getNewRasters: Skipping raster_series_id ",
+        raster_series_id,
+        " because it is locked by another process."
+      )
+    }
+  }
+
+  failed <- vapply(
+    worker_results,
+    function(result) !is.null(result$error),
+    logical(1)
+  )
+  if (any(failed)) {
+    for (index in which(failed)) {
+      warning(
+        "getNewRasters: Failed to get new rasters or to append new rasters for raster_series_id ",
+        worker_results[[index]]$raster_series_id,
+        " with error message: ",
+        worker_results[[index]]$error
+      )
+    }
+  }
+
+  count <- sum(vapply(worker_results, function(result) result$count, integer(1)))
+  raster_count <- sum(vapply(
+    worker_results,
+    function(result) result$raster_count,
+    integer(1)
+  ))
+  success <- unlist(lapply(worker_results, function(result) result$success), use.names = FALSE)
+  append_errors <- unlist(
+    lapply(worker_results, function(result) result$append_errors),
+    recursive = FALSE
+  )
 
   message(
     count,

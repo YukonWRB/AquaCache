@@ -50,6 +50,9 @@ mock_getnew_db_get_query <- function(
   )
 ) {
   function(con, statement, params = NULL, ...) {
+    if (grepl("to_regclass('public.qc_rule_capabilities')", statement, fixed = TRUE)) {
+      return(data.frame(available = FALSE))
+    }
     if (grepl("timeseries_aggregation_methods", statement, fixed = TRUE) &&
         grepl("to_regclass", statement, fixed = TRUE)) {
       # This mock has no aggregation-method table; exercise the legacy fallback.
@@ -287,7 +290,8 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
       port = Sys.getenv("aquacachePort"),
       username = Sys.getenv("aquacacheAdminUser"),
       password = Sys.getenv("aquacacheAdminPass"),
-      silent = FALSE
+      silent = FALSE,
+      check = TRUE
     ) {
       connect_calls <<- connect_calls + 1L
       captured$connect_args[[length(captured$connect_args) + 1L]] <- list(
@@ -336,12 +340,17 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
     ),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
+    dbIsValid = function(con, ...) TRUE,
     .package = "DBI"
   )
   local_mocked_bindings(
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
+    clusterEvalQ = function(cl, expr) {
+      eval(substitute(expr), envir = parent.frame())
+      invisible(list(NULL))
+    },
     clusterExport = function(cl, varlist, envir) {
       captured$cluster_exports <- varlist
       invisible(TRUE)
@@ -376,7 +385,7 @@ test_that("getNewContinuous groups cache-sharing ECCC tasks in parallel", {
 
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
-  expect_equal(connect_calls, 3L)
+  expect_equal(connect_calls, 2L)
   expect_equal(captured$parameters, c("wind_spd", "temp", "temp"))
   expect_true("source_adapter_args_decode" %in% captured$cluster_exports)
   expect_true(
@@ -440,7 +449,8 @@ test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID
       port = Sys.getenv("aquacachePort"),
       username = Sys.getenv("aquacacheAdminUser"),
       password = Sys.getenv("aquacacheAdminPass"),
-      silent = FALSE
+      silent = FALSE,
+      check = TRUE
     ) {
       connect_calls <<- connect_calls + 1L
       structure(list(), class = "mock_con")
@@ -487,12 +497,17 @@ test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID
     ),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
+    dbIsValid = function(con, ...) TRUE,
     .package = "DBI"
   )
   local_mocked_bindings(
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
+    clusterEvalQ = function(cl, expr) {
+      eval(substitute(expr), envir = parent.frame())
+      invisible(list(NULL))
+    },
     clusterExport = function(cl, varlist, envir) invisible(TRUE),
     .package = "parallel"
   )
@@ -524,7 +539,7 @@ test_that("getNewContinuous groups NESDIS tasks by DCP and injects timeseries ID
 
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
-  expect_equal(connect_calls, 3L)
+  expect_equal(connect_calls, 2L)
   expect_equal(captured$timeseries_ids, c(1322L, 1323L, 2000L))
   expect_equal(captured$route_ids, c(72L, 71L, 73L))
 })
@@ -770,7 +785,8 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
       port = Sys.getenv("aquacachePort"),
       username = Sys.getenv("aquacacheAdminUser"),
       password = Sys.getenv("aquacacheAdminPass"),
-      silent = FALSE
+      silent = FALSE,
+      check = TRUE
     ) {
       connect_calls <<- connect_calls + 1L
       captured$connect_args[[length(captured$connect_args) + 1L]] <- list(
@@ -816,12 +832,17 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
     ),
     dbExecute = function(con, statement, ...) 1L,
     dbDisconnect = function(con, ...) invisible(TRUE),
+    dbIsValid = function(con, ...) TRUE,
     .package = "DBI"
   )
   local_mocked_bindings(
     detectCores = function(...) 4L,
     makeCluster = function(...) structure(list(), class = "mock_cluster"),
     stopCluster = function(cl) invisible(TRUE),
+    clusterEvalQ = function(cl, expr) {
+      eval(substitute(expr), envir = parent.frame())
+      invisible(list(NULL))
+    },
     clusterExport = function(cl, varlist, envir) invisible(TRUE),
     .package = "parallel"
   )
@@ -853,7 +874,7 @@ test_that("getNewContinuous does not group ECCC minute tasks", {
 
   expect_s3_class(res, "data.frame")
   expect_equal(res$timeseries_id, timeseries_ids)
-  expect_equal(connect_calls, 4L)
+  expect_equal(connect_calls, 2L)
   expect_equal(captured$parameters, c("temp", "wind_spd", "temp"))
   expect_true(all(vapply(
     captured$connect_args,
@@ -919,7 +940,7 @@ test_that("getNewContinuous does not delete history when period calculation need
   }
 
   last_datetime <- max(history$datetime)
-  new_rows <- data.frame(
+  new_rows <- data.table::data.table(
     datetime = last_datetime + step_seconds * seq_len(3),
     value = as.numeric(history$value[[1]]) + c(0.1, 0.2, 0.3)
   )
@@ -1006,6 +1027,89 @@ test_that("getNewContinuous does not delete history when period calculation need
   expect_equal(delete_count, 0)
   expect_equal(inserted_count, nrow(new_rows))
   expect_true(tsid %in% result$timeseries_id)
+})
+
+test_that("getNewContinuous rolls back a failed series write to its savepoint", {
+  con <- connect_test()
+  on.exit(DBI::dbDisconnect(con), add = TRUE, after = TRUE)
+
+  candidate <- DBI::dbGetQuery(
+    con,
+    "SELECT t.timeseries_id, max(m.datetime) AS latest
+     FROM continuous.timeseries t
+     JOIN continuous.measurements_continuous m
+       ON m.timeseries_id = t.timeseries_id
+     GROUP BY t.timeseries_id
+     ORDER BY max(m.datetime) DESC
+     LIMIT 1"
+  )
+  if (nrow(candidate) != 1L || is.na(candidate$latest[[1L]])) {
+    testthat::skip("No measured timeseries is available in testdb.")
+  }
+
+  tsid <- candidate$timeseries_id[[1L]]
+  new_datetime <- as.POSIXct(candidate$latest[[1L]], tz = "UTC") + 3600
+  invalid_rows <- data.table::data.table(
+    datetime = new_datetime,
+    value = 1,
+    period = "not-an-interval"
+  )
+  captured <- new.env(parent = emptyenv())
+  AquaCache:::dbTransBegin(con)
+  on.exit(DBI::dbExecute(con, "ROLLBACK;"), add = TRUE, after = FALSE)
+  DBI::dbExecute(
+    con,
+    "DELETE FROM continuous.timeseries_source_adapters
+     WHERE timeseries_id = $1",
+    params = list(tsid)
+  )
+  DBI::dbExecute(
+    con,
+    "INSERT INTO continuous.timeseries_source_adapters (
+       timeseries_id, source_fx, source_fx_args, fetch_priority,
+       synchronize_priority, active
+     ) VALUES ($1, 'downloadRWIS', '{}'::jsonb, 1, 1, TRUE)",
+    params = list(tsid)
+  )
+  testthat::local_mocked_bindings(
+    getSourceAdapterCapabilities = function(...) {
+      data.table::data.table(
+        source_fx = "downloadRWIS",
+        parallel_group_strategy = "timeseries",
+        parallel_group_args = list(character()),
+        inject_timeseries_id = FALSE
+      )
+    },
+    downloadRWIS = function(start_datetime, con, ...) {
+      captured$called <- TRUE
+      invalid_rows
+    },
+    .package = "AquaCache"
+  )
+
+  expect_message(
+    result <- AquaCache::getNewContinuous(
+      con = con,
+      timeseries_id = tsid,
+      active = "all"
+    ),
+    regexp = "invalid input syntax for type interval"
+  )
+
+  expect_true(AquaCache:::dbTransCheck(con))
+  expect_true(isTRUE(captured$called))
+  expect_equal(DBI::dbGetQuery(
+    con,
+    "SELECT count(*) AS n FROM continuous.measurements_continuous
+     WHERE timeseries_id = $1 AND datetime = $2",
+    params = list(tsid, new_datetime)
+  )$n[[1L]], 0L)
+  expect_equal(DBI::dbGetQuery(
+    con,
+    "SELECT count(*) AS n FROM continuous.qualifiers
+     WHERE timeseries_id = $1 AND start_dt <= $2 AND end_dt >= $2",
+    params = list(tsid, new_datetime)
+  )$n[[1L]], 0L)
 })
 
 test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinute", {

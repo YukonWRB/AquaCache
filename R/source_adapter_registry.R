@@ -66,28 +66,46 @@ getSourceAdapterCapabilities <- function(
     on.exit(DBI::dbDisconnect(con), add = TRUE)
   }
 
+  filters <- character()
+  if (enabled_only) {
+    filters <- c(filters, "enabled")
+  }
+  if (!is.null(data_domain)) {
+    filters <- c(
+      filters,
+      paste0(
+        "data_domain IN (",
+        paste0("'", data_domain, "'", collapse = ", "),
+        ")"
+      )
+    )
+  }
+  query <- paste0(
+    "SELECT
+       source_fx,
+       data_domain,
+       adapter_kind,
+       requires_transmission_mapping,
+       inject_timeseries_id,
+       parallel_group_strategy,
+       array_to_json(parallel_group_args)::text
+         AS parallel_group_args_json,
+       allow_empty_initial_fetch,
+       array_to_json(transmission_method_codes)::text
+         AS transmission_method_codes_json,
+       argument_schema::text AS argument_schema_json,
+       ui_config::text AS ui_config_json,
+       enabled,
+       note
+     FROM public.source_adapter_capabilities",
+    if (length(filters) > 0L) {
+      paste0(" WHERE ", paste(filters, collapse = " AND "))
+    },
+    " ORDER BY data_domain, source_fx"
+  )
+
   capabilities <- tryCatch(
-    data.table::as.data.table(DBI::dbGetQuery(
-      con,
-      "SELECT
-         source_fx,
-         data_domain,
-         adapter_kind,
-         requires_transmission_mapping,
-         inject_timeseries_id,
-         parallel_group_strategy,
-         array_to_json(parallel_group_args)::text
-           AS parallel_group_args_json,
-         allow_empty_initial_fetch,
-         array_to_json(transmission_method_codes)::text
-           AS transmission_method_codes_json,
-         argument_schema::text AS argument_schema_json,
-         ui_config::text AS ui_config_json,
-         enabled,
-         note
-       FROM public.source_adapter_capabilities
-       ORDER BY data_domain, source_fx"
-    )),
+    data.table::as.data.table(DBI::dbGetQuery(con, query)),
     error = function(e) {
       stop(
         "getSourceAdapterCapabilities requires database Patch 56: ",

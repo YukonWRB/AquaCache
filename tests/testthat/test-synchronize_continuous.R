@@ -38,6 +38,9 @@ mock_sync_db_get_query <- function(
   source_fx_args = rep(NA_character_, length(timeseries_ids))
 ) {
   function(con, statement, ...) {
+    if (grepl("to_regclass('public.qc_rule_capabilities')", statement, fixed = TRUE)) {
+      return(data.frame(available = FALSE))
+    }
     if (
       grepl("FROM public.source_adapter_capabilities", statement, fixed = TRUE) &&
         !grepl("FROM continuous.timeseries t", statement, fixed = TRUE)

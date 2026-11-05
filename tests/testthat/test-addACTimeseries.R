@@ -24,6 +24,9 @@ test_that("addACTimeseries accepts mixed missing and valid sub-locations", {
       if (grepl("continuous.aggregation_types", statement, fixed = TRUE)) {
         return(data.frame(aggregation_type_id = 1L))
       }
+      if (grepl("to_regclass('public.qc_rule_capabilities')", statement, fixed = TRUE)) {
+        return(data.frame(available = FALSE))
+      }
       if (grepl("INSERT INTO continuous.timeseries", statement, fixed = TRUE)) {
         next_timeseries_id <<- next_timeseries_id + 1L
         return(data.frame(timeseries_id = next_timeseries_id))
