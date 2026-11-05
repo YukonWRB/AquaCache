@@ -187,18 +187,6 @@ qc_validate_integer_arg <- function(args, name, min_value) {
   as.integer(value)
 }
 
-#' Registry of implemented continuous QC rule versions
-#'
-#' Each catalogue key has the form `rule_fx@rule_version` and must match a
-#' versioned row in `public.qc_rule_capabilities`. Its `fx` implementation
-#' accepts the grading data, merged arguments, and time context, and returns
-#' one qualifier code or `NA` per reading. Its `window` function describes
-#' required context as counts of preceding and following readings plus whether
-#' context must extend to the calendar-year start. `primary_parameters` lists
-#' compatible parameter names; an omitted or empty value accepts any
-#' parameter. Additions must keep the database schema, registry entry, and
-#' implementation version aligned.
-#' @keywords internal
 qc_rule_registry <- list(
   "qc_rain_cold@1" = list(
     fx = qc_rain_cold,
@@ -923,8 +911,7 @@ qc_validate_qualifier_overlaps <- function(con) {
 #' @param con A connection with an open transaction.
 #' @param timeseries_id The timeseries just written to.
 #' @param from Earliest datetime written or rewritten.
-#' @return Invisibly returns `TRUE` when grading succeeds and `FALSE` when it
-#'   is skipped or rolls back after an error.
+#' @return Invisibly, TRUE if grading succeeded.
 #' @noRd
 #' @keywords internal
 grade_after_import <- function(con, timeseries_id, from) {
@@ -982,19 +969,9 @@ grade_after_import <- function(con, timeseries_id, from) {
   invisible(ok)
 }
 
-#' Skip the grading hook when an adapter has no datetimes to write
-#'
-#' Import paths call this helper after writing or synchronizing a series. It
-#' avoids invoking the grading savepoint for empty writes and derives the
-#' grading start from the earliest non-missing written datetime.
-#'
-#' @param con A connection with an open import transaction.
-#' @param timeseries_id The timeseries just written to.
-#' @param datetimes Datetimes written or rewritten by the import.
-#' @return Invisibly returns `FALSE` for empty input; otherwise returns the
-#'   logical result from the internal grading hook.
-#' @noRd
-#' @keywords internal
+# Skip the hook when an adapter has no datetimes to write. In particular,
+# synchronize_continuous() promotes warnings inside its write transaction to
+# errors, so min(character(0)) must not be evaluated at the call site.
 grade_after_import_if_data <- function(con, timeseries_id, datetimes) {
   datetimes <- datetimes[!is.na(datetimes)]
   if (!length(datetimes)) {
