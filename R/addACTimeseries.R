@@ -15,6 +15,10 @@
 #'
 #' Source adapters are supplied in `source_adapters`. Each assignment may be used for fetching, synchronization, or both, and may be retained while temporarily inactive. The highest active priority (lowest number) is selected for each operation.
 #'
+#' QC rules are not assigned automatically when a timeseries is added. Use
+#' [populateTimeseriesQCRules()] to apply the automatic policy defaults in
+#' bulk, or [setTimeseriesQCRules()] to save a customized assignment.
+#'
 #' @param df A data.frame containing at least one row and the following columns: start_datetime, location, z, parameter, media, sensor_priority, aggregation_type, record_rate, share_with, owner, note. An optional list-column named `source_adapters` may contain one assignment data.frame per new timeseries. If this parameter is provided, all other parameters save for `data` must be left at their defaults.
 #' @param data An optional list of data.frames of length nrow(df) or length(location) containing the data to add to the database. If adding multiple timeseries and not all of them need data, include NA elements in the list in the correct locations.
 #' @param start_datetime A character or POSIXct vector of datetimes from which
@@ -507,8 +511,6 @@ addACTimeseries <- function(
   }
 
   #Add the timeseries #######################################################################################################
-  qc_locations_to_populate <- integer()
-
   for (i in 1:length(location)) {
     loc_id <- location[i]
     loc_label <- as.character(loc_id)
@@ -889,10 +891,6 @@ addACTimeseries <- function(
             new_tsid
           )
         }
-        qc_locations_to_populate <- unique(c(
-          qc_locations_to_populate,
-          as.integer(loc_id)
-        ))
       },
       error = function(e) {
         warning(
@@ -907,18 +905,4 @@ addACTimeseries <- function(
     )
   } #End of loop iterating over each new  timeseries entry
 
-  if (length(qc_locations_to_populate)) {
-    tryCatch(
-      populateTimeseriesQCRules(
-        con,
-        location_ids = qc_locations_to_populate,
-        dry_run = FALSE
-      ),
-      error = function(e) warning(
-        "Failed to add automatic QC assignments: ",
-        conditionMessage(e),
-        call. = FALSE
-      )
-    )
-  }
 }

@@ -928,25 +928,8 @@ grade_after_import <- function(con, timeseries_id, from) {
   DBI::dbExecute(con, "SAVEPOINT grade_after_import")
   ok <- tryCatch(
     {
-      automatic <- populateTimeseriesQCRules(
-        con,
-        location_ids = DBI::dbGetQuery(
-          con,
-          "SELECT location_id FROM continuous.timeseries WHERE timeseries_id = $1",
-          params = list(as.integer(timeseries_id))
-        )$location_id[[1L]],
-        dry_run = FALSE
-      )
-      newly_configured <- if (nrow(automatic)) {
-        automatic$timeseries_id[automatic$action == "created"]
-      } else {
-        integer()
-      }
-      grade_ids <- unique(c(as.integer(timeseries_id), newly_configured))
       withCallingHandlers(
-        for (grade_id in grade_ids) {
-          gradeContinuous(con, grade_id, from = from)
-        },
+        gradeContinuous(con, as.integer(timeseries_id), from = from),
         warning = function(w) {
           message(conditionMessage(w))
           invokeRestart("muffleWarning")
