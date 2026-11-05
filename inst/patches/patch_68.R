@@ -63,32 +63,36 @@ if (!is.na(patch_number)) {
   }
 }
 
-message(
-  "Choose which QC rules to assign automatically. Enter 0 for none, or a comma-separated selection from 1 to 4:\n",
-  "0 = do not create any automatic assignments (they can  be created later)\n",
-  "1 = qc_rain_cold (rain below the registered air-temperature threshold)\n",
-  "2 = qc_stuck_sensor (applies to all active continuous parameters. Beware that this might not be advisable for many timeseries, such as precipitation, that routinely report identical values (no precip) for a long time. We recommend applying this per-timeseries or per-parameter later)\n",
-  "3 = qc_dir_calm (wind direction during calm wind)\n",
-  "4 = qc_snowmelt_tips (possible snowmelt tipping-bucket readings)\n\n",
-  "For example, enter 1,3,4 to select those three rules. No rule arguments are requested: selected assignments use populateTimeseriesQCRules()' automatic policy defaults (including its recording-rate-based snowmelt window). Assignments apply to the full timeseries record (-Inf to Inf). This patch will backfill all currently available readings; future imports will use the saved assignments."
-)
-selection <- trimws(readline(
-  prompt = "Enter 0 or one or more rule numbers (1,2,3,4): "
-))
-selected_numbers <- suppressWarnings(as.integer(trimws(
-  strsplit(selection, ",", fixed = TRUE)[[1L]]
-)))
-if (
-  !length(selected_numbers) ||
-    anyNA(selected_numbers) ||
-    any(!selected_numbers %in% 0:4) ||
-    (0L %in% selected_numbers && length(selected_numbers) != 1L)
-) {
-  stop(
-    "Invalid QC rule selection. Enter 0 alone, or a comma-separated selection of 1, 2, 3 and/or 4."
+if (interactive()) {
+  message(
+    "Choose which QC rules to assign automatically. Enter 0 for none, or a comma-separated selection from 1 to 4:\n",
+    "0 = do not create any automatic assignments (they can  be created later)\n",
+    "1 = qc_rain_cold (rain below the registered air-temperature threshold)\n",
+    "2 = qc_stuck_sensor (applies to all active continuous parameters. Beware that this might not be advisable for many timeseries, such as precipitation, that routinely report identical values (no precip) for a long time. We recommend applying this per-timeseries or per-parameter later)\n",
+    "3 = qc_dir_calm (wind direction during calm wind)\n",
+    "4 = qc_snowmelt_tips (possible snowmelt tipping-bucket readings)\n\n",
+    "For example, enter 1,3,4 to select those three rules. No rule arguments are requested: selected assignments use populateTimeseriesQCRules()' automatic policy defaults (including its recording-rate-based snowmelt window). Assignments apply to the full timeseries record (-Inf to Inf). This patch will backfill all currently available readings; future imports will use the saved assignments."
   )
+  selection <- trimws(readline(
+    prompt = "Enter 0 or one or more rule numbers (1,2,3,4): "
+  ))
+  selected_numbers <- suppressWarnings(as.integer(trimws(
+    strsplit(selection, ",", fixed = TRUE)[[1L]]
+  )))
+  if (
+    !length(selected_numbers) ||
+      anyNA(selected_numbers) ||
+      any(!selected_numbers %in% 0:4) ||
+      (0L %in% selected_numbers && length(selected_numbers) != 1L)
+  ) {
+    stop(
+      "Invalid QC rule selection. Enter 0 alone, or a comma-separated selection of 1, 2, 3 and/or 4."
+    )
+  }
+  selected_numbers <- unique(selected_numbers)
+} else {
+  selected_numbers <- 0
 }
-selected_numbers <- unique(selected_numbers)
 
 active <- dbTransBegin(con)
 tryCatch(
