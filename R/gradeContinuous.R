@@ -399,6 +399,13 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' source-managed (`no_source_update = FALSE`), so later runs can replace
 #' them.
 #'
+#' Inactive saved assignments also contribute managed codes, so disabling or
+#' removing an assignment with [setTimeseriesQCRules()] lets later grading
+#' clear its old flags. With no active rules, unprotected managed flags in
+#' the graded window become `baseline`. Use `from = NULL` to clear the whole
+#' record. Series with no saved assignments are left alone. A preview also
+#' manages codes from saved assignments omitted from the proposed set.
+#'
 #' **Protected readings.** A reading covered by a protected range of a
 #' managed code gets no new code of any type: the protected range is never
 #' changed, and the grader writes around it. Rules only reproduce what they
@@ -432,7 +439,8 @@ qc_runs_to_ranges <- function(datetime, code) {
 #'   over the whole window, for comparison with stored qualifiers), `window`
 #'   and `protected` (the number of readings held by protected ranges). With
 #'   `write = TRUE`, a data.frame of readings and ranges per
-#'   code. NULL if the series has no active rules or nothing to write.
+#'   code. NULL if the series has no saved or proposed assignments, or nothing
+#'   to write.
 #' @seealso [adjust_qualifier()]
 #' @export
 gradeContinuous <- function(
@@ -448,27 +456,30 @@ gradeContinuous <- function(
   tsid <- as.integer(timeseries_id)
   stopifnot(length(tsid) == 1, !is.na(tsid))
   full_regrade <- is.null(from)
+  if (!is.null(assignments) && write) {
+    stop(
+      "gradeContinuous: assignments can only be supplied with write = FALSE."
+    )
+  }
 
-  if (is.null(assignments)) {
-    rules <- DBI::dbGetQuery(
-      con,
-      "SELECT r.rule_fx, r.rule_version, r.rule_args::text AS rule_args,
+  # Retain inactive assignments for reconciliation. The assignment API
+  # deactivates omitted rows rather than deleting their output-code history.
+  saved_rules <- DBI::dbGetQuery(
+    con,
+    "SELECT r.rule_fx, r.rule_version, r.active, r.rule_args::text AS rule_args,
          r.companion_timeseries::text AS companion_timeseries,
          array_to_string(c.emits, ',') AS emits,
          c.argument_schema::text AS argument_schema
        FROM continuous.timeseries_qc_rules r
        JOIN public.qc_rule_capabilities c
          ON c.rule_fx = r.rule_fx AND c.rule_version = r.rule_version
-       WHERE r.timeseries_id = $1 AND r.active
+       WHERE r.timeseries_id = $1
        ORDER BY r.run_order, r.timeseries_qc_rule_id",
-      params = list(tsid)
-    )
+    params = list(tsid)
+  )
+  if (is.null(assignments)) {
+    rules <- saved_rules[saved_rules$active, , drop = FALSE]
   } else {
-    if (write) {
-      stop(
-        "gradeContinuous: assignments can only be supplied with write = FALSE."
-      )
-    }
     rules <- qc_rule_assignments_normalize(con, tsid, assignments)
     rules <- rules[rules$active, , drop = FALSE]
     if (nrow(rules)) {
@@ -499,10 +510,19 @@ gradeContinuous <- function(
       ]
     }
   }
-  if (nrow(rules) == 0) {
+  if (nrow(rules) == 0 && nrow(saved_rules) == 0) {
     return(invisible(NULL))
   }
-  rules$rule_key <- qc_rule_capability_key(rules$rule_fx, rules$rule_version)
+  # Saved arguments are materialized by setTimeseriesQCRules(). Read output
+  # overrides without validating or executing inactive rule implementations.
+  saved_args <- lapply(saved_rules$rule_args, function(a) {
+    jsonlite::fromJSON(a, simplifyVector = FALSE)
+  })
+  rules$rule_key <- if (nrow(rules)) {
+    qc_rule_capability_key(rules$rule_fx, rules$rule_version)
+  } else {
+    character()
+  }
   unknown <- setdiff(rules$rule_key, names(qc_rule_registry))
   if (length(unknown)) {
     stop(
@@ -539,8 +559,8 @@ gradeContinuous <- function(
   win <- lapply(seq_len(nrow(rules)), function(i) {
     qc_rule_registry[[rules$rule_key[i]]]$window(args[[i]])
   })
-  back <- 2 * rate * max(vapply(win, function(w) w$back, numeric(1)))
-  ahead <- 2 * rate * max(vapply(win, function(w) w$ahead, numeric(1)))
+  back <- 2 * rate * max(0, vapply(win, function(w) w$back, numeric(1)))
+  ahead <- 2 * rate * max(0, vapply(win, function(w) w$ahead, numeric(1)))
   from <- if (is.null(from)) meta$first_dt else as.POSIXct(from, tz = "UTC")
   to <- if (is.null(to)) meta$last_dt else as.POSIXct(to, tz = "UTC")
   write_start <- max(from - ahead, meta$first_dt)
@@ -597,7 +617,11 @@ gradeContinuous <- function(
     }
     codes[[i]] <- rule$fx(rule_x, args[[i]], ctx)
   }
-  x$code <- qc_combine_codes(codes)
+  x$code <- if (length(codes)) {
+    qc_combine_codes(codes)
+  } else {
+    rep(NA_character_, nrow(x))
+  }
   w <- x[x$datetime >= write_start & x$datetime <= to, c("datetime", "code")]
   if (nrow(w) == 0) {
     return(invisible(NULL))
@@ -605,8 +629,11 @@ gradeContinuous <- function(
   w$code[is.na(w$code)] <- baseline
 
   emitted <- unique(c(
-    unlist(strsplit(rules$emits, ",")),
-    unlist(lapply(args, function(a) c(a$qualifier, a$zero_qualifier)))
+    unlist(strsplit(saved_rules$emits, ",")),
+    unlist(strsplit(as.character(rules$emits), ",")),
+    unlist(lapply(c(saved_args, args), function(a) {
+      c(a$qualifier, a$zero_qualifier)
+    }))
   ))
   managed <- unique(c(baseline, replace, emitted))
   if (write && full_regrade) {

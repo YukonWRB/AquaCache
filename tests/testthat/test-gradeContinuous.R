@@ -1,6 +1,5 @@
-# Pure-function tests for gradeContinuous() helpers and rules. They need no
-# database; the database path was exercised against a full copy of NWT's
-# database inside rolled-back transactions.
+# Rule/helper tests and mocked grading/reconciliation tests need no database.
+# The qualifier-constraint integration test requires an explicit testdb opt-in.
 
 hourly <- function(n, start = "2026-01-01 00:00:00") {
   as.POSIXct(start, tz = "UTC") + (seq_len(n) - 1) * 3600
@@ -88,17 +87,12 @@ test_that("runs become ranges, single readings included", {
   expect_equal(nrow(qc_runs_to_ranges(dt[0], character(0))), 0L)
 })
 
-test_that("protected readings get no new range, and break runs", {
+test_that("qualifier helpers handle empty protection and quoted codes", {
   dt <- hourly(6)
-  prot <- data.frame(start_dt = dt[3], end_dt = dt[4])
-  held <- qc_covered(dt, prot)
-  expect_equal(held, c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE))
-  expect_equal(qc_covered(dt, prot[0, ]), rep(FALSE, 6))
-  # All UNS: without the mask this would be one range over the protected pair.
-  r <- qc_runs_to_ranges(dt, ifelse(held, NA_character_, "UNS"))
-  r <- r[!is.na(r$code), ]
-  expect_equal(r$start_dt, dt[c(1, 5)])
-  expect_equal(r$end_dt, dt[c(2, 6)])
+  expect_equal(
+    qc_covered(dt, data.frame(start_dt = dt[0], end_dt = dt[0])),
+    rep(FALSE, 6)
+  )
   expect_equal(qc_pg_text_array(c("UNS", 'a"b')), '{"UNS","a\\"b"}')
 })
 
@@ -450,4 +444,238 @@ test_that("qualifier exclusion validation is scoped to the QC constraint", {
   DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT qc_overlap_probe")
   DBI::dbExecute(con, "RELEASE SAVEPOINT qc_overlap_probe")
   expect_true(qc_validate_qualifier_overlaps(con))
+})
+
+# Exercise the public grader and its real range writer against an in-memory
+# database substitute. No database connections or writes are needed.
+local_qc_reconciliation <- function(.local_envir = parent.frame()) {
+  state <- new.env(parent = emptyenv())
+  state$datetime <- hourly(6)
+  state$rules <- data.frame(
+    rule_fx = "retired_rule",
+    rule_version = 1L,
+    active = FALSE,
+    rule_args = '{"qualifier":"CUSTOM","zero_qualifier":"ZERO"}',
+    companion_timeseries = "{}",
+    emits = "CT,PSM,ERROR",
+    argument_schema = "{}"
+  )
+  state$types <- data.frame(
+    qualifier_type_id = 1:8,
+    qualifier_type_code = c(
+      "CT",
+      "PSM",
+      "ERROR",
+      "CUSTOM",
+      "ZERO",
+      "GW",
+      "UNS",
+      "UNK"
+    )
+  )
+  state$qualifiers <- data.frame(
+    qualifier_id = 1:6,
+    qualifier_type_id = 1:6,
+    start_dt = state$datetime,
+    end_dt = state$datetime,
+    no_source_update = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE)
+  )
+  state$writes <- 0L
+  local_mocked_bindings(
+    dbGetQuery = function(con, statement, params = NULL, ...) {
+      if (grepl("SELECT to_regclass(", statement, fixed = TRUE)) {
+        return(data.frame(available = TRUE))
+      }
+      if (
+        grepl("FROM continuous.timeseries_qc_rules r", statement, fixed = TRUE)
+      ) {
+        rules <- state$rules
+        # Honour the old query too, so this fixture reproduces the regression.
+        if (grepl("AND r.active", statement, fixed = TRUE)) {
+          rules <- rules[rules$active, , drop = FALSE]
+        }
+        return(rules)
+      }
+      if (grepl("FROM continuous.timeseries t", statement, fixed = TRUE)) {
+        return(data.frame(
+          location_id = 1L,
+          param_name = "test",
+          utc_offset = 0,
+          rate_s = 3600,
+          first_dt = state$datetime[1],
+          last_dt = state$datetime[6]
+        ))
+      }
+      if (
+        grepl("measurements_continuous_corrected(", statement, fixed = TRUE)
+      ) {
+        dt <- state$datetime
+        dt <- dt[dt >= params[[2]] & dt <= params[[3]]]
+        return(data.frame(datetime = dt, value = 1))
+      }
+      if (grepl("SELECT max(datetime) AS d", statement, fixed = TRUE)) {
+        dt <- state$datetime[state$datetime < params[[2]]]
+        return(data.frame(
+          d = if (length(dt)) max(dt) else state$datetime[NA_integer_]
+        ))
+      }
+      if (grepl("SELECT min(datetime) AS d", statement, fixed = TRUE)) {
+        dt <- state$datetime[state$datetime > params[[2]]]
+        return(data.frame(
+          d = if (length(dt)) min(dt) else state$datetime[NA_integer_]
+        ))
+      }
+      if (grepl("FROM continuous.qualifiers", statement, fixed = TRUE)) {
+        q <- state$qualifiers
+        if (grepl("q.no_source_update", statement, fixed = TRUE)) {
+          codes <- state$types$qualifier_type_code[match(
+            q$qualifier_type_id,
+            state$types$qualifier_type_id
+          )]
+          q <- q[
+            q$no_source_update &
+              vapply(
+                codes,
+                function(code) {
+                  grepl(paste0('"', code, '"'), params[[2]], fixed = TRUE)
+                },
+                logical(1)
+              ),
+          ]
+          return(q[, c("start_dt", "end_dt")])
+        }
+        ids <- as.integer(strsplit(gsub("[{}]", "", params[[2]]), ",")[[1]])
+        return(q[
+          q$qualifier_type_id %in%
+            ids &
+            q$start_dt <= params[[4]] &
+            q$end_dt >= params[[3]],
+        ])
+      }
+      if (grepl("FROM public.qualifier_types", statement, fixed = TRUE)) {
+        return(state$types)
+      }
+      stop("Unexpected query: ", statement)
+    },
+    dbExecute = function(con, statement, params = NULL, ...) {
+      if (grepl("DELETE FROM continuous.qualifiers", statement, fixed = TRUE)) {
+        ids <- as.integer(strsplit(gsub("[{}]", "", params[[1]]), ",")[[1]])
+        state$qualifiers <- state$qualifiers[
+          !state$qualifiers$qualifier_id %in% ids,
+        ]
+        state$writes <- state$writes + 1L
+      } else if (
+        !grepl("^(SET CONSTRAINTS|SAVEPOINT|RELEASE SAVEPOINT)", statement)
+      ) {
+        stop("Unexpected statement: ", statement)
+      }
+      1L
+    },
+    .package = "DBI",
+    .env = .local_envir
+  )
+  local_mocked_bindings(
+    dbTransBegin = function(...) FALSE,
+    dbAppendTableRLS = function(con, table, value, ...) {
+      expect_identical(table, "continuous.qualifiers")
+      value$qualifier_id <- 100L + seq_len(nrow(value))
+      state$qualifiers <- rbind(
+        state$qualifiers,
+        value[, names(state$qualifiers)]
+      )
+      state$writes <- state$writes + 1L
+    },
+    .package = "AquaCache",
+    .env = .local_envir
+  )
+  state
+}
+
+test_that("the last inactive rule's flags reconcile to baseline", {
+  state <- local_qc_reconciliation()
+  before <- state$qualifiers
+  expect_warning(summary <- gradeContinuous(NULL, 1L), "WHOLE record")
+  expect_equal(summary, data.frame(code = "UNS", n = 5L, ranges = 2L))
+  # Protected ERROR and unrelated GW survive; all old editable QC codes go.
+  expect_setequal(state$qualifiers$qualifier_type_id, c(3L, 6L, 7L))
+  expect_identical(
+    state$qualifiers[state$qualifiers$qualifier_id < 100L, ],
+    before[c(3, 6), ]
+  )
+  baseline <- state$qualifiers[state$qualifiers$qualifier_type_id == 7L, ]
+  expect_equal(baseline$start_dt, state$datetime[c(1, 4)])
+  expect_equal(baseline$end_dt, state$datetime[c(2, 6)])
+  expect_false(any(baseline$no_source_update))
+})
+
+test_that("previewing removal of every assignment reconciles without writing", {
+  state <- local_qc_reconciliation()
+  state$rules$active <- TRUE
+  before <- state$qualifiers
+  preview <- gradeContinuous(
+    NULL,
+    1L,
+    assignments = data.frame(),
+    write = FALSE
+  )
+  expect_equal(preview$readings$code, rep("UNS", 6))
+  expect_equal(preview$protected, 1L)
+  expect_identical(state$qualifiers, before)
+  expect_identical(state$writes, 0L)
+})
+
+test_that("import grading clears inactive flags only inside its window", {
+  state <- local_qc_reconciliation()
+  expect_true(grade_after_import(NULL, 1L, from = state$datetime[4]))
+  expect_setequal(
+    state$qualifiers$qualifier_id[state$qualifiers$qualifier_id < 100L],
+    c(1L, 2L, 3L, 6L)
+  )
+  baseline <- state$qualifiers[state$qualifiers$qualifier_type_id == 7L, ]
+  expect_equal(baseline$start_dt, state$datetime[4])
+  expect_equal(baseline$end_dt, state$datetime[6])
+})
+
+test_that("remaining active rules still replace inactive rules' output", {
+  state <- local_qc_reconciliation()
+  active <- state$rules
+  active$rule_fx <- "qc_test"
+  active$active <- TRUE
+  active$rule_args <- "{}"
+  active$argument_schema <- '{"schema_version":2,"arguments":[],"companions":[]}'
+  active$emits <- "CT"
+  state$rules <- rbind(state$rules, active)
+  registry <- qc_rule_registry
+  registry[["qc_test@1"]] <- list(
+    fx = function(x, a, ctx) rep("CT", nrow(x)),
+    window = function(a) list(back = 0, ahead = 0, year_start = FALSE)
+  )
+  local_mocked_bindings(qc_rule_registry = registry, .package = "AquaCache")
+  expect_warning(summary <- gradeContinuous(NULL, 1L), "WHOLE record")
+  expect_equal(summary, data.frame(code = "CT", n = 5L, ranges = 2L))
+  expect_setequal(state$qualifiers$qualifier_type_id, c(1L, 3L, 6L))
+})
+
+test_that("series with no saved assignments are left alone", {
+  state <- local_qc_reconciliation()
+  state$rules <- state$rules[0, ]
+  before <- state$qualifiers
+  expect_null(gradeContinuous(NULL, 1L))
+  expect_identical(state$qualifiers, before)
+  expect_identical(state$writes, 0L)
+})
+
+test_that("fully protected records need no writes after deactivation", {
+  state <- local_qc_reconciliation()
+  state$qualifiers <- state$qualifiers[3, , drop = FALSE]
+  state$qualifiers$start_dt <- state$datetime[1]
+  state$qualifiers$end_dt <- state$datetime[6]
+  before <- state$qualifiers
+  preview <- gradeContinuous(NULL, 1L, write = FALSE)
+  expect_equal(preview$protected, 6L)
+  expect_equal(nrow(preview$ranges), 0L)
+  expect_warning(result <- gradeContinuous(NULL, 1L), "WHOLE record")
+  expect_null(result)
+  expect_identical(state$qualifiers, before)
+  expect_identical(state$writes, 0L)
 })

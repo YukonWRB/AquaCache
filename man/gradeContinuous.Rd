@@ -43,7 +43,8 @@ written, around protected readings), \code{readings} (one code per reading
 over the whole window, for comparison with stored qualifiers), \code{window}
 and \code{protected} (the number of readings held by protected ranges). With
 \code{write = TRUE}, a data.frame of readings and ranges per
-code. NULL if the series has no active rules or nothing to write.
+code. NULL if the series has no saved or proposed assignments, or nothing
+to write.
 }
 \description{
 Applies the quality-control rules assigned to a timeseries in
@@ -69,6 +70,13 @@ the graded window, and only if not protected (\code{no_source_update = TRUE}).
 Codes it does not manage are left alone. Ranges it writes are
 source-managed (\code{no_source_update = FALSE}), so later runs can replace
 them.
+
+Inactive saved assignments also contribute managed codes, so disabling or
+removing an assignment with \code{\link[=setTimeseriesQCRules]{setTimeseriesQCRules()}} lets later grading
+clear its old flags. With no active rules, unprotected managed flags in
+the graded window become \code{baseline}. Use \code{from = NULL} to clear the whole
+record. Series with no saved assignments are left alone. A preview also
+manages codes from saved assignments omitted from the proposed set.
 
 \strong{Protected readings.} A reading covered by a protected range of a
 managed code gets no new code of any type: the protected range is never
