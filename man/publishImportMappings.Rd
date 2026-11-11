@@ -2,31 +2,21 @@
 % Please edit documentation in R/import_mappings.R
 \name{publishImportMappings}
 \alias{publishImportMappings}
-\title{Publish staged import mappings}
+\title{Save mappings immediately}
 \usage{
 publishImportMappings(con, source_code, profile_code = NULL)
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Stable code for the external source.}
+\item{source_code}{Source code whose mappings were saved.}
 
-\item{profile_code}{Optional profile code. Omit it to publish source-wide
-mappings.}
+\item{profile_code}{Optional profile scope.}
 }
 \value{
-Invisibly returns the active \code{import_mapping_set_id}. If no draft
-exists, the current published set is returned unchanged. Returns
-\code{NA_integer_} when the scope has no mapping set; publishing an empty scope
-is a no-op.
+Invisibly returns \code{NULL}.
 }
 \description{
-Publishes the draft mapping set for a source or source/profile scope. The
-draft can be amended through any of the three mapping upsert functions
-before it is published. Publishing makes the draft the active immutable
-snapshot and retires the previously published snapshot for that scope.
-Active parameter mappings must have assigned targets and satisfy all current
-analytical requirements and catalogue selections. Incomplete draft rows may
-be corrected or deactivated before publication; existing published history
-is preserved. Direct SQL publication is subject to the same database gate.
+Compatibility wrapper for applications that still call this function.
+Patch 69 saves mappings directly, so there is no publication step.
 }

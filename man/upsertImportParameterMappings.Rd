@@ -2,7 +2,7 @@
 % Please edit documentation in R/import_mappings.R
 \name{upsertImportParameterMappings}
 \alias{upsertImportParameterMappings}
-\title{Upload source import parameter mappings}
+\title{Add or update parameter mappings immediately}
 \usage{
 upsertImportParameterMappings(
   con,
@@ -17,77 +17,27 @@ upsertImportParameterMappings(
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Stable code for the external source or key set.}
+\item{source_code}{Optional source code.}
 
-\item{mappings}{A data.frame/data.table of mappings, or a path to a CSV or
-Excel workbook file. See examples.}
+\item{mappings}{Mapping rows or a CSV/Excel path.}
 
-\item{match_columns}{Character vector of column names from \code{mappings} that
-identify the source-side result.}
+\item{match_columns}{Source columns forming the match key.}
 
-\item{source_name}{Human-readable source name. Defaults to \code{source_code}.}
+\item{source_name}{Human-readable source name.}
 
 \item{source_description}{Optional source description.}
 
-\item{target_columns}{Optional named list overriding which columns contain
-AquaCache target values. Names can include \code{parameter}, \code{result_type},
-\code{sample_fraction}, \code{result_value_type}, \code{reporting_basis}, and
-\code{matrix_state}, \code{result_speciation}, or \code{result_target}. Endpoint and
-analysis-condition values use their explicit column names.}
+\item{target_columns}{Target-field column map.}
 
-\item{profile_code}{Optional profile code. When supplied, mappings override
-source-wide mappings only while that profile is being used.}
+\item{profile_code}{Optional profile code; requires \code{source_code}.}
 
-\item{publish}{If \code{FALSE}, leave the changes in the scope's editable draft.
-Call \code{\link[=publishImportMappings]{publishImportMappings()}} after staging changes to any mapping type.}
+\item{publish}{Compatibility argument. Must be \code{TRUE}; staged edits were removed.}
 }
 \value{
-Invisibly returns the resolved mapping table that was uploaded.
+Invisibly returns resolved mapping rows.
 }
 \description{
-Adds or updates parameter mappings for an external source in
-\code{discrete.import_sources} and \code{discrete.import_parameter_mappings}. The
-source-side matching fields are chosen by \code{match_columns}, so simple sources
-can match on a variable/unit pair while richer source databases can match on
-any combination of source columns.
-}
-\examples{
-\dontrun{
-# The 'mappings' argument should contain integer IDs for every column in table 'discrete.import_parameter_mappings', or NA, PLUS the source columns on which you wish to match.
-# For EQWin, the two source columns are 'ParamCode' and 'input_unit'; the other columns in the below data.frame correspond to AquaCache database columns.
-# this data.frame can contain multiple rows, one per new mapping.
-new_mapping <- data.frame(
-  ParamCode = "Hg-T-ULL",
-  input_unit = "mg/L",
-  parameter_id = 1105,
-  result_type = 2,
-  sample_fraction_id = 19,
-  result_value_type = 1,
-  reporting_basis_id = NA,
-  matrix_state_id = 1,
-  conversion = 1, # The conversion to database units
-  result_offset = 0,
-  priority = 100, # ordering weight when more than one mapping could match. Lower number wins.
-  active = TRUE,
-  note = "Add any notes useful in future, if applicable."
-)
-
-con <- AquaConnect()
-
-upsertImportParameterMappings(
-  con,
-  source_code = "EQWin",
-  mappings = new_mapping,
-  match_columns = c("ParamCode", "input_unit"),
-  publish = FALSE
-)
-
-# Add more parameter, location, or result-flag mappings with publish = FALSE,
-# then publish the complete draft once all edits are ready.
-publishImportMappings(con, source_code = "EQWin")
-
-DBI::dbDisconnect(con)
-}
+Add or update parameter mappings immediately
 }

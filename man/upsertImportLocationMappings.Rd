@@ -2,7 +2,7 @@
 % Please edit documentation in R/import_mappings.R
 \name{upsertImportLocationMappings}
 \alias{upsertImportLocationMappings}
-\title{Add or update source location mappings}
+\title{Add or update location mappings immediately}
 \usage{
 upsertImportLocationMappings(
   con,
@@ -14,26 +14,21 @@ upsertImportLocationMappings(
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Stable code in \code{discrete.import_sources}.}
+\item{source_code}{Optional source code.}
 
-\item{mappings}{A data.frame/data.table containing \code{source_location_code}
-and \code{location_id}. Optional fields are \code{source_location_name},
-\code{sub_location_id}, \code{priority}, \code{active}, and \code{note}.}
+\item{mappings}{Location mapping rows containing \code{source_location_code} and \code{location_id}.}
 
-\item{profile_code}{Optional profile code for a profile-specific override.}
+\item{profile_code}{Optional profile code; requires \code{source_code}.}
 
-\item{source_name}{Human-readable source name, used if the source is new.}
+\item{source_name}{Human-readable source name.}
 
-\item{publish}{If \code{FALSE}, leave the changes in the scope's editable draft.
-Call \code{\link[=publishImportMappings]{publishImportMappings()}} after staging changes to any mapping type.}
+\item{publish}{Compatibility argument. Must be \code{TRUE}; staged edits were removed.}
 }
 \value{
-Invisibly returns the normalized mapping table.
+Invisibly returns the normalized mappings.
 }
 \description{
-Maps stable location or station codes from an external source to AquaCache
-locations. A source-wide mapping is used by every profile for that source;
-a profile-scoped mapping with the same code takes precedence.
+Add or update location mappings immediately
 }

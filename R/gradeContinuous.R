@@ -25,6 +25,15 @@ qc_severity <- c("ERROR", "SSM", "PSM", "CT", "SUS")
 # the window is NA or the window runs off either end - same as zoo with
 # fill = NA, which flag_data() used) -----------------------------------------
 
+#' Shift a numeric vector by a reading offset
+#'
+#' Positions moved beyond either end are filled with `NA_real_`.
+#' @param x Numeric vector.
+#' @param s Integer shift; positive values move values toward lower indices
+#'   and negative values move them toward higher indices.
+#' @return A numeric vector with the same length as `x`.
+#' @noRd
+#' @keywords internal
 qc_shift <- function(x, s) {
   n <- length(x)
   if (abs(s) >= n) {
@@ -37,6 +46,15 @@ qc_shift <- function(x, s) {
   }
 }
 
+#' Build centered reading windows
+#'
+#' Each output row contains the `k` readings centered on the corresponding
+#' input row; incomplete windows contain `NA` values.
+#' @param x Numeric input vector.
+#' @param k Number of readings in each window.
+#' @return A matrix with one row per input reading and `k` columns.
+#' @noRd
+#' @keywords internal
 qc_window_matrix <- function(x, k) {
   lo <- (k - 1) %/% 2
   vapply(seq_len(k) - 1L - lo, function(s) qc_shift(x, s), numeric(length(x)))
@@ -44,6 +62,15 @@ qc_window_matrix <- function(x, k) {
 
 # Direct deviations, not a running sum of squares: thresholds go down to
 # sd < 0.001 and cumulative sums would lose that to cancellation.
+#' Calculate centered rolling sample standard deviations
+#'
+#' Uses direct deviations from each window mean to retain precision for very
+#' small standard deviations.
+#' @param x Numeric input vector.
+#' @param k Number of readings in each window.
+#' @return A numeric vector; incomplete or missing-value windows yield `NA`.
+#' @noRd
+#' @keywords internal
 qc_roll_sd <- function(x, k) {
   m <- matrix(qc_window_matrix(x, k), ncol = k)
   mu <- rowMeans(m)
@@ -53,6 +80,16 @@ qc_roll_sd <- function(x, k) {
 # Running sums are fine for a mean, and k = 720 is too wide for a matrix.
 # align = "center" as zoo's default; "right" = trailing (the reading and the
 # k - 1 before it), as zoo's align = "right".
+#' Calculate rolling means over readings
+#'
+#' Centered alignment places the reading in the middle of the window. Right
+#' alignment uses the reading and its `k - 1` predecessors.
+#' @param x Numeric input vector.
+#' @param k Number of readings in each window.
+#' @param align Either `"center"` or `"right"`.
+#' @return A numeric vector; incomplete or missing-value windows yield `NA`.
+#' @noRd
+#' @keywords internal
 qc_roll_mean <- function(x, k, align = "center") {
   n <- length(x)
   lo <- if (align == "right") k - 1 else (k - 1) %/% 2
@@ -76,6 +113,17 @@ qc_roll_mean <- function(x, k, align = "center") {
 # than k - 1 recording intervals, i.e. where rows are missing - the same "any
 # gap = no result" rule the helpers apply to NA values. flag_data() had no
 # such check (zoo windows count rows too).
+#' Check that a reading window has no time gaps
+#'
+#' The window must span no more than the expected duration for `k` readings,
+#' allowing a one-percent cadence tolerance.
+#' @param datetime POSIXct reading timestamps in order.
+#' @param k Number of readings in the window.
+#' @param align Either `"center"` or `"right"`.
+#' @param rate_s Expected seconds between readings.
+#' @return A logical vector with one value per timestamp.
+#' @noRd
+#' @keywords internal
 qc_window_span_ok <- function(datetime, k, align = "center", rate_s) {
   t <- as.numeric(datetime)
   lo <- if (align == "right") k - 1 else (k - 1) %/% 2
@@ -90,6 +138,16 @@ qc_window_span_ok <- function(datetime, k, align = "center", rate_s) {
 # merged arguments, and ctx (utc_offset in hours, rate_s in seconds). Returns a character vector:
 # a qualifier code, or NA for no flag.
 
+#' Flag precipitation recorded while air temperature is below threshold
+#'
+#' This rule emits its configured qualifier where precipitation is positive
+#' and the `air_temp` companion is below `max_air_temp`.
+#' @param x Data frame with `value` and `air_temp` columns.
+#' @param a Merged rule arguments, including `max_air_temp` and `qualifier`.
+#' @param ctx Rule context (unused by this rule).
+#' @return A qualifier-code vector, with `NA` where no reading is flagged.
+#' @noRd
+#' @keywords internal
 qc_rain_cold <- function(x, a, ctx) {
   hit <- !is.na(x$value) &
     x$value > 0 &
@@ -102,6 +160,18 @@ qc_rain_cold <- function(x, a, ctx) {
 # below zero_max_air_temp or no air temp -> SUS (frozen propeller OR calm cold
 # night); at or above it -> no flag (calm is real). Stuck at any other value
 # -> ERROR.
+#' Flag a sensor value that remains nearly constant
+#'
+#' Uses rolling standard deviation and cadence checks. When `zero_split` is
+#' enabled, cold or missing air temperature maps stuck zero readings to
+#' `zero_qualifier`; warm zero readings are left unflagged.
+#' @param x Data frame with `datetime`, `value`, and optionally `air_temp`.
+#' @param a Merged rule arguments (`width`, `min_sd`, qualifier codes, and
+#'   optional zero-split settings).
+#' @param ctx Rule context containing the expected `rate_s`.
+#' @return A qualifier-code vector, with `NA` where no reading is flagged.
+#' @noRd
+#' @keywords internal
 qc_stuck_sensor <- function(x, a, ctx) {
   s <- qc_roll_sd(x$value, a$width)
   stuck <- !is.na(s) &
@@ -118,6 +188,16 @@ qc_stuck_sensor <- function(x, a, ctx) {
   out
 }
 
+#' Flag wind direction recorded at calm wind speed
+#'
+#' Emits the configured qualifier when `wind_speed` is at or below the
+#' configured maximum.
+#' @param x Data frame with `value` and `wind_speed` columns.
+#' @param a Merged rule arguments, including `max_wind_speed` and `qualifier`.
+#' @param ctx Rule context (unused by this rule).
+#' @return A qualifier-code vector, with `NA` where no reading is flagged.
+#' @noRd
+#' @keywords internal
 qc_dir_calm <- function(x, a, ctx) {
   hit <- !is.na(x$value) &
     !is.na(x$wind_speed) &
@@ -141,6 +221,17 @@ qc_dir_calm <- function(x, a, ctx) {
 # fall melt too rare to flag for now; revisit if it becomes common.
 # Difference from flag_data(): it ran per download batch (e.g. April to
 # September); this always looks back to January 1 (window() asks for it).
+#' Flag rain recorded during spring snowmelt conditions
+#'
+#' Combines the configured early-season window with a warm-after-cold rolling
+#' air-temperature test. The rolling alignment and year boundary come from the
+#' rule arguments.
+#' @param x Data frame with `datetime`, `value`, and `air_temp` columns.
+#' @param a Merged rule arguments for warm-day and cold-window thresholds.
+#' @param ctx Rule context containing `utc_offset` and `rate_s`.
+#' @return A qualifier-code vector, with `NA` where no reading is flagged.
+#' @noRd
+#' @keywords internal
 qc_snowmelt_tips <- function(x, a, ctx) {
   day <- as.numeric(as.Date(x$datetime + ctx$utc_offset * 3600, tz = "UTC"))
   yr <- format(as.Date(day, origin = "1970-01-01"), "%Y")
@@ -166,6 +257,14 @@ qc_snowmelt_tips <- function(x, a, ctx) {
 
 # window(): how many READINGS of context a rule needs before (back) and after
 # (ahead) a reading, and whether it needs the calendar year from January 1.
+#' Validate an integer-valued QC rule argument
+#'
+#' @param args Named list of merged rule arguments.
+#' @param name Argument name to validate.
+#' @param min_value Smallest permitted integer.
+#' @return The validated value as an integer.
+#' @noRd
+#' @keywords internal
 qc_validate_integer_arg <- function(args, name, min_value) {
   value <- args[[name]]
   if (
@@ -237,6 +336,14 @@ qc_rule_registry <- list(
   )
 )
 
+#' Get the primary parameter names for a registered QC rule
+#'
+#' @param rule_fx Rule function name from the capability catalogue.
+#' @param rule_version Version of that rule.
+#' @return Character vector of primary parameter names, or `character()` when
+#'   the rule has no registered parameter metadata.
+#' @noRd
+#' @keywords internal
 qc_rule_primary_parameters <- function(rule_fx, rule_version) {
   key <- qc_rule_capability_key(rule_fx, rule_version)
   definition <- qc_rule_registry[[key]]
@@ -248,9 +355,23 @@ qc_rule_primary_parameters <- function(rule_fx, rule_version) {
 
 # --- Plumbing ----------------------------------------------------------------
 
+#' Format an integer vector as a PostgreSQL array literal
+#'
+#' @param x Integer values.
+#' @return A brace-delimited PostgreSQL integer-array string.
+#' @noRd
+#' @keywords internal
 qc_pg_int_array <- function(x) {
   paste0("{", paste(as.integer(x), collapse = ","), "}")
 }
+
+#' Format a character vector as a PostgreSQL text-array literal
+#'
+#' Embedded quotes and backslashes are escaped for PostgreSQL array syntax.
+#' @param x Character values.
+#' @return A brace-delimited PostgreSQL text-array string.
+#' @noRd
+#' @keywords internal
 qc_pg_text_array <- function(x) {
   paste0(
     "{",
@@ -259,7 +380,13 @@ qc_pg_text_array <- function(x) {
   )
 }
 
-# TRUE for each datetime inside any [start_dt, end_dt] row of `ranges`.
+#' Mark timestamps covered by any supplied range
+#'
+#' @param datetime POSIXct timestamps to check.
+#' @param ranges Data frame with `start_dt` and `end_dt` columns.
+#' @return Logical vector aligned with `datetime`.
+#' @noRd
+#' @keywords internal
 qc_covered <- function(datetime, ranges) {
   held <- rep(FALSE, length(datetime))
   for (i in seq_len(nrow(ranges))) {
@@ -269,17 +396,35 @@ qc_covered <- function(datetime, ranges) {
   held
 }
 
-# Defaults come from the catalogue's argument_schema - one source of truth,
-# the one YGwater would build its form from - overridden by rule_args.
+#' Resolve effective QC rule arguments
+#'
+#' Validates the catalogue schema, applies its defaults, and overlays saved
+#' assignment values.
+#' @param schema_json JSON text from the rule capability's argument schema.
+#' @param args_json JSON text containing assignment-specific values.
+#' @return A named list of effective rule arguments.
+#' @noRd
+#' @keywords internal
 qc_merge_rule_args <- function(schema_json, args_json) {
   schema <- jsonlite::fromJSON(schema_json, simplifyVector = FALSE)
   validateQCRuleArgumentSchema(schema)
   qc_rule_effective_args(schema, args_json)
 }
 
-# Explicit assignment overrides win; otherwise use the schema's same-location
-# selection strategy. Runtime checks catch companion series that were later
-# disabled or moved after the assignment was saved.
+#' Resolve companion timeseries for a QC rule
+#'
+#' Explicit assignment overrides take precedence over the schema's default
+#' same-location selection. Overrides are revalidated against current active
+#' companion candidates.
+#' @param con AquaCache database connection.
+#' @param location_id Target timeseries location ID.
+#' @param target_timeseries_id Timeseries being graded; excluded from candidates.
+#' @param descriptors Active companion-role descriptors from the rule schema.
+#' @param overrides Named list of explicit companion timeseries IDs.
+#' @return Named integer list mapping companion roles to timeseries IDs; missing
+#'   roles have value `NA_integer_`.
+#' @noRd
+#' @keywords internal
 qc_resolve_companions <- function(
   con,
   location_id,
@@ -326,9 +471,17 @@ qc_resolve_companions <- function(
   out
 }
 
-# Since patch 53 this is a set-returning FUNCTION (timeseries, from, to; both
-# ends inclusive), not the old view. Trimmed readings come back with
-# value_corrected NULL.
+#' Read corrected measurements for a QC evaluation window
+#'
+#' Uses the Patch 53 set-returning database function. Trimmed readings remain in
+#' the result with a missing corrected value.
+#' @param con AquaCache database connection.
+#' @param tsid Timeseries ID.
+#' @param from Inclusive start datetime.
+#' @param to Inclusive end datetime.
+#' @return Data frame with ordered `datetime` and corrected numeric `value`.
+#' @noRd
+#' @keywords internal
 qc_read_corrected <- function(con, tsid, from, to) {
   DBI::dbGetQuery(
     con,
@@ -337,8 +490,13 @@ qc_read_corrected <- function(con, tsid, from, to) {
   )
 }
 
-# Fold rule outputs into one code per reading by qc_severity; codes not in
-# qc_severity (custom qualifier arguments) rank last.
+#' Combine QC rule outputs by configured severity
+#'
+#' Codes absent from `qc_severity` rank below the registered standard codes.
+#' @param codes List of equal-length qualifier-code vectors, one per rule.
+#' @return One qualifier code or `NA` per reading.
+#' @noRd
+#' @keywords internal
 qc_combine_codes <- function(codes) {
   rank_of <- function(v) {
     ifelse(
@@ -355,8 +513,15 @@ qc_combine_codes <- function(codes) {
   out
 }
 
-# A run of consecutive readings with one code is one range, first to last
-# reading inclusive (the convention of build_attribute_segments()).
+#' Convert consecutive qualifier codes to time ranges
+#'
+#' Each consecutive run of one code becomes a range from its first timestamp
+#' through its last timestamp.
+#' @param datetime Ordered POSIXct reading timestamps.
+#' @param code Qualifier code for each reading; `NA` separates runs.
+#' @return Data frame with `code`, `start_dt`, `end_dt`, and reading count `n`.
+#' @noRd
+#' @keywords internal
 qc_runs_to_ranges <- function(datetime, code) {
   r <- rle(code)
   end <- cumsum(r$lengths)
@@ -377,7 +542,9 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' @description
 #' Applies the quality-control rules assigned to a timeseries in
 #' `continuous.timeseries_qc_rules` and writes the resulting qualifiers to
-#' `continuous.qualifiers`. Readings no rule flags get `baseline` (UNS).
+#' `continuous.qualifiers`. Eligible readings reviewed by an active rule also
+#' receive approval code `S` (auto screened, no human review). Readings with
+#' no rule flags get `baseline` (UNS).
 #' Called after new data are imported (see [getNewContinuous()] and
 #' [synchronize_continuous()]); can also be run directly, e.g. with
 #' `write = FALSE` to preview.
@@ -393,18 +560,32 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' first left UNS for lack of "ahead" context and later judged ERROR.
 #'
 #' **Which ranges are replaced.** Only stored qualifiers of the codes the
-#' grader manages (`baseline`, `replace` and the codes its rules emit), inside
-#' the graded window, and only if not protected (`no_source_update = TRUE`).
+#' grader manages (`UNK`, `UNS`, `baseline`, `replace` and the codes its rules
+#' emit), inside the graded window, and only if not protected
+#' (`no_source_update = TRUE`). A baseline `UNK` or `UNS` is omitted where a
+#' different qualifier already covers the reading; a rule qualifier may
+#' overlap another non-placeholder qualifier.
 #' Codes it does not manage are left alone. Ranges it writes are
 #' source-managed (`no_source_update = FALSE`), so later runs can replace
 #' them.
 #'
-#' Inactive saved assignments also contribute managed codes, so disabling or
-#' removing an assignment with [setTimeseriesQCRules()] lets later grading
-#' clear its old flags. With no active rules, unprotected managed flags in
-#' the graded window become `baseline`. Use `from = NULL` to clear the whole
-#' record. Series with no saved assignments are left alone. A preview also
-#' manages codes from saved assignments omitted from the proposed set.
+#' Inactive saved assignments also contribute managed codes, so unprotected
+#' flags can be cleared to `baseline`. Previously auto-screened `S` ranges are
+#' reconsidered only for explicit rule-removal reconciliation (or when
+#' `reconcile_auto_screened = TRUE`). With no active rules, unprotected managed
+#' flags in the eligible graded window become `baseline`. Use `from = NULL` to
+#' clear the whole record. Series with no saved assignments are left alone. A
+#' preview also manages codes from saved assignments omitted from the proposed
+#' set.
+#'
+#' **Approval-aware screening.** Readings whose current approval code is
+#' `UNK`, `UNS` or `N` (not reviewed), or which have no approval row, may be
+#' screened. Other approval codes are retained and excluded from automatic
+#' QC. Protected approval ranges keep their current code. Qualifier and
+#' approval writes are split around these ranges, including when no reading
+#' falls within an existing approval interval. `S` is included only when
+#' `reconcile_auto_screened = TRUE`, for explicit rule-removal reconciliation;
+#' it is otherwise treated as an existing approval that must be left alone.
 #'
 #' **Protected readings.** A reading covered by a protected range of a
 #' managed code gets no new code of any type: the protected range is never
@@ -433,14 +614,19 @@ qc_runs_to_ranges <- function(datetime, code) {
 #' @param assignments Optional desired QC assignments for a read-only preview.
 #'   When supplied, these values are validated and graded without saving them.
 #'   This is allowed only with `write = FALSE`.
+#' @param reconcile_auto_screened Logical. Set TRUE only while explicitly
+#'   reconciling a saved rule change; this allows prior `S` ranges to be
+#'   recalculated. Normal imports and fetches leave this FALSE and skip `S`.
 #'
 #' @return Invisibly. With `write = FALSE`, a list: `ranges` (what would be
 #'   written, around protected readings), `readings` (one code per reading
-#'   over the whole window, for comparison with stored qualifiers), `window`
-#'   and `protected` (the number of readings held by protected ranges). With
-#'   `write = TRUE`, a data.frame of readings and ranges per
-#'   code. NULL if the series has no saved or proposed assignments, or nothing
-#'   to write.
+#'   over the whole window, for comparison with stored qualifiers),
+#'   `approvals` (the approval state that would be written), `window` and
+#'   `protected` (the number of readings held by protected ranges). With
+#'   `write = TRUE`, a data.frame of readings and ranges per code, plus the
+#'   total `approval_readings` screened. An approval-only update returns one
+#'   row with `code = NA`, `n = 0`, and `ranges = 0`. NULL if the series has no
+#'   saved or proposed assignments, or nothing to write.
 #' @seealso [adjust_qualifier()]
 #' @export
 gradeContinuous <- function(
@@ -451,10 +637,18 @@ gradeContinuous <- function(
   baseline = "UNS",
   replace = "UNK",
   write = TRUE,
-  assignments = NULL
+  assignments = NULL,
+  reconcile_auto_screened = FALSE
 ) {
   tsid <- as.integer(timeseries_id)
   stopifnot(length(tsid) == 1, !is.na(tsid))
+  if (
+    !is.logical(reconcile_auto_screened) ||
+      length(reconcile_auto_screened) != 1L ||
+      is.na(reconcile_auto_screened)
+  ) {
+    stop("reconcile_auto_screened must be TRUE or FALSE.")
+  }
   full_regrade <- is.null(from)
   if (!is.null(assignments) && write) {
     stop(
@@ -469,7 +663,7 @@ gradeContinuous <- function(
     "SELECT r.rule_fx, r.rule_version, r.active, r.rule_args::text AS rule_args,
          r.companion_timeseries::text AS companion_timeseries,
          array_to_string(c.emits, ',') AS emits,
-         c.argument_schema::text AS argument_schema
+          c.argument_schema::text AS argument_schema, c.enabled
        FROM continuous.timeseries_qc_rules r
        JOIN public.qc_rule_capabilities c
          ON c.rule_fx = r.rule_fx AND c.rule_version = r.rule_version
@@ -478,7 +672,16 @@ gradeContinuous <- function(
     params = list(tsid)
   )
   if (is.null(assignments)) {
-    rules <- saved_rules[saved_rules$active, , drop = FALSE]
+    saved_enabled <- if ("enabled" %in% names(saved_rules)) {
+      !is.na(saved_rules$enabled) & saved_rules$enabled
+    } else {
+      rep(TRUE, nrow(saved_rules))
+    }
+    rules <- saved_rules[
+      saved_rules$active & saved_enabled,
+      ,
+      drop = FALSE
+    ]
   } else {
     rules <- qc_rule_assignments_normalize(con, tsid, assignments)
     rules <- rules[rules$active, , drop = FALSE]
@@ -626,8 +829,6 @@ gradeContinuous <- function(
   if (nrow(w) == 0) {
     return(invisible(NULL))
   }
-  w$code[is.na(w$code)] <- baseline
-
   emitted <- unique(c(
     unlist(strsplit(saved_rules$emits, ",")),
     unlist(strsplit(as.character(rules$emits), ",")),
@@ -635,7 +836,70 @@ gradeContinuous <- function(
       c(a$qualifier, a$zero_qualifier)
     }))
   ))
-  managed <- unique(c(baseline, replace, emitted))
+  managed <- unique(c("UNK", "UNS", baseline, replace, emitted))
+  qualifier_types <- DBI::dbGetQuery(
+    con,
+    "SELECT qualifier_type_id, qualifier_type_code FROM public.qualifier_types"
+  )
+  managed_ids <- qualifier_types$qualifier_type_id[
+    qualifier_types$qualifier_type_code %in% managed
+  ]
+
+  # Existing upstream or user-supplied approvals take precedence. Missing
+  # approvals are treated as unspecified, matching import defaults.
+  approval_rows <- DBI::dbGetQuery(
+    con,
+    "SELECT a.start_dt, a.end_dt, a.no_source_update,
+            t.approval_type_code
+       FROM continuous.approvals a
+       JOIN public.approval_types t USING (approval_type_id)
+      WHERE a.timeseries_id = $1
+        AND a.start_dt <= $3 AND a.end_dt >= $2
+      ORDER BY a.start_dt",
+    params = list(tsid, min(w$datetime), max(w$datetime))
+  )
+  approval_code <- rep("UNS", nrow(w))
+  approval_protected <- rep(FALSE, nrow(w))
+  if (nrow(approval_rows)) {
+    for (i in seq_len(nrow(approval_rows))) {
+      covered <- w$datetime >= approval_rows$start_dt[i] &
+        w$datetime <= approval_rows$end_dt[i]
+      approval_code[covered] <- approval_rows$approval_type_code[i]
+      approval_protected[covered] <-
+        approval_rows$no_source_update[i] %in% TRUE
+    }
+  }
+  approval_codes_allowing_qc <- c(
+    "UNK", "UNS", "N",
+    if (reconcile_auto_screened) "S"
+  )
+  approval_allows_qc <- approval_code %in% approval_codes_allowing_qc
+  w$code[!approval_allows_qc] <- NA_character_
+  w$code[approval_allows_qc & is.na(w$code)] <- baseline
+
+  # Placeholder qualifiers carry no additional information when another
+  # qualifier already covers the reading, so do not write an overlapping
+  # baseline UNS/UNK range.
+  if (length(managed_ids)) {
+    other_qualifiers <- DBI::dbGetQuery(
+      con,
+      "SELECT q.start_dt, q.end_dt
+         FROM continuous.qualifiers q
+        WHERE q.timeseries_id = $1
+          AND NOT (q.qualifier_type_id = ANY($2::int[]))
+          AND q.start_dt <= $4 AND q.end_dt >= $3",
+      params = list(
+        tsid,
+        qc_pg_int_array(managed_ids),
+        min(w$datetime),
+        max(w$datetime)
+      )
+    )
+    covered_by_other <- qc_covered(w$datetime, other_qualifiers)
+    placeholder <- w$code %in% c("UNK", "UNS")
+    w$code[placeholder & covered_by_other] <- NA_character_
+  }
+
   if (write && full_regrade) {
     warning(
       "gradeContinuous: timeseries ",
@@ -659,14 +923,90 @@ gradeContinuous <- function(
       max(w$datetime)
     )
   )
-  held <- qc_covered(w$datetime, prot)
-  ranges <- qc_runs_to_ranges(w$datetime, ifelse(held, NA_character_, w$code))
-  ranges <- ranges[!is.na(ranges$code), ]
+  held <- qc_covered(w$datetime, prot) |
+    !approval_allows_qc | approval_protected
+
+  # A range writer reconciles everything between its first and last reading.
+  # Keep separate runs around protected or higher approval ranges so neither
+  # qualifiers nor approvals are rewritten through those periods, including
+  # when a range falls between two sparse measurements.
+  qc_candidates <- which(approval_allows_qc & !approval_protected)
+  approval_barriers <- approval_rows[
+    !approval_rows$approval_type_code %in% approval_codes_allowing_qc |
+      approval_rows$no_source_update %in% TRUE,
+    ,
+    drop = FALSE
+  ]
+  approval_barrier_crossing <- rep(FALSE, max(0L, nrow(w) - 1L))
+  if (nrow(approval_barriers) && length(approval_barrier_crossing)) {
+    barrier_order <- order(approval_barriers$start_dt)
+    barrier_starts <- as.numeric(
+      approval_barriers$start_dt[barrier_order]
+    )
+    barrier_max_ends <- cummax(as.numeric(
+      approval_barriers$end_dt[barrier_order]
+    ))
+    gap_end <- as.numeric(w$datetime[-1L])
+    gap_start <- as.numeric(w$datetime[-nrow(w)])
+    last_barrier <- findInterval(gap_end, barrier_starts, left.open = TRUE)
+    has_barrier <- last_barrier > 0L
+    approval_barrier_crossing[has_barrier] <-
+      barrier_max_ends[last_barrier[has_barrier]] > gap_start[has_barrier]
+  }
+  qc_runs <- list()
+  if (length(qc_candidates)) {
+    run_id <- integer(length(qc_candidates))
+    run_id[1L] <- 1L
+    if (length(qc_candidates) > 1L) {
+      for (i in 2:length(qc_candidates)) {
+        previous <- qc_candidates[i - 1L]
+        current <- qc_candidates[i]
+        separated <- current != previous + 1L
+        crosses_barrier <- !separated && approval_barrier_crossing[previous]
+        run_id[i] <- run_id[i - 1L] + as.integer(separated || crosses_barrier)
+      }
+    }
+    qc_runs <- split(qc_candidates, run_id)
+  }
+  range_parts <- lapply(qc_runs, function(indices) {
+    run_ranges <- qc_runs_to_ranges(
+      w$datetime[indices],
+      ifelse(held[indices], NA_character_, w$code[indices])
+    )
+    run_ranges[!is.na(run_ranges$code), , drop = FALSE]
+  })
+  range_parts <- Filter(function(x) nrow(x) > 0L, range_parts)
+  ranges <- if (length(range_parts)) {
+    do.call(rbind, range_parts)
+  } else {
+    data.frame(
+      code = character(),
+      start_dt = as.POSIXct(character(), tz = "UTC"),
+      end_dt = as.POSIXct(character(), tz = "UTC"),
+      n = integer()
+    )
+  }
+
+  approval_data <- data.frame(
+    datetime = w$datetime,
+    approval = approval_code,
+    no_source_update = approval_protected,
+    stringsAsFactors = FALSE
+  )
+  approval_updates <- if (nrow(rules)) {
+    which(approval_allows_qc & !approval_protected & !qc_covered(w$datetime, prot))
+  } else {
+    integer()
+  }
+  if (length(approval_updates)) {
+    approval_data$approval[approval_updates] <- "S"
+  }
 
   if (!write) {
     return(invisible(list(
       ranges = ranges,
       readings = w,
+      approvals = approval_data,
       window = c(
         eval_start = eval_start,
         write_start = write_start,
@@ -675,40 +1015,177 @@ gradeContinuous <- function(
       protected = sum(held)
     )))
   }
-  if (nrow(ranges) == 0) {
+  needs_approval_write <- length(approval_updates) > 0L &&
+    any(approval_code[approval_updates] != "S")
+  if (nrow(ranges) == 0L && !needs_approval_write) {
     return(invisible(NULL))
-  } # every reading is protected
+  }
 
-  qc_write_ranges(con, tsid, ranges, managed = managed)
+  # An approval-only update has no qualifier code to aggregate. Keep one
+  # explicit summary row so its approval count is still available to callers.
+  summary <- if (nrow(ranges)) {
+    counts <- stats::aggregate(n ~ code, data = ranges, FUN = sum)
+    counts$ranges <- as.vector(table(ranges$code)[counts$code])
+    counts
+  } else {
+    data.frame(code = NA_character_, n = 0L, ranges = 0L)
+  }
+  summary$approval_readings <- length(approval_updates)
 
-  summary <- stats::aggregate(n ~ code, data = ranges, FUN = sum)
-  summary$ranges <- as.vector(table(ranges$code)[summary$code])
+  active_transaction <- dbTransBegin(con)
+  savepoint <- "grade_continuous_write"
+  if (!active_transaction) {
+    DBI::dbExecute(con, paste("SAVEPOINT", savepoint))
+  }
+  tryCatch(
+    {
+      for (indices in qc_runs) {
+        run_ranges <- qc_runs_to_ranges(
+          w$datetime[indices],
+          ifelse(held[indices], NA_character_, w$code[indices])
+        )
+        run_ranges <- run_ranges[!is.na(run_ranges$code), , drop = FALSE]
+        if (nrow(run_ranges)) {
+          qc_write_ranges(con, tsid, run_ranges, managed = managed)
+        }
+      }
+      if (needs_approval_write) {
+        for (indices in qc_runs) {
+          if (!any(approval_updates %in% indices)) {
+            next
+          }
+          withCallingHandlers(
+            adjust_approval(con, tsid, approval_data[indices, , drop = FALSE]),
+            warning = function(warning) {
+              stop(conditionMessage(warning), call. = FALSE)
+            }
+          )
+        }
+      }
+      if (active_transaction) {
+        DBI::dbExecute(con, "COMMIT")
+      } else {
+        DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
+      }
+    },
+    error = function(e) {
+      if (active_transaction) {
+        DBI::dbExecute(con, "ROLLBACK")
+      } else {
+        DBI::dbExecute(con, paste("ROLLBACK TO SAVEPOINT", savepoint))
+        DBI::dbExecute(con, paste("RELEASE SAVEPOINT", savepoint))
+      }
+      stop(e)
+    }
+  )
+
   invisible(summary)
 }
 
-# Reconcile new ranges with stored ones of the MANAGED codes only, inside
-# [first, last reading of the window]:
-#   - stored ranges inside the window are deleted;
-#   - ranges straddling an edge are clipped to the reading just outside it
-#     (split in two if they span the whole window);
-#   - at each edge, a clipped range and the new range touching it are merged
-#     when they carry the same code, so a daily run extends yesterday's UNS
-#     instead of starting a new one;
-#   - PROTECTED ranges (no_source_update = TRUE - a person set them) are
-#     never changed. gradeContinuous() already leaves their readings out of
-#     the new ranges; a new range of the same type that still overlaps one
-#     is dropped with a warning;
-#   - a range reaching the window from before is cut at the last reading
-#     before the window that no later-starting range of another managed code
-#     covers, not simply at the reading before the window. When no stored range of the import's code
-#     (UNS from downloadECCCwx, else UNK) overlaps the new rows, the import's
-#     adjust_qualifier() stretches the LATEST range of that code forward to
-#     them (bridge_latest_extension), straight across later ranges of other
-#     codes, which would leave those readings double-coded. Shortening a
-#     bridged range undoes the import rather than regrading, so it may reach
-#     before the graded window.
-# Codes the grader does not manage (e.g. a manual GW or a source qualifier)
-# are left alone; the overlap trigger only checks within a type.
+#' Add a QC grade without replacing an assigned grade
+#'
+#' Future QC rule implementations that produce grades use this helper to fill
+#' only `UNK` or `UNS` grade ranges where approval allows QC. Existing grades,
+#' protected ranges, and readings with an upstream or reviewed approval remain
+#' unchanged.
+#'
+#' @param con An open AquaCache connection.
+#' @param timeseries_id One continuous timeseries id.
+#' @param data A data frame with POSIXct `datetime` and proposed `grade` values
+#'   (grade codes or IDs accepted by [adjust_grade()]).
+#' @return Invisibly, the result of [adjust_grade()].
+#' @noRd
+#' @keywords internal
+qc_add_grade <- function(con, timeseries_id, data) {
+  tsid <- qc_rule_integer_id(timeseries_id, "timeseries_id")
+  if (!is.data.frame(data) || !all(c("datetime", "grade") %in% names(data))) {
+    stop("qc_add_grade: 'data' must contain 'datetime' and 'grade' columns.")
+  }
+  if (nrow(data) == 0L) {
+    return(invisible(NULL))
+  }
+  if (!inherits(data$datetime, "POSIXct") || anyNA(data$datetime)) {
+    stop("qc_add_grade: 'datetime' must be non-missing POSIXct values.")
+  }
+
+  approval_rows <- DBI::dbGetQuery(
+    con,
+    "SELECT a.start_dt, a.end_dt, a.no_source_update,
+            t.approval_type_code
+       FROM continuous.approvals a
+       JOIN public.approval_types t USING (approval_type_id)
+      WHERE a.timeseries_id = $1
+        AND a.start_dt <= $3 AND a.end_dt >= $2
+      ORDER BY a.start_dt",
+    params = list(tsid, min(data$datetime), max(data$datetime))
+  )
+  approval_code <- rep("UNS", nrow(data))
+  approval_protected <- rep(FALSE, nrow(data))
+  if (nrow(approval_rows)) {
+    for (i in seq_len(nrow(approval_rows))) {
+      covered <- data$datetime >= approval_rows$start_dt[i] &
+        data$datetime <= approval_rows$end_dt[i]
+      approval_code[covered] <- approval_rows$approval_type_code[i]
+      approval_protected[covered] <-
+        approval_rows$no_source_update[i] %in% TRUE
+    }
+  }
+  approval_allows_qc <- approval_code %in% c("UNK", "UNS", "N") &
+    !approval_protected
+
+  current <- DBI::dbGetQuery(
+    con,
+    "SELECT g.start_dt, g.end_dt, g.no_source_update,
+            t.grade_type_code
+       FROM continuous.grades g
+       JOIN public.grade_types t USING (grade_type_id)
+      WHERE g.timeseries_id = $1
+        AND g.start_dt <= $3 AND g.end_dt >= $2
+      ORDER BY g.start_dt",
+    params = list(tsid, min(data$datetime), max(data$datetime))
+  )
+  current_code <- rep("UNS", nrow(data))
+  protected <- rep(FALSE, nrow(data))
+  if (nrow(current)) {
+    for (i in seq_len(nrow(current))) {
+      covered <- data$datetime >= current$start_dt[i] &
+        data$datetime <= current$end_dt[i]
+      current_code[covered] <- current$grade_type_code[i]
+      protected[covered] <- current$no_source_update[i] %in% TRUE
+    }
+  }
+
+  fillable <- current_code %in% c("UNK", "UNS") &
+    !protected & approval_allows_qc
+  data$grade <- as.character(data$grade)
+  data$grade[!fillable] <- current_code[!fillable]
+  data$no_source_update <- protected
+  adjust_grade(con, tsid, data)
+}
+
+#' Reconcile calculated qualifier ranges in a grading window
+#'
+#' Only codes listed in `managed` are replaced. Stored ranges inside the
+#' window are rebuilt; ranges straddling its edges are clipped, split, or joined
+#' to matching new ranges. Protected ranges remain unchanged, and overlapping
+#' new ranges of the same type are dropped with a warning. Codes outside the
+#' managed set are left alone.
+#'
+#' A prior imported range can extend through later QC ranges of other types.
+#' When clipping such a range, this helper finds the last reading before the
+#' new window that is not covered by a later-starting managed range. This avoids
+#' leaving a double-coded interval while preserving the imported range's
+#' earlier valid portion.
+#'
+#' @param con AquaCache database connection.
+#' @param tsid Timeseries ID.
+#' @param ranges Data frame of proposed `code`, `start_dt`, `end_dt`, and `n`
+#'   values from `qc_runs_to_ranges()`.
+#' @param managed Character vector of qualifier codes whose stored ranges may
+#'   be reconciled.
+#' @return Invisibly, counts of deleted, updated, and inserted qualifier rows.
+#' @noRd
+#' @keywords internal
 qc_write_ranges <- function(con, tsid, ranges, managed) {
   types <- DBI::dbGetQuery(
     con,
@@ -912,16 +1389,25 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
   ))
 }
 
-# Validate the qualifier exclusion constraint without changing the mode of
-# unrelated deferred constraints in a caller-owned transaction.
+#' Validate qualifier overlap constraints in a caller-owned transaction
+#'
+#' Temporarily checks the same-code exclusion and cross-code `UNK`/`UNS`
+#' constraints, then restores both to deferred mode. Other constraints are
+#' unchanged.
+#' @param con AquaCache database connection with an open transaction.
+#' @return Invisibly, `TRUE` after both constraints validate.
+#' @noRd
+#' @keywords internal
 qc_validate_qualifier_overlaps <- function(con) {
   DBI::dbExecute(
     con,
-    "SET CONSTRAINTS continuous.qualifiers_no_overlap IMMEDIATE"
+    "SET CONSTRAINTS continuous.qualifiers_no_overlap,
+       continuous.check_special_qualifier_overlap IMMEDIATE"
   )
   DBI::dbExecute(
     con,
-    "SET CONSTRAINTS continuous.qualifiers_no_overlap DEFERRED"
+    "SET CONSTRAINTS continuous.qualifiers_no_overlap,
+       continuous.check_special_qualifier_overlap DEFERRED"
   )
   invisible(TRUE)
 }
@@ -979,9 +1465,16 @@ grade_after_import <- function(con, timeseries_id, from) {
   invisible(ok)
 }
 
-# Skip the hook when an adapter has no datetimes to write. In particular,
-# synchronize_continuous() promotes warnings inside its write transaction to
-# errors, so min(character(0)) must not be evaluated at the call site.
+#' Run the post-import QC hook only when datetimes were written
+#'
+#' Skips empty input before calculating the earliest datetime.
+#' @param con AquaCache database connection.
+#' @param timeseries_id Timeseries ID just written to.
+#' @param datetimes Datetimes written or replaced by the import.
+#' @return Invisibly, `FALSE` for no data or unavailable QC schema; otherwise
+#'   the result of `grade_after_import()`.
+#' @noRd
+#' @keywords internal
 grade_after_import_if_data <- function(con, timeseries_id, datetimes) {
   datetimes <- datetimes[!is.na(datetimes)]
   if (!length(datetimes)) {

@@ -1,0 +1,114 @@
+Patch 69 review completed - 2026-11-10
+
+Scope and decisions verified
+- Current mappings and workbook parser profiles are edited directly. No mapping-set
+  draft/publish/retire workflow remains in the application.
+- One immutable configuration snapshot is stored per import operation. Results
+  link directly to the run that inserted them; separate uploads can add results
+  to an explicitly selected existing sample without changing sample metadata.
+- Original workbook bytes remain in files.documents; sample_documents supplies
+  the sample links. import_runs stores source_document_id and has no duplicated
+  source-file name, size, hash or SHA256 fields.
+- Legacy mapping-set and import_run_rows tables are removed. Existing audit
+  events remain, published scope overrides migrate, unpublished drafts are
+  discarded, and unambiguous old result/run links are retained. Older runs may
+  have no captured configuration or workbook; the provenance UI says so.
+- Snapshot/source identity, original result/run links, archived file content and
+  finalized run outcomes are protected by database guards. Run snapshot reads
+  follow source-document visibility; documentless runs are creator/admin only.
+
+Visibility and document behavior
+- Uploaded source files and attachments use group names common to every linked
+  sample. public_reader is unrestricted. Empty common groups reject the upload
+  or coordinated edit atomically with an actionable message.
+- The complete source workbook, including omitted source samples, constrains
+  initial sharing for a partial upload. Later automatic synchronization retains
+  that limit; users can explicitly review and change sharing in Documents.
+- Single and bulk sample visibility edits ask Yes / No / Cancel. Yes is the
+  primary/recommended choice; No preserves document sharing; Cancel saves nothing.
+- Actual browser saves exercised all three choices in both modes. Database
+  comparisons confirmed their effects and unchanged collection metadata,
+  sub-location, timestamps, source identifiers and other non-sharing fields.
+- Identical binary uploads reuse the document. Shared-document synchronization
+  considers every linked sample; two-document independence and public_reader
+  isolation are covered by live database tests.
+- Unchanged document associations now retain their roles, notes and audit fields.
+
+Concrete defects fixed during review
+- Migration referred to a nonexistent legacy run-row table; restored mapping
+  scope constraints, target foreign keys, custom editor grants and audit registry
+  history continuity. Direct APIs now live in their owning files, without zzz
+  overrides or live calls to the removed revision workflow.
+- Added an explicit existing-sample destination with live sample/version checks,
+  result-only insertion, duplicate rollback, and clear Created / Results added
+  summaries. No silent result overwrite or sample metadata replacement.
+- Protected omitted workbook content and configuration snapshots from disclosure
+  through a public result belonging to a restricted original workbook.
+- Added result -> run provenance retrieval, original-workbook download and exact
+  stored JSON configuration/metadata download. Restricted and older/manual
+  results have explicit explanations.
+- Fixed ISO analysis timestamps, embedded times, mixed clock formats and explicit
+  source offsets. Numeric Excel and existing date parsing regression tests pass.
+- Fixed the sample editor's sub-location reset, obsolete link_source insert, and
+  delete/reinsert behavior that would erase unchanged document link metadata.
+- Bulk confirmation now captures selected fields along with the pending form.
+  Mapping saves preserve existing source names and activation state.
+- Fixed source-wide mapping status rendering, a missing location-code report
+  assumption, source/target upload-summary labeling and stale workflow help text.
+- Suppressed accidental configuration printing by the direct app launcher and
+  corrected the Sass cache option. Upload failures remain visible until dismissed.
+
+Verification evidence
+- AquaCache/dev/patch69-review/migration-verification.log:
+  Fresh checked-in Patch 68 fixture -> seeded published/draft/source/profile
+  cases -> current complete Patch 69 -> 115 targeted AquaCache assertions passed.
+  migrate.R asserts scope precedence, draft discard, audit history continuity,
+  custom table/sequence grants, historic result links and removal of old tables.
+- YGwater/dev/review-import-tests.log:
+  378 targeted application assertions passed, including parser/mapping/result
+  metadata, partial uploads, existing samples, client/report compatibility,
+  privilege requirements, document sharing, preserved link metadata and provenance.
+- YGwater/dev/review-upload-integration.log:
+  Real worker tests passed: two labs on one sample, unchanged original metadata,
+  new-sample/partial upload, omitted private content, duplicate rollback, stale
+  sample rejection and stale mapping/configuration rejection.
+- Browser upload created sample 11 and appended to sample 1, adding results 35/36
+  in run 12. Analysis datetimes persisted as 2032-02-01 12:00:00 UTC. The downloaded
+  original workbook SHA256 matched the input exactly. The downloaded JSON parsed
+  correctly and retained the stored parser, mappings, options and upload summary.
+- YGwater/dev/review-browser-verification.log and review-sharing-state.R assert
+  exact archived bytes, run/sample links, restricted public provenance and the
+  effects of browser sharing choices. Review screenshots are ignored local JPGs.
+- AquaCache/dev/patch69-review/final-audit.log:
+  Current database remains Patch 69, with 11 samples / 4 documents, no legacy
+  import tables or duplicate file fields, complete new-upload document links, and
+  a public sample/result whose private workbook/run snapshot remain inaccessible
+  to public_reader. On 2026-11-10 the database and review fixtures were still
+  intact; no overnight reset was observed.
+- Final sources installed successfully into the isolated temporary review library.
+  The installer now fails on package-install warnings and checks installed source
+  equality. This caught and corrected an earlier sandbox compiler failure that
+  caused background workers to load an older installed AquaCache package.
+- Both repositories pass git diff --check. Existing locale/encoding warnings are
+  environmental. Full YGwater test setup requires the absent r-reticulate conda
+  environment for unrelated plotly/Python setup; the relevant tests ran separately
+  without that setup and passed. No production connection or dev database writes
+  were made. Unrelated gradeContinuous work was preserved.
+
+Current state and replay
+- Only testdb on 10.250.12.154 was modified. Original testdb backup is preserved
+  as testdb_patch69_review_backup. Synthetic review sources remain available.
+- After No-choice tests, fixture document visibility was restored to its current
+  sample constraints. Sample 1 is WSP_group; sample 11 is public_reader; their
+  shared full workbook is WSP_group. The omitted-sample workbook remains restricted.
+- The local verification app was stopped using its own execution session. No
+  unrelated R processes were stopped. Both packages must be installed together
+  when deploying this database/application change. This review installed only
+  into TEMP/aquacache-patch69-review-library, not the normal user library.
+- To repeat the complete migration from disposable testdb, run reset-testdb.R
+  then verify-migration.R from AquaCache using R 4.6.0. To recreate application
+  fixtures, run review-upload-integration.R then review-browser-fixture.R from
+  YGwater. review-launch.R starts the testdb app on localhost:38499 with the
+  isolated installed packages; review-import-tests.R runs the targeted suite with
+  YGWATER_TEST_IMPORT_DB=true. review-browser-verification.R restore-documents
+  restores fixture document constraints and checks the completed browser upload.

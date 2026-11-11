@@ -2,7 +2,7 @@
 % Please edit documentation in R/import_mappings.R
 \name{getImportParameterMappings}
 \alias{getImportParameterMappings}
-\title{List applicable import parameter mappings}
+\title{List current parameter mappings}
 \usage{
 getImportParameterMappings(
   con,
@@ -14,25 +14,22 @@ getImportParameterMappings(
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Optional source-code filter.}
+\item{source_code}{Optional source code.}
 
-\item{profile_code}{Optional profile code. When supplied, the current
-published source mappings and profile overrides are returned.}
+\item{profile_code}{Optional profile code; requires \code{source_code}.}
 
-\item{active}{Optional row-active filter. Use \code{NULL} for all rows.}
+\item{active}{Optional active filter. Use \code{NULL} for all rows.}
 
-\item{import_mapping_set_id}{Optional exact mapping-set revision. When set,
-\code{source_code} and \code{profile_code} are ignored.}
+\item{import_mapping_set_id}{Legacy argument; supplying it is an error.}
 
-\item{include_draft}{If \code{TRUE}, use the draft instead of the published set
-for any scope that has an open draft. Intended for mapping editors and
-upload previews; import runs should use published mappings.}
+\item{include_draft}{Legacy compatibility argument; all current rows are live.}
 }
 \value{
-A data.frame of typed parameter mappings in resolution order.
+A data.frame of current parameter mappings.
 }
 \description{
-List applicable import parameter mappings
+Returns source-wide mappings and, when requested, the matching profile
+overrides. Profile-specific rows sort before source-wide rows.
 }

@@ -12,7 +12,8 @@ gradeContinuous(
   baseline = "UNS",
   replace = "UNK",
   write = TRUE,
-  assignments = NULL
+  assignments = NULL,
+  reconcile_auto_screened = FALSE
 )
 }
 \arguments{
@@ -36,20 +37,28 @@ supplies no qualifier, so new readings arrive as UNK and leave as
 \item{assignments}{Optional desired QC assignments for a read-only preview.
 When supplied, these values are validated and graded without saving them.
 This is allowed only with \code{write = FALSE}.}
+
+\item{reconcile_auto_screened}{Logical. Set TRUE only while explicitly
+reconciling a saved rule change; this allows prior \code{S} ranges to be
+recalculated. Normal imports and fetches leave this FALSE and skip \code{S}.}
 }
 \value{
 Invisibly. With \code{write = FALSE}, a list: \code{ranges} (what would be
 written, around protected readings), \code{readings} (one code per reading
-over the whole window, for comparison with stored qualifiers), \code{window}
-and \code{protected} (the number of readings held by protected ranges). With
-\code{write = TRUE}, a data.frame of readings and ranges per
-code. NULL if the series has no saved or proposed assignments, or nothing
-to write.
+over the whole window, for comparison with stored qualifiers),
+\code{approvals} (the approval state that would be written), \code{window} and
+\code{protected} (the number of readings held by protected ranges). With
+\code{write = TRUE}, a data.frame of readings and ranges per code, plus the
+total \code{approval_readings} screened. An approval-only update returns one
+row with \code{code = NA}, \code{n = 0}, and \code{ranges = 0}. NULL if the series has no
+saved or proposed assignments, or nothing to write.
 }
 \description{
 Applies the quality-control rules assigned to a timeseries in
 \code{continuous.timeseries_qc_rules} and writes the resulting qualifiers to
-\code{continuous.qualifiers}. Readings no rule flags get \code{baseline} (UNS).
+\code{continuous.qualifiers}. Eligible readings reviewed by an active rule also
+receive approval code \code{S} (auto screened, no human review). Readings with
+no rule flags get \code{baseline} (UNS).
 Called after new data are imported (see \code{\link[=getNewContinuous]{getNewContinuous()}} and
 \code{\link[=synchronize_continuous]{synchronize_continuous()}}); can also be run directly, e.g. with
 \code{write = FALSE} to preview.
@@ -65,18 +74,32 @@ replaces the old one rather than being added beside it, e.g. a reading
 first left UNS for lack of "ahead" context and later judged ERROR.
 
 \strong{Which ranges are replaced.} Only stored qualifiers of the codes the
-grader manages (\code{baseline}, \code{replace} and the codes its rules emit), inside
-the graded window, and only if not protected (\code{no_source_update = TRUE}).
+grader manages (\code{UNK}, \code{UNS}, \code{baseline}, \code{replace} and the codes its rules
+emit), inside the graded window, and only if not protected
+(\code{no_source_update = TRUE}). A baseline \code{UNK} or \code{UNS} is omitted where a
+different qualifier already covers the reading; a rule qualifier may
+overlap another non-placeholder qualifier.
 Codes it does not manage are left alone. Ranges it writes are
 source-managed (\code{no_source_update = FALSE}), so later runs can replace
 them.
 
-Inactive saved assignments also contribute managed codes, so disabling or
-removing an assignment with \code{\link[=setTimeseriesQCRules]{setTimeseriesQCRules()}} lets later grading
-clear its old flags. With no active rules, unprotected managed flags in
-the graded window become \code{baseline}. Use \code{from = NULL} to clear the whole
-record. Series with no saved assignments are left alone. A preview also
-manages codes from saved assignments omitted from the proposed set.
+Inactive saved assignments also contribute managed codes, so unprotected
+flags can be cleared to \code{baseline}. Previously auto-screened \code{S} ranges are
+reconsidered only for explicit rule-removal reconciliation (or when
+\code{reconcile_auto_screened = TRUE}). With no active rules, unprotected managed
+flags in the eligible graded window become \code{baseline}. Use \code{from = NULL} to
+clear the whole record. Series with no saved assignments are left alone. A
+preview also manages codes from saved assignments omitted from the proposed
+set.
+
+\strong{Approval-aware screening.} Readings whose current approval code is
+\code{UNK}, \code{UNS} or \code{N} (not reviewed), or which have no approval row, may be
+screened. Other approval codes are retained and excluded from automatic
+QC. Protected approval ranges keep their current code. Qualifier and
+approval writes are split around these ranges, including when no reading
+falls within an existing approval interval. \code{S} is included only when
+\code{reconcile_auto_screened = TRUE}, for explicit rule-removal reconciliation;
+it is otherwise treated as an existing approval that must be left alone.
 
 \strong{Protected readings.} A reading covered by a protected range of a
 managed code gets no new code of any type: the protected range is never

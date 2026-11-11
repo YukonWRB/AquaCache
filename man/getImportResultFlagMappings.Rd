@@ -2,7 +2,7 @@
 % Please edit documentation in R/import_mappings.R
 \name{getImportResultFlagMappings}
 \alias{getImportResultFlagMappings}
-\title{List applicable import result-flag mappings}
+\title{List current result-flag mappings}
 \usage{
 getImportResultFlagMappings(
   con,
@@ -13,22 +13,19 @@ getImportResultFlagMappings(
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Optional source-code filter.}
+\item{source_code}{Optional source code.}
 
-\item{profile_code}{Optional profile code. When supplied, source-wide and
-profile-specific mappings are returned, with profile mappings first.}
+\item{profile_code}{Optional profile code; requires \code{source_code}.}
 
 \item{active}{Optional active filter. Use \code{NULL} for all rows.}
 
-\item{include_draft}{If \code{TRUE}, use the draft instead of the published set
-for any scope that has an open draft. Intended for mapping editors and
-upload previews; import runs should use published mappings.}
+\item{include_draft}{Legacy compatibility argument; all current rows are live.}
 }
 \value{
-A data.frame of result-flag mappings in precedence order.
+A data.frame of current result-flag mappings.
 }
 \description{
-List applicable import result-flag mappings
+List current result-flag mappings
 }

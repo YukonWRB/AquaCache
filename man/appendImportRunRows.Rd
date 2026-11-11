@@ -2,21 +2,20 @@
 % Please edit documentation in R/import_mappings.R
 \name{appendImportRunRows}
 \alias{appendImportRunRows}
-\title{Append or update discrete import-run rows}
+\title{Reject removed per-result import-run rows}
 \usage{
 appendImportRunRows(con, import_run_id, rows)
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
 \item{import_run_id}{Import run ID.}
 
-\item{rows}{A data.frame/data.table with optional columns matching
-\code{discrete.import_run_rows}.}
+\item{rows}{Former row-level import audit data.}
 }
 \value{
-Invisibly returns \code{rows}.
+Never returns; this compatibility entry point always errors.
 }
 \description{
-Append or update discrete import-run rows
+Result provenance is now stored directly on \code{discrete.results.import_run_id}.
 }

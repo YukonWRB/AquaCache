@@ -481,6 +481,14 @@ local_qc_reconciliation <- function(.local_envir = parent.frame()) {
     no_source_update = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE)
   )
   state$writes <- 0L
+  state$approval_writes <- 0L
+  state$approval_data <- NULL
+  state$owns_transaction <- FALSE
+  state$statements <- character()
+  state$approvals <- data.frame(
+    start_dt = state$datetime[0], end_dt = state$datetime[0],
+    no_source_update = logical(), approval_type_code = character()
+  )
   local_mocked_bindings(
     dbGetQuery = function(con, statement, params = NULL, ...) {
       if (grepl("SELECT to_regclass(", statement, fixed = TRUE)) {
@@ -525,6 +533,9 @@ local_qc_reconciliation <- function(.local_envir = parent.frame()) {
           d = if (length(dt)) min(dt) else state$datetime[NA_integer_]
         ))
       }
+      if (grepl("FROM continuous.approvals", statement, fixed = TRUE)) {
+        return(state$approvals)
+      }
       if (grepl("FROM continuous.qualifiers", statement, fixed = TRUE)) {
         q <- state$qualifiers
         if (grepl("q.no_source_update", statement, fixed = TRUE)) {
@@ -545,9 +556,12 @@ local_qc_reconciliation <- function(.local_envir = parent.frame()) {
           return(q[, c("start_dt", "end_dt")])
         }
         ids <- as.integer(strsplit(gsub("[{}]", "", params[[2]]), ",")[[1]])
+        type_match <- q$qualifier_type_id %in% ids
+        if (grepl("NOT (q.qualifier_type_id", statement, fixed = TRUE)) {
+          type_match <- !type_match
+        }
         return(q[
-          q$qualifier_type_id %in%
-            ids &
+          type_match &
             q$start_dt <= params[[4]] &
             q$end_dt >= params[[3]],
         ])
@@ -558,14 +572,20 @@ local_qc_reconciliation <- function(.local_envir = parent.frame()) {
       stop("Unexpected query: ", statement)
     },
     dbExecute = function(con, statement, params = NULL, ...) {
+      state$statements <- c(state$statements, statement)
       if (grepl("DELETE FROM continuous.qualifiers", statement, fixed = TRUE)) {
         ids <- as.integer(strsplit(gsub("[{}]", "", params[[1]]), ",")[[1]])
         state$qualifiers <- state$qualifiers[
           !state$qualifiers$qualifier_id %in% ids,
         ]
         state$writes <- state$writes + 1L
+      } else if (grepl("UPDATE continuous.qualifiers", statement, fixed = TRUE)) {
+        i <- match(params[[1]], state$qualifiers$qualifier_id)
+        state$qualifiers$start_dt[i] <- params[[2]]
+        state$qualifiers$end_dt[i] <- params[[3]]
+        state$writes <- state$writes + 1L
       } else if (
-        !grepl("^(SET CONSTRAINTS|SAVEPOINT|RELEASE SAVEPOINT)", statement)
+        !grepl("^(SET CONSTRAINTS|SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK|COMMIT)", statement)
       ) {
         stop("Unexpected statement: ", statement)
       }
@@ -575,7 +595,12 @@ local_qc_reconciliation <- function(.local_envir = parent.frame()) {
     .env = .local_envir
   )
   local_mocked_bindings(
-    dbTransBegin = function(...) FALSE,
+    dbTransBegin = function(...) state$owns_transaction,
+    adjust_approval = function(con, tsid, data, ...) {
+      state$approval_writes <- state$approval_writes + 1L
+      state$approval_data <- data
+      invisible(NULL)
+    },
     dbAppendTableRLS = function(con, table, value, ...) {
       expect_identical(table, "continuous.qualifiers")
       value$qualifier_id <- 100L + seq_len(nrow(value))
@@ -595,7 +620,7 @@ test_that("the last inactive rule's flags reconcile to baseline", {
   state <- local_qc_reconciliation()
   before <- state$qualifiers
   expect_warning(summary <- gradeContinuous(NULL, 1L), "WHOLE record")
-  expect_equal(summary, data.frame(code = "UNS", n = 5L, ranges = 2L))
+  expect_equal(summary, data.frame(code = "UNS", n = 4L, ranges = 2L, approval_readings = 0L))
   # Protected ERROR and unrelated GW survive; all old editable QC codes go.
   expect_setequal(state$qualifiers$qualifier_type_id, c(3L, 6L, 7L))
   expect_identical(
@@ -604,7 +629,7 @@ test_that("the last inactive rule's flags reconcile to baseline", {
   )
   baseline <- state$qualifiers[state$qualifiers$qualifier_type_id == 7L, ]
   expect_equal(baseline$start_dt, state$datetime[c(1, 4)])
-  expect_equal(baseline$end_dt, state$datetime[c(2, 6)])
+  expect_equal(baseline$end_dt, state$datetime[c(2, 5)])
   expect_false(any(baseline$no_source_update))
 })
 
@@ -618,7 +643,7 @@ test_that("previewing removal of every assignment reconciles without writing", {
     assignments = data.frame(),
     write = FALSE
   )
-  expect_equal(preview$readings$code, rep("UNS", 6))
+  expect_equal(preview$readings$code, c(rep("UNS", 5), NA_character_))
   expect_equal(preview$protected, 1L)
   expect_identical(state$qualifiers, before)
   expect_identical(state$writes, 0L)
@@ -633,7 +658,7 @@ test_that("import grading clears inactive flags only inside its window", {
   )
   baseline <- state$qualifiers[state$qualifiers$qualifier_type_id == 7L, ]
   expect_equal(baseline$start_dt, state$datetime[4])
-  expect_equal(baseline$end_dt, state$datetime[6])
+  expect_equal(baseline$end_dt, state$datetime[5])
 })
 
 test_that("remaining active rules still replace inactive rules' output", {
@@ -652,7 +677,7 @@ test_that("remaining active rules still replace inactive rules' output", {
   )
   local_mocked_bindings(qc_rule_registry = registry, .package = "AquaCache")
   expect_warning(summary <- gradeContinuous(NULL, 1L), "WHOLE record")
-  expect_equal(summary, data.frame(code = "CT", n = 5L, ranges = 2L))
+  expect_equal(summary, data.frame(code = "CT", n = 5L, ranges = 2L, approval_readings = 5L))
   expect_setequal(state$qualifiers$qualifier_type_id, c(1L, 3L, 6L))
 })
 
@@ -678,4 +703,39 @@ test_that("fully protected records need no writes after deactivation", {
   expect_null(result)
   expect_identical(state$qualifiers, before)
   expect_identical(state$writes, 0L)
+})
+
+test_that("approval-only QC updates return a summary in either transaction mode", {
+  for (owns_transaction in c(FALSE, TRUE)) {
+    state <- local_qc_reconciliation()
+    state$owns_transaction <- owns_transaction
+    state$rules <- data.frame(
+      rule_fx = "qc_test", rule_version = 1L, active = TRUE,
+      rule_args = "{}", companion_timeseries = "{}", emits = "CT",
+      argument_schema = '{"schema_version":2,"arguments":[],"companions":[]}'
+    )
+    registry <- qc_rule_registry
+    registry[["qc_test@1"]] <- list(
+      fx = function(x, a, ctx) rep(NA_character_, nrow(x)),
+      window = function(a) list(back = 0, ahead = 0, year_start = FALSE)
+    )
+    local_mocked_bindings(qc_rule_registry = registry, .package = "AquaCache")
+    # An unrelated qualifier suppresses every placeholder baseline. The
+    # readings are nevertheless eligible for approval S after screening.
+    state$qualifiers <- state$qualifiers[6L, , drop = FALSE]
+    state$qualifiers$start_dt <- state$datetime[1L]
+    state$qualifiers$end_dt <- state$datetime[6L]
+    before <- state$qualifiers
+
+    expect_warning(summary <- gradeContinuous(NULL, 1L), "WHOLE record")
+
+    expect_equal(summary, data.frame(
+      code = NA_character_, n = 0L, ranges = 0L, approval_readings = 6L
+    ))
+    expect_identical(state$approval_writes, 1L)
+    expect_equal(state$approval_data$approval, rep("S", 6))
+    expect_identical(state$qualifiers, before)
+    expect_identical(state$writes, 0L)
+    expect_match(tail(state$statements, 1), if (owns_transaction) "^COMMIT" else "^RELEASE SAVEPOINT")
+  }
 })

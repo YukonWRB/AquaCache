@@ -272,6 +272,260 @@ build_attribute_segments <- function(data, value_col, id_col, timeseries_id) {
   segments
 }
 
+#' Reconcile incoming qualifiers with existing placeholder intervals
+#'
+#' Removes conflicting incoming placeholder rows and trims or replaces
+#' overlapping editable `UNK`/`UNS` intervals so placeholder qualifiers do not
+#' overlap more informative qualifiers. Existing specific qualifiers and
+#' protected placeholders take precedence. Other specific qualifier types may
+#' continue to overlap.
+#' @param con An open AquaCache database connection.
+#' @param timeseries_id The continuous timeseries receiving the qualifiers.
+#' @param data Normalized incoming qualifier rows, including `datetime`,
+#'   `qualifier`, `rank`, and `no_source_update` columns.
+#' @param special_type_ids Qualifier type ids for the `UNK` and `UNS`
+#'   placeholder types.
+#' @param source_update Whether the incoming rows come from a source refresh;
+#'   protected existing placeholders are preserved during source updates.
+#' @return The incoming rows that can be safely written after removing rows
+#'   that conflict with existing qualifier intervals.
+#' @noRd
+#' @keywords internal
+reconcile_qualifier_placeholders <- function(
+  con,
+  timeseries_id,
+  data,
+  special_type_ids,
+  source_update
+) {
+  if (!nrow(data) || !length(special_type_ids)) {
+    return(data)
+  }
+
+  min_dt <- min(data$datetime)
+  max_dt <- max(data$datetime)
+  current <- DBI::dbGetQuery(
+    con,
+    "SELECT q.qualifier_id, q.timeseries_id, q.qualifier_type_id,
+            q.start_dt, q.end_dt, q.no_source_update
+       FROM continuous.qualifiers q
+      WHERE q.timeseries_id = $1
+        AND q.start_dt <= $3 AND q.end_dt >= $2
+      ORDER BY q.start_dt, q.qualifier_id",
+    params = list(timeseries_id, min_dt, max_dt)
+  )
+  current_special <- current[
+    current$qualifier_type_id %in% special_type_ids,
+    ,
+    drop = FALSE
+  ]
+  current_specific <- current[
+    !current$qualifier_type_id %in% special_type_ids,
+    ,
+    drop = FALSE
+  ]
+  drop <- rep(FALSE, nrow(data))
+
+  # A specific qualifier in the same input row wins over UNK/UNS. If two
+  # placeholders are supplied, retain the first one in source order.
+  for (indices in split(seq_len(nrow(data)), as.character(data$datetime))) {
+    specific <- indices[
+      !data$qualifier[indices] %in% special_type_ids
+    ]
+    placeholders <- indices[
+      data$qualifier[indices] %in% special_type_ids
+    ]
+    if (length(placeholders) && length(specific)) {
+      drop[placeholders] <- TRUE
+    } else if (length(placeholders) > 1L) {
+      keep <- placeholders[which.min(data$rank[placeholders])]
+      drop[setdiff(placeholders, keep)] <- TRUE
+    }
+  }
+
+  # A placeholder never replaces a specific qualifier already stored on the
+  # series. Protected placeholders also block a source update from writing a
+  # more specific value over them.
+  for (i in which(!drop)) {
+    overlaps_specific <- if (data$qualifier[i] %in% special_type_ids) {
+      current_specific$start_dt <= data$datetime[i] &
+        current_specific$end_dt >= data$datetime[i]
+    } else {
+      rep(FALSE, nrow(current_specific))
+    }
+    overlaps_protected_placeholder <- if (source_update) {
+      current_special$qualifier_type_id != data$qualifier[i] &
+        current_special$no_source_update %in% TRUE &
+        current_special$start_dt <= data$datetime[i] &
+        current_special$end_dt >= data$datetime[i]
+    } else {
+      rep(FALSE, nrow(current_special))
+    }
+    if (any(overlaps_specific) || any(overlaps_protected_placeholder)) {
+      drop[i] <- TRUE
+    }
+  }
+  if (any(drop)) {
+    warning(
+      "adjust_qualifier: skipped ", sum(drop),
+      " incoming placeholder or qualifier value(s) that overlap a more informative or protected qualifier."
+    )
+    data <- data[!drop, , drop = FALSE]
+  }
+  if (!nrow(data)) {
+    return(data)
+  }
+
+  # Build the incoming intervals by source rank, matching the normal
+  # qualifier segmenting logic. A code change breaks a run even if the same
+  # code appears again later. Protected special intervals have already caused
+  # overlapping source rows to be removed above.
+  groups <- split(
+    seq_len(nrow(data)),
+    data$rank
+  )
+  incoming_parts <- list()
+  for (indices in groups) {
+    indices <- indices[order(data$datetime[indices])]
+    d <- data[indices, , drop = FALSE]
+    run <- c(
+      TRUE,
+      d$qualifier[-1L] != utils::head(d$qualifier, -1L) |
+      d$no_source_update[-1L] != utils::head(d$no_source_update, -1L)
+    )
+    run_id <- cumsum(run)
+    for (value in unique(run_id)) {
+      rows <- which(run_id == value)
+      incoming_parts[[length(incoming_parts) + 1L]] <- data.frame(
+        qualifier_type_id = d$qualifier[rows[1L]],
+        start_dt = d$datetime[rows[1L]],
+        end_dt = d$datetime[rows[length(rows)]],
+        source_rows = I(list(indices[rows]))
+      )
+    }
+  }
+  incoming <- do.call(rbind, incoming_parts)
+
+  # Input points can form a continuous interval across a gap with no row in
+  # it. Recheck the full intervals so a placeholder cannot bridge a specific
+  # qualifier, and a source update cannot bridge a protected placeholder.
+  segment_conflict <- logical(nrow(incoming))
+  for (i in seq_len(nrow(incoming))) {
+    if (incoming$qualifier_type_id[i] %in% special_type_ids) {
+      segment_conflict[i] <- any(
+        current_specific$start_dt < incoming$end_dt[i] &
+          current_specific$end_dt > incoming$start_dt[i]
+      )
+    }
+    if (source_update && !segment_conflict[i]) {
+      segment_conflict[i] <- any(
+        current_special$qualifier_type_id != incoming$qualifier_type_id[i] &
+          current_special$no_source_update %in% TRUE &
+          current_special$start_dt < incoming$end_dt[i] &
+          current_special$end_dt > incoming$start_dt[i]
+      )
+    }
+  }
+  if (any(segment_conflict)) {
+    conflicting_rows <- unique(unlist(
+      incoming$source_rows[segment_conflict],
+      use.names = FALSE
+    ))
+    warning(
+      "adjust_qualifier: skipped ", length(conflicting_rows),
+      " incoming row(s) whose qualifier interval overlaps a specific or protected placeholder qualifier."
+    )
+    return(reconcile_qualifier_placeholders(
+      con,
+      timeseries_id,
+      data[-conflicting_rows, , drop = FALSE],
+      special_type_ids,
+      source_update
+    ))
+  }
+  if (!nrow(current_special)) {
+    return(data)
+  }
+
+  # Incoming specific qualifiers replace overlapping editable placeholders;
+  # an incoming UNS/UNK also replaces the other placeholder code. Preserve
+  # portions of existing ranges outside the changed intervals.
+  replacements <- list()
+  for (i in seq_len(nrow(current_special))) {
+    old <- current_special[i, , drop = FALSE]
+    cuts <- incoming[
+      incoming$qualifier_type_id != old$qualifier_type_id &
+        incoming$start_dt < old$end_dt &
+        incoming$end_dt > old$start_dt,
+      ,
+      drop = FALSE
+    ]
+    cuts <- cuts[, c("qualifier_type_id", "start_dt", "end_dt"), drop = FALSE]
+    if (source_update && old$no_source_update %in% TRUE) {
+      cuts <- cuts[0, , drop = FALSE]
+    }
+    if (!nrow(cuts)) {
+      replacements[[length(replacements) + 1L]] <- data.frame(
+        qualifier_id = old$qualifier_id,
+        timeseries_id = old$timeseries_id,
+        qualifier_type_id = old$qualifier_type_id,
+        start_dt = old$start_dt,
+        end_dt = old$end_dt,
+        no_source_update = old$no_source_update
+      )
+      next
+    }
+
+    cuts <- cuts[order(cuts$start_dt, cuts$end_dt), , drop = FALSE]
+    cursor <- as.numeric(old$start_dt)
+    old_end <- as.numeric(old$end_dt)
+    kept <- list()
+    for (j in seq_len(nrow(cuts))) {
+      cut_start <- max(cursor, as.numeric(cuts$start_dt[j]))
+      cut_end <- min(old_end, as.numeric(cuts$end_dt[j]))
+      if (cut_start > cursor) {
+        kept[[length(kept) + 1L]] <- c(cursor, cut_start)
+      }
+      cursor <- max(cursor, cut_end)
+      if (cursor >= old_end) {
+        break
+      }
+    }
+    if (cursor < old_end) {
+      kept[[length(kept) + 1L]] <- c(cursor, old_end)
+    }
+    if (length(kept)) {
+      for (j in seq_along(kept)) {
+        replacements[[length(replacements) + 1L]] <- data.frame(
+          qualifier_id = if (j == 1L) old$qualifier_id else NA_integer_,
+          timeseries_id = old$timeseries_id,
+          qualifier_type_id = old$qualifier_type_id,
+          start_dt = as.POSIXct(kept[[j]][1L], origin = "1970-01-01", tz = "UTC"),
+          end_dt = as.POSIXct(kept[[j]][2L], origin = "1970-01-01", tz = "UTC"),
+          no_source_update = old$no_source_update
+        )
+      }
+    }
+  }
+  proposed_special <- if (length(replacements)) {
+    do.call(rbind, replacements)
+  } else {
+    current_special[0, , drop = FALSE]
+  }
+  reconcile_segment_changes(
+    con = con,
+    table_name = "continuous.qualifiers",
+    id_col = "qualifier_id",
+    value_col = "qualifier_type_id",
+    db_value_col = "qualifier_type_id",
+    existing_state = current_special,
+    proposed_state = proposed_special,
+    protection_col = "no_source_update",
+    source_update = source_update
+  )
+  data
+}
+
 #' @title Clip source-managed segments around protected intervals
 #' @description Subtract immutable source-protected intervals from proposed
 #' source-managed segments. Intervals use the database's half-open `[)`
@@ -946,6 +1200,13 @@ adjust_grade <- function(
 #' `no_source_update` are then immutable. Direct/manual calls leave this FALSE
 #' and may set `data$no_source_update` explicitly.
 #'
+#' @details
+#' `UNK` and `UNS` are placeholders and cannot overlap another qualifier.
+#' Incoming placeholder values are skipped where a specific qualifier already
+#' exists. Incoming specific values replace overlapping editable placeholders;
+#' source updates preserve protected placeholder ranges. Different specific
+#' qualifier types may still overlap.
+#'
 #' @return Modifies the 'qualifiers' table in the database.
 #' @export
 
@@ -1028,6 +1289,22 @@ adjust_qualifier <- function(
         !data$qualifier %in% qualifier_table$qualifier_type_id,
         "qualifier"
       ] <- unknown_qualifier
+
+      data <- reconcile_qualifier_placeholders(
+        con = con,
+        timeseries_id = timeseries_id,
+        data = data,
+        special_type_ids = qualifier_table$qualifier_type_id[
+          qualifier_table$qualifier_type_code %in% c("UNK", "UNS")
+        ],
+        source_update = source_update
+      )
+      if (!nrow(data)) {
+        if (active) {
+          DBI::dbExecute(con, "COMMIT;")
+        }
+        return(invisible(NULL))
+      }
 
       # Break 'data' into a data.frame for each unique 'rank'
       datalist <- split(data, data$rank)

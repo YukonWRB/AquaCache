@@ -2,7 +2,7 @@
 % Please edit documentation in R/import_mappings.R
 \name{upsertImportResultFlagMappings}
 \alias{upsertImportResultFlagMappings}
-\title{Add or update import result-flag mappings}
+\title{Add or update result-flag mappings immediately}
 \usage{
 upsertImportResultFlagMappings(
   con,
@@ -14,27 +14,21 @@ upsertImportResultFlagMappings(
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Stable source/key code in \code{discrete.import_sources}.}
+\item{source_code}{Optional source code.}
 
-\item{mappings}{A data.frame/data.table of result-flag mappings. It must
-contain \code{source_flag_value}; \code{source_flag_column} is optional.}
+\item{mappings}{Result-flag mapping rows.}
 
-\item{profile_code}{Optional profile code. When supplied, mappings are scoped
-to that profile; otherwise they apply to the source.}
+\item{profile_code}{Optional profile code; requires \code{source_code}.}
 
-\item{source_name}{Human-readable source name, used if the source row must
-be created.}
+\item{source_name}{Human-readable source name.}
 
-\item{publish}{If \code{FALSE}, leave the changes in the scope's editable draft.
-Call \code{\link[=publishImportMappings]{publishImportMappings()}} after staging changes to any mapping type.}
+\item{publish}{Compatibility argument. Must be \code{TRUE}; staged edits were removed.}
 }
 \value{
-Invisibly returns the uploaded mappings.
+Invisibly returns the normalized mappings.
 }
 \description{
-Add or update source-specific result flags for importing water-quality
-data. Universal comparison syntax such as leading \code{<} and \code{>} may remain in
-adapter code; these rows describe provider-specific flags and actions.
+Add or update result-flag mappings immediately
 }

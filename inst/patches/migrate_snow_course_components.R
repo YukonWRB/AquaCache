@@ -41,6 +41,35 @@ suppressPackageStartupMessages({
   library(DBI)
 })
 
+#' Migrate legacy snow-course results to component-backed aggregations
+#'
+#' Runs a per-sample migration from direct snow results to component-backed
+#' aggregations. It is a dry run unless explicitly enabled, and changes are
+#' committed independently for each sample after synchronization succeeds.
+#' @param apply_changes Logical; apply changes when `TRUE`, otherwise report
+#'   the planned migration. Defaults to the `SNOW_COMPONENTS_APPLY`
+#'   environment variable.
+#' @param aquacache Optional open AquaCache database connection. When omitted,
+#'   connection settings are read from the environment.
+#' @param snow Optional open SnowDB connection. When omitted, connection
+#'   settings are read from the environment.
+#' @param target_host AquaCache database host; defaults to
+#'   `SNOW_COMPONENTS_AQUACACHE_HOST`.
+#' @param target_name AquaCache database name; defaults to the corresponding
+#'   environment setting.
+#' @param target_port AquaCache database port; defaults to the corresponding
+#'   environment setting.
+#' @param snow_host SnowDB host; defaults to `SNOW_COMPONENTS_SNOW_HOST` or the
+#'   AquaCache host.
+#' @param snow_name SnowDB name; defaults to the corresponding environment
+#'   setting.
+#' @param snow_port SnowDB port; defaults to the corresponding environment
+#'   setting.
+#' @param confirm_production Logical confirmation required for a production
+#'   AquaCache host; defaults to `SNOW_COMPONENTS_CONFIRM_PRODUCTION`.
+#' @return Invisibly returns one migration result per selected sample series.
+#' @noRd
+#' @keywords internal
 run_snow_component_migration <- function(
   apply_changes = NULL,
   aquacache = NULL,
@@ -384,10 +413,7 @@ run_snow_component_migration <- function(
          SELECT 1 FROM discrete.result_aggregations ra
          WHERE ra.result_id = solid.result_id
        )
-       AND NOT EXISTS (
-         SELECT 1 FROM discrete.import_run_rows iur
-         WHERE iur.result_id = solid.result_id
-       )"
+       AND solid.import_run_id IS NULL"
     )
   )$result_count[[1L]]
   primary_source_locations <- unique(series$source_location)
@@ -571,10 +597,7 @@ run_snow_component_migration <- function(
              SELECT 1 FROM discrete.result_aggregations ra
              WHERE ra.result_id = solid.result_id
            )
-           AND NOT EXISTS (
-             SELECT 1 FROM discrete.import_run_rows iur
-             WHERE iur.result_id = solid.result_id
-           )",
+           AND solid.import_run_id IS NULL",
           params = list(solid_id, liquid_id, current$location_id)
         )
         corrected_states <- dbExecute(
@@ -691,10 +714,7 @@ run_snow_component_migration <- function(
                  direct.protocol_method
                AND replacement.matrix_state_id = direct.matrix_state_id
            )
-           AND NOT EXISTS (
-             SELECT 1 FROM discrete.import_run_rows iur
-             WHERE iur.result_id = direct.result_id
-           )"
+           AND direct.import_run_id IS NULL"
         )
       )
       dbCommit(aquacache)

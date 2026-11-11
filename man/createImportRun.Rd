@@ -2,57 +2,49 @@
 % Please edit documentation in R/import_mappings.R
 \name{createImportRun}
 \alias{createImportRun}
-\title{Create a discrete import run}
+\title{Create a discrete import run with one configuration snapshot}
 \usage{
 createImportRun(
   con,
   import_source_id,
   import_profile_id = NULL,
-  source_mapping_set_id = NULL,
-  profile_mapping_set_id = NULL,
   source_adapter_function = NULL,
   adapter_version = NULL,
   source_uri = NULL,
-  source_file_name = NULL,
-  source_file_hash = NULL,
-  source_file_size = NULL,
   summary = list(),
   validation_summary = list(),
-  note = NULL
+  note = NULL,
+  configuration_snapshot = NULL,
+  source_document_id = NULL
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{import_source_id}{Import source ID.}
+\item{import_source_id}{Source ID.}
 
-\item{import_profile_id}{Optional file-import profile ID.}
+\item{import_profile_id}{Optional profile ID.}
 
-\item{source_mapping_set_id}{Optional exact source mapping-set revision.}
+\item{source_adapter_function}{Adapter or application function.}
 
-\item{profile_mapping_set_id}{Optional exact profile mapping-set revision.}
+\item{adapter_version}{Adapter version.}
 
-\item{source_adapter_function}{Optional AquaCache adapter function.}
+\item{source_uri}{Source URL or identifier.}
 
-\item{adapter_version}{Optional adapter/package version.}
+\item{summary}{Run summary.}
 
-\item{source_uri}{Optional source URL, path, or dataset identifier.}
+\item{validation_summary}{Validation summary.}
 
-\item{source_file_name}{Optional uploaded source file name.}
+\item{note}{Optional run note.}
 
-\item{source_file_hash}{Optional source file hash.}
+\item{configuration_snapshot}{Optional effective configuration. Generated from the current source/profile when omitted.}
 
-\item{source_file_size}{Optional source file size in bytes.}
-
-\item{summary}{Optional named list of run summary values.}
-
-\item{validation_summary}{Optional named list of validation summary values.}
-
-\item{note}{Optional note.}
+\item{source_document_id}{Uploaded workbook document ID.}
 }
 \value{
 The \code{import_run_id}.
 }
 \description{
-Create a discrete import run
+New runs save one immutable parser/mapping/options snapshot and never store
+a mapping-set identifier.
 }

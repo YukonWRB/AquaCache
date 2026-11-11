@@ -2,26 +2,22 @@
 % Please edit documentation in R/import_mapping_review.R
 \name{getImportMappingReview}
 \alias{getImportMappingReview}
-\title{Review saved import mappings across sources and workbook formats}
+\title{Review current import mappings}
 \usage{
 getImportMappingReview(con, source_code = NULL, include_history = FALSE)
 }
 \arguments{
-\item{con}{AquaCache connection to a database at Patch 65 or later.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Optional source code. \code{NULL} includes all sources.}
+\item{source_code}{Optional source-code filter.}
 
-\item{include_history}{Include retired mapping-set revisions.}
+\item{include_history}{Legacy argument retained for call compatibility.}
 }
 \value{
-A data.frame containing source and profile scope, revision status,
-matching criteria, target label, activity, validation issue, audit metadata,
-and a JSON definition without generated IDs or audit metadata. \code{profile_code}
-is \code{NA} for source-wide mappings used by package download functions.
+A data.frame of current mapping definitions and validation state.
 }
 \description{
-Returns current published and draft parameter, location, and result-flag
-mappings, including sources that have no workbook format. Completeness is
-calculated with the database validator used by \code{\link[=publishImportMappings]{publishImportMappings()}}.
-No definitions are changed. Retired revisions are available for inspection.
+Returns one current row per directly scoped mapping. Historical audit events
+remain available in the audit tables; the legacy revision graph is not part
+of the current editor.
 }

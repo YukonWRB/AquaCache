@@ -1,327 +1,142 @@
-import_mapping_published_set_ids <- function(
-  con,
-  import_source_id,
-  import_profile_id = NA_integer_
-) {
-  out <- DBI::dbGetQuery(
-    con,
-    "SELECT
-       max(import_mapping_set_id) FILTER (
-         WHERE import_profile_id IS NULL
-       ) AS source_mapping_set_id,
-       max(import_mapping_set_id) FILTER (
-         WHERE import_profile_id IS NOT NULL
-       ) AS profile_mapping_set_id
-     FROM discrete.import_mapping_sets
-     WHERE import_source_id = $1
-       AND status = 'published'
-       AND (
-         import_profile_id IS NULL
-         OR import_profile_id IS NOT DISTINCT FROM $2
-       )",
-    params = list(as.integer(import_source_id), as.integer(import_profile_id))
-  )
-  list(
-    source_mapping_set_id = as.integer(out$source_mapping_set_id[[1]]),
-    profile_mapping_set_id = as.integer(out$profile_mapping_set_id[[1]])
-  )
-}
 
-import_mapping_prepare_revision <- function(
-  con,
-  import_source_id,
-  import_profile_id = NA_integer_
-) {
-  scope_key <- paste(
-    as.integer(import_source_id),
-    if (is.na(import_profile_id)) "source" else as.integer(import_profile_id),
-    sep = ":"
-  )
-  DBI::dbExecute(
+#' Acquire a transaction lock for one mapping scope
+#'
+#' Source-wide and profile-specific edits use different lock keys so concurrent
+#' writes to the same scope are serialized.
+#' @param con AquaCache database connection with an open transaction.
+#' @param import_source_id Import source ID.
+#' @param import_profile_id Profile ID, or `NA_integer_` for source-wide scope.
+#' @return Invisibly, `NULL` after acquiring the transaction-level lock.
+#' @noRd
+#' @keywords internal
+import_mapping_direct_lock <- function(con, import_source_id, import_profile_id = NA_integer_) {
+  scope <- if (is.na(import_profile_id)) "source" else as.character(import_profile_id)
+  DBI::dbGetQuery(
     con,
     "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-    params = list(scope_key)
+    params = list(paste(as.integer(import_source_id), scope, sep = ":"))
   )
-  existing_draft <- DBI::dbGetQuery(
-    con,
-    "SELECT import_mapping_set_id
-     FROM discrete.import_mapping_sets
-     WHERE import_source_id = $1
-       AND import_profile_id IS NOT DISTINCT FROM $2
-       AND status = 'draft'
-     ORDER BY version DESC
-     LIMIT 1",
-    params = list(as.integer(import_source_id), as.integer(import_profile_id))
-  )
-  if (nrow(existing_draft)) {
-    return(as.integer(existing_draft$import_mapping_set_id[[1]]))
-  }
-
-  published <- DBI::dbGetQuery(
-    con,
-    "SELECT import_mapping_set_id
-     FROM discrete.import_mapping_sets
-     WHERE import_source_id = $1
-       AND import_profile_id IS NOT DISTINCT FROM $2
-       AND status = 'published'",
-    params = list(as.integer(import_source_id), as.integer(import_profile_id))
-  )
-  draft_id <- DBI::dbGetQuery(
-    con,
-    "INSERT INTO discrete.import_mapping_sets (
-       import_source_id,
-       import_profile_id,
-       version,
-       status
-     )
-     SELECT $1, $2, COALESCE(max(version), 0) + 1, 'draft'
-     FROM discrete.import_mapping_sets
-     WHERE import_source_id = $1
-       AND import_profile_id IS NOT DISTINCT FROM $2
-     RETURNING import_mapping_set_id",
-    params = list(as.integer(import_source_id), as.integer(import_profile_id))
-  )$import_mapping_set_id[[1]]
-
-  if (nrow(published)) {
-    old_id <- as.integer(published$import_mapping_set_id[[1]])
-    DBI::dbExecute(
-      con,
-      "INSERT INTO discrete.import_parameter_mappings (
-         import_mapping_set_id, source_match, parameter_id, result_type,
-          sample_fraction_id, result_value_type, reporting_basis_id,
-          result_speciation_id, result_target_id, endpoint_mode, endpoint_ph, analysis_conditions,
-         matrix_state_id, conversion, result_offset, priority, active, note
-       )
-       SELECT $1, source_match, parameter_id, result_type, sample_fraction_id,
-               result_value_type, reporting_basis_id,
-               result_speciation_id, result_target_id, endpoint_mode, endpoint_ph, analysis_conditions, matrix_state_id,
-              conversion, result_offset, priority, active, note
-       FROM discrete.import_parameter_mappings
-       WHERE import_mapping_set_id = $2",
-      params = list(as.integer(draft_id), old_id)
-    )
-    DBI::dbExecute(
-      con,
-      "INSERT INTO discrete.import_result_flag_mappings (
-         import_mapping_set_id, source_flag_column, source_flag_value,
-         result_condition_id, result_condition_value_source,
-         result_condition_value_literal, result_action, note_template,
-         priority, active, note
-       )
-       SELECT $1, source_flag_column, source_flag_value, result_condition_id,
-              result_condition_value_source, result_condition_value_literal,
-              result_action, note_template, priority, active, note
-       FROM discrete.import_result_flag_mappings
-       WHERE import_mapping_set_id = $2",
-      params = list(as.integer(draft_id), old_id)
-    )
-    DBI::dbExecute(
-      con,
-      "INSERT INTO discrete.import_location_mappings (
-         import_mapping_set_id, source_location_code, source_location_name,
-         location_id, sub_location_id, priority, active, note
-       )
-       SELECT $1, source_location_code, source_location_name, location_id,
-              sub_location_id, priority, active, note
-       FROM discrete.import_location_mappings
-       WHERE import_mapping_set_id = $2",
-      params = list(as.integer(draft_id), old_id)
-    )
-  }
-  as.integer(draft_id)
+  invisible(NULL)
 }
 
-import_mapping_publish_revision <- function(con, import_mapping_set_id) {
-  scope <- DBI::dbGetQuery(
-    con,
-    "SELECT import_source_id, import_profile_id
-     FROM discrete.import_mapping_sets
-     WHERE import_mapping_set_id = $1
-       AND status = 'draft'",
-    params = list(as.integer(import_mapping_set_id))
-  )
-  if (nrow(scope) != 1L) {
-    stop("The mapping-set revision is not an unpublished draft.")
-  }
-  # Validate before retiring the current snapshot. The database transition
-  # trigger also checks direct SQL publications and serializes with draft edits.
-  invalid <- DBI::dbGetQuery(con,
-    "SELECT m.import_mapping_id, discrete.import_parameter_mapping_error(m) AS missing
-     FROM discrete.import_parameter_mappings m WHERE m.import_mapping_set_id = $1 AND m.active
-       AND discrete.import_parameter_mapping_error(m) IS NOT NULL ORDER BY m.import_mapping_id",
-    params = list(as.integer(import_mapping_set_id)))
-  if (nrow(invalid)) stop("Cannot publish incomplete active import mappings: ",
-    paste(sprintf("%s (%s)", invalid$import_mapping_id, invalid$missing), collapse = "; "), call. = FALSE)
-  DBI::dbExecute(
-    con,
-    "UPDATE discrete.import_mapping_sets
-     SET status = 'retired', retired_at = clock_timestamp()
-     WHERE import_source_id = $1
-       AND import_profile_id IS NOT DISTINCT FROM $2
-       AND status = 'published'",
-    params = list(scope$import_source_id[[1]], scope$import_profile_id[[1]])
-  )
-  DBI::dbExecute(
-    con,
-    "UPDATE discrete.import_mapping_sets
-     SET status = 'published', published_at = clock_timestamp()
-     WHERE import_mapping_set_id = $1",
-    params = list(as.integer(import_mapping_set_id))
-  )
-  invisible(as.integer(import_mapping_set_id))
+#' Extract one import mapping row as a named list
+#'
+#' List columns retain their per-row values, which makes the result suitable
+#' for database write helpers.
+#' @param x Data frame or data table of mapping rows.
+#' @param i Row index to extract.
+#' @return A named list containing the values from row `i`.
+#' @noRd
+#' @keywords internal
+import_mapping_direct_record <- function(x, i) {
+  out <- lapply(x, function(column) {
+    column[[i]]
+  })
+  names(out) <- names(x)
+  out
 }
 
-#' Publish staged import mappings
+#' Convert import mapping rows to a list of named records
 #'
-#' @description
-#' Publishes the draft mapping set for a source or source/profile scope. The
-#' draft can be amended through any of the three mapping upsert functions
-#' before it is published. Publishing makes the draft the active immutable
-#' snapshot and retires the previously published snapshot for that scope.
-#' Active parameter mappings must have assigned targets and satisfy all current
-#' analytical requirements and catalogue selections. Incomplete draft rows may
-#' be corrected or deactivated before publication; existing published history
-#' is preserved. Direct SQL publication is subject to the same database gate.
+#' @param x Data frame or data table of mapping rows.
+#' @return A list of named row lists; empty input returns `list()`.
+#' @noRd
+#' @keywords internal
+import_mapping_direct_rows <- function(x) {
+  if (!nrow(x)) return(list())
+  lapply(seq_len(nrow(x)), function(i) import_mapping_direct_record(x, i))
+}
+
+#' Capture the effective import configuration for one upload
 #'
-#' @param con A connection to the AquaCache database.
-#' @param source_code Stable code for the external source.
-#' @param profile_code Optional profile code. Omit it to publish source-wide
-#'   mappings.
+#' The returned object is suitable for storage once on an import-run row. It
+#' contains the selected parser profile, both applicable mapping scopes, and
+#' upload-specific parsing options.
+#' @param con AquaCache database connection.
+#' @param source_code Source code.
+#' @param profile_code Optional profile code.
+#' @param options Named list of upload-specific options.
+#' @return A named list containing the effective configuration.
+#' @export
+getImportConfigurationSnapshot <- function(con, source_code, profile_code = NULL, options = list()) {
+  if (!is.character(source_code) || length(source_code) != 1L || is.na(source_code) || !nzchar(trimws(source_code))) stop("'source_code' must be a single non-empty value.")
+  source <- DBI::dbGetQuery(con,"SELECT import_source_id,source_code,source_name,source_description,active FROM discrete.import_sources WHERE source_code=$1",params=list(trimws(source_code)))
+  if (nrow(source)!=1L) stop("The import source does not exist.")
+  profile <- if (is.null(profile_code)) data.frame() else getImportProfiles(con,source_code=source_code,active=NULL,parse_json=TRUE)
+  if (!is.null(profile_code)) {
+    profile <- profile[profile$profile_code == profile_code,,drop=FALSE]
+    if (nrow(profile)!=1L) stop("The import profile does not exist for this source.")
+  }
+  parameters <- getImportParameterMappings(con,source_code,profile_code,active=NULL)
+  locations <- getImportLocationMappings(con,source_code,profile_code,active=NULL)
+  flags <- getImportResultFlagMappings(con,source_code,profile_code,active=NULL)
+  strip_audit <- function(x) {
+    x <- as.data.frame(x)
+    x[setdiff(names(x),c("created","created_by","modified","modified_by"))]
+  }
+  list(
+    snapshot_version=1L,
+    source=as.list(source[1,,drop=FALSE]),
+    profile=if (nrow(profile)) import_mapping_direct_record(profile,1L) else list(),
+    mappings=list(
+      parameters=import_mapping_direct_rows(strip_audit(parameters)),
+      locations=import_mapping_direct_rows(strip_audit(locations)),
+      result_flags=import_mapping_direct_rows(strip_audit(flags))
+    ),
+    upload_options=options,
+    software=list(aquacache=as.character(utils::packageVersion("AquaCache")))
+  )
+}
+
+#' Save mappings immediately
 #'
-#' @return Invisibly returns the active `import_mapping_set_id`. If no draft
-#'   exists, the current published set is returned unchanged. Returns
-#'   `NA_integer_` when the scope has no mapping set; publishing an empty scope
-#'   is a no-op.
+#' Compatibility wrapper for applications that still call this function.
+#' Patch 69 saves mappings directly, so there is no publication step.
+#' @param con AquaCache database connection.
+#' @param source_code Source code whose mappings were saved.
+#' @param profile_code Optional profile scope.
+#' @return Invisibly returns `NULL`.
 #' @export
 publishImportMappings <- function(con, source_code, profile_code = NULL) {
-  if (
-    !is.character(source_code) || length(source_code) != 1L ||
-      is.na(source_code) || !nzchar(trimws(source_code))
-  ) {
-    stop("'source_code' must be a single non-empty character value.")
-  }
-  if (
-    !is.null(profile_code) &&
-      (!is.character(profile_code) || length(profile_code) != 1L ||
-        is.na(profile_code) || !nzchar(trimws(profile_code)))
-  ) {
-    stop("'profile_code' must be NULL or a single non-empty character value.")
-  }
-
-  active_trans <- dbTransBegin(con)
-  tryCatch(
-    {
-      source <- DBI::dbGetQuery(
-        con,
-        "SELECT import_source_id
-         FROM discrete.import_sources
-         WHERE source_code = $1",
-        params = list(trimws(source_code))
-      )
-      if (nrow(source) != 1L) {
-        stop("The import source does not exist.")
-      }
-      source_id <- as.integer(source$import_source_id[[1]])
-      profile_id <- import_mapping_resolve_profile_id(
-        con,
-        source_id,
-        profile_code
-      )
-      scope_key <- paste(
-        source_id,
-        if (is.na(profile_id)) "source" else profile_id,
-        sep = ":"
-      )
-      DBI::dbExecute(
-        con,
-        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-        params = list(scope_key)
-      )
-      draft <- DBI::dbGetQuery(
-        con,
-        "SELECT import_mapping_set_id
-         FROM discrete.import_mapping_sets
-         WHERE import_source_id = $1
-           AND import_profile_id IS NOT DISTINCT FROM $2
-           AND status = 'draft'",
-        params = list(source_id, profile_id)
-      )
-      if (nrow(draft) == 0L) {
-        current <- DBI::dbGetQuery(
-          con,
-          "SELECT import_mapping_set_id
-           FROM discrete.import_mapping_sets
-           WHERE import_source_id = $1
-             AND import_profile_id IS NOT DISTINCT FROM $2
-             AND status = 'published'",
-          params = list(source_id, profile_id)
-        )
-        mapping_set_id <- if (nrow(current) == 1L) {
-          as.integer(current$import_mapping_set_id[[1]])
-        } else if (nrow(current) == 0L) {
-          NA_integer_
-        } else {
-          stop("Multiple published mapping sets exist for this scope.")
-        }
-      } else if (nrow(draft) == 1L) {
-        mapping_set_id <- as.integer(draft$import_mapping_set_id[[1]])
-        import_mapping_publish_revision(con, mapping_set_id)
-      } else {
-        stop("Multiple draft mapping sets exist for this scope.")
-      }
-      if (active_trans) {
-        DBI::dbExecute(con, "COMMIT")
-      }
-      invisible(mapping_set_id)
-    },
-    error = function(e) {
-      if (active_trans) {
-        try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
-      }
-      stop(e)
-    }
+  warning(
+    "Patch 69 saves import mappings immediately; no publish step is required.",
+    call. = FALSE
   )
+  invisible(NULL)
 }
 
+#' Validate the legacy mapping publication argument
+#'
+#' Direct mapping writes require `publish = TRUE`; staged publication was
+#' removed in Patch 69.
+#' @param publish One non-missing logical value.
+#' @return Invisibly, `TRUE` when the compatibility argument is valid.
+#' @noRd
+#' @keywords internal
 import_mapping_validate_publish <- function(publish) {
   if (!is.logical(publish) || length(publish) != 1L || is.na(publish)) {
     stop("'publish' must be TRUE or FALSE.")
   }
+  if (!publish) {
+    stop(
+      "Staged mapping edits were removed in Patch 69; save directly with publish = TRUE.",
+      call. = FALSE
+    )
+  }
   invisible(publish)
 }
 
-import_mapping_status_filter <- function(include_draft) {
-  if (!is.logical(include_draft) || length(include_draft) != 1L ||
-      is.na(include_draft)) {
-    stop("'include_draft' must be TRUE or FALSE.")
-  }
-  if (!include_draft) {
-    return("mapping_set.status = 'published'")
-  }
-  paste0(
-    "(mapping_set.status = 'draft' OR (",
-    "mapping_set.status = 'published' AND NOT EXISTS (",
-    "SELECT 1 FROM discrete.import_mapping_sets draft_set ",
-    "WHERE draft_set.import_source_id = mapping_set.import_source_id ",
-    "AND draft_set.import_profile_id IS NOT DISTINCT FROM ",
-    "mapping_set.import_profile_id AND draft_set.status = 'draft')))"
-  )
-}
-
-#' List applicable import parameter mappings
+#' List current parameter mappings
 #'
-#' @param con A connection to the AquaCache database.
-#' @param source_code Optional source-code filter.
-#' @param profile_code Optional profile code. When supplied, the current
-#'   published source mappings and profile overrides are returned.
-#' @param active Optional row-active filter. Use `NULL` for all rows.
-#' @param import_mapping_set_id Optional exact mapping-set revision. When set,
-#'   `source_code` and `profile_code` are ignored.
-#' @param include_draft If `TRUE`, use the draft instead of the published set
-#'   for any scope that has an open draft. Intended for mapping editors and
-#'   upload previews; import runs should use published mappings.
-#'
-#' @return A data.frame of typed parameter mappings in resolution order.
+#' Returns source-wide mappings and, when requested, the matching profile
+#' overrides. Profile-specific rows sort before source-wide rows.
+#' @param con AquaCache database connection.
+#' @param source_code Optional source code.
+#' @param profile_code Optional profile code; requires `source_code`.
+#' @param active Optional active filter. Use `NULL` for all rows.
+#' @param import_mapping_set_id Legacy argument; supplying it is an error.
+#' @param include_draft Legacy compatibility argument; all current rows are live.
+#' @return A data.frame of current parameter mappings.
 #' @export
 getImportParameterMappings <- function(
   con,
@@ -331,156 +146,65 @@ getImportParameterMappings <- function(
   import_mapping_set_id = NULL,
   include_draft = FALSE
 ) {
+  if (!is.null(import_mapping_set_id)) {
+    stop("Mapping-set IDs are historical only after Patch 69.", call. = FALSE)
+  }
+  if (!is.logical(include_draft) || length(include_draft) != 1L || is.na(include_draft)) {
+    stop("'include_draft' must be TRUE or FALSE.")
+  }
   if (!is.null(profile_code) && is.null(source_code)) {
     stop("'source_code' is required when 'profile_code' is supplied.")
   }
   where <- character()
   params <- list()
-  if (!is.null(import_mapping_set_id)) {
-    params <- list(as.integer(import_mapping_set_id))
-    where <- "mapping_set.import_mapping_set_id = $1"
+  if (!is.null(source_code)) {
+    params <- c(params, list(source_code))
+    where <- c(where, paste0("s.source_code = $", length(params)))
+  }
+  if (is.null(profile_code)) {
+    where <- c(where, "m.import_profile_id IS NULL")
   } else {
-    where <- import_mapping_status_filter(include_draft)
-    if (!is.null(source_code)) {
-      params <- c(params, list(source_code))
-      where <- c(where, paste0("source.source_code = $", length(params)))
-    }
-    if (is.null(profile_code)) {
-      where <- c(where, "mapping_set.import_profile_id IS NULL")
-    } else {
-      params <- c(params, list(profile_code))
-      where <- c(
-        where,
-        paste0(
-          "(mapping_set.import_profile_id IS NULL OR profile.profile_code = $",
-          length(params),
-          ")"
-        )
-      )
-    }
+    params <- c(params, list(profile_code))
+    where <- c(where, paste0("(m.import_profile_id IS NULL OR p.profile_code = $", length(params), ")"))
   }
   if (!is.null(active)) {
     params <- c(params, list(isTRUE(active)))
-    where <- c(where, paste0("mapping.active = $", length(params)))
+    where <- c(where, paste0("m.active = $", length(params)))
   }
   DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT
-         mapping.import_mapping_id,
-         mapping_set.import_mapping_set_id,
-         mapping_set.version AS mapping_set_version,
-         mapping_set.status AS mapping_set_status,
-         source.import_source_id,
-         source.source_code,
-         source.source_name,
-         mapping_set.import_profile_id,
-         profile.profile_code,
-         profile.profile_name,
-         mapping.source_match::text AS source_match,
-         mapping.parameter_id,
-         mapping.result_type,
-         mapping.sample_fraction_id,
-         mapping.result_value_type,
-          mapping.reporting_basis_id,
-          mapping.result_speciation_id,
-          mapping.result_target_id,
-          mapping.endpoint_mode,
-          mapping.endpoint_ph,
-          mapping.analysis_conditions,
-         mapping.matrix_state_id,
-         mapping.conversion,
-         mapping.result_offset,
-         mapping.priority,
-         mapping.active,
-         mapping.note,
-         (mapping_set.import_profile_id IS NOT NULL) AS profile_specific
-       FROM discrete.import_parameter_mappings mapping
-       JOIN discrete.import_mapping_sets mapping_set
-         ON mapping_set.import_mapping_set_id = mapping.import_mapping_set_id
-       JOIN discrete.import_sources source
-         ON source.import_source_id = mapping_set.import_source_id
-       LEFT JOIN discrete.import_profiles profile
-         ON profile.import_profile_id = mapping_set.import_profile_id
-       WHERE ",
-      paste(where, collapse = " AND "),
-      "
-       ORDER BY source.source_code,
-                (mapping_set.import_profile_id IS NOT NULL) DESC,
-                mapping.priority,
-                mapping.import_mapping_id"
+      "SELECT m.import_mapping_id, m.import_source_id, s.source_code, s.source_name,
+              m.import_profile_id, p.profile_code, p.profile_name,
+              m.source_match::text AS source_match, m.parameter_id, m.result_type,
+              m.sample_fraction_id, m.result_value_type, m.reporting_basis_id,
+              m.result_speciation_id, m.result_target_id, m.endpoint_mode,
+              m.endpoint_ph, m.analysis_conditions::text AS analysis_conditions,
+              m.matrix_state_id, m.conversion, m.result_offset, m.priority,
+              m.active, m.note,
+              (m.import_profile_id IS NOT NULL) AS profile_specific
+       FROM discrete.import_parameter_mappings m
+       JOIN discrete.import_sources s USING (import_source_id)
+       LEFT JOIN discrete.import_profiles p USING (import_profile_id)
+       WHERE ", paste(where, collapse = " AND "), "
+       ORDER BY s.source_code, (m.import_profile_id IS NOT NULL) DESC,
+                m.priority, m.import_mapping_id"
     ),
     params = params
   )
 }
 
-#' Upload source import parameter mappings
+#' Add or update parameter mappings immediately
 #'
-#' @description
-#' Adds or updates parameter mappings for an external source in
-#' `discrete.import_sources` and `discrete.import_parameter_mappings`. The
-#' source-side matching fields are chosen by `match_columns`, so simple sources
-#' can match on a variable/unit pair while richer source databases can match on
-#' any combination of source columns.
-#'
-#' @param con A connection to the AquaCache database.
-#' @param source_code Stable code for the external source or key set.
-#' @param mappings A data.frame/data.table of mappings, or a path to a CSV or
-#'   Excel workbook file. See examples.
-#' @param match_columns Character vector of column names from `mappings` that
-#'   identify the source-side result.
-#' @param source_name Human-readable source name. Defaults to `source_code`.
+#' @inheritParams getImportParameterMappings
+#' @param mappings Mapping rows or a CSV/Excel path.
+#' @param match_columns Source columns forming the match key.
+#' @param source_name Human-readable source name.
 #' @param source_description Optional source description.
-#' @param target_columns Optional named list overriding which columns contain
-#'   AquaCache target values. Names can include `parameter`, `result_type`,
-#'   `sample_fraction`, `result_value_type`, `reporting_basis`, and
-#'   `matrix_state`, `result_speciation`, or `result_target`. Endpoint and
-#'   analysis-condition values use their explicit column names.
-#' @param profile_code Optional profile code. When supplied, mappings override
-#'   source-wide mappings only while that profile is being used.
-#' @param publish If `FALSE`, leave the changes in the scope's editable draft.
-#'   Call [publishImportMappings()] after staging changes to any mapping type.
-#'
-#' @return Invisibly returns the resolved mapping table that was uploaded.
+#' @param target_columns Target-field column map.
+#' @param publish Compatibility argument. Must be `TRUE`; staged edits were removed.
+#' @return Invisibly returns resolved mapping rows.
 #' @export
-#'
-#' @examples
-#' \dontrun{
-#' # The 'mappings' argument should contain integer IDs for every column in table 'discrete.import_parameter_mappings', or NA, PLUS the source columns on which you wish to match.
-#' # For EQWin, the two source columns are 'ParamCode' and 'input_unit'; the other columns in the below data.frame correspond to AquaCache database columns.
-#' # this data.frame can contain multiple rows, one per new mapping.
-#' new_mapping <- data.frame(
-#'   ParamCode = "Hg-T-ULL",
-#'   input_unit = "mg/L",
-#'   parameter_id = 1105,
-#'   result_type = 2,
-#'   sample_fraction_id = 19,
-#'   result_value_type = 1,
-#'   reporting_basis_id = NA,
-#'   matrix_state_id = 1,
-#'   conversion = 1, # The conversion to database units
-#'   result_offset = 0,
-#'   priority = 100, # ordering weight when more than one mapping could match. Lower number wins.
-#'   active = TRUE,
-#'   note = "Add any notes useful in future, if applicable."
-#' )
-#'
-#' con <- AquaConnect()
-#'
-#' upsertImportParameterMappings(
-#'   con,
-#'   source_code = "EQWin",
-#'   mappings = new_mapping,
-#'   match_columns = c("ParamCode", "input_unit"),
-#'   publish = FALSE
-#' )
-#'
-#' # Add more parameter, location, or result-flag mappings with publish = FALSE,
-#' # then publish the complete draft once all edits are ready.
-#' publishImportMappings(con, source_code = "EQWin")
-#'
-#' DBI::dbDisconnect(con)
-#' }
 upsertImportParameterMappings <- function(
   con,
   source_code,
@@ -492,186 +216,79 @@ upsertImportParameterMappings <- function(
   profile_code = NULL,
   publish = TRUE
 ) {
-  import_mapping_source_match_json <- function(row, match_columns) {
-    match_values <- as.list(row[, match_columns, with = FALSE])
-    for (nm in names(match_values)) {
-      value <- match_values[[nm]][[1]]
-      if (length(value) == 0 || is.null(value) || is.na(value)) {
-        value <- ""
-      }
-      match_values[[nm]] <- as.character(value)
-    }
-    jsonlite::toJSON(match_values, auto_unbox = TRUE, null = "null")
-  }
-
-  import_mapping_blank_to_na <- function(x, exclude = character()) {
-    char_cols <- setdiff(
-      names(x)[vapply(x, is.character, logical(1))],
-      exclude
-    )
-    for (col in char_cols) {
-      data.table::set(
-        x,
-        i = which(
-          !nzchar(trimws(x[[col]])) | toupper(trimws(x[[col]])) == "NA"
-        ),
-        j = col,
-        value = NA_character_
-      )
-    }
-    invisible(x)
-  }
-
-  if (
-    !is.character(source_code) ||
-      length(source_code) != 1 ||
-      !nzchar(source_code)
-  ) {
-    stop("'source_code' must be a single non-empty character value.")
-  }
   import_mapping_validate_publish(publish)
-  if (!is.character(match_columns) || length(match_columns) < 1) {
+  if (!is.character(match_columns) || !length(match_columns) || anyNA(match_columns)) {
     stop("'match_columns' must name at least one source-side matching column.")
   }
-  if (is.null(source_description)) {
-    source_description <- NA_character_
-  }
-
+  if (is.null(source_description)) source_description <- NA_character_
   mappings <- import_mapping_read_input(mappings)
-  missing_match_columns <- setdiff(match_columns, names(mappings))
-  if (length(missing_match_columns) > 0) {
-    stop(
-      "The mapping input is missing match_columns: ",
-      paste(missing_match_columns, collapse = ", ")
-    )
-  }
-
+  missing <- setdiff(match_columns, names(mappings))
+  if (length(missing)) stop("The mapping input is missing match_columns: ", paste(missing, collapse = ", "))
   mappings <- data.table::as.data.table(mappings)
-  import_mapping_blank_to_na(mappings, exclude = match_columns)
   if ("ignore" %in% names(mappings)) {
-    ignore <- import_mapping_as_logical(mappings$ignore)
-    keep <- is.na(ignore) | !ignore
-    mappings <- mappings[keep]
+    ignored <- import_mapping_as_logical(mappings$ignore)
+    mappings <- mappings[is.na(ignored) | !ignored]
   }
-  resolved <- import_mapping_resolve_targets(
-    con,
-    mappings,
-    target_columns = target_columns
-  )
-
+  resolved <- import_mapping_resolve_targets(con, mappings, target_columns = target_columns)
   active_trans <- dbTransBegin(con)
-  tryCatch(
-    {
-      source_id <- DBI::dbGetQuery(
+  tryCatch({
+    source_id <- import_mapping_upsert_source(con, source_code, source_name, source_description)
+    profile_id <- import_mapping_resolve_profile_id(con, source_id, profile_code)
+    import_mapping_direct_lock(con, source_id, profile_id)
+    for (i in seq_len(nrow(resolved))) {
+      values <- lapply(match_columns, function(nm) {
+        value <- resolved[[nm]][[i]]
+        if (length(value) != 1L || is.na(value)) "" else as.character(value)
+      })
+      names(values) <- match_columns
+      source_match <- jsonlite::toJSON(values, auto_unbox = TRUE, null = "null")
+      DBI::dbExecute(
         con,
-        "INSERT INTO discrete.import_sources
-           (source_code, source_name, source_description, active)
-         VALUES ($1, $2, $3, TRUE)
-         ON CONFLICT (source_code) DO UPDATE
-         SET source_name = EXCLUDED.source_name,
-             source_description = COALESCE(EXCLUDED.source_description, discrete.import_sources.source_description),
-             active = TRUE
-         RETURNING import_source_id;",
-        params = list(source_code, source_name, source_description)
-      )$import_source_id[[1]]
-      profile_id <- import_mapping_resolve_profile_id(
-        con,
-        source_id,
-        profile_code
-      )
-      mapping_set_id <- import_mapping_prepare_revision(
-        con,
-        source_id,
-        profile_id
-      )
-
-      for (i in seq_len(nrow(resolved))) {
-        source_match <- import_mapping_source_match_json(
-          resolved[i],
-          match_columns
+        "INSERT INTO discrete.import_parameter_mappings (
+           import_source_id, import_profile_id, source_match, parameter_id,
+           result_type, sample_fraction_id, result_value_type, reporting_basis_id,
+           result_speciation_id, result_target_id, endpoint_mode, endpoint_ph,
+           matrix_state_id, conversion, result_offset, priority, active, note,
+           analysis_conditions
+         ) VALUES (
+           $1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+           $14, $15, $16, $17, $18, $19::jsonb
+         )
+         ON CONFLICT (import_source_id, import_profile_id, source_match)
+         DO UPDATE SET parameter_id = EXCLUDED.parameter_id,
+           result_type = EXCLUDED.result_type,
+           sample_fraction_id = EXCLUDED.sample_fraction_id,
+           result_value_type = EXCLUDED.result_value_type,
+           reporting_basis_id = EXCLUDED.reporting_basis_id,
+           result_speciation_id = EXCLUDED.result_speciation_id,
+           result_target_id = EXCLUDED.result_target_id,
+           endpoint_mode = EXCLUDED.endpoint_mode,
+           endpoint_ph = EXCLUDED.endpoint_ph,
+           matrix_state_id = EXCLUDED.matrix_state_id,
+           conversion = EXCLUDED.conversion,
+           result_offset = EXCLUDED.result_offset,
+           priority = EXCLUDED.priority,
+           active = EXCLUDED.active,
+           note = EXCLUDED.note,
+           analysis_conditions = EXCLUDED.analysis_conditions",
+        params = list(
+          as.integer(source_id), profile_id, source_match,
+          resolved$parameter_id[[i]], resolved$result_type[[i]],
+          resolved$sample_fraction_id[[i]], resolved$result_value_type[[i]],
+          resolved$reporting_basis_id[[i]], resolved$result_speciation_id[[i]],
+          resolved$result_target_id[[i]], resolved$endpoint_mode[[i]],
+          resolved$endpoint_ph[[i]], resolved$matrix_state_id[[i]],
+          resolved$conversion[[i]], resolved$result_offset[[i]],
+          resolved$priority[[i]], isTRUE(resolved$active[[i]]),
+          resolved$note[[i]], resolved$analysis_conditions[[i]]
         )
-        DBI::dbExecute(
-          con,
-          "INSERT INTO discrete.import_parameter_mappings (
-             import_mapping_set_id,
-             source_match,
-             parameter_id,
-             result_type,
-             sample_fraction_id,
-             result_value_type,
-              reporting_basis_id,
-              result_speciation_id,
-              result_target_id,
-              endpoint_mode,
-              endpoint_ph,
-             matrix_state_id,
-             conversion,
-             result_offset,
-             priority,
-             active,
-             note,
-             analysis_conditions
-           ) VALUES (
-              $1, $2::jsonb, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb
-           )
-           ON CONFLICT (
-             import_mapping_set_id,
-             source_match
-           ) DO UPDATE
-           SET parameter_id = EXCLUDED.parameter_id,
-               result_type = EXCLUDED.result_type,
-               sample_fraction_id = EXCLUDED.sample_fraction_id,
-               result_value_type = EXCLUDED.result_value_type,
-                reporting_basis_id = EXCLUDED.reporting_basis_id,
-                result_speciation_id = EXCLUDED.result_speciation_id,
-                result_target_id = EXCLUDED.result_target_id,
-                endpoint_mode = EXCLUDED.endpoint_mode,
-                endpoint_ph = EXCLUDED.endpoint_ph,
-               matrix_state_id = EXCLUDED.matrix_state_id,
-               conversion = EXCLUDED.conversion,
-               result_offset = EXCLUDED.result_offset,
-               priority = EXCLUDED.priority,
-               active = EXCLUDED.active,
-               note = EXCLUDED.note,
-               analysis_conditions = EXCLUDED.analysis_conditions;",
-          params = list(
-            mapping_set_id,
-            source_match,
-            resolved$parameter_id[[i]],
-            resolved$result_type[[i]],
-            resolved$sample_fraction_id[[i]],
-            resolved$result_value_type[[i]],
-            resolved$reporting_basis_id[[i]],
-            resolved$result_speciation_id[[i]],
-            resolved$result_target_id[[i]],
-            resolved$endpoint_mode[[i]],
-            resolved$endpoint_ph[[i]],
-            resolved$matrix_state_id[[i]],
-            resolved$conversion[[i]],
-            resolved$result_offset[[i]],
-            resolved$priority[[i]],
-            resolved$active[[i]],
-            resolved$note[[i]],
-            resolved$analysis_conditions[[i]]
-          )
-        )
-      }
-      if (publish) {
-        import_mapping_publish_revision(con, mapping_set_id)
-      }
-
-      if (active_trans) {
-        DBI::dbExecute(con, "COMMIT;")
-      }
-    },
-    error = function(e) {
-      if (active_trans) {
-        try(DBI::dbExecute(con, "ROLLBACK;"), silent = TRUE)
-      }
-      stop(e)
+      )
     }
-  )
-
+    if (active_trans) DBI::dbExecute(con, "COMMIT")
+  }, error = function(e) {
+    if (active_trans) try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
+    stop(e)
+  })
   invisible(resolved)
 }
 
@@ -836,6 +453,7 @@ upsertImportProfile <- function(
     source_name = source_name,
     source_description = source_description
   )
+  import_mapping_direct_lock(con, source_id, NA_integer_)
 
   out <- DBI::dbGetQuery(
     con,
@@ -960,31 +578,6 @@ upsertImportProfile <- function(
   )
   profile_id <- out$import_profile_id[[1]]
 
-  # Initialize empty scopes with published identities for import provenance.
-  # An existing draft must remain unpublished: creating or editing a workbook
-  # format must never publish mapping changes as a side effect.
-  for (scope_profile_id in c(NA_integer_, as.integer(profile_id))) {
-    scope_key <- paste(source_id, if (is.na(scope_profile_id)) "source" else scope_profile_id, sep = ":")
-    DBI::dbGetQuery(con, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", params = list(scope_key))
-    existing <- DBI::dbGetQuery(
-      con,
-      "SELECT import_mapping_set_id
-       FROM discrete.import_mapping_sets
-       WHERE import_source_id = $1
-         AND import_profile_id IS NOT DISTINCT FROM $2
-         AND status IN ('published', 'draft')",
-      params = list(as.integer(source_id), scope_profile_id)
-    )
-    if (!nrow(existing)) {
-      mapping_set_id <- import_mapping_prepare_revision(
-        con,
-        import_source_id = source_id,
-        import_profile_id = scope_profile_id
-      )
-      import_mapping_publish_revision(con, mapping_set_id)
-    }
-  }
-
   if (active_trans) DBI::dbExecute(con, "COMMIT")
   failed <- FALSE
   profile_id
@@ -1094,267 +687,108 @@ getImportProfiles <- function(
   out
 }
 
-#' Add or update import result-flag mappings
-#'
-#' @description
-#' Add or update source-specific result flags for importing water-quality
-#' data. Universal comparison syntax such as leading `<` and `>` may remain in
-#' adapter code; these rows describe provider-specific flags and actions.
-#'
-#' @param con A connection to the AquaCache database.
-#' @param source_code Stable source/key code in `discrete.import_sources`.
-#' @param mappings A data.frame/data.table of result-flag mappings. It must
-#'   contain `source_flag_value`; `source_flag_column` is optional.
-#' @param profile_code Optional profile code. When supplied, mappings are scoped
-#'   to that profile; otherwise they apply to the source.
-#' @param publish If `FALSE`, leave the changes in the scope's editable draft.
-#'   Call [publishImportMappings()] after staging changes to any mapping type.
-#' @param source_name Human-readable source name, used if the source row must
-#'   be created.
-#'
-#' @return Invisibly returns the uploaded mappings.
+#' Add or update result-flag mappings immediately
+#' @inheritParams getImportParameterMappings
+#' @param mappings Result-flag mapping rows.
+#' @param source_name Human-readable source name.
+#' @param publish Compatibility argument. Must be `TRUE`; staged edits were removed.
+#' @return Invisibly returns the normalized mappings.
 #' @export
 upsertImportResultFlagMappings <- function(
-  con,
-  source_code,
-  mappings,
-  profile_code = NULL,
-  source_name = source_code,
-  publish = TRUE
+  con, source_code, mappings, profile_code = NULL,
+  source_name = source_code, publish = TRUE
 ) {
   import_mapping_validate_publish(publish)
-  required <- c("source_flag_value")
-  missing <- setdiff(required, names(mappings))
-  if (length(missing) > 0) {
-    stop(
-      "Missing result-flag mapping column(s): ",
-      paste(missing, collapse = ", ")
-    )
-  }
-
-  active_trans <- dbTransBegin(con)
-  failed <- TRUE
-  on.exit(
-    {
-      if (failed && active_trans) {
-        try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
-      }
-    },
-    add = TRUE
-  )
-
-  source_id <- import_mapping_upsert_source(
-    con = con,
-    source_code = source_code,
-    source_name = source_name
-  )
-  profile_id <- import_mapping_resolve_profile_id(
-    con,
-    source_id,
-    profile_code
-  )
-  mapping_set_id <- import_mapping_prepare_revision(
-    con,
-    source_id,
-    profile_id
-  )
-
   mappings <- data.table::copy(data.table::as.data.table(mappings))
-  optional_defaults <- list(
-    source_flag_column = NA_character_,
-    result_condition_id = NA,
-    result_condition_value_source = "none",
-    result_condition_value_literal = NA_real_,
-    result_action = "keep_result",
-    note_template = NA_character_,
-    priority = 100L,
-    active = TRUE,
-    note = NA_character_
+  if (!"source_flag_value" %in% names(mappings)) stop("Missing result-flag mapping column: source_flag_value")
+  defaults <- list(
+    source_flag_column = NA_character_, result_condition_id = NA_integer_,
+    result_condition_value_source = "none", result_condition_value_literal = NA_real_,
+    result_action = "keep_result", note_template = NA_character_,
+    priority = 100L, active = TRUE, note = NA_character_
   )
-  for (nm in names(optional_defaults)) {
-    if (!(nm %in% names(mappings))) mappings[[nm]] <- optional_defaults[[nm]]
-  }
-
-  condition_lookup <- DBI::dbGetQuery(
-    con,
-    "SELECT result_condition_id, result_condition
-     FROM discrete.result_conditions;"
-  )
-
-  for (i in seq_len(nrow(mappings))) {
-    condition <- mappings$result_condition_id[[i]]
-    if (import_mapping_is_missing(condition)) {
-      condition <- NA_integer_
-    } else if (
-      is.numeric(condition) || grepl("^[0-9]+$", as.character(condition))
-    ) {
-      condition <- as.integer(condition)
-    } else {
-      hit <- condition_lookup[
-        tolower(condition_lookup$result_condition) ==
-          tolower(trimws(as.character(condition))),
-      ]
-      if (nrow(hit) != 1) {
-        stop(
-          "Unknown result_condition_id result-flag mapping value: ",
-          condition
-        )
+  for (nm in names(defaults)) if (!nm %in% names(mappings)) mappings[[nm]] <- defaults[[nm]]
+  conditions <- DBI::dbGetQuery(con, "SELECT result_condition_id, result_condition FROM discrete.result_conditions")
+  active_trans <- dbTransBegin(con)
+  tryCatch({
+    source_id <- import_mapping_upsert_source(con, source_code, source_name)
+    profile_id <- import_mapping_resolve_profile_id(con, source_id, profile_code)
+    import_mapping_direct_lock(con, source_id, profile_id)
+    for (i in seq_len(nrow(mappings))) {
+      condition <- mappings$result_condition_id[[i]]
+      if (import_mapping_is_missing(condition)) {
+        condition <- NA_integer_
+      } else if (is.numeric(condition) || grepl("^[0-9]+$", as.character(condition))) {
+        condition <- as.integer(condition)
+      } else {
+        hit <- conditions[tolower(conditions$result_condition) == tolower(trimws(as.character(condition))), , drop = FALSE]
+        if (nrow(hit) != 1L) stop("Unknown result condition: ", condition)
+        condition <- hit$result_condition_id[[1]]
       }
-      condition <- hit$result_condition_id[[1]]
-    }
-
-    DBI::dbExecute(
-      con,
-      "INSERT INTO discrete.import_result_flag_mappings (
-         import_mapping_set_id,
-         source_flag_column,
-         source_flag_value,
-         result_condition_id,
-         result_condition_value_source,
-         result_condition_value_literal,
-         result_action,
-         note_template,
-         priority,
-         active,
-         note
-       ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-       )
-       ON CONFLICT (
-         import_mapping_set_id,
-         source_flag_column,
-         source_flag_value
-       ) DO UPDATE
-       SET result_condition_id = EXCLUDED.result_condition_id,
-           result_condition_value_source = EXCLUDED.result_condition_value_source,
-           result_condition_value_literal = EXCLUDED.result_condition_value_literal,
-           result_action = EXCLUDED.result_action,
-           note_template = EXCLUDED.note_template,
-           priority = EXCLUDED.priority,
-           active = EXCLUDED.active,
-           note = EXCLUDED.note;",
-      params = list(
-        mapping_set_id,
-        mappings$source_flag_column[[i]],
-        mappings$source_flag_value[[i]],
-        condition,
-        mappings$result_condition_value_source[[i]],
-        mappings$result_condition_value_literal[[i]],
-        mappings$result_action[[i]],
-        mappings$note_template[[i]],
-        as.integer(mappings$priority[[i]]),
-        isTRUE(import_mapping_as_logical(mappings$active[[i]])),
-        mappings$note[[i]]
+      column <- mappings$source_flag_column[[i]]
+      if (is.na(column) || !nzchar(trimws(as.character(column)))) column <- NA_character_
+      DBI::dbExecute(
+        con,
+        "INSERT INTO discrete.import_result_flag_mappings (
+           import_source_id, import_profile_id, source_flag_column,
+           source_flag_value, result_condition_id,
+           result_condition_value_source, result_condition_value_literal,
+           result_action, note_template, priority, active, note
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         ON CONFLICT (import_source_id, import_profile_id, source_flag_column, source_flag_value)
+         DO UPDATE SET result_condition_id=EXCLUDED.result_condition_id,
+           result_condition_value_source=EXCLUDED.result_condition_value_source,
+           result_condition_value_literal=EXCLUDED.result_condition_value_literal,
+           result_action=EXCLUDED.result_action, note_template=EXCLUDED.note_template,
+           priority=EXCLUDED.priority, active=EXCLUDED.active, note=EXCLUDED.note",
+        params = list(
+          as.integer(source_id), profile_id, column,
+          as.character(mappings$source_flag_value[[i]]), condition,
+          as.character(mappings$result_condition_value_source[[i]]),
+          mappings$result_condition_value_literal[[i]],
+          as.character(mappings$result_action[[i]]), mappings$note_template[[i]],
+          as.integer(mappings$priority[[i]]),
+          isTRUE(import_mapping_as_logical(mappings$active[[i]])), mappings$note[[i]]
+        )
       )
-    )
-  }
-
-  if (publish) {
-    import_mapping_publish_revision(con, mapping_set_id)
-  }
-  if (active_trans) {
-    DBI::dbExecute(con, "COMMIT")
-  }
-  failed <- FALSE
-
+    }
+    if (active_trans) DBI::dbExecute(con, "COMMIT")
+  }, error = function(e) {
+    if (active_trans) try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
+    stop(e)
+  })
   invisible(mappings)
 }
 
-#' List applicable import result-flag mappings
-#'
-#' @param con A connection to the AquaCache database.
-#' @param source_code Optional source-code filter.
-#' @param profile_code Optional profile code. When supplied, source-wide and
-#'   profile-specific mappings are returned, with profile mappings first.
-#' @param active Optional active filter. Use `NULL` for all rows.
-#' @param include_draft If `TRUE`, use the draft instead of the published set
-#'   for any scope that has an open draft. Intended for mapping editors and
-#'   upload previews; import runs should use published mappings.
-#'
-#' @return A data.frame of result-flag mappings in precedence order.
+#' List current result-flag mappings
+#' @inheritParams getImportParameterMappings
+#' @return A data.frame of current result-flag mappings.
 #' @export
-getImportResultFlagMappings <- function(
-  con,
-  source_code = NULL,
-  profile_code = NULL,
-  active = TRUE,
-  include_draft = FALSE
-) {
-  if (!is.null(profile_code) && is.null(source_code)) {
-    stop("'source_code' is required when 'profile_code' is supplied.")
+getImportResultFlagMappings <- function(con, source_code = NULL, profile_code = NULL, active = TRUE, include_draft = FALSE) {
+  if (!is.logical(include_draft) || length(include_draft) != 1L || is.na(include_draft)) stop("'include_draft' must be TRUE or FALSE.")
+  if (!is.null(profile_code) && is.null(source_code)) stop("'source_code' is required when 'profile_code' is supplied.")
+  where <- character(); params <- list()
+  if (!is.null(source_code)) { params <- c(params, list(source_code)); where <- c(where, paste0("s.source_code=$", length(params))) }
+  if (is.null(profile_code)) where <- c(where, "m.import_profile_id IS NULL") else {
+    params <- c(params, list(profile_code)); where <- c(where, paste0("(m.import_profile_id IS NULL OR p.profile_code=$", length(params), ")"))
   }
-  where <- character()
-  params <- list()
-  if (!is.null(source_code)) {
-    params <- c(params, list(source_code))
-    where <- c(where, paste0("s.source_code = $", length(params)))
-  }
-  if (is.null(profile_code)) {
-    where <- c(where, "mapping_set.import_profile_id IS NULL")
-  } else {
-    params <- c(params, list(profile_code))
-    where <- c(
-      where,
-      paste0(
-        "(mapping_set.import_profile_id IS NULL OR p.profile_code = $",
-        length(params),
-        ")"
-      )
-    )
-  }
-  if (!is.null(active)) {
-    params <- c(params, list(isTRUE(active)))
-    where <- c(where, paste0("m.active = $", length(params)))
-  }
-  where <- c(where, import_mapping_status_filter(include_draft))
-
-  DBI::dbGetQuery(
-    con,
-    paste0(
-      "SELECT
-         m.import_result_flag_mapping_id,
-         mapping_set.import_mapping_set_id,
-         mapping_set.version AS mapping_set_version,
-         s.import_source_id,
-         s.source_code,
-         s.source_name,
-         mapping_set.import_profile_id,
-         p.profile_code,
-         p.profile_name,
-         m.source_flag_column,
-         m.source_flag_value,
-         m.result_condition_id,
-         rc.result_condition AS result_condition_name,
-         m.result_condition_value_source,
-         m.result_condition_value_literal,
-         m.result_action,
-         m.note_template,
-         m.priority,
-         m.active,
-         m.note,
-         (mapping_set.import_profile_id IS NOT NULL) AS profile_specific
-       FROM discrete.import_result_flag_mappings m
-       JOIN discrete.import_mapping_sets mapping_set
-         ON mapping_set.import_mapping_set_id = m.import_mapping_set_id
-       JOIN discrete.import_sources s
-         ON s.import_source_id = mapping_set.import_source_id
-       LEFT JOIN discrete.import_profiles p
-         ON p.import_profile_id = mapping_set.import_profile_id
-       LEFT JOIN discrete.result_conditions rc
-         ON rc.result_condition_id = m.result_condition_id
-       WHERE ",
-      paste(where, collapse = " AND "),
-      "
-       ORDER BY
-         s.source_code,
-         lower(m.source_flag_value),
-         (mapping_set.import_profile_id IS NOT NULL) DESC,
-         (m.source_flag_column IS NOT NULL AND btrim(m.source_flag_column) <> '') DESC,
-         m.priority,
-         m.import_result_flag_mapping_id"
-    ),
-    params = params
-  )
+  if (!is.null(active)) { params <- c(params, list(isTRUE(active))); where <- c(where, paste0("m.active=$", length(params))) }
+  DBI::dbGetQuery(con, paste0(
+    "SELECT m.import_result_flag_mapping_id,m.import_source_id,s.source_code,s.source_name,
+      m.import_profile_id,p.profile_code,p.profile_name,
+      m.source_flag_column,m.source_flag_value,
+      m.result_condition_id,rc.result_condition AS result_condition_name,
+      m.result_condition_value_source,m.result_condition_value_literal,m.result_action,
+      m.note_template,m.priority,m.active,m.note,
+      (m.import_profile_id IS NOT NULL) AS profile_specific
+     FROM discrete.import_result_flag_mappings m
+     JOIN discrete.import_sources s USING(import_source_id)
+     LEFT JOIN discrete.import_profiles p USING(import_profile_id)
+     LEFT JOIN discrete.result_conditions rc USING(result_condition_id)
+     WHERE ", paste(where, collapse=" AND "), "
+     ORDER BY s.source_code,(m.import_profile_id IS NOT NULL) DESC,
+       lower(m.source_flag_value),(m.source_flag_column IS NOT NULL AND btrim(m.source_flag_column)<>'') DESC,
+       m.priority,m.import_result_flag_mapping_id"), params=params)
 }
 
 #' Resolve one external result flag
@@ -1419,231 +853,76 @@ resolveImportResultFlagMapping <- function(
   hit[1, , drop = FALSE]
 }
 
-#' Add or update source location mappings
-#'
-#' @description
-#' Maps stable location or station codes from an external source to AquaCache
-#' locations. A source-wide mapping is used by every profile for that source;
-#' a profile-scoped mapping with the same code takes precedence.
-#'
-#' @param con A connection to the AquaCache database.
-#' @param source_code Stable code in `discrete.import_sources`.
-#' @param mappings A data.frame/data.table containing `source_location_code`
-#'   and `location_id`. Optional fields are `source_location_name`,
-#'   `sub_location_id`, `priority`, `active`, and `note`.
-#' @param profile_code Optional profile code for a profile-specific override.
-#' @param source_name Human-readable source name, used if the source is new.
-#' @param publish If `FALSE`, leave the changes in the scope's editable draft.
-#'   Call [publishImportMappings()] after staging changes to any mapping type.
-#'
-#' @return Invisibly returns the normalized mapping table.
+#' Add or update location mappings immediately
+#' @inheritParams getImportParameterMappings
+#' @param mappings Location mapping rows containing `source_location_code` and `location_id`.
+#' @param source_name Human-readable source name.
+#' @param publish Compatibility argument. Must be `TRUE`; staged edits were removed.
+#' @return Invisibly returns the normalized mappings.
 #' @export
-upsertImportLocationMappings <- function(
-  con,
-  source_code,
-  mappings,
-  profile_code = NULL,
-  source_name = source_code,
-  publish = TRUE
-) {
+upsertImportLocationMappings <- function(con, source_code, mappings, profile_code = NULL, source_name = source_code, publish = TRUE) {
   import_mapping_validate_publish(publish)
+  mappings <- data.table::copy(data.table::as.data.table(mappings))
   required <- c("source_location_code", "location_id")
   missing <- setdiff(required, names(mappings))
-  if (length(missing)) {
-    stop(
-      "Missing location mapping column(s): ",
-      paste(missing, collapse = ", ")
-    )
-  }
-  mappings <- data.table::as.data.table(mappings)
-  defaults <- list(
-    source_location_name = NA_character_,
-    sub_location_id = NA_integer_,
-    priority = 100L,
-    active = TRUE,
-    note = NA_character_
-  )
-  for (nm in names(defaults)) {
-    if (!(nm %in% names(mappings))) mappings[[nm]] <- defaults[[nm]]
-  }
+  if (length(missing)) stop("Missing location mapping column(s): ", paste(missing, collapse = ", "))
+  defaults <- list(source_location_name=NA_character_,sub_location_id=NA_integer_,priority=100L,active=TRUE,note=NA_character_)
+  for (nm in names(defaults)) if (!nm %in% names(mappings)) mappings[[nm]] <- defaults[[nm]]
   mappings[, source_location_code := trimws(as.character(source_location_code))]
-  if (
-    any(
-      !nzchar(mappings$source_location_code) |
-        is.na(mappings$source_location_code)
-    )
-  ) {
-    stop("'source_location_code' cannot be blank or missing.")
-  }
+  if (anyNA(mappings$source_location_code) || any(!nzchar(mappings$source_location_code))) stop("'source_location_code' cannot be blank or missing.")
   mappings[, location_id := as.integer(location_id)]
   mappings[, sub_location_id := as.integer(sub_location_id)]
   mappings[, priority := as.integer(priority)]
   mappings[, active := import_mapping_as_logical(active)]
-  if (any(is.na(mappings$location_id))) {
-    stop("'location_id' must contain a valid integer for every mapping.")
-  }
-
+  if (anyNA(mappings$location_id)) stop("'location_id' must contain a valid integer for every mapping.")
   active_trans <- dbTransBegin(con)
-  tryCatch(
-    {
-      source_id <- import_mapping_upsert_source(
-        con,
-        source_code = source_code,
-        source_name = source_name
-      )
-      profile_id <- import_mapping_resolve_profile_id(
-        con,
-        source_id,
-        profile_code
-      )
-      mapping_set_id <- import_mapping_prepare_revision(
-        con,
-        source_id,
-        profile_id
-      )
-
-      for (i in seq_len(nrow(mappings))) {
-        DBI::dbExecute(
-          con,
-          "INSERT INTO discrete.import_location_mappings (
-             import_mapping_set_id,
-             source_location_code,
-             source_location_name,
-             location_id,
-             sub_location_id,
-             priority,
-             active,
-             note
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           ON CONFLICT (
-             import_mapping_set_id,
-             source_location_key
-           ) DO UPDATE
-           SET source_location_code = EXCLUDED.source_location_code,
-               source_location_name = EXCLUDED.source_location_name,
-               location_id = EXCLUDED.location_id,
-               sub_location_id = EXCLUDED.sub_location_id,
-               priority = EXCLUDED.priority,
-               active = EXCLUDED.active,
-               note = EXCLUDED.note",
-          params = list(
-            mapping_set_id,
-            mappings$source_location_code[[i]],
-            mappings$source_location_name[[i]],
-            mappings$location_id[[i]],
-            mappings$sub_location_id[[i]],
-            mappings$priority[[i]],
-            isTRUE(mappings$active[[i]]),
-            mappings$note[[i]]
-          )
-        )
-      }
-      if (publish) {
-        import_mapping_publish_revision(con, mapping_set_id)
-      }
-      if (active_trans) {
-        DBI::dbExecute(con, "COMMIT")
-      }
-    },
-    error = function(e) {
-      if (active_trans) {
-        try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
-      }
-      stop(e)
-    }
-  )
-
+  tryCatch({
+    source_id <- import_mapping_upsert_source(con, source_code, source_name)
+    profile_id <- import_mapping_resolve_profile_id(con, source_id, profile_code)
+    import_mapping_direct_lock(con, source_id, profile_id)
+    for (i in seq_len(nrow(mappings))) DBI::dbExecute(con,
+      "INSERT INTO discrete.import_location_mappings (
+         import_source_id,import_profile_id,source_location_code,source_location_name,
+         location_id,sub_location_id,priority,active,note
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (import_source_id,import_profile_id,source_location_key)
+       DO UPDATE SET source_location_code=EXCLUDED.source_location_code,
+         source_location_name=EXCLUDED.source_location_name,location_id=EXCLUDED.location_id,
+         sub_location_id=EXCLUDED.sub_location_id,priority=EXCLUDED.priority,
+         active=EXCLUDED.active,note=EXCLUDED.note",
+      params=list(as.integer(source_id),profile_id,mappings$source_location_code[[i]],
+        mappings$source_location_name[[i]],mappings$location_id[[i]],
+        mappings$sub_location_id[[i]],mappings$priority[[i]],
+        isTRUE(mappings$active[[i]]),mappings$note[[i]]))
+    if (active_trans) DBI::dbExecute(con,"COMMIT")
+  }, error=function(e) { if (active_trans) try(DBI::dbExecute(con,"ROLLBACK"),silent=TRUE); stop(e) })
   invisible(mappings)
 }
 
-#' List applicable source location mappings
-#'
-#' @param con A connection to the AquaCache database.
-#' @param source_code Optional source-code filter.
-#' @param profile_code Optional profile code. When supplied, both source-wide
-#'   and profile-specific mappings are returned, with profile mappings first.
-#' @param active Optional active filter. Use `NULL` for all rows.
-#' @param include_draft If `TRUE`, use the draft instead of the published set
-#'   for any scope that has an open draft. Intended for mapping editors and
-#'   upload previews; import runs should use published mappings.
-#'
-#' @return A data.frame of typed location mappings.
+#' List current location mappings
+#' @inheritParams getImportParameterMappings
+#' @return A data.frame of current location mappings.
 #' @export
-getImportLocationMappings <- function(
-  con,
-  source_code = NULL,
-  profile_code = NULL,
-  active = TRUE,
-  include_draft = FALSE
-) {
-  if (!is.null(profile_code) && is.null(source_code)) {
-    stop("'source_code' is required when 'profile_code' is supplied.")
+getImportLocationMappings <- function(con, source_code = NULL, profile_code = NULL, active = TRUE, include_draft = FALSE) {
+  if (!is.logical(include_draft) || length(include_draft) != 1L || is.na(include_draft)) stop("'include_draft' must be TRUE or FALSE.")
+  if (!is.null(profile_code) && is.null(source_code)) stop("'source_code' is required when 'profile_code' is supplied.")
+  where <- character(); params <- list()
+  if (!is.null(source_code)) { params <- c(params,list(source_code)); where <- c(where,paste0("s.source_code=$",length(params))) }
+  if (is.null(profile_code)) where <- c(where,"m.import_profile_id IS NULL") else {
+    params <- c(params,list(profile_code)); where <- c(where,paste0("(m.import_profile_id IS NULL OR p.profile_code=$",length(params),")"))
   }
-  where <- character()
-  params <- list()
-  if (!is.null(source_code)) {
-    params <- c(params, list(source_code))
-    where <- c(where, paste0("s.source_code = $", length(params)))
-  }
-  if (is.null(profile_code)) {
-    where <- c(where, "mapping_set.import_profile_id IS NULL")
-  } else {
-    params <- c(params, list(profile_code))
-    where <- c(
-      where,
-      paste0(
-        "(mapping_set.import_profile_id IS NULL OR p.profile_code = $",
-        length(params),
-        ")"
-      )
-    )
-  }
-  if (!is.null(active)) {
-    params <- c(params, list(isTRUE(active)))
-    where <- c(where, paste0("m.active = $", length(params)))
-  }
-  where <- c(where, import_mapping_status_filter(include_draft))
-
-  DBI::dbGetQuery(
-    con,
-    paste0(
-      "SELECT
-         m.import_location_mapping_id,
-         mapping_set.import_mapping_set_id,
-         mapping_set.version AS mapping_set_version,
-         s.import_source_id,
-         s.source_code,
-         s.source_name,
-         mapping_set.import_profile_id,
-         p.profile_code,
-         p.profile_name,
-         m.source_location_code,
-         m.source_location_name,
-         m.location_id,
-         m.sub_location_id,
-         m.priority,
-         m.active,
-         m.note,
-         (mapping_set.import_profile_id IS NOT NULL) AS profile_specific
-       FROM discrete.import_location_mappings m
-       JOIN discrete.import_mapping_sets mapping_set
-         ON mapping_set.import_mapping_set_id = m.import_mapping_set_id
-       JOIN discrete.import_sources s
-         ON s.import_source_id = mapping_set.import_source_id
-       LEFT JOIN discrete.import_profiles p
-         ON p.import_profile_id = mapping_set.import_profile_id
-       WHERE ",
-      paste(where, collapse = " AND "),
-      "
-       ORDER BY
-         s.source_code,
-         lower(m.source_location_code),
-         (mapping_set.import_profile_id IS NOT NULL) DESC,
-         m.priority,
-         m.import_location_mapping_id"
-    ),
-    params = params
-  )
+  if (!is.null(active)) { params <- c(params,list(isTRUE(active))); where <- c(where,paste0("m.active=$",length(params))) }
+  DBI::dbGetQuery(con,paste0(
+    "SELECT m.import_location_mapping_id,m.import_source_id,s.source_code,s.source_name,
+      m.import_profile_id,p.profile_code,p.profile_name,
+      m.source_location_code,
+      m.source_location_name,m.location_id,m.sub_location_id,m.priority,m.active,m.note,
+      (m.import_profile_id IS NOT NULL) AS profile_specific
+     FROM discrete.import_location_mappings m JOIN discrete.import_sources s USING(import_source_id)
+     LEFT JOIN discrete.import_profiles p USING(import_profile_id)
+     WHERE ",paste(where,collapse=" AND "),"
+     ORDER BY s.source_code,(m.import_profile_id IS NOT NULL) DESC,
+       lower(m.source_location_code),m.priority,m.import_location_mapping_id"),params=params)
 }
 
 #' Resolve one external location code
@@ -1679,197 +958,82 @@ resolveImportLocationMapping <- function(
   hit[1, , drop = FALSE]
 }
 
-#' Create a discrete import run
+#' Create a discrete import run with one configuration snapshot
 #'
-#' @param con A connection to the AquaCache database.
-#' @param import_source_id Import source ID.
-#' @param import_profile_id Optional file-import profile ID.
-#' @param source_mapping_set_id Optional exact source mapping-set revision.
-#' @param profile_mapping_set_id Optional exact profile mapping-set revision.
-#' @param source_adapter_function Optional AquaCache adapter function.
-#' @param adapter_version Optional adapter/package version.
-#' @param source_uri Optional source URL, path, or dataset identifier.
-#' @param source_file_name Optional uploaded source file name.
-#' @param source_file_hash Optional source file hash.
-#' @param source_file_size Optional source file size in bytes.
-#' @param summary Optional named list of run summary values.
-#' @param validation_summary Optional named list of validation summary values.
-#' @param note Optional note.
-#'
+#' New runs save one immutable parser/mapping/options snapshot and never store
+#' a mapping-set identifier.
+#' @param con AquaCache database connection.
+#' @param import_source_id Source ID.
+#' @param import_profile_id Optional profile ID.
+#' @param source_adapter_function Adapter or application function.
+#' @param adapter_version Adapter version.
+#' @param source_uri Source URL or identifier.
+#' @param summary Run summary.
+#' @param validation_summary Validation summary.
+#' @param note Optional run note.
+#' @param configuration_snapshot Optional effective configuration. Generated from the current source/profile when omitted.
+#' @param source_document_id Uploaded workbook document ID.
 #' @return The `import_run_id`.
 #' @export
 createImportRun <- function(
-  con,
-  import_source_id,
-  import_profile_id = NULL,
-  source_mapping_set_id = NULL,
-  profile_mapping_set_id = NULL,
-  source_adapter_function = NULL,
-  adapter_version = NULL,
-  source_uri = NULL,
-  source_file_name = NULL,
-  source_file_hash = NULL,
-  source_file_size = NULL,
-  summary = list(),
-  validation_summary = list(),
-  note = NULL
+  con, import_source_id, import_profile_id = NULL,
+  source_adapter_function = NULL, adapter_version = NULL, source_uri = NULL,
+  summary = list(), validation_summary = list(), note = NULL,
+  configuration_snapshot = NULL, source_document_id = NULL
 ) {
-  if (is.null(import_profile_id)) {
+  source <- DBI::dbGetQuery(con,"SELECT source_code FROM discrete.import_sources WHERE import_source_id=$1",params=list(as.integer(import_source_id)))
+  if (nrow(source)!=1L) stop("The import source does not exist.")
+  profile_code <- NULL
+  if (!is.null(import_profile_id) && length(import_profile_id) && !is.na(import_profile_id)) {
+    profile <- DBI::dbGetQuery(con,"SELECT profile_code FROM discrete.import_profiles WHERE import_profile_id=$1 AND import_source_id=$2",params=list(as.integer(import_profile_id),as.integer(import_source_id)))
+    if (nrow(profile)!=1L) stop("The import profile does not belong to this source.")
+    profile_code <- profile$profile_code[[1]]
+  } else {
     import_profile_id <- NA_integer_
   }
-  published_sets <- import_mapping_published_set_ids(
-    con,
-    import_source_id,
-    import_profile_id
-  )
-  if (is.null(source_mapping_set_id)) {
-    source_mapping_set_id <- published_sets$source_mapping_set_id
+  if (is.null(configuration_snapshot)) {
+    configuration_snapshot <- getImportConfigurationSnapshot(con,source$source_code[[1]],profile_code)
   }
-  if (is.null(profile_mapping_set_id)) {
-    profile_mapping_set_id <- published_sets$profile_mapping_set_id
-  }
-  if (is.na(source_mapping_set_id)) {
-    stop("The import source has no published source-wide mapping set.")
-  }
-  null_character <- function(x) {
-    if (is.null(x)) NA_character_ else as.character(x)
-  }
-  if (is.null(source_file_size)) {
-    source_file_size <- NA_integer_
-  }
-
-  DBI::dbGetQuery(
-    con,
+  DBI::dbGetQuery(con,
     "INSERT INTO discrete.import_runs (
-       import_source_id,
-       import_profile_id,
-       source_mapping_set_id,
-       profile_mapping_set_id,
-       source_adapter_function,
-       adapter_version,
-       source_uri,
-       source_file_name,
-       source_file_hash,
-       source_file_size,
-       summary,
-       validation_summary,
-       note
-     ) VALUES (
-       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-       $11::jsonb, $12::jsonb, $13
-     )
-     RETURNING import_run_id",
-    params = list(
-      as.integer(import_source_id),
-      as.integer(import_profile_id),
-      as.integer(source_mapping_set_id),
-      as.integer(profile_mapping_set_id),
-      null_character(source_adapter_function),
-      null_character(adapter_version),
-      null_character(source_uri),
-      null_character(source_file_name),
-      null_character(source_file_hash),
-      source_file_size,
-      import_mapping_json(summary, object = TRUE),
-      import_mapping_json(validation_summary, object = TRUE),
-      null_character(note)
+       import_source_id,import_profile_id,
+       source_adapter_function,adapter_version,source_uri,
+       summary,validation_summary,note,configuration_snapshot,
+       configuration_snapshot_version,source_document_id
+     ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,
+       $9::jsonb,1,$10) RETURNING import_run_id",
+    params=list(
+      as.integer(import_source_id),as.integer(import_profile_id),
+      if (is.null(source_adapter_function)) NA_character_ else as.character(source_adapter_function),
+      if (is.null(adapter_version)) NA_character_ else as.character(adapter_version),
+      if (is.null(source_uri)) NA_character_ else as.character(source_uri),
+      import_mapping_json(summary,object=TRUE),import_mapping_json(validation_summary,object=TRUE),
+      if (is.null(note)) NA_character_ else as.character(note),
+      import_mapping_json(configuration_snapshot,object=TRUE),
+      if (is.null(source_document_id)) NA_integer_ else as.integer(source_document_id)
     )
   )$import_run_id[[1]]
 }
 
-#' Append or update discrete import-run rows
+#' Reject removed per-result import-run rows
 #'
-#' @param con A connection to the AquaCache database.
+#' Result provenance is now stored directly on `discrete.results.import_run_id`.
+#' @param con AquaCache database connection.
 #' @param import_run_id Import run ID.
-#' @param rows A data.frame/data.table with optional columns matching
-#'   `discrete.import_run_rows`.
-#'
-#' @return Invisibly returns `rows`.
+#' @param rows Former row-level import audit data.
+#' @return Never returns; this compatibility entry point always errors.
 #' @export
 appendImportRunRows <- function(con, import_run_id, rows) {
-  rows <- data.table::as.data.table(rows)
-  defaults <- list(
-    sheet_name = NA_character_,
-    source_row_number = NA_integer_,
-    result_index = 1L,
-    source_record = NULL,
-    normalized_sample = NULL,
-    normalized_result = NULL,
-    validation_status = "pending",
-    validation_messages = NULL,
-    sample_id = NA_integer_,
-    result_id = NA_integer_
+  stop(
+    "Per-result import-run rows were removed in Patch 69. Store import_run_id on each inserted result.",
+    call. = FALSE
   )
-  for (nm in names(defaults)) {
-    if (!(nm %in% names(rows))) {
-      if (
-        nm %in%
-          c(
-            "source_record",
-            "normalized_sample",
-            "normalized_result",
-            "validation_messages"
-          )
-      ) {
-        rows[[nm]] <- replicate(nrow(rows), list(), simplify = FALSE)
-      } else {
-        rows[[nm]] <- defaults[[nm]]
-      }
-    }
-  }
-
-  for (i in seq_len(nrow(rows))) {
-    DBI::dbExecute(
-      con,
-      "INSERT INTO discrete.import_run_rows (
-         import_run_id,
-         sheet_name,
-         source_row_number,
-         result_index,
-         source_record,
-         normalized_sample,
-         normalized_result,
-         validation_status,
-         validation_messages,
-         sample_id,
-         result_id
-       ) VALUES (
-         $1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb,
-         $8, $9::jsonb, $10, $11
-       )
-       ON CONFLICT (
-         import_run_id,
-         sheet_name,
-         source_row_number,
-         result_index
-       ) DO UPDATE
-       SET source_record = EXCLUDED.source_record,
-           normalized_sample = EXCLUDED.normalized_sample,
-           normalized_result = EXCLUDED.normalized_result,
-           validation_status = EXCLUDED.validation_status,
-           validation_messages = EXCLUDED.validation_messages,
-           sample_id = EXCLUDED.sample_id,
-           result_id = EXCLUDED.result_id;",
-      params = list(
-        as.integer(import_run_id),
-        rows$sheet_name[[i]],
-        rows$source_row_number[[i]],
-        rows$result_index[[i]],
-        import_mapping_json(rows$source_record[[i]], object = TRUE),
-        import_mapping_json(rows$normalized_sample[[i]], object = TRUE),
-        import_mapping_json(rows$normalized_result[[i]], object = TRUE),
-        rows$validation_status[[i]],
-        import_mapping_json(rows$validation_messages[[i]], object = FALSE),
-        rows$sample_id[[i]],
-        rows$result_id[[i]]
-      )
-    )
-  }
-
-  invisible(rows)
 }
 
 #' Complete a discrete import run
+#'
+#' Finalizes a run once. Patch 69 keeps its terminal status, completion times,
+#' summary, and validation summary immutable. Use a new run for another attempt.
 #'
 #' @param con A connection to the AquaCache database.
 #' @param import_run_id Import run ID.
@@ -1937,15 +1101,17 @@ import_mapping_upsert_source <- function(
   if (is.null(source_description)) {
     source_description <- NA_character_
   }
+  # Mapping saves default source_name to its code. Preserve an existing
+  # display name and activation state unless source metadata is edited itself.
   DBI::dbGetQuery(
     con,
     "INSERT INTO discrete.import_sources
        (source_code, source_name, source_description, active)
      VALUES ($1, $2, $3, TRUE)
      ON CONFLICT (source_code) DO UPDATE
-     SET source_name = EXCLUDED.source_name,
-         source_description = COALESCE(EXCLUDED.source_description, discrete.import_sources.source_description),
-         active = TRUE
+     SET source_name = CASE WHEN $2 = $1 THEN discrete.import_sources.source_name
+                            ELSE EXCLUDED.source_name END,
+         source_description = COALESCE(EXCLUDED.source_description, discrete.import_sources.source_description)
      RETURNING import_source_id;",
     params = list(source_code, source_name, source_description)
   )$import_source_id[[1]]
@@ -1986,6 +1152,16 @@ import_mapping_resolve_profile_id <- function(
   as.integer(profile$import_profile_id[[1]])
 }
 
+#' Encode a mapping value as JSON text
+#'
+#' Existing scalar JSON strings are returned unchanged. `NULL` becomes an
+#' empty object or array according to `object`.
+#' @param x Value to encode, or an existing scalar JSON string.
+#' @param object Whether a missing value should be encoded as `{}` instead of
+#'   `[]`.
+#' @return One JSON string.
+#' @noRd
+#' @keywords internal
 import_mapping_json <- function(x, object = TRUE) {
   if (is.null(x)) {
     x <- if (object) list() else character()
@@ -2484,6 +1660,17 @@ import_mapping_resolve_match <- function(mappings, source_match) {
 
 # Missing-mapping reports group by the complete source discriminator tuple,
 # so distinct fractions/species are not collapsed into one code/unit row.
+#' Find source columns used by mapping match criteria
+#'
+#' Includes the required base fields and any additional match fields present
+#' in the source data. A `source.` prefix is removed when the field names a
+#' source column directly.
+#' @param mappings Data table with parsed `source_match_values` list column.
+#' @param source Source data frame or data table.
+#' @param base Required source column names.
+#' @return Unique character vector of available source column names.
+#' @noRd
+#' @keywords internal
 import_mapping_source_columns <- function(mappings, source, base) {
   fields <- unique(unlist(lapply(mappings$source_match_values, names), use.names = FALSE))
   original <- startsWith(fields, "source.") & !fields %in% names(source)
@@ -2491,6 +1678,15 @@ import_mapping_source_columns <- function(mappings, source, base) {
   unique(c(base, intersect(fields, names(source))))
 }
 
+#' Build the match criteria for one source record
+#'
+#' Non-base fields are prefixed with `source.` to distinguish source-only
+#' criteria from standard mapping fields.
+#' @param record Named source record.
+#' @param base Names of standard source fields that do not need a prefix.
+#' @return Named list of scalar, character-valued match criteria.
+#' @noRd
+#' @keywords internal
 import_mapping_source_criteria <- function(record, base) {
   values <- lapply(record, function(x) {
     if (!length(x) || is.na(x[[1]])) "" else as.character(x[[1]])
@@ -2500,6 +1696,14 @@ import_mapping_source_criteria <- function(record, base) {
   values
 }
 
+#' Return a structured status for one source-to-parameter match
+#'
+#' @param mappings Candidate mapping table with resolved target IDs.
+#' @param source_match Named source criteria for one record.
+#' @return List with `status`, `message`, and `mapping` fields. Status is one of
+#'   `mapped`, `no_mapping`, `missing_parameter_id`, or `mapping_error`.
+#' @noRd
+#' @keywords internal
 import_mapping_match_status <- function(mappings, source_match) {
   tryCatch(
     {
