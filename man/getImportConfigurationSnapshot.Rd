@@ -25,6 +25,7 @@ A named list containing the effective configuration.
 }
 \description{
 The returned object is suitable for storage once on an import-run row. It
-contains the selected parser profile, both applicable mapping scopes, and
-upload-specific parsing options.
+contains the selected parser profile, source-wide analyte exclusions, both
+applicable mapping scopes, and upload-specific parsing options. Requires
+database Patch 71 or later.
 }

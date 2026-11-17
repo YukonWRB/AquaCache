@@ -1,4 +1,3 @@
-
 #' Review current import mappings
 #'
 #' Returns one current row per directly scoped mapping. Historical audit events
@@ -9,15 +8,32 @@
 #' @param include_history Legacy argument retained for call compatibility.
 #' @return A data.frame of current mapping definitions and validation state.
 #' @export
-getImportMappingReview <- function(con, source_code = NULL, include_history = FALSE) {
-  if (!is.logical(include_history) || length(include_history) != 1L || is.na(include_history)) {
+getImportMappingReview <- function(
+  con,
+  source_code = NULL,
+  include_history = FALSE
+) {
+  if (
+    !is.logical(include_history) ||
+      length(include_history) != 1L ||
+      is.na(include_history)
+  ) {
     stop("'include_history' must be TRUE or FALSE.")
   }
-  if (!is.null(source_code) && (!is.character(source_code) || length(source_code) != 1L || is.na(source_code) || !nzchar(trimws(source_code)))) {
+  if (
+    !is.null(source_code) &&
+      (!is.character(source_code) ||
+        length(source_code) != 1L ||
+        is.na(source_code) ||
+        !nzchar(trimws(source_code)))
+  ) {
     stop("'source_code' must be NULL or a non-empty source code.")
   }
-  params <- list(if (is.null(source_code)) NA_character_ else trimws(source_code))
-  DBI::dbGetQuery(con,
+  params <- list(
+    if (is.null(source_code)) NA_character_ else trimws(source_code)
+  )
+  DBI::dbGetQuery(
+    con,
     "WITH mappings AS (
        SELECT s.source_code,s.source_name,s.import_source_id,s.active AS source_active,
          p.profile_code,p.profile_name,p.import_profile_id,p.active AS profile_active,
@@ -38,7 +54,7 @@ getImportMappingReview <- function(con, source_code = NULL, include_history = FA
        SELECT s.source_code,s.source_name,s.import_source_id,s.active,p.profile_code,p.profile_name,p.import_profile_id,p.active,
          'location'::TEXT,m.import_location_mapping_id,m.import_location_mapping_id,
          NULL::INTEGER,
-         jsonb_build_object('source_location_code',m.source_location_code)::TEXT,
+         jsonb_build_object('source_location_code',m.source_location_code, 'project_id',m.project_id)::TEXT,
          concat_ws(' / ',l.name,sl.sub_location_name)::TEXT,m.active,
          CASE WHEN m.location_id IS NULL THEN 'Choose an AquaCache location.' END::TEXT,
          m.note,m.created,m.created_by,m.modified,m.modified_by,

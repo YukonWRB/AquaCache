@@ -8,7 +8,9 @@ resolveImportLocationMapping(
   con,
   source_code,
   source_location_code,
-  profile_code = NULL
+  profile_code = NULL,
+  project_id = NULL,
+  mappings = NULL
 )
 }
 \arguments{
@@ -19,9 +21,15 @@ resolveImportLocationMapping(
 \item{source_location_code}{External location or station code.}
 
 \item{profile_code}{Optional profile code.}
+
+\item{project_id}{Optional project ID; NULL considers all projects.}
+
+\item{mappings}{Optional preloaded mapping rows; when supplied no database
+query is made. These must already be filtered to the source and format.}
 }
 \value{
-One mapping row, or an empty data.frame when no mapping exists.
+One mapping row, or an empty data.frame when missing or ambiguous.
+Ambiguous results carry a \code{candidates} attribute containing conflicting rows.
 }
 \description{
 Resolve one external location code

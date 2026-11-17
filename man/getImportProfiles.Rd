@@ -17,7 +17,8 @@ inactive profiles.}
 \item{parse_json}{If \code{TRUE}, JSON columns are returned as list columns.}
 }
 \value{
-A data.frame of import profiles.
+A data.frame of import profiles, including the source-wide
+\code{excluded_analytes} list column (JSON text when \code{parse_json = FALSE}).
 }
 \description{
 List file import profiles from the AquaCache database. This can be filtered by source code and/or active status.

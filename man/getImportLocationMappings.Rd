@@ -9,7 +9,8 @@ getImportLocationMappings(
   source_code = NULL,
   profile_code = NULL,
   active = TRUE,
-  include_draft = FALSE
+  include_draft = FALSE,
+  project_id = NULL
 )
 }
 \arguments{
@@ -22,6 +23,9 @@ getImportLocationMappings(
 \item{active}{Optional active filter. Use \code{NULL} for all rows.}
 
 \item{include_draft}{Legacy compatibility argument; all current rows are live.}
+
+\item{project_id}{Optional project ID. NULL returns all projects; a project ID
+returns that project and project-free fallbacks; NA returns project-free rows.}
 }
 \value{
 A data.frame of current location mappings.

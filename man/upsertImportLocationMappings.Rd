@@ -18,7 +18,9 @@ upsertImportLocationMappings(
 
 \item{source_code}{Optional source code.}
 
-\item{mappings}{Location mapping rows containing \code{source_location_code} and \code{location_id}.}
+\item{mappings}{Location mapping rows containing \code{source_location_code} and
+\code{location_id}. Optional \code{project_id} scopes a mapping to that project; NA
+creates a project-free fallback. Requires database Patch 72 or later.}
 
 \item{profile_code}{Optional profile code; requires \code{source_code}.}
 
