@@ -166,7 +166,7 @@ generateACDatabaseReference <- function(
   }
 
   connect_catalog <- function() {
-    con <- AquaConnect(silent = TRUE)
+    con <- AquaConnect(silent = TRUE, check = FALSE)
     suppressWarnings(
       try(
         DBI::dbExecute(
