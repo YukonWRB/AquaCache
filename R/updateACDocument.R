@@ -41,7 +41,7 @@ updateHydrometDocument <- function(
   id_exists <- DBI::dbGetQuery(
     con,
     paste0(
-      "SELECT d.name, t.document_type_en AS type, d.authors, d.url, d.publish_date, d.description FROM files.documents AS d LEFT JOIN files.document_types as t ON d.type = t.document_type_id WHERE document_id = ",
+      "SELECT d.name, t.document_type_en AS type, d.authors, d.url, d.publish_date, d.description FROM files.documents AS d LEFT JOIN files.document_types as t ON d.document_type_id = t.document_type_id WHERE document_id = ",
       id
     )
   )
@@ -192,7 +192,7 @@ updateHydrometDocument <- function(
     DBI::dbExecute(
       con,
       paste0(
-        "UPDATE files.documents SET type = ",
+        "UPDATE files.documents SET document_type_id = ",
         assigned_type,
         " WHERE document_id = ",
         id,

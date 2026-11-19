@@ -384,7 +384,8 @@ aquacache_try_install_ogr2ogr <- function(ask = interactive()) {
       install_cmd <- winget
       install_args <- c(
         "install",
-        "--id", "OSGeo.QGIS_LTR",
+        "--id",
+        "OSGeo.QGIS_LTR",
         "--exact",
         "--silent",
         "--accept-package-agreements",
@@ -993,10 +994,10 @@ find_discrete_sample_id <- function(con, sample) {
       "WHERE location_id = $1",
       "  AND sub_location_id IS NOT DISTINCT FROM $2",
       "  AND media_id = $3",
-      "  AND z IS NOT DISTINCT FROM $4",
+      "  AND depth_height_m IS NOT DISTINCT FROM $4",
       "  AND datetime = $5",
-      "  AND sample_type = $6",
-      "  AND collection_method = $7",
+      "  AND sample_type_id = $6",
+      "  AND collection_method_id = $7",
       "LIMIT 1;"
     ),
     params = list(
@@ -1007,14 +1008,14 @@ find_discrete_sample_id <- function(con, sample) {
         NA_integer_
       },
       suppressWarnings(as.integer(sample$media_id[1])),
-      if ("z" %in% names(sample)) {
-        suppressWarnings(as.numeric(sample$z[1]))
+      if ("depth_height_m" %in% names(sample)) {
+        suppressWarnings(as.numeric(sample$depth_height_m[1]))
       } else {
         NA_real_
       },
       as.POSIXct(sample$datetime[1], tz = "UTC"),
-      suppressWarnings(as.integer(sample$sample_type[1])),
-      suppressWarnings(as.integer(sample$collection_method[1]))
+      suppressWarnings(as.integer(sample$sample_type_id[1])),
+      suppressWarnings(as.integer(sample$collection_method_id[1]))
     )
   )[1, 1]
 

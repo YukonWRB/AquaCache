@@ -13,14 +13,17 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
     password = Sys.getenv("aquacacheAdminPass")
   )
   transaction_open <- FALSE
-  on.exit({
-    if (DBI::dbIsValid(con)) {
-      if (transaction_open) {
-        try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
+  on.exit(
+    {
+      if (DBI::dbIsValid(con)) {
+        if (transaction_open) {
+          try(DBI::dbExecute(con, "ROLLBACK"), silent = TRUE)
+        }
+        DBI::dbDisconnect(con)
       }
-      DBI::dbDisconnect(con)
-    }
-  }, add = TRUE)
+    },
+    add = TRUE
+  )
   identity <- DBI::dbGetQuery(
     con,
     "SELECT current_database() AS db, inet_server_addr()::text AS host"
@@ -65,7 +68,8 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
      WHERE qualifier_type_code IN ('ERROR', 'PSM')"
   )
   skip_if(
-    nrow(capability) != 1L || nrow(best_effort_capability) != 1L ||
+    nrow(capability) != 1L ||
+      nrow(best_effort_capability) != 1L ||
       !all(c("ERROR", "PSM") %in% qualifier_types$qualifier_type_code),
     "testdb lacks QC rule or qualifier fixtures"
   )
@@ -121,7 +125,7 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
     DBI::dbGetQuery(
       con,
       "INSERT INTO continuous.qualifiers
-         (timeseries_id, qualifier_type_id, start_dt, end_dt,
+         (timeseries_id, qualifier_type_id, start_datetime, end_datetime,
           no_source_update)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING qualifier_id",
@@ -148,18 +152,24 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
     action = "leave"
   )
   expect_true(dbTransCheck(con))
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
      WHERE timeseries_id = $1 AND timeseries_qc_rule_id = $2",
-    params = list(timeseries_id, leave_rule)
-  )$n[[1L]], 0)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
+      params = list(timeseries_id, leave_rule)
+    )$n[[1L]],
+    0
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
      WHERE qualifier_id = ANY($1::integer[])",
-    params = list(qc_pg_int_array(leave_qualifiers))
-  )$n[[1L]], 2)
+      params = list(qc_pg_int_array(leave_qualifiers))
+    )$n[[1L]],
+    2
+  )
 
   # "best_effort" removes predicted ERROR output for the target rule only.
   best_effort_rule <- insert_assignment(
@@ -185,14 +195,15 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
     assignments = best_effort_assignment
   )
   if (
-    is.null(preview) || is.null(preview$ranges) ||
+    is.null(preview) ||
+      is.null(preview$ranges) ||
       !any(preview$ranges$code == "ERROR")
   ) {
     stop("testdb readings did not produce a predicted stuck-sensor range.")
   }
   existing_error_ranges <- DBI::dbGetQuery(
     con,
-    "SELECT q.start_dt, q.end_dt
+    "SELECT q.start_datetime AS start_dt, q.end_datetime AS end_dt
      FROM continuous.qualifiers q
      JOIN public.qualifier_types t USING (qualifier_type_id)
      WHERE q.timeseries_id = $1 AND t.qualifier_type_code = 'ERROR'",
@@ -202,10 +213,12 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
     preview$readings$code == "ERROR" &
       qc_covered(preview$readings$datetime, preview$ranges)
   ]
-  eligible_times <- eligible_times[!qc_covered(
-    eligible_times,
-    existing_error_ranges
-  )]
+  eligible_times <- eligible_times[
+    !qc_covered(
+      eligible_times,
+      existing_error_ranges
+    )
+  ]
   expect_gt(length(eligible_times), 0L)
   best_effort_time <- eligible_times[[1L]]
   best_effort_qualifier <- insert_qualifier(
@@ -227,24 +240,33 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
   )
   expect_true(dbTransCheck(con))
   expect_equal(removed$qualifier_rows_deleted, 1L)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
      WHERE timeseries_qc_rule_id = $1",
-    params = list(best_effort_rule)
-  )$n[[1L]], 0)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
+      params = list(best_effort_rule)
+    )$n[[1L]],
+    0
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
      WHERE qualifier_id = $1",
-    params = list(best_effort_qualifier)
-  )$n[[1L]], 0)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
+      params = list(best_effort_qualifier)
+    )$n[[1L]],
+    0
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
      WHERE qualifier_id = $1 AND no_source_update IS TRUE",
-    params = list(overlapping_protected)
-  )$n[[1L]], 1)
+      params = list(overlapping_protected)
+    )$n[[1L]],
+    1
+  )
 
   # "regrade_remaining" clears unprotected qualifiers and retains the other rule.
   regrade_rule <- insert_assignment()
@@ -260,30 +282,42 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
     action = "regrade_remaining"
   )
   expect_true(dbTransCheck(con))
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
      WHERE timeseries_id = $1 AND timeseries_qc_rule_id = $2",
-    params = list(timeseries_id, regrade_rule)
-  )$n[[1L]], 0)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
+      params = list(timeseries_id, regrade_rule)
+    )$n[[1L]],
+    0
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.timeseries_qc_rules
      WHERE timeseries_id = $1 AND timeseries_qc_rule_id = $2",
-    params = list(timeseries_id, remaining_rule)
-  )$n[[1L]], 1)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
+      params = list(timeseries_id, remaining_rule)
+    )$n[[1L]],
+    1
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
      WHERE qualifier_id = $1",
-    params = list(regrade_qualifiers[[2L]])
-  )$n[[1L]], 1)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
+      params = list(regrade_qualifiers[[2L]])
+    )$n[[1L]],
+    1
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
      WHERE qualifier_id = $1",
-    params = list(regrade_qualifiers[[1L]])
-  )$n[[1L]], 0)
+      params = list(regrade_qualifiers[[1L]])
+    )$n[[1L]],
+    0
+  )
 
   # "clear_unprotected" is valid only for the last saved assignment.
   DBI::dbExecute(
@@ -304,23 +338,29 @@ test_that("saved QC rule removal applies its selected qualifier cleanup", {
     action = "clear_unprotected"
   )
   expect_true(dbTransCheck(con))
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
      WHERE timeseries_id = $1
        AND no_source_update IS DISTINCT FROM TRUE",
-    params = list(timeseries_id)
-  )$n[[1L]], 0)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
+      params = list(timeseries_id)
+    )$n[[1L]],
+    0
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
      WHERE qualifier_id = ANY($1::integer[])
        AND no_source_update IS TRUE",
-    params = list(qc_pg_int_array(c(
-      leave_qualifiers[[2L]],
-      regrade_qualifiers[[2L]],
-      final_qualifiers[[2L]],
-      overlapping_protected
-    )))
-  )$n[[1L]], 4)
+      params = list(qc_pg_int_array(c(
+        leave_qualifiers[[2L]],
+        regrade_qualifiers[[2L]],
+        final_qualifiers[[2L]],
+        overlapping_protected
+      )))
+    )$n[[1L]],
+    4
+  )
 })

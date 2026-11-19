@@ -9,7 +9,6 @@ getImportLocationMappings(
   source_code = NULL,
   profile_code = NULL,
   active = TRUE,
-  include_draft = FALSE,
   project_id = NULL
 )
 }
@@ -21,8 +20,6 @@ getImportLocationMappings(
 \item{profile_code}{Optional profile code; requires \code{source_code}.}
 
 \item{active}{Optional active filter. Use \code{NULL} for all rows.}
-
-\item{include_draft}{Legacy compatibility argument; all current rows are live.}
 
 \item{project_id}{Optional project ID. NULL returns all projects; a project ID
 returns that project and project-free fallbacks; NA returns project-free rows.}

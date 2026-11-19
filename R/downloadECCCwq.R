@@ -234,7 +234,7 @@ downloadECCCwq <- function(
       "INSERT INTO public.organizations (name) VALUES ('Environment and Climate Change Canada');"
     )
   }
-  sample_type <- DBI::dbGetQuery(
+  sample_type_id <- DBI::dbGetQuery(
     con,
     "SELECT sample_type_id FROM discrete.sample_types WHERE sample_type = 'sample-routine';"
   )[1, 1]
@@ -264,8 +264,8 @@ downloadECCCwq <- function(
     sample <- data.frame(
       media_id = media_id,
       datetime = all_samples[i],
-      collection_method = collect_method,
-      sample_type = sample_type,
+      collection_method_id = collect_method,
+      sample_type_id = sample_type_id,
       owner = owner_contributor,
       contributor = owner_contributor,
       external_sample_id = paste(
@@ -284,10 +284,13 @@ downloadECCCwq <- function(
       input_unit <- subset[["UNIT_UNIT\u00C9"]][j]
       param_row <- import_mapping_resolve_match(
         key,
-        utils::modifyList(as.list(subset[j, , drop = FALSE]), list(
-          input_param = var,
-          input_unit = input_unit
-        ))
+        utils::modifyList(
+          as.list(subset[j, , drop = FALSE]),
+          list(
+            input_param = var,
+            input_unit = input_unit
+          )
+        )
       )
       if (is.null(param_row) || nrow(param_row) == 0) {
         if (warn_unmapped) {
@@ -321,12 +324,12 @@ downloadECCCwq <- function(
         as.numeric(param_row$conversion[1]) +
         as.numeric(param_row$result_offset[1])
 
-      # Look for '<' or '>' in the FLAG_MARQUEUR to set result_condition and result_condition_value
+      # Look for '<' or '>' in the FLAG_MARQUEUR to set result_condition_id and result_condition_value
       flag <- subset$FLAG_MARQUEUR[j]
       result_condition_value <- NA
-      result_condition <- NA
+      result_condition_id <- NA
       if (!is.na(flag) && flag == "<") {
-        result_condition <- result_conditions[
+        result_condition_id <- result_conditions[
           grep(
             "below detection",
             result_conditions$result_condition,
@@ -337,7 +340,7 @@ downloadECCCwq <- function(
         result_condition_value <- result_value
         result_value <- NA
       } else if (!is.na(flag) && flag == ">") {
-        result_condition <- result_conditions[
+        result_condition_id <- result_conditions[
           grep(
             "above detection",
             result_conditions$result_condition,
@@ -367,7 +370,7 @@ downloadECCCwq <- function(
         NA_character_
       }
       mapped_result_type <- result_types$result_type_name[
-        match(param_row$result_type[1], result_types$result_type_id)
+        match(param_row$result_type_id[1], result_types$result_type_id)
       ]
       result_laboratory <- if (identical(mapped_result_type, "lab")) {
         eccc_lab
@@ -377,20 +380,21 @@ downloadECCCwq <- function(
 
       # Build the result row
       result <- data.frame(
-        result_type = param_row$result_type[1],
+        result_type_id = param_row$result_type_id[1],
         parameter_id = param_row$parameter_id[1],
+        protocol_method_id = param_row$protocol_method_id[1],
         sample_fraction_id = param_row$sample_fraction_id[1],
         result = result_value,
-        result_condition = result_condition,
+        result_condition_id = result_condition_id,
         result_condition_value = result_condition_value,
-        result_value_type = param_row$result_value_type[1],
+        result_value_type_id = param_row$result_value_type_id[1],
         reporting_basis_id = param_row$reporting_basis_id[1],
         result_speciation_id = param_row$result_speciation_id[1],
         result_target_id = param_row$result_target_id[1],
         endpoint_mode = param_row$endpoint_mode[1],
         endpoint_ph = param_row$endpoint_ph[1],
         analysis_conditions = param_row$analysis_conditions[1],
-        laboratory = result_laboratory,
+        lab_id = result_laboratory,
         matrix_state_id = matrix_state_id,
         matrix_state = matrix_state,
         stringsAsFactors = FALSE
@@ -498,7 +502,11 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
     return(empty_report)
   }
 
-  match_columns <- import_mapping_source_columns(mapping, source, c("input_param", "input_unit"))
+  match_columns <- import_mapping_source_columns(
+    mapping,
+    source,
+    c("input_param", "input_unit")
+  )
   report <- source[,
     .(
       n_results = .N,
@@ -542,7 +550,10 @@ downloadECCCwq_missing_mappings <- function(all_results, mapping) {
       seq_len(.N),
       function(i) {
         jsonlite::toJSON(
-          import_mapping_source_criteria(as.list(report[i, match_columns, with = FALSE]), c("input_param", "input_unit")),
+          import_mapping_source_criteria(
+            as.list(report[i, match_columns, with = FALSE]),
+            c("input_param", "input_unit")
+          ),
           auto_unbox = TRUE,
           null = "null"
         )

@@ -320,8 +320,10 @@ insertACBorehole <- function(
     if (is.null(value)) {
       return(rep(NA_integer_, well_count))
     }
-    if (!(is.numeric(value) || is.character(value)) ||
-        !(length(value) %in% c(1L, well_count))) {
+    if (
+      !(is.numeric(value) || is.character(value)) ||
+        !(length(value) %in% c(1L, well_count))
+    ) {
       stop(
         sprintf(
           "'%s' must contain one catalogue value or one value per well (%d).",
@@ -384,25 +386,46 @@ insertACBorehole <- function(
   )
 
   casing_od <- normalize_well_vector(
-    casing_od, "casing_od", "numeric", NA_real_
+    casing_od,
+    "casing_od",
+    "numeric",
+    NA_real_
   )
   top_of_screen <- normalize_well_vector(
-    top_of_screen, "top_of_screen", "numeric", NA_real_
+    top_of_screen,
+    "top_of_screen",
+    "numeric",
+    NA_real_
   )
   bottom_of_screen <- normalize_well_vector(
-    bottom_of_screen, "bottom_of_screen", "numeric", NA_real_
+    bottom_of_screen,
+    "bottom_of_screen",
+    "numeric",
+    NA_real_
   )
   well_head_stick_up <- normalize_well_vector(
-    well_head_stick_up, "well_head_stick_up", "numeric", NA_real_
+    well_head_stick_up,
+    "well_head_stick_up",
+    "numeric",
+    NA_real_
   )
   static_water_level <- normalize_well_vector(
-    static_water_level, "static_water_level", "numeric", NA_real_
+    static_water_level,
+    "static_water_level",
+    "numeric",
+    NA_real_
   )
   estimated_yield <- normalize_well_vector(
-    estimated_yield, "estimated_yield", "numeric", NA_real_
+    estimated_yield,
+    "estimated_yield",
+    "numeric",
+    NA_real_
   )
   purpose_of_well <- normalize_well_vector(
-    purpose_of_well, "purpose_of_well", "numeric", NA_integer_
+    purpose_of_well,
+    "purpose_of_well",
+    "numeric",
+    NA_integer_
   )
   purpose_well_inferred <- normalize_well_vector(
     purpose_well_inferred,
@@ -411,16 +434,28 @@ insertACBorehole <- function(
     FALSE
   )
   notes_well <- normalize_well_vector(
-    notes_well, "notes_well", "character", NA_character_
+    notes_well,
+    "notes_well",
+    "character",
+    NA_character_
   )
   seal_diameter_mm <- normalize_well_vector(
-    seal_diameter_mm, "seal_diameter_mm", "numeric", NA_real_
+    seal_diameter_mm,
+    "seal_diameter_mm",
+    "numeric",
+    NA_real_
   )
   seal_depth_from <- normalize_well_vector(
-    seal_depth_from, "seal_depth_from", "numeric", NA_real_
+    seal_depth_from,
+    "seal_depth_from",
+    "numeric",
+    NA_real_
   )
   seal_depth_to <- normalize_well_vector(
-    seal_depth_to, "seal_depth_to", "numeric", NA_real_
+    seal_depth_to,
+    "seal_depth_to",
+    "numeric",
+    NA_real_
   )
 
   if (!well_count) {
@@ -530,10 +565,8 @@ insertACBorehole <- function(
   if (
     is.character(depth_to_bedrock) &&
       length(depth_to_bedrock) == 1L &&
-      (
-        is.na(depth_to_bedrock) ||
-          identical(tolower(trimws(depth_to_bedrock)), "unknown")
-      )
+      (is.na(depth_to_bedrock) ||
+        identical(tolower(trimws(depth_to_bedrock)), "unknown"))
   ) {
     depth_to_bedrock <- NULL
   }
@@ -643,8 +676,8 @@ insertACBorehole <- function(
       depth_m,
       bedrock_reached,
       depth_to_bedrock_m,
-      drilled_by,
-      drill_method,
+      driller_id,
+      drill_method_id,
       completion_date,
       notes,
       borehole_purpose_id,

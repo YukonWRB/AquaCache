@@ -849,13 +849,13 @@ gradeContinuous <- function(
   # approvals are treated as unspecified, matching import defaults.
   approval_rows <- DBI::dbGetQuery(
     con,
-    "SELECT a.start_dt, a.end_dt, a.no_source_update,
+    "SELECT a.start_datetime AS start_dt, a.end_datetime AS end_dt, a.no_source_update,
             t.approval_type_code
        FROM continuous.approvals a
        JOIN public.approval_types t USING (approval_type_id)
       WHERE a.timeseries_id = $1
-        AND a.start_dt <= $3 AND a.end_dt >= $2
-      ORDER BY a.start_dt",
+        AND a.start_datetime <= $3 AND a.end_datetime >= $2
+      ORDER BY a.start_datetime",
     params = list(tsid, min(w$datetime), max(w$datetime))
   )
   approval_code <- rep("UNS", nrow(w))
@@ -870,7 +870,9 @@ gradeContinuous <- function(
     }
   }
   approval_codes_allowing_qc <- c(
-    "UNK", "UNS", "N",
+    "UNK",
+    "UNS",
+    "N",
     if (reconcile_auto_screened) "S"
   )
   approval_allows_qc <- approval_code %in% approval_codes_allowing_qc
@@ -883,11 +885,11 @@ gradeContinuous <- function(
   if (length(managed_ids)) {
     other_qualifiers <- DBI::dbGetQuery(
       con,
-      "SELECT q.start_dt, q.end_dt
+      "SELECT q.start_datetime AS start_dt, q.end_datetime AS end_dt
          FROM continuous.qualifiers q
         WHERE q.timeseries_id = $1
           AND NOT (q.qualifier_type_id = ANY($2::int[]))
-          AND q.start_dt <= $4 AND q.end_dt >= $3",
+          AND q.start_datetime <= $4 AND q.end_datetime >= $3",
       params = list(
         tsid,
         qc_pg_int_array(managed_ids),
@@ -915,7 +917,7 @@ gradeContinuous <- function(
   # before building ranges also breaks runs there, so no new range spans one.
   prot <- DBI::dbGetQuery(
     con,
-    "SELECT q.start_dt, q.end_dt FROM continuous.qualifiers q JOIN public.qualifier_types t ON t.qualifier_type_id = q.qualifier_type_id WHERE q.timeseries_id = $1 AND q.no_source_update AND t.qualifier_type_code = ANY($2::text[]) AND q.start_dt <= $4 AND q.end_dt >= $3",
+    "SELECT q.start_datetime AS start_dt, q.end_datetime AS end_dt FROM continuous.qualifiers q JOIN public.qualifier_types t ON t.qualifier_type_id = q.qualifier_type_id WHERE q.timeseries_id = $1 AND q.no_source_update AND t.qualifier_type_code = ANY($2::text[]) AND q.start_datetime <= $4 AND q.end_datetime >= $3",
     params = list(
       tsid,
       qc_pg_text_array(managed),
@@ -924,7 +926,8 @@ gradeContinuous <- function(
     )
   )
   held <- qc_covered(w$datetime, prot) |
-    !approval_allows_qc | approval_protected
+    !approval_allows_qc |
+    approval_protected
 
   # A range writer reconciles everything between its first and last reading.
   # Keep separate runs around protected or higher approval ranges so neither
@@ -994,7 +997,9 @@ gradeContinuous <- function(
     stringsAsFactors = FALSE
   )
   approval_updates <- if (nrow(rules)) {
-    which(approval_allows_qc & !approval_protected & !qc_covered(w$datetime, prot))
+    which(
+      approval_allows_qc & !approval_protected & !qc_covered(w$datetime, prot)
+    )
   } else {
     integer()
   }
@@ -1110,13 +1115,13 @@ qc_add_grade <- function(con, timeseries_id, data) {
 
   approval_rows <- DBI::dbGetQuery(
     con,
-    "SELECT a.start_dt, a.end_dt, a.no_source_update,
+    "SELECT a.start_datetime AS start_dt, a.end_datetime AS end_dt, a.no_source_update,
             t.approval_type_code
        FROM continuous.approvals a
        JOIN public.approval_types t USING (approval_type_id)
       WHERE a.timeseries_id = $1
-        AND a.start_dt <= $3 AND a.end_dt >= $2
-      ORDER BY a.start_dt",
+        AND a.start_datetime <= $3 AND a.end_datetime >= $2
+      ORDER BY a.start_datetime",
     params = list(tsid, min(data$datetime), max(data$datetime))
   )
   approval_code <- rep("UNS", nrow(data))
@@ -1130,18 +1135,19 @@ qc_add_grade <- function(con, timeseries_id, data) {
         approval_rows$no_source_update[i] %in% TRUE
     }
   }
-  approval_allows_qc <- approval_code %in% c("UNK", "UNS", "N") &
+  approval_allows_qc <- approval_code %in%
+    c("UNK", "UNS", "N") &
     !approval_protected
 
   current <- DBI::dbGetQuery(
     con,
-    "SELECT g.start_dt, g.end_dt, g.no_source_update,
+    "SELECT g.start_datetime AS start_dt, g.end_datetime AS end_dt, g.no_source_update,
             t.grade_type_code
        FROM continuous.grades g
        JOIN public.grade_types t USING (grade_type_id)
       WHERE g.timeseries_id = $1
-        AND g.start_dt <= $3 AND g.end_dt >= $2
-      ORDER BY g.start_dt",
+        AND g.start_datetime <= $3 AND g.end_datetime >= $2
+      ORDER BY g.start_datetime",
     params = list(tsid, min(data$datetime), max(data$datetime))
   )
   current_code <- rep("UNS", nrow(data))
@@ -1155,8 +1161,10 @@ qc_add_grade <- function(con, timeseries_id, data) {
     }
   }
 
-  fillable <- current_code %in% c("UNK", "UNS") &
-    !protected & approval_allows_qc
+  fillable <- current_code %in%
+    c("UNK", "UNS") &
+    !protected &
+    approval_allows_qc
   data$grade <- as.character(data$grade)
   data$grade[!fillable] <- current_code[!fillable]
   data$no_source_update <- protected
@@ -1223,7 +1231,7 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
   # (ending at prev_dt / starting at next_dt): those are merge candidates.
   existing <- DBI::dbGetQuery(
     con,
-    "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt, no_source_update FROM continuous.qualifiers WHERE timeseries_id = $1 AND qualifier_type_id = ANY($2::int[]) AND start_dt <= $4 AND end_dt >= $3",
+    "SELECT qualifier_id, qualifier_type_id, start_datetime AS start_dt, end_datetime AS end_dt, no_source_update FROM continuous.qualifiers WHERE timeseries_id = $1 AND qualifier_type_id = ANY($2::int[]) AND start_datetime <= $4 AND end_datetime >= $3",
     params = list(tsid, qc_pg_int_array(managed_ids), lo, hi)
   )
   prot <- existing[existing$no_source_update %in% TRUE, ]
@@ -1275,7 +1283,7 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
       # ranges keep their readings. Usually prev_dt itself.
       left_end <- DBI::dbGetQuery(
         con,
-        "SELECT m.datetime FROM continuous.measurements_continuous m WHERE m.timeseries_id = $1 AND m.datetime >= $2 AND m.datetime < $3 AND NOT EXISTS (SELECT 1 FROM continuous.qualifiers q WHERE q.timeseries_id = $1 AND q.qualifier_type_id = ANY($4::int[]) AND q.start_dt > $2 AND m.datetime BETWEEN q.start_dt AND q.end_dt) ORDER BY m.datetime DESC LIMIT 1",
+        "SELECT m.datetime FROM continuous.measurements_continuous m WHERE m.timeseries_id = $1 AND m.datetime >= $2 AND m.datetime < $3 AND NOT EXISTS (SELECT 1 FROM continuous.qualifiers q WHERE q.timeseries_id = $1 AND q.qualifier_type_id = ANY($4::int[]) AND q.start_datetime > $2 AND m.datetime BETWEEN q.start_datetime AND q.end_datetime) ORDER BY m.datetime DESC LIMIT 1",
         params = list(
           tsid,
           e$start_dt,
@@ -1347,7 +1355,7 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
       for (r in seq_len(nrow(upd))) {
         DBI::dbExecute(
           con,
-          "UPDATE continuous.qualifiers SET start_dt = $2, end_dt = $3 WHERE qualifier_id = $1",
+          "UPDATE continuous.qualifiers SET start_datetime = $2, end_datetime = $3 WHERE qualifier_id = $1",
           params = list(upd$qualifier_id[r], upd$start_dt[r], upd$end_dt[r])
         )
       }
@@ -1358,8 +1366,8 @@ qc_write_ranges <- function(con, tsid, ranges, managed) {
           data.frame(
             timeseries_id = tsid,
             qualifier_type_id = ins$qualifier_type_id,
-            start_dt = ins$start_dt,
-            end_dt = ins$end_dt,
+            start_datetime = ins$start_dt,
+            end_datetime = ins$end_dt,
             no_source_update = FALSE
           )
         )

@@ -310,7 +310,9 @@ create_test_db <- function(
       message(
         "Skipping generated column(s) ",
         paste(generated, collapse = ", "),
-        " while loading ", label, "."
+        " while loading ",
+        label,
+        "."
       )
       data <- data[, !names(data) %in% generated, drop = FALSE]
     }
@@ -696,7 +698,7 @@ create_test_db <- function(
     "turbidity result descriptor"
   )
   protocol_method_id <- first_id(
-    "SELECT protocol_id FROM discrete.protocols_methods ORDER BY protocol_id LIMIT 1",
+    "SELECT protocol_method_id FROM discrete.protocols_methods ORDER BY protocol_method_id LIMIT 1",
     "protocol/method"
   )
   laboratory_id <- first_id(
@@ -1162,7 +1164,7 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO continuous.grades (
-         grade_id, timeseries_id, grade_type_id, start_dt, end_dt
+         grade_id, timeseries_id, grade_type_id, start_datetime, end_datetime
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-01-01 00:00+00'),
          (2, 1, %d, '2022-01-01 00:00+00', '2024-01-02 00:00+00'),
@@ -1180,7 +1182,7 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO continuous.approvals (
-         approval_id, timeseries_id, approval_type_id, start_dt, end_dt
+         approval_id, timeseries_id, approval_type_id, start_datetime, end_datetime
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
          (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
@@ -1198,7 +1200,7 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO continuous.qualifiers (
-         qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt
+         qualifier_id, timeseries_id, qualifier_type_id, start_datetime, end_datetime
        ) VALUES
          (1, 1, %d, '2023-01-03 00:00+00', '2023-01-04 00:00+00'),
          (2, 2, %d, '2023-01-02 00:00+00', '2023-01-02 12:00+00')",
@@ -1210,7 +1212,7 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO continuous.owners (
-         owner_id, timeseries_id, organization_id, start_dt, end_dt
+         owner_id, timeseries_id, organization_id, start_datetime, end_datetime
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
          (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
@@ -1228,7 +1230,7 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO continuous.contributors (
-         contributor_id, timeseries_id, organization_id, start_dt, end_dt
+         contributor_id, timeseries_id, organization_id, start_datetime, end_datetime
        ) VALUES
          (1, 1, %d, '2020-01-01 00:00+00', '2022-07-01 00:00+00'),
          (2, 1, %d, '2022-07-01 00:00+00', '2024-01-02 00:00+00'),
@@ -1246,7 +1248,7 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO continuous.corrections (
-         correction_id, timeseries_id, start_dt, end_dt,
+         correction_id, timeseries_id, start_datetime, end_datetime,
          correction_type, value1, value2, timestep_window, equation
        ) VALUES
          (1, 1, '2023-01-03 00:00+00', '2023-01-04 00:00+00',
@@ -1291,10 +1293,10 @@ create_test_db <- function(
         test_con,
         sprintf(
           "INSERT INTO discrete.samples (
-         sample_id, location_id, sub_location_id, media_id, z, datetime,
-         target_datetime, collection_method, sample_type, sample_volume_ml,
-         sample_grade, sample_approval, owner,
-         contributor, sampling_org, share_with, source_adapter_function,
+         sample_id, location_id, sub_location_id, media_id, depth_height_m, datetime,
+         target_datetime, collection_method_id, sample_type_id, sample_volume_ml,
+         grade_type_id, approval_type_id, owner,
+         contributor, sampling_org_id, share_with, source_adapter_function,
          no_source_update, note, external_sample_id, import_source_id
        ) VALUES
          (1, %d, %d, %d, 0.5, '2023-01-01 12:00+00',
@@ -1345,11 +1347,11 @@ create_test_db <- function(
         test_con,
         sprintf(
           "INSERT INTO discrete.samples (
-         sample_id, location_id, sub_location_id, media_id, z, datetime,
-         target_datetime, collection_method, sample_type,
+         sample_id, location_id, sub_location_id, media_id, depth_height_m, datetime,
+         target_datetime, collection_method_id, sample_type_id,
          sample_volume_ml, purge_volume_l, purge_time_min, flow_rate_l_min,
-         sample_grade, sample_approval, owner,
-         contributor, sampling_org, share_with, source_adapter_function,
+         grade_type_id, approval_type_id, owner,
+         contributor, sampling_org_id, share_with, source_adapter_function,
          no_source_update, note, external_sample_id, import_source_id
        ) VALUES
          (4, %d, %d, %d, 0.5, '2023-04-01 12:00+00',
@@ -1538,9 +1540,9 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO discrete.results (
-         result_id, sample_id, result_type, parameter_id, sample_fraction_id,
-         result, result_condition, result_condition_value,
-         result_value_type, analysis_datetime, share_with, no_source_update,
+         result_id, sample_id, result_type_id, parameter_id, sample_fraction_id,
+         result, result_condition_id, result_condition_value,
+         result_value_type_id, analysis_datetime, share_with, no_source_update,
          matrix_state_id
        ) VALUES
          (1, 1, %d, %d, %d, 6.7, NULL, NULL, %d,
@@ -1588,10 +1590,10 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO discrete.results (
-       result_id, sample_id, result_type, parameter_id, sample_fraction_id,
-       result, result_condition, result_condition_value,
-       result_value_type, reporting_basis_id, protocol_method,
-       laboratory, analysis_datetime, share_with, no_source_update,
+       result_id, sample_id, result_type_id, parameter_id, sample_fraction_id,
+       result, result_condition_id, result_condition_value,
+       result_value_type_id, reporting_basis_id, protocol_method_id,
+       lab_id, analysis_datetime, share_with, no_source_update,
        matrix_state_id, endpoint_mode, endpoint_ph
      ) VALUES
        (6, 4, %d, %d, NULL, 7.1, NULL, NULL, %d, NULL, NULL, NULL,
@@ -1677,10 +1679,10 @@ create_test_db <- function(
     test_con,
     sprintf(
       "INSERT INTO discrete.results (
-       result_id, sample_id, result_type, parameter_id, sample_fraction_id,
-       result, result_condition, result_condition_value,
-       result_value_type, reporting_basis_id, protocol_method,
-       laboratory, analysis_datetime, share_with, no_source_update,
+       result_id, sample_id, result_type_id, parameter_id, sample_fraction_id,
+       result, result_condition_id, result_condition_value,
+       result_value_type_id, reporting_basis_id, protocol_method_id,
+       lab_id, analysis_datetime, share_with, no_source_update,
        matrix_state_id, endpoint_mode, endpoint_ph
      ) VALUES
        (16, 6, %d, %d, %d, NULL, %d, 0.02, %d, NULL, %d, %d,
@@ -1787,8 +1789,8 @@ create_test_db <- function(
         sprintf(
           "INSERT INTO discrete.samples (
              sample_id, location_id, sub_location_id, media_id, datetime,
-             target_datetime, collection_method, sample_type, sample_grade,
-             sample_approval, owner, contributor, sampling_org, share_with,
+             target_datetime, collection_method_id, sample_type_id, grade_type_id,
+             approval_type_id, owner, contributor, sampling_org_id, share_with,
              source_adapter_function, no_source_update, note,
              external_sample_id, import_source_id
            ) VALUES (
@@ -1845,9 +1847,9 @@ create_test_db <- function(
         test_con,
         sprintf(
           "INSERT INTO discrete.results (
-             result_id, sample_id, result_type, parameter_id,
-             sample_fraction_id, result, result_condition,
-             result_condition_value, result_value_type, analysis_datetime,
+             result_id, sample_id, result_type_id, parameter_id,
+             sample_fraction_id, result, result_condition_id,
+             result_condition_value, result_value_type_id, analysis_datetime,
              share_with, no_source_update, matrix_state_id,
              grade_type_id, approval_type_id
            ) VALUES
@@ -1855,22 +1857,22 @@ create_test_db <- function(
               '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d, %d, %d),
              (28, 9, %d, %d, %d, NULL, NULL, NULL, %d,
               '2023-03-15 15:30+00', ARRAY['public_reader'], false, %d, %d, %d)",
-           result_type_field,
-           swe_param,
-           sample_fraction_total,
-           result_value_calculated,
-           matrix_solid,
-           grade_a,
-           approval_a,
-           result_type_field,
-           snow_depth_param,
-           sample_fraction_total,
-           result_value_calculated,
-           matrix_solid,
-           grade_b,
-           approval_n
-         )
-       )
+          result_type_field,
+          swe_param,
+          sample_fraction_total,
+          result_value_calculated,
+          matrix_solid,
+          grade_a,
+          approval_a,
+          result_type_field,
+          snow_depth_param,
+          sample_fraction_total,
+          result_value_calculated,
+          matrix_solid,
+          grade_b,
+          approval_n
+        )
+      )
       DBI::dbExecute(
         test_con,
         sprintf(
@@ -1893,7 +1895,7 @@ create_test_db <- function(
         sprintf(
           "INSERT INTO discrete.result_components (
              result_id, observation_number, observation_datetime, result,
-             result_condition, result_condition_value,
+             result_condition_id, result_condition_value,
              included_in_aggregate, weight, note
            ) VALUES
              (27, 1, '2023-03-15 15:00+00', 90, NULL, NULL, true, NULL, NULL),
@@ -1922,7 +1924,9 @@ create_test_db <- function(
          ) AS updated_count"
       )$updated_count
       if (length(refreshed_count) != 1L || refreshed_count[[1]] != 2L) {
-        stop("Composite fixture batch refresh did not update exactly two results.")
+        stop(
+          "Composite fixture batch refresh did not update exactly two results."
+        )
       }
       DBI::dbExecute(
         test_con,

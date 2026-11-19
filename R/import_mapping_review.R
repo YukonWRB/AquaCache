@@ -5,21 +5,12 @@
 #' of the current editor.
 #' @param con AquaCache database connection.
 #' @param source_code Optional source-code filter.
-#' @param include_history Legacy argument retained for call compatibility.
 #' @return A data.frame of current mapping definitions and validation state.
 #' @export
 getImportMappingReview <- function(
   con,
-  source_code = NULL,
-  include_history = FALSE
+  source_code = NULL
 ) {
-  if (
-    !is.logical(include_history) ||
-      length(include_history) != 1L ||
-      is.na(include_history)
-  ) {
-    stop("'include_history' must be TRUE or FALSE.")
-  }
   if (
     !is.null(source_code) &&
       (!is.character(source_code) ||

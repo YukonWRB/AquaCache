@@ -16,8 +16,8 @@ addACLocation(
   location_type = NA,
   note = NA,
   contact = NA,
-  datum_id_from = NA,
-  datum_id_to = NA,
+  from_datum_id = NA,
+  to_datum_id = NA,
   conversion_m = NA,
   current = NA,
   network = NA,
@@ -26,8 +26,8 @@ addACLocation(
 )
 }
 \arguments{
-\item{df}{A data.frame containing the location fields. \code{datum_id_from},
-\code{datum_id_to}, \code{conversion_m}, and \code{current} are optional. When
+\item{df}{A data.frame containing the location fields. \code{from_datum_id},
+\code{to_datum_id}, \code{conversion_m}, and \code{current} are optional. When
 \code{conversion_m} is missing, \code{\link[=get_elevation]{get_elevation()}} estimates the elevation from
 \code{latitude} and \code{longitude} and the matching datum IDs are populated
 automatically. If this parameter is provided, all other parameters except
@@ -53,17 +53,17 @@ for \code{con} must be left as their default values.}
 
 \item{contact}{A character vector of the contact(s) for the location(s) (optional).}
 
-\item{datum_id_from}{A numeric vector of the datum ID(s) from which the
+\item{from_datum_id}{A numeric vector of the datum ID(s) from which the
 location(s) are measured, from \code{public.datum_list}. When \code{conversion_m} is
 omitted, this is set to the Assumed Datum ID.}
 
-\item{datum_id_to}{A numeric vector of the datum ID(s) to which the
+\item{to_datum_id}{A numeric vector of the datum ID(s) to which the
 location(s) are measured, from \code{public.datum_list}. When \code{conversion_m} is
 omitted, this is matched to the vertical datum returned by
 \code{\link[=get_elevation]{get_elevation()}}. A missing datum is added to \code{public.datum_list}.}
 
 \item{conversion_m}{A numeric vector of conversion factors from
-\code{datum_id_from} to \code{datum_id_to}. Missing values are estimated with
+\code{from_datum_id} to \code{to_datum_id}. Missing values are estimated with
 \code{\link[=get_elevation]{get_elevation()}}.}
 
 \item{current}{A logical vector indicating whether the conversion factor(s)

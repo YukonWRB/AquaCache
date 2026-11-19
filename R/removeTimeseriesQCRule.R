@@ -63,8 +63,11 @@ removeTimeseriesQCRule <- function(
       )$timeseries_qc_rule_id
       if (!rule_id %in% locked) {
         stop(
-          "QC assignment ", rule_id,
-          " does not belong to timeseries ", tsid, "."
+          "QC assignment ",
+          rule_id,
+          " does not belong to timeseries ",
+          tsid,
+          "."
         )
       }
 
@@ -208,10 +211,14 @@ qc_remove_rule_output_ranges <- function(
     regraded = FALSE
   )
   if (
-    is.null(preview_with) || is.null(preview_without) ||
-      is.null(preview_with$readings) || is.null(preview_without$readings) ||
-      is.null(preview_with$ranges) || !nrow(preview_with$ranges) ||
-      !nrow(preview_with$readings) || !nrow(preview_without$readings)
+    is.null(preview_with) ||
+      is.null(preview_without) ||
+      is.null(preview_with$readings) ||
+      is.null(preview_without$readings) ||
+      is.null(preview_with$ranges) ||
+      !nrow(preview_with$ranges) ||
+      !nrow(preview_with$readings) ||
+      !nrow(preview_without$readings)
   ) {
     return(empty_counts)
   }
@@ -257,12 +264,12 @@ qc_remove_rule_output_ranges <- function(
 
   existing <- DBI::dbGetQuery(
     con,
-    "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt
+    "SELECT qualifier_id, qualifier_type_id, start_datetime AS start_dt, end_datetime AS end_dt
      FROM continuous.qualifiers
      WHERE timeseries_id = $1
        AND qualifier_type_id = ANY($2::integer[])
        AND no_source_update IS DISTINCT FROM TRUE
-       AND start_dt <= $4 AND end_dt >= $3
+       AND start_datetime <= $4 AND end_datetime >= $3
      FOR UPDATE",
     params = list(
       timeseries_id,
@@ -322,7 +329,7 @@ qc_remove_rule_output_ranges <- function(
     updated <- DBI::dbExecute(
       con,
       "UPDATE continuous.qualifiers
-       SET start_dt = $3, end_dt = $4
+       SET start_datetime = $3, end_datetime = $4
        WHERE timeseries_id = $1 AND qualifier_id = $2",
       params = list(
         timeseries_id,
@@ -342,8 +349,8 @@ qc_remove_rule_output_ranges <- function(
           as.integer(q$qualifier_type_id[[1L]]),
           nrow(segments) - 1L
         ),
-        start_dt = segments$start_dt[-1L],
-        end_dt = segments$end_dt[-1L],
+        start_datetime = segments$start_dt[-1L],
+        end_datetime = segments$end_dt[-1L],
         no_source_update = rep(FALSE, nrow(segments) - 1L),
         stringsAsFactors = FALSE
       )
@@ -383,9 +390,12 @@ qc_unique_rule_output_ranges <- function(
     stringsAsFactors = FALSE
   )
   if (
-    is.null(preview_with$readings) || is.null(preview_without$readings) ||
-      is.null(preview_with$ranges) || !nrow(preview_with$readings) ||
-      !nrow(preview_without$readings) || !nrow(preview_with$ranges)
+    is.null(preview_with$readings) ||
+      is.null(preview_without$readings) ||
+      is.null(preview_with$ranges) ||
+      !nrow(preview_with$readings) ||
+      !nrow(preview_without$readings) ||
+      !nrow(preview_with$ranges)
   ) {
     return(empty)
   }
@@ -410,7 +420,8 @@ qc_unique_rule_output_ranges <- function(
   # still unique at that reading.
   unique_contribution <-
     qc_covered(readings$datetime, preview_with$ranges) &
-    !is.na(with_code) & with_code %in% emitted_codes &
+    !is.na(with_code) &
+    with_code %in% emitted_codes &
     (is.na(without_code) | with_code != without_code)
   candidates <- qc_runs_to_ranges(
     readings$datetime,

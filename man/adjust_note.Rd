@@ -12,8 +12,8 @@ adjust_note(con, timeseries_id, data, delete = FALSE, source_update = FALSE)
 
 \item{timeseries_id}{A single integer timeseries identifier.}
 
-\item{data}{A data frame with \code{note}, \code{start_dt}, and \code{end_dt} columns.
-\code{start_datetime}/\code{end_datetime} are accepted aliases. An optional
+\item{data}{A data frame with \code{note}, \code{start_datetime}, and \code{end_datetime} columns.
+An optional
 \code{note_id} updates an existing row, and optional \code{no_source_update} values
 control protection from source synchronization.}
 
@@ -33,6 +33,6 @@ Inserts or updates free-text notes that apply to explicit datetime ranges.
 Different notes may overlap. Rows with a \code{note_id} update that note. Rows
 without one reuse an exact existing note or are inserted. When
 \code{delete = TRUE}, stored notes beginning at or after the earliest supplied
-\code{start_dt} are removed unless they are included in \code{data}, matching the
+\code{start_datetime} are removed unless they are included in \code{data}, matching the
 synchronization boundary used by the other \verb{adjust_*()} helpers.
 }

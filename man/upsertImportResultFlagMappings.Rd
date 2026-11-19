@@ -9,8 +9,7 @@ upsertImportResultFlagMappings(
   source_code,
   mappings,
   profile_code = NULL,
-  source_name = source_code,
-  publish = TRUE
+  source_name = source_code
 )
 }
 \arguments{
@@ -23,8 +22,6 @@ upsertImportResultFlagMappings(
 \item{profile_code}{Optional profile code; requires \code{source_code}.}
 
 \item{source_name}{Human-readable source name.}
-
-\item{publish}{Compatibility argument. Must be \code{TRUE}; staged edits were removed.}
 }
 \value{
 Invisibly returns the normalized mappings.

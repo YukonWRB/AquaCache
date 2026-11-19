@@ -1,6 +1,7 @@
 test_that("ECCC missing mapping report identifies unmapped and incomplete rows", {
   mapping <- data.table::data.table(
     import_mapping_id = c(1L, 2L),
+    profile_specific = FALSE,
     source_match_values = list(
       list(input_param = "KNOWN", input_unit = "mg/L"),
       list(input_param = "INCOMPLETE", input_unit = "mg/L")
@@ -30,6 +31,7 @@ test_that("ECCC missing mapping report identifies unmapped and incomplete rows",
 test_that("EQWin missing mapping report identifies unmapped and incomplete rows", {
   mapping <- data.table::data.table(
     import_mapping_id = c(1L, 2L),
+    profile_specific = FALSE,
     source_match_values = list(
       list(ParamCode = "KNOWN", input_unit = "mg/L"),
       list(ParamCode = "INCOMPLETE", input_unit = "mg/L")

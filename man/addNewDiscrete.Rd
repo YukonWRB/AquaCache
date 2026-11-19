@@ -55,10 +55,13 @@ type does not require a location. Every locationless sample must have at
 least one \code{sample_groups} entry.
 \item 'media_id': a numeric specifying the media_id of the data point from table 'medias'.
 \item 'datetime': a POSIXct datetime object in UTC 0 time zone, specifying the datetime of the data point.
-\item 'collection_method': a numeric specifying the collection_method_id of the data point from table 'collection_methods', such as 1 (observation), 27 (water bottle), or 14 (pump).
-\item 'sample_type': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
+\item 'collection_method_id': a numeric specifying the collection_method_id of the data point from table 'collection_methods', such as 1 (observation), 27 (water bottle), or 14 (pump).
+\item 'sample_type_id': a numeric specifying the sample_type_id of the data point from table 'sample_types', such as 1 (grab), 2 (composite), or 3 (integrated).
 \item 'owner': the numeric organization ID that owns the sample.
 Optional columns are:
+\item 'depth_height_m': the signed vertical offset in metres relative to the
+ground or water surface. Positive is above the surface, negative is below,
+and zero is at the surface. Leave missing when unspecified.
 \item 'source_adapter_function': the registered adapter function that supplied
 the sample.
 \item 'external_sample_id': a stable source-specific identifier used to match
@@ -79,10 +82,10 @@ The 'results' data.frame should contain one row per result and must contain the 
 \itemize{
 \item 'parameter_id': a numeric specifying the parameter_id of the data point from table 'parameters'.
 \item 'result': a numeric specifying the sample's results, matched to the parameters
-\item 'result_type': a numeric specifying the result_type_id of the data point from table 'result_types', such as 1 (concentration), 2 (load), or 3 (other).
+\item 'result_type_id': a numeric specifying the result_type_id of the data point from table 'result_types', such as 1 (concentration), 2 (load), or 3 (other).
 Additionally, the following columns may need to be included:
-\item 'result_condition': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA result values will be dropped.
-\item 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
+\item 'result_condition_id': a numeric specifying the result condition of the data point from table 'result_conditions', such as "< DL" or "> DL". Only necessary if there are NA values in the 'result' column that should be interpreted as a specific condition. If not provided, rows with NA result values will be dropped.
+\item 'result_condition_value': a numeric specifying the value of the result condition, such as 0.1 for "< DL 0.1". Necessary if column 'result_condition_id' is provided AND contains values of 1 or 2, i.e. 'Below Detection/Quantification Limit' or 'Above Detection/Quantification Limit'.
 \item 'matrix_state_id' or 'matrix_state': an optional numeric id or text code/name specifying the physical matrix state of the analyzed result from table 'matrix_states'. If omitted, the database defaults it from the parent sample media.
 \item 'sample_fraction_id': a numeric specifying the sample_fraction_id of the data point from table 'sample_fractions', such as 19 ('total'), 5 ('dissolved'), or 18 ('suspended'). Required if the column 'sample_fraction' in table 'parameters' is TRUE for the parameter in question.
 \item 'reporting_basis_id': numeric reporting expression from \code{discrete.reporting_bases}, such as "as N" or "as CaCO3"; "unknown / not reported" is an unresolved state with no conversion meaning.
@@ -122,7 +125,7 @@ aggregation, with rounding last.
 
 \code{result_components} has required \code{result_row}, \code{observation_number}, and
 \code{result} columns; \code{result} may be \code{NA} when a condition or missing observation
-is stored. Optional columns are \code{observation_datetime}, \code{result_condition},
+is stored. Optional columns are \code{observation_datetime}, \code{result_condition_id},
 \code{result_condition_value}, \code{included_in_aggregate} (default \code{TRUE}), \code{weight},
 and \code{note}. Excluded observations require a note. Each configured aggregation
 requires at least one component. The database calculates the canonical

@@ -8,8 +8,7 @@ getImportResultFlagMappings(
   con,
   source_code = NULL,
   profile_code = NULL,
-  active = TRUE,
-  include_draft = FALSE
+  active = TRUE
 )
 }
 \arguments{
@@ -20,8 +19,6 @@ getImportResultFlagMappings(
 \item{profile_code}{Optional profile code; requires \code{source_code}.}
 
 \item{active}{Optional active filter. Use \code{NULL} for all rows.}
-
-\item{include_draft}{Legacy compatibility argument; all current rows are live.}
 }
 \value{
 A data.frame of current result-flag mappings.

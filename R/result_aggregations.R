@@ -30,7 +30,7 @@
 #'   `calculation_arguments` may contain JSON object strings or named lists.
 #' @param result_components An optional data frame of component observations.
 #'   Required columns are `result_row`, `observation_number`, and `result`.
-#'   Optional columns are `observation_datetime`, `result_condition`,
+#'   Optional columns are `observation_datetime`, `result_condition_id`,
 #'   `result_condition_value`, `included_in_aggregate`, `weight`, and `note`.
 #'
 #' @return A list containing normalized `results`, `result_aggregations`, and
@@ -200,11 +200,10 @@ normalize_discrete_result_aggregations <- function(
     expected_count <- suppressWarnings(as.numeric(
       as.character(raw_expected_count)
     ))
-    invalid_expected_count <- !is.na(raw_expected_count) & (
-      is.na(expected_count) |
+    invalid_expected_count <- !is.na(raw_expected_count) &
+      (is.na(expected_count) |
         expected_count <= 0 |
-        expected_count != trunc(expected_count)
-    )
+        expected_count != trunc(expected_count))
     if (any(invalid_expected_count)) {
       stop("expected_count must contain positive integers or missing values.")
     }
@@ -226,7 +225,7 @@ normalize_discrete_result_aggregations <- function(
   component_columns <- c(
     required_component_columns,
     "observation_datetime",
-    "result_condition",
+    "result_condition_id",
     "result_condition_value",
     "included_in_aggregate",
     "weight",
@@ -267,11 +266,11 @@ normalize_discrete_result_aggregations <- function(
   ) {
     stop("result_components$result must contain finite values or NA.")
   }
-  if (!"result_condition" %in% names(result_components)) {
-    result_components$result_condition <- NA_integer_
+  if (!"result_condition_id" %in% names(result_components)) {
+    result_components$result_condition_id <- NA_integer_
   }
-  result_components$result_condition <- as.integer(
-    result_components$result_condition
+  result_components$result_condition_id <- as.integer(
+    result_components$result_condition_id
   )
   if (!"result_condition_value" %in% names(result_components)) {
     result_components$result_condition_value <- NA_real_
@@ -282,20 +281,21 @@ normalize_discrete_result_aggregations <- function(
   if (
     any(
       !is.na(result_components$result) &
-        !is.na(result_components$result_condition)
+        !is.na(result_components$result_condition_id)
     )
   ) {
-    stop("A result component cannot have both result and result_condition.")
+    stop("A result component cannot have both result and result_condition_id.")
   }
   invalid_condition_value <- !is.na(
     result_components$result_condition_value
   ) &
-    !result_components$result_condition %in% c(1L, 2L)
+    !result_components$result_condition_id %in% c(1L, 2L)
   invalid_condition_value[is.na(invalid_condition_value)] <- TRUE
   if (any(invalid_condition_value)) {
     stop("result_condition_value is only valid for conditions 1 and 2.")
   }
-  missing_condition_value <- result_components$result_condition %in% c(1L, 2L) &
+  missing_condition_value <- result_components$result_condition_id %in%
+    c(1L, 2L) &
     is.na(result_components$result_condition_value)
   missing_condition_value[is.na(missing_condition_value)] <- FALSE
   if (any(missing_condition_value)) {
@@ -342,15 +342,15 @@ normalize_discrete_result_aggregations <- function(
     )
   }
 
-  if (!"result_condition" %in% names(results)) {
-    results$result_condition <- NA_integer_
+  if (!"result_condition_id" %in% names(results)) {
+    results$result_condition_id <- NA_integer_
   }
   if (!"result_condition_value" %in% names(results)) {
     results$result_condition_value <- NA_real_
   }
   aggregate_rows <- result_aggregations$result_row
   results$result[aggregate_rows] <- NA_real_
-  results$result_condition[aggregate_rows] <- NA_integer_
+  results$result_condition_id[aggregate_rows] <- NA_integer_
   results$result_condition_value[aggregate_rows] <- NA_real_
 
   list(

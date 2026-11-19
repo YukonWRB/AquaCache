@@ -8,9 +8,7 @@ getImportParameterMappings(
   con,
   source_code = NULL,
   profile_code = NULL,
-  active = TRUE,
-  import_mapping_set_id = NULL,
-  include_draft = FALSE
+  active = TRUE
 )
 }
 \arguments{
@@ -21,10 +19,6 @@ getImportParameterMappings(
 \item{profile_code}{Optional profile code; requires \code{source_code}.}
 
 \item{active}{Optional active filter. Use \code{NULL} for all rows.}
-
-\item{import_mapping_set_id}{Legacy argument; supplying it is an error.}
-
-\item{include_draft}{Legacy compatibility argument; all current rows are live.}
 }
 \value{
 A data.frame of current parameter mappings.
@@ -32,4 +26,7 @@ A data.frame of current parameter mappings.
 \description{
 Returns source-wide mappings and, when requested, the matching profile
 overrides. Profile-specific rows sort before source-wide rows.
+}
+\details{
+Requires AquaCache database Patch 72 or later.
 }

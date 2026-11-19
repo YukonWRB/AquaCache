@@ -61,7 +61,7 @@ import_mapping_direct_rows <- function(x) {
 #' The returned object is suitable for storage once on an import-run row. It
 #' contains the selected parser profile, source-wide analyte exclusions, both
 #' applicable mapping scopes, and upload-specific parsing options. Requires
-#' database Patch 71 or later.
+#' database Patch 72 or later.
 #' @param con AquaCache database connection.
 #' @param source_code Source code.
 #' @param profile_code Optional profile code.
@@ -152,44 +152,6 @@ getImportConfigurationSnapshot <- function(
   )
 }
 
-#' Save mappings immediately
-#'
-#' Compatibility wrapper for applications that still call this function.
-#' Patch 69 saves mappings directly, so there is no publication step.
-#' @param con AquaCache database connection.
-#' @param source_code Source code whose mappings were saved.
-#' @param profile_code Optional profile scope.
-#' @return Invisibly returns `NULL`.
-#' @export
-publishImportMappings <- function(con, source_code, profile_code = NULL) {
-  warning(
-    "Patch 69 saves import mappings immediately; no publish step is required.",
-    call. = FALSE
-  )
-  invisible(NULL)
-}
-
-#' Validate the legacy mapping publication argument
-#'
-#' Direct mapping writes require `publish = TRUE`; staged publication was
-#' removed in Patch 69.
-#' @param publish One non-missing logical value.
-#' @return Invisibly, `TRUE` when the compatibility argument is valid.
-#' @noRd
-#' @keywords internal
-import_mapping_validate_publish <- function(publish) {
-  if (!is.logical(publish) || length(publish) != 1L || is.na(publish)) {
-    stop("'publish' must be TRUE or FALSE.")
-  }
-  if (!publish) {
-    stop(
-      "Staged mapping edits were removed in Patch 69; save directly with publish = TRUE.",
-      call. = FALSE
-    )
-  }
-  invisible(publish)
-}
-
 #' List current parameter mappings
 #'
 #' Returns source-wide mappings and, when requested, the matching profile
@@ -198,28 +160,15 @@ import_mapping_validate_publish <- function(publish) {
 #' @param source_code Optional source code.
 #' @param profile_code Optional profile code; requires `source_code`.
 #' @param active Optional active filter. Use `NULL` for all rows.
-#' @param import_mapping_set_id Legacy argument; supplying it is an error.
-#' @param include_draft Legacy compatibility argument; all current rows are live.
+#' @details Requires AquaCache database Patch 72 or later.
 #' @return A data.frame of current parameter mappings.
 #' @export
 getImportParameterMappings <- function(
   con,
   source_code = NULL,
   profile_code = NULL,
-  active = TRUE,
-  import_mapping_set_id = NULL,
-  include_draft = FALSE
+  active = TRUE
 ) {
-  if (!is.null(import_mapping_set_id)) {
-    stop("Mapping-set IDs are historical only after Patch 69.", call. = FALSE)
-  }
-  if (
-    !is.logical(include_draft) ||
-      length(include_draft) != 1L ||
-      is.na(include_draft)
-  ) {
-    stop("'include_draft' must be TRUE or FALSE.")
-  }
   if (!is.null(profile_code) && is.null(source_code)) {
     stop("'source_code' is required when 'profile_code' is supplied.")
   }
@@ -251,10 +200,12 @@ getImportParameterMappings <- function(
     paste0(
       "SELECT m.import_mapping_id, m.import_source_id, s.source_code, s.source_name,
               m.import_profile_id, p.profile_code, p.profile_name,
-              m.source_match::text AS source_match, m.parameter_id, m.result_type,
-              m.sample_fraction_id, m.result_value_type, m.reporting_basis_id,
+              m.source_match::text AS source_match, m.parameter_id,
+              m.result_type_id, m.sample_fraction_id,
+              m.result_value_type_id, m.reporting_basis_id,
               m.result_speciation_id, m.result_target_id, m.endpoint_mode,
               m.endpoint_ph, m.analysis_conditions::text AS analysis_conditions,
+              m.protocol_method_id,
               m.matrix_state_id, m.conversion, m.result_offset, m.priority,
               m.active, m.note,
               (m.import_profile_id IS NOT NULL) AS profile_specific
@@ -279,7 +230,9 @@ getImportParameterMappings <- function(
 #' @param source_name Human-readable source name.
 #' @param source_description Optional source description.
 #' @param target_columns Target-field column map.
-#' @param publish Compatibility argument. Must be `TRUE`; staged edits were removed.
+#' @details Supply `protocol_method_id` (a protocol ID or name) to assign a
+#'   protocol to imported results. An explicit missing value clears the
+#'   assignment. Omitting the column preserves an existing assignment.
 #' @return Invisibly returns resolved mapping rows.
 #' @export
 upsertImportParameterMappings <- function(
@@ -290,10 +243,8 @@ upsertImportParameterMappings <- function(
   source_name = source_code,
   source_description = NULL,
   target_columns = import_mapping_default_target_columns(),
-  profile_code = NULL,
-  publish = TRUE
+  profile_code = NULL
 ) {
-  import_mapping_validate_publish(publish)
   if (
     !is.character(match_columns) ||
       !length(match_columns) ||
@@ -313,6 +264,11 @@ upsertImportParameterMappings <- function(
     )
   }
   mappings <- data.table::as.data.table(mappings)
+  protocol_columns <- utils::modifyList(
+    import_mapping_default_target_columns(),
+    target_columns
+  )$protocol_method_id
+  set_protocol <- any(protocol_columns %in% names(mappings))
   if ("ignore" %in% names(mappings)) {
     ignored <- import_mapping_as_logical(mappings$ignore)
     mappings <- mappings[is.na(ignored) | !ignored]
@@ -352,19 +308,19 @@ upsertImportParameterMappings <- function(
           con,
           "INSERT INTO discrete.import_parameter_mappings (
            import_source_id, import_profile_id, source_match, parameter_id,
-           result_type, sample_fraction_id, result_value_type, reporting_basis_id,
+           result_type_id, sample_fraction_id, result_value_type_id, reporting_basis_id,
            result_speciation_id, result_target_id, endpoint_mode, endpoint_ph,
            matrix_state_id, conversion, result_offset, priority, active, note,
-           analysis_conditions
+           analysis_conditions, protocol_method_id
          ) VALUES (
            $1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-           $14, $15, $16, $17, $18, $19::jsonb
+           $14, $15, $16, $17, $18, $19::jsonb, $20
          )
          ON CONFLICT (import_source_id, import_profile_id, source_match)
          DO UPDATE SET parameter_id = EXCLUDED.parameter_id,
-           result_type = EXCLUDED.result_type,
+           result_type_id = EXCLUDED.result_type_id,
            sample_fraction_id = EXCLUDED.sample_fraction_id,
-           result_value_type = EXCLUDED.result_value_type,
+           result_value_type_id = EXCLUDED.result_value_type_id,
            reporting_basis_id = EXCLUDED.reporting_basis_id,
            result_speciation_id = EXCLUDED.result_speciation_id,
            result_target_id = EXCLUDED.result_target_id,
@@ -376,15 +332,17 @@ upsertImportParameterMappings <- function(
            priority = EXCLUDED.priority,
            active = EXCLUDED.active,
            note = EXCLUDED.note,
-           analysis_conditions = EXCLUDED.analysis_conditions",
+           analysis_conditions = EXCLUDED.analysis_conditions,
+           protocol_method_id = CASE WHEN $21::boolean THEN EXCLUDED.protocol_method_id
+             ELSE import_parameter_mappings.protocol_method_id END",
           params = list(
             as.integer(source_id),
             profile_id,
             source_match,
             resolved$parameter_id[[i]],
-            resolved$result_type[[i]],
+            resolved$result_type_id[[i]],
             resolved$sample_fraction_id[[i]],
-            resolved$result_value_type[[i]],
+            resolved$result_value_type_id[[i]],
             resolved$reporting_basis_id[[i]],
             resolved$result_speciation_id[[i]],
             resolved$result_target_id[[i]],
@@ -396,7 +354,9 @@ upsertImportParameterMappings <- function(
             resolved$priority[[i]],
             isTRUE(resolved$active[[i]]),
             resolved$note[[i]],
-            resolved$analysis_conditions[[i]]
+            resolved$analysis_conditions[[i]],
+            resolved$protocol_method_id[[i]],
+            set_protocol
           )
         )
       }
@@ -487,25 +447,25 @@ upsertImportProfile <- function(
     "location_id",
     "sub_location_id",
     "media_id",
-    "z",
+    "depth_height_m",
     "datetime",
-    "sample_type",
-    "collection_method"
+    "sample_type_id",
+    "collection_method_id"
   ),
   result_identity = c(
-    "result_type",
+    "result_type_id",
     "parameter_id",
     "matrix_state_id",
     "sample_fraction_id",
-    "result_value_type",
+    "result_value_type_id",
     "reporting_basis_id",
     "result_speciation_id",
     "result_target_id",
     "endpoint_mode",
     "endpoint_ph",
     "analysis_conditions",
-    "protocol_method",
-    "laboratory",
+    "protocol_method_id",
+    "lab_id",
     "analysis_datetime"
   ),
   validation_rules = list(),
@@ -545,14 +505,14 @@ upsertImportProfile <- function(
 
   typed_default_names <- c(
     "media_id",
-    "collection_method",
-    "sample_type",
+    "collection_method_id",
+    "sample_type_id",
     "owner",
     "contributor",
-    "laboratory",
-    "result_type",
+    "lab_id",
+    "result_type_id",
     "matrix_state_id",
-    "result_value_type",
+    "result_value_type_id",
     "grade_type_id",
     "approval_type_id",
     "sample_no_source_update",
@@ -694,14 +654,14 @@ upsertImportProfile <- function(
       isTRUE(active),
       note,
       as.integer(typed_value("media_id")),
-      as.integer(typed_value("collection_method")),
-      as.integer(typed_value("sample_type")),
+      as.integer(typed_value("collection_method_id")),
+      as.integer(typed_value("sample_type_id")),
       as.integer(typed_value("owner")),
       as.integer(typed_value("contributor")),
-      as.integer(typed_value("laboratory")),
-      as.integer(typed_value("result_type")),
+      as.integer(typed_value("lab_id")),
+      as.integer(typed_value("result_type_id")),
       as.integer(typed_value("matrix_state_id")),
-      as.integer(typed_value("result_value_type")),
+      as.integer(typed_value("result_value_type_id")),
       as.integer(typed_value("grade_type_id")),
       as.integer(typed_value("approval_type_id")),
       isTRUE(typed_value("sample_no_source_update", FALSE)),
@@ -778,14 +738,14 @@ getImportProfiles <- function(
        jsonb_strip_nulls(
          p.defaults || jsonb_build_object(
            'media_id', p.media_id,
-           'collection_method', p.collection_method_id,
-           'sample_type', p.sample_type_id,
+           'collection_method_id', p.collection_method_id,
+           'sample_type_id', p.sample_type_id,
            'owner', p.owner_organization_id,
            'contributor', p.contributor_organization_id,
-           'laboratory', p.laboratory_id,
-           'result_type', p.result_type_id,
+           'lab_id', p.laboratory_id,
+           'result_type_id', p.result_type_id,
            'matrix_state_id', p.matrix_state_id,
-           'result_value_type', p.result_value_type_id,
+           'result_value_type_id', p.result_value_type_id,
            'grade_type_id', p.grade_type_id,
            'approval_type_id', p.approval_type_id,
            'sample_no_source_update', p.sample_no_source_update,
@@ -832,7 +792,6 @@ getImportProfiles <- function(
 #' @inheritParams getImportParameterMappings
 #' @param mappings Result-flag mapping rows.
 #' @param source_name Human-readable source name.
-#' @param publish Compatibility argument. Must be `TRUE`; staged edits were removed.
 #' @return Invisibly returns the normalized mappings.
 #' @export
 upsertImportResultFlagMappings <- function(
@@ -840,10 +799,8 @@ upsertImportResultFlagMappings <- function(
   source_code,
   mappings,
   profile_code = NULL,
-  source_name = source_code,
-  publish = TRUE
+  source_name = source_code
 ) {
-  import_mapping_validate_publish(publish)
   mappings <- data.table::copy(data.table::as.data.table(mappings))
   if (!"source_flag_value" %in% names(mappings)) {
     stop("Missing result-flag mapping column: source_flag_value")
@@ -950,16 +907,8 @@ getImportResultFlagMappings <- function(
   con,
   source_code = NULL,
   profile_code = NULL,
-  active = TRUE,
-  include_draft = FALSE
+  active = TRUE
 ) {
-  if (
-    !is.logical(include_draft) ||
-      length(include_draft) != 1L ||
-      is.na(include_draft)
-  ) {
-    stop("'include_draft' must be TRUE or FALSE.")
-  }
   if (!is.null(profile_code) && is.null(source_code)) {
     stop("'source_code' is required when 'profile_code' is supplied.")
   }
@@ -1079,7 +1028,6 @@ resolveImportResultFlagMapping <- function(
 #'   `location_id`. Optional `project_id` scopes a mapping to that project; NA
 #'   creates a project-free fallback. Requires database Patch 72 or later.
 #' @param source_name Human-readable source name.
-#' @param publish Compatibility argument. Must be `TRUE`; staged edits were removed.
 #' @return Invisibly returns the normalized mappings.
 #' @export
 upsertImportLocationMappings <- function(
@@ -1087,10 +1035,8 @@ upsertImportLocationMappings <- function(
   source_code,
   mappings,
   profile_code = NULL,
-  source_name = source_code,
-  publish = TRUE
+  source_name = source_code
 ) {
-  import_mapping_validate_publish(publish)
   mappings <- data.table::copy(data.table::as.data.table(mappings))
   required <- c("source_location_code", "location_id")
   missing <- setdiff(required, names(mappings))
@@ -1196,16 +1142,8 @@ getImportLocationMappings <- function(
   source_code = NULL,
   profile_code = NULL,
   active = TRUE,
-  include_draft = FALSE,
   project_id = NULL
 ) {
-  if (
-    !is.logical(include_draft) ||
-      length(include_draft) != 1L ||
-      is.na(include_draft)
-  ) {
-    stop("'include_draft' must be TRUE or FALSE.")
-  }
   if (!is.null(profile_code) && is.null(source_code)) {
     stop("'source_code' is required when 'profile_code' is supplied.")
   }
@@ -1305,12 +1243,6 @@ resolveImportLocationMapping <- function(
   ]
   if (!nrow(hit)) {
     return(hit)
-  }
-  if (!"project_id" %in% names(hit)) {
-    hit$project_id <- NA_integer_
-  }
-  if (!"profile_specific" %in% names(hit)) {
-    hit$profile_specific <- FALSE
   }
   if (!is.null(project_id)) {
     if (length(project_id) != 1L) {
@@ -1450,21 +1382,6 @@ createImportRun <- function(
       }
     )
   )$import_run_id[[1]]
-}
-
-#' Reject removed per-result import-run rows
-#'
-#' Result provenance is now stored directly on `discrete.results.import_run_id`.
-#' @param con AquaCache database connection.
-#' @param import_run_id Import run ID.
-#' @param rows Former row-level import audit data.
-#' @return Never returns; this compatibility entry point always errors.
-#' @export
-appendImportRunRows <- function(con, import_run_id, rows) {
-  stop(
-    "Per-result import-run rows were removed in Patch 69. Store import_run_id on each inserted result.",
-    call. = FALSE
-  )
 }
 
 #' Complete a discrete import run
@@ -1652,16 +1569,16 @@ import_mapping_read_input <- function(mappings) {
 #' Default target columns for import mappings
 #'
 #' @description
-#' Provides the default candidate column names for each AquaCache target field in import mappings. This function returns a named list where each name corresponds to an AquaCache target field (e.g., `parameter`, `result_type`, `sample_fraction`, `result_value_type`, `reporting_basis`, `matrix_state`) and each value is a character vector of candidate column names that the `import_mapping_resolve_targets()` function will look for in the input mapping table to identify the source of the target values. Users can override these defaults by providing a custom `target_columns` argument to the `upsertImportParameterMappings()` function.
+#' Provides the default candidate column names for each AquaCache target field in import mappings. This function returns a named list where each name corresponds to an AquaCache target field (e.g., `parameter`, `result_type_id`, `sample_fraction`, `result_value_type_id`, `reporting_basis`, `matrix_state`) and each value is a character vector of candidate column names that the `import_mapping_resolve_targets()` function will look for in the input mapping table to identify the source of the target values. Users can override these defaults by providing a custom `target_columns` argument to the `upsertImportParameterMappings()` function.
 #' @return A named list of default target column candidates for import mappings.
 #' @keywords internal
 #' @noRd
 import_mapping_default_target_columns <- function() {
   list(
     parameter = c("parameter_id", "parameter", "param_name"),
-    result_type = c("result_type", "result_type_id"),
+    result_type_id = "result_type_id",
     sample_fraction = c("sample_fraction_id", "sample_fraction"),
-    result_value_type = c("result_value_type", "result_value_type_id"),
+    result_value_type_id = "result_value_type_id",
     reporting_basis = c(
       "reporting_basis_id",
       "reporting_basis",
@@ -1677,18 +1594,19 @@ import_mapping_default_target_columns <- function() {
       "result_target",
       "result_target_code"
     ),
-    matrix_state = c("matrix_state_id", "matrix_state")
+    matrix_state = c("matrix_state_id", "matrix_state"),
+    protocol_method_id = "protocol_method_id"
   )
 }
 
 #' Resolve import mapping target IDs
 #'
 #' @description
-#' Resolves the target IDs for an import mapping table by looking up the corresponding values in the database. For example, it resolves `parameter_id` by looking up the `parameter` name in the `public.parameters` table, resolves `result_type` by looking up the `result_type` name in the `discrete.result_types` table, and so on. The function also handles various input formats for the target values, such as allowing either IDs or names, and converting logical values to IDs when appropriate. The resolved target IDs are added as new columns to the mapping table, and the function returns the updated table.
+#' Resolves the target IDs for an import mapping table by looking up the corresponding values in the database. For example, it resolves `parameter_id` by looking up the `parameter` name in the `public.parameters` table, resolves `result_type_id` by looking up the result type label in the `discrete.result_types` table, and so on. The function also handles various input formats for the target values, such as allowing either IDs or names, and converting logical values to IDs when appropriate. The resolved target IDs are added as new columns to the mapping table, and the function returns the updated table.
 #' @param con A connection to the AquaCache database.
 #' @param mappings A data.table of import mappings for a given source, with an additional list column `source_match_values` containing the parsed JSON values of the `source_match` column.
-#' @param target_columns A named list overriding which columns contain AquaCache target values. Names can include `parameter`, `result_type`, `sample_fraction`, `result_value_type`, `reporting_basis`, and `matrix_state`. Each element should be a character vector of candidate column names to look for in the `mappings` table for that target.
-#' @return The input `mappings` data.table with additional columns for the resolved target IDs, such as `parameter_id`, `result_type`, `sample_fraction_id`, `result_value_type_id`, `reporting_basis_id`, and `matrix_state_id`.
+#' @param target_columns A named list overriding which columns contain AquaCache target values. Names can include `parameter`, `result_type_id`, `sample_fraction`, `result_value_type_id`, `reporting_basis`, `matrix_state`, and `protocol_method_id`. Each element should be a character vector of candidate column names to look for in the `mappings` table for that target.
+#' @return The input `mappings` data.table with additional columns for the resolved target IDs, such as `parameter_id`, `result_type_id`, `sample_fraction_id`, `result_value_type_id`, `reporting_basis_id`, and `matrix_state_id`.
 #' @keywords internal
 #' @noRd
 import_mapping_resolve_targets <- function(
@@ -1812,13 +1730,13 @@ import_mapping_resolve_targets <- function(
     )
   ]
   result[,
-    result_type := import_mapping_resolve_lookup_vector(
+    result_type_id := import_mapping_resolve_lookup_vector(
       con,
-      import_mapping_column(result, target_columns$result_type),
+      import_mapping_column(result, target_columns$result_type_id),
       "result_type_id",
       "discrete.result_types",
-      c("result_type"),
       "result_type",
+      "result_type_id",
       allow_na = FALSE
     )
   ]
@@ -1834,13 +1752,13 @@ import_mapping_resolve_targets <- function(
     )
   ]
   result[,
-    result_value_type := import_mapping_resolve_lookup_vector(
+    result_value_type_id := import_mapping_resolve_lookup_vector(
       con,
-      import_mapping_column(result, target_columns$result_value_type),
+      import_mapping_column(result, target_columns$result_value_type_id),
       "result_value_type_id",
       "discrete.result_value_types",
-      c("result_value_type"),
       "result_value_type",
+      "result_value_type_id",
       allow_na = TRUE
     )
   ]
@@ -1852,6 +1770,17 @@ import_mapping_resolve_targets <- function(
       "discrete.reporting_bases",
       c("reporting_basis", "reporting_basis_code"),
       "reporting_basis",
+      allow_na = TRUE
+    )
+  ]
+  result[,
+    protocol_method_id := import_mapping_resolve_lookup_vector(
+      con,
+      import_mapping_column(result, target_columns$protocol_method_id),
+      "protocol_method_id",
+      "discrete.protocols_methods",
+      "protocol_name",
+      "protocol_method_id",
       allow_na = TRUE
     )
   ]
@@ -1966,7 +1895,7 @@ import_mapping_resolve_targets <- function(
 #' Extract a column from the import mapping table based on candidate column names
 #'
 #' @description
-#' Extracts a column from the import mapping table by checking for the presence of candidate column names. The function takes a data.table and a character vector of candidate column names, and returns the  first column that matches one of the candidate names. If none of the candidate columns are found in the data.table, it returns a character vector of NA values with the same length as the number of rows in the data.table. This is used to flexibly identify which column in the input mapping table corresponds to a given target field (e.g., parameter, result_type) based on common naming conventions.
+#' Extracts a column from the import mapping table by checking for the presence of candidate column names. The function takes a data.table and a character vector of candidate column names, and returns the  first column that matches one of the candidate names. If none of the candidate columns are found in the data.table, it returns a character vector of NA values with the same length as the number of rows in the data.table. This is used to flexibly identify which column in the input mapping table corresponds to a given target field (e.g., parameter, result_type_id) based on common naming conventions.
 #' @param x A data.table containing the import mappings.
 #' @param candidates A character vector of candidate column names to look for in the data.table.
 #' @return A character vector containing the values from the first matching column, or NA if no matching column is found.
@@ -2114,7 +2043,7 @@ import_mapping_resolve_match <- function(mappings, source_match) {
     function(criteria) {
       criteria_names <- names(criteria)
       # The editor namespaces original source columns to distinguish them from
-      # assigned AquaCache fields, including result_type and sample_fraction.
+      # assigned AquaCache fields, including result_type_id and sample_fraction.
       source_names <- criteria_names
       original_names <- startsWith(criteria_names, "source.") &
         !criteria_names %in% names(source_match)
@@ -2143,11 +2072,6 @@ import_mapping_resolve_match <- function(mappings, source_match) {
   }
 
   matched <- mappings[hits]
-  # Hand-built or legacy mapping tables may not carry profile scope. Treat
-  # those rows as source-wide mappings, which rank below profile overrides.
-  if (!("profile_specific" %in% names(matched))) {
-    matched[, profile_specific := FALSE]
-  }
   data.table::setorder(
     matched,
     -profile_specific,

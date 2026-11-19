@@ -12,8 +12,7 @@ upsertImportParameterMappings(
   source_name = source_code,
   source_description = NULL,
   target_columns = import_mapping_default_target_columns(),
-  profile_code = NULL,
-  publish = TRUE
+  profile_code = NULL
 )
 }
 \arguments{
@@ -32,12 +31,15 @@ upsertImportParameterMappings(
 \item{target_columns}{Target-field column map.}
 
 \item{profile_code}{Optional profile code; requires \code{source_code}.}
-
-\item{publish}{Compatibility argument. Must be \code{TRUE}; staged edits were removed.}
 }
 \value{
 Invisibly returns resolved mapping rows.
 }
 \description{
 Add or update parameter mappings immediately
+}
+\details{
+Supply \code{protocol_method_id} (a protocol ID or name) to assign a
+protocol to imported results. An explicit missing value clears the
+assignment. Omitting the column preserves an existing assignment.
 }

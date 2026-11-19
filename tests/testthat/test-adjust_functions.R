@@ -113,7 +113,7 @@ test_that("adjust_qualifier merges a qualifier repeated across rank streams", {
   DBI::dbExecute(
     con,
     "INSERT INTO continuous.qualifiers
-       (timeseries_id, qualifier_type_id, start_dt, end_dt)
+       (timeseries_id, qualifier_type_id, start_datetime, end_datetime)
      VALUES
        ($1, $2, '2099-01-01 00:00:00+00', '2099-01-10 00:00:00+00'),
        ($1, $3, '2099-01-01 00:00:00+00', '2099-01-10 00:00:00+00'),
@@ -146,12 +146,12 @@ test_that("adjust_qualifier merges a qualifier repeated across rank streams", {
 
   qualifier_b_out <- DBI::dbGetQuery(
     con,
-    "SELECT start_dt, end_dt
+    "SELECT start_datetime AS start_dt, end_datetime AS end_dt
        FROM continuous.qualifiers
       WHERE timeseries_id = $1
         AND qualifier_type_id = $2
-        AND start_dt >= '2099-01-01 00:00:00+00'
-        AND end_dt <= '2099-01-10 00:00:00+00'
+        AND start_datetime >= '2099-01-01 00:00:00+00'
+        AND end_datetime <= '2099-01-10 00:00:00+00'
       ORDER BY start_dt;",
     params = list(ts_id, qualifier_b)
   )
@@ -168,12 +168,12 @@ test_that("adjust_qualifier merges a qualifier repeated across rank streams", {
 
   qualifier_a_out <- DBI::dbGetQuery(
     con,
-    "SELECT start_dt, end_dt
+    "SELECT start_datetime AS start_dt, end_datetime AS end_dt
        FROM continuous.qualifiers
       WHERE timeseries_id = $1
         AND qualifier_type_id = $2
-        AND start_dt >= '2099-01-01 00:00:00+00'
-        AND end_dt <= '2099-01-10 00:00:00+00'
+        AND start_datetime >= '2099-01-01 00:00:00+00'
+        AND end_datetime <= '2099-01-10 00:00:00+00'
       ORDER BY start_dt;",
     params = list(ts_id, qualifier_a)
   )
@@ -190,11 +190,11 @@ test_that("adjust_qualifier merges a qualifier repeated across rank streams", {
 
   ids_after_first_adjustment <- DBI::dbGetQuery(
     con,
-    "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt
+    "SELECT qualifier_id, qualifier_type_id, start_datetime AS start_dt, end_datetime AS end_dt
        FROM continuous.qualifiers
       WHERE timeseries_id = $1
-        AND start_dt >= '2099-01-01 00:00:00+00'
-        AND end_dt <= '2099-01-10 00:00:00+00'
+        AND start_datetime >= '2099-01-01 00:00:00+00'
+        AND end_datetime <= '2099-01-10 00:00:00+00'
       ORDER BY qualifier_type_id, start_dt, end_dt;",
     params = list(ts_id)
   )
@@ -206,11 +206,11 @@ test_that("adjust_qualifier merges a qualifier repeated across rank streams", {
 
   ids_after_second_adjustment <- DBI::dbGetQuery(
     con,
-    "SELECT qualifier_id, qualifier_type_id, start_dt, end_dt
+    "SELECT qualifier_id, qualifier_type_id, start_datetime AS start_dt, end_datetime AS end_dt
        FROM continuous.qualifiers
       WHERE timeseries_id = $1
-        AND start_dt >= '2099-01-01 00:00:00+00'
-        AND end_dt <= '2099-01-10 00:00:00+00'
+        AND start_datetime >= '2099-01-01 00:00:00+00'
+        AND end_datetime <= '2099-01-10 00:00:00+00'
       ORDER BY qualifier_type_id, start_dt, end_dt;",
     params = list(ts_id)
   )
@@ -239,7 +239,7 @@ test_that("adjust_owner maps organization names and updates owner segments", {
     con,
     sprintf(
       paste0(
-        "INSERT INTO continuous.owners (timeseries_id, organization_id, start_dt, end_dt) VALUES ",
+        "INSERT INTO continuous.owners (timeseries_id, organization_id, start_datetime, end_datetime) VALUES ",
         "(%d, %d, '2099-01-01 00:00:00+00', '2099-01-04 00:00:00+00'),",
         "(%d, %d, '2099-01-04 00:00:00+00', '2099-01-10 00:00:00+00');"
       ),
@@ -270,10 +270,10 @@ test_that("adjust_owner maps organization names and updates owner segments", {
     con,
     sprintf(
       paste0(
-        "SELECT organization_id, start_dt::text AS start_dt, end_dt::text AS end_dt ",
+        "SELECT organization_id, start_datetime::text AS start_dt, end_datetime::text AS end_dt ",
         "FROM continuous.owners WHERE timeseries_id = %d ",
-        "AND start_dt >= '2099-01-01 00:00:00+00' ",
-        "AND end_dt <= '2099-01-10 00:00:00+00' ORDER BY start_dt;"
+        "AND start_datetime >= '2099-01-01 00:00:00+00' ",
+        "AND end_datetime <= '2099-01-10 00:00:00+00' ORDER BY start_dt;"
       ),
       ts_id
     )
@@ -309,7 +309,7 @@ test_that("adjust_contributor accepts date column and delete removes later segme
     con,
     sprintf(
       paste0(
-        "INSERT INTO continuous.contributors (timeseries_id, organization_id, start_dt, end_dt) VALUES ",
+        "INSERT INTO continuous.contributors (timeseries_id, organization_id, start_datetime, end_datetime) VALUES ",
         "(%d, %d, '2099-02-01 00:00:00+00', '2099-02-03 00:00:00+00'),",
         "(%d, %d, '2099-02-03 00:00:00+00', '2099-02-10 00:00:00+00');"
       ),
@@ -332,10 +332,10 @@ test_that("adjust_contributor accepts date column and delete removes later segme
     con,
     sprintf(
       paste0(
-        "SELECT organization_id, start_dt::text AS start_dt, end_dt::text AS end_dt ",
+        "SELECT organization_id, start_datetime::text AS start_dt, end_datetime::text AS end_dt ",
         "FROM continuous.contributors WHERE timeseries_id = %d ",
-        "AND start_dt >= '2099-02-01 00:00:00+00' ",
-        "AND end_dt <= '2099-02-10 00:00:00+00' ORDER BY start_dt;"
+        "AND start_datetime >= '2099-02-01 00:00:00+00' ",
+        "AND end_datetime <= '2099-02-10 00:00:00+00' ORDER BY start_dt;"
       ),
       ts_id
     )
@@ -378,7 +378,7 @@ test_that("adjust_grade splits an existing contiguous period when inserting a mi
     con,
     sprintf(
       paste0(
-        "INSERT INTO continuous.grades (timeseries_id, grade_type_id, start_dt, end_dt) VALUES ",
+        "INSERT INTO continuous.grades (timeseries_id, grade_type_id, start_datetime, end_datetime) VALUES ",
         "(%d, %d, '2099-01-01 00:00:00+00', '2099-04-01 00:00:00+00');"
       ),
       ts_id,
@@ -400,10 +400,10 @@ test_that("adjust_grade splits an existing contiguous period when inserting a mi
     con,
     sprintf(
       paste0(
-        "SELECT grade_type_id, start_dt::text AS start_dt, end_dt::text AS end_dt ",
+        "SELECT grade_type_id, start_datetime::text AS start_dt, end_datetime::text AS end_dt ",
         "FROM continuous.grades WHERE timeseries_id = %d ",
-        "AND start_dt >= '2099-01-01 00:00:00+00' ",
-        "AND end_dt <= '2099-04-01 00:00:00+00' ORDER BY start_dt;"
+        "AND start_datetime >= '2099-01-01 00:00:00+00' ",
+        "AND end_datetime <= '2099-04-01 00:00:00+00' ORDER BY start_dt;"
       ),
       ts_id
     )
@@ -438,8 +438,8 @@ test_that("adjust_note validates explicit note intervals before connecting", {
       1L,
       data.frame(
         note = "",
-        start_dt = as.POSIXct("2026-01-01", tz = "UTC"),
-        end_dt = as.POSIXct("2026-01-02", tz = "UTC")
+        start_datetime = as.POSIXct("2026-01-01", tz = "UTC"),
+        end_datetime = as.POSIXct("2026-01-02", tz = "UTC")
       )
     ),
     "non-blank text"
@@ -451,11 +451,11 @@ test_that("adjust_note validates explicit note intervals before connecting", {
       1L,
       data.frame(
         note = "Range is reversed",
-        start_dt = as.POSIXct("2026-01-02", tz = "UTC"),
-        end_dt = as.POSIXct("2026-01-01", tz = "UTC")
+        start_datetime = as.POSIXct("2026-01-02", tz = "UTC"),
+        end_datetime = as.POSIXct("2026-01-01", tz = "UTC")
       )
     ),
-    "start_dt <= end_dt",
+    "start_datetime <= end_datetime",
     fixed = TRUE
   )
 
@@ -466,8 +466,8 @@ test_that("adjust_note validates explicit note intervals before connecting", {
       data.frame(
         note_id = 1.5,
         note = "Invalid identifier",
-        start_dt = as.POSIXct("2026-01-01", tz = "UTC"),
-        end_dt = as.POSIXct("2026-01-02", tz = "UTC")
+        start_datetime = as.POSIXct("2026-01-01", tz = "UTC"),
+        end_datetime = as.POSIXct("2026-01-02", tz = "UTC")
       )
     ),
     "positive integer",
@@ -485,8 +485,8 @@ test_that("adjust_note inserts a validated explicit interval", {
       return(data.frame(
         note_id = integer(),
         note = character(),
-        start_dt = as.POSIXct(character(), tz = "UTC"),
-        end_dt = as.POSIXct(character(), tz = "UTC"),
+        start_datetime = as.POSIXct(character(), tz = "UTC"),
+        end_datetime = as.POSIXct(character(), tz = "UTC"),
         no_source_update = logical()
       ))
     }
@@ -504,8 +504,8 @@ test_that("adjust_note inserts a validated explicit interval", {
         17L,
         data.frame(
           note = "Ice affected",
-          start_dt = as.POSIXct("2026-01-01", tz = "UTC"),
-          end_dt = as.POSIXct("2026-01-15", tz = "UTC")
+          start_datetime = as.POSIXct("2026-01-01", tz = "UTC"),
+          end_datetime = as.POSIXct("2026-01-15", tz = "UTC")
         )
       ),
       dbGetQuery = fake_db_get_query,
@@ -567,8 +567,8 @@ test_that("adjust_note inserts overlapping notes and updates by note_id", {
     data.frame(
       note_id = inserted_ids[[1L]],
       note = "Ice affected; interpret cautiously",
-      start_dt = as.POSIXct("2099-01-01", tz = "UTC"),
-      end_dt = as.POSIXct("2099-01-12", tz = "UTC"),
+      start_datetime = as.POSIXct("2099-01-01", tz = "UTC"),
+      end_datetime = as.POSIXct("2099-01-12", tz = "UTC"),
       no_source_update = TRUE
     )
   )

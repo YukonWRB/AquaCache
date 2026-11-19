@@ -27,5 +27,5 @@ A named list containing the effective configuration.
 The returned object is suitable for storage once on an import-run row. It
 contains the selected parser profile, source-wide analyte exclusions, both
 applicable mapping scopes, and upload-specific parsing options. Requires
-database Patch 71 or later.
+database Patch 72 or later.
 }

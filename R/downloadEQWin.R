@@ -36,8 +36,8 @@
 #' @param unknown_time_local Local-time value assigned to collection datetimes
 #'   stored by EQWin as midnight, which commonly indicates an unknown time.
 #' @param media_id Optional AquaCache media ID override.
-#' @param collection_method Optional AquaCache collection method ID override.
-#' @param sample_type Optional AquaCache sample type ID override.
+#' @param collection_method_id Optional AquaCache collection method ID override.
+#' @param sample_type_id Optional AquaCache sample type ID override.
 #' @param mode `"data"` returns samples/results for import. `"missing_mappings"`
 #'   returns EQWin parameter/unit combinations in the requested data that do not
 #'   have a complete database import mapping.
@@ -57,8 +57,8 @@ downloadEQWin <- function(
   tz = "MST",
   unknown_time_local = "12:00:00",
   media_id = NULL,
-  collection_method = NULL,
-  sample_type = NULL,
+  collection_method_id = NULL,
+  sample_type_id = NULL,
   mode = c("data", "missing_mappings")
 ) {
   mode <- match.arg(mode)
@@ -182,8 +182,8 @@ downloadEQWin <- function(
     con = con,
     stn_type = station$StnType[[1]],
     media_id = media_id,
-    collection_method = collection_method,
-    sample_type = sample_type
+    collection_method_id = collection_method_id,
+    sample_type_id = sample_type_id
   )
 
   result_conditions <- DBI::dbGetQuery(
@@ -222,7 +222,10 @@ downloadEQWin <- function(
       source_row <- sample_results[j]
       param_row <- import_mapping_resolve_match(
         mapping,
-        utils::modifyList(as.list(source_row), list(input_unit = source_row$Units[[1]]))
+        utils::modifyList(
+          as.list(source_row),
+          list(input_unit = source_row$Units[[1]])
+        )
       )
       if (is.null(param_row) || is.na(param_row$parameter_id[[1]])) {
         next
@@ -248,13 +251,14 @@ downloadEQWin <- function(
 
       result_i <- result_i + 1L
       result_rows[[result_i]] <- data.frame(
-        result_type = param_row$result_type[[1]],
+        result_type_id = param_row$result_type_id[[1]],
         parameter_id = param_row$parameter_id[[1]],
+        protocol_method_id = param_row$protocol_method_id[[1]],
         sample_fraction_id = param_row$sample_fraction_id[[1]],
         result = parsed$result,
-        result_condition = parsed$result_condition,
+        result_condition_id = parsed$result_condition_id,
         result_condition_value = parsed$result_condition_value,
-        result_value_type = param_row$result_value_type[[1]],
+        result_value_type_id = param_row$result_value_type_id[[1]],
         reporting_basis_id = param_row$reporting_basis_id[[1]],
         result_speciation_id = param_row$result_speciation_id[[1]],
         result_target_id = param_row$result_target_id[[1]],
@@ -298,8 +302,8 @@ downloadEQWin <- function(
           tz = tz,
           unknown_time_local = unknown_time_local
         ),
-        collection_method = defaults$collection_method,
-        sample_type = sample_type_i,
+        collection_method_id = defaults$collection_method_id,
+        sample_type_id = sample_type_i,
         external_sample_id = paste0(
           eqwin_source_namespace,
           "-",
@@ -344,8 +348,12 @@ eqwin_connection_cache_new <- function() {
 }
 
 eqwin_connection_cache_get <- function(cache, EQpath) {
-  if (is.null(EQpath) || length(EQpath) == 0 || is.na(EQpath[[1]]) ||
-      !nzchar(EQpath[[1]])) {
+  if (
+    is.null(EQpath) ||
+      length(EQpath) == 0 ||
+      is.na(EQpath[[1]]) ||
+      !nzchar(EQpath[[1]])
+  ) {
     return(NULL)
   }
 
@@ -362,8 +370,10 @@ eqwin_connection_cache_get <- function(cache, EQpath) {
   }
 
   con <- AccessConnect(path, silent = TRUE)
-  if (is.null(con) ||
-      !isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))) {
+  if (
+    is.null(con) ||
+      !isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))
+  ) {
     stop("Could not connect to EQWin database at '", path, "'.")
   }
   cache$connections[[path]] <- con
@@ -458,23 +468,38 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     by = "SampleId",
     all.x = TRUE
   )
-  source[, ParamCode := data.table::fifelse(is.na(ParamCode), "", as.character(ParamCode))]
-  source[, input_unit := data.table::fifelse(is.na(Units), "", as.character(Units))]
+  source[,
+    ParamCode := data.table::fifelse(
+      is.na(ParamCode),
+      "",
+      as.character(ParamCode)
+    )
+  ]
+  source[,
+    input_unit := data.table::fifelse(is.na(Units), "", as.character(Units))
+  ]
   source <- source[nzchar(ParamCode)]
   if (nrow(source) == 0L) {
     return(empty_report)
   }
 
-  match_columns <- import_mapping_source_columns(mapping, source, c("ParamCode", "input_unit"))
-  report <- source[, .(
-    ParamDesc = collapse_non_missing(ParamDesc),
-    n_results = .N,
-    n_samples = data.table::uniqueN(SampleId),
-    first_sample_id = first_non_missing(SampleId),
-    first_collect_datetime = min_datetime(CollectDateTime),
-    last_collect_datetime = max_datetime(CollectDateTime),
-    example_result = first_non_missing(Result)
-  ), by = match_columns]
+  match_columns <- import_mapping_source_columns(
+    mapping,
+    source,
+    c("ParamCode", "input_unit")
+  )
+  report <- source[,
+    .(
+      ParamDesc = collapse_non_missing(ParamDesc),
+      n_results = .N,
+      n_samples = data.table::uniqueN(SampleId),
+      first_sample_id = first_non_missing(SampleId),
+      first_collect_datetime = min_datetime(CollectDateTime),
+      last_collect_datetime = max_datetime(CollectDateTime),
+      example_result = first_non_missing(Result)
+    ),
+    by = match_columns
+  ]
 
   statuses <- lapply(seq_len(nrow(report)), function(i) {
     import_mapping_match_status(
@@ -483,33 +508,42 @@ downloadEQWin_missing_mappings <- function(samples, results, mapping) {
     )
   })
   report[, missing_reason := vapply(statuses, `[[`, character(1), "status")]
-  report[, mapping_error := vapply(statuses, function(x) x$message, character(1))]
-  report[, import_mapping_id := vapply(
-    statuses,
-    function(x) {
-      if (is.null(x$mapping)) {
-        return(NA_integer_)
-      }
-      as.integer(x$mapping$import_mapping_id[[1]])
-    },
-    integer(1)
-  )]
+  report[,
+    mapping_error := vapply(statuses, function(x) x$message, character(1))
+  ]
+  report[,
+    import_mapping_id := vapply(
+      statuses,
+      function(x) {
+        if (is.null(x$mapping)) {
+          return(NA_integer_)
+        }
+        as.integer(x$mapping$import_mapping_id[[1]])
+      },
+      integer(1)
+    )
+  ]
   report <- report[missing_reason != "mapped"]
   if (nrow(report) == 0L) {
     return(empty_report)
   }
 
-  report[, source_match := vapply(
-    seq_len(.N),
-    function(i) {
-      jsonlite::toJSON(
-        import_mapping_source_criteria(as.list(report[i, match_columns, with = FALSE]), c("ParamCode", "input_unit")),
-        auto_unbox = TRUE,
-        null = "null"
-      )
-    },
-    character(1)
-  )]
+  report[,
+    source_match := vapply(
+      seq_len(.N),
+      function(i) {
+        jsonlite::toJSON(
+          import_mapping_source_criteria(
+            as.list(report[i, match_columns, with = FALSE]),
+            c("ParamCode", "input_unit")
+          ),
+          auto_unbox = TRUE,
+          null = "null"
+        )
+      },
+      character(1)
+    )
+  ]
   data.table::setorderv(report, c("missing_reason", "ParamCode", "input_unit"))
   report[, ..output_cols]
 }
@@ -564,8 +598,8 @@ eqwin_discrete_defaults <- function(
   con,
   stn_type,
   media_id,
-  collection_method,
-  sample_type
+  collection_method_id,
+  sample_type_id
 ) {
   stn_type <- toupper(trimws(as.character(stn_type)))
   media_labels <- if (stn_type %in% c("GW", "GROUNDWATER")) {
@@ -595,13 +629,13 @@ eqwin_discrete_defaults <- function(
     }
     media_id <- media$media_id[[1]]
   }
-  if (is.null(collection_method)) {
+  if (is.null(collection_method_id)) {
     method_label <- if (identical(media_labels[[1]], "groundwater")) {
       "Pump"
     } else {
       "Water Bottle (direct fill)"
     }
-    collection_method <- DBI::dbGetQuery(
+    collection_method_id <- DBI::dbGetQuery(
       con,
       "SELECT collection_method_id
        FROM discrete.collection_methods
@@ -609,8 +643,8 @@ eqwin_discrete_defaults <- function(
       params = list(method_label)
     )$collection_method_id[[1]]
   }
-  if (is.null(sample_type)) {
-    sample_type <- DBI::dbGetQuery(
+  if (is.null(sample_type_id)) {
+    sample_type_id <- DBI::dbGetQuery(
       con,
       "SELECT sample_type_id
        FROM discrete.sample_types
@@ -694,8 +728,8 @@ eqwin_discrete_defaults <- function(
 
   list(
     media_id = as.integer(media_id),
-    collection_method = as.integer(collection_method),
-    sample_type = as.integer(sample_type),
+    collection_method_id = as.integer(collection_method_id),
+    sample_type_id = as.integer(sample_type_id),
     sample_type_replicate = as.integer(sample_type_replicate),
     sample_type_field_blank = as.integer(sample_type_field_blank),
     sample_type_trip_blank = as.integer(sample_type_trip_blank),
@@ -705,7 +739,12 @@ eqwin_discrete_defaults <- function(
   )
 }
 
-eqwin_sample_type <- function(sample_class, sample_no, sample_comments, defaults) {
+eqwin_sample_type <- function(
+  sample_class,
+  sample_no,
+  sample_comments,
+  defaults
+) {
   sample_text <- paste(
     tolower(trimws(as.character(sample_no))),
     tolower(trimws(as.character(sample_comments)))
@@ -719,7 +758,10 @@ eqwin_sample_type <- function(sample_class, sample_no, sample_comments, defaults
     return(eqwin_default_sample_type(defaults$sample_type_lab_blank, defaults))
   }
   if (grepl("\\bfield\\s+blank\\b|\\bblank\\b", sample_text)) {
-    return(eqwin_default_sample_type(defaults$sample_type_field_blank, defaults))
+    return(eqwin_default_sample_type(
+      defaults$sample_type_field_blank,
+      defaults
+    ))
   }
   if (identical(sample_class, "D")) {
     return(eqwin_default_sample_type(defaults$sample_type_replicate, defaults))
@@ -730,14 +772,14 @@ eqwin_sample_type <- function(sample_class, sample_no, sample_comments, defaults
   if (identical(sample_class, "XX")) {
     return(eqwin_default_sample_type(defaults$sample_type_unknown, defaults))
   }
-  defaults$sample_type
+  defaults$sample_type_id
 }
 
 eqwin_default_sample_type <- function(value, defaults) {
   if (!is.na(value)) {
     return(as.integer(value))
   }
-  defaults$sample_type
+  defaults$sample_type_id
 }
 
 eqwin_parse_result <- function(
@@ -778,22 +820,26 @@ eqwin_parse_result <- function(
   if (is.na(condition)) {
     return(list(
       result = value,
-      result_condition = NA_integer_,
+      result_condition_id = NA_integer_,
       result_condition_value = NA_real_
     ))
   }
 
   list(
     result = NA_real_,
-    result_condition = condition,
+    result_condition_id = condition,
     result_condition_value = value
   )
 }
 
 eqwin_drop_incomplete_required_targets <- function(con, results) {
   messages <- validateResultChemistry(con, results, error = FALSE)
-  if (any(nzchar(messages))) warning("EQWin results with incomplete analytical metadata were omitted: ",
-    paste(unique(messages[nzchar(messages)]), collapse = "; "))
+  if (any(nzchar(messages))) {
+    warning(
+      "EQWin results with incomplete analytical metadata were omitted: ",
+      paste(unique(messages[nzchar(messages)]), collapse = "; ")
+    )
+  }
   results[!nzchar(messages), ]
 }
 

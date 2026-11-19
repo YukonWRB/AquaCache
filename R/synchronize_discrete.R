@@ -212,11 +212,7 @@ synchronize_discrete_sample_detail <- function(
         dbAppendTableRLS(
           con,
           "discrete.results",
-          data.table::rbindlist(
-            pending_results,
-            use.names = TRUE,
-            fill = TRUE
-          )
+          data.table::rbindlist(pending_results, use.names = TRUE, fill = TRUE)
         )
       }
 
@@ -334,10 +330,10 @@ synchronize_discrete_sample_detail <- function(
           converting_ids <- setdiff(previously_aggregated, target_result_ids)
           for (converting_id in converting_ids) {
             result_row <- which(result_ids == converting_id)[[1]]
-            result_condition <- if (
-              "result_condition" %in% names(remote_results)
+            result_condition_id <- if (
+              "result_condition_id" %in% names(remote_results)
             ) {
-              remote_results$result_condition[[result_row]]
+              remote_results$result_condition_id[[result_row]]
             } else {
               NA_integer_
             }
@@ -352,7 +348,7 @@ synchronize_discrete_sample_detail <- function(
             # With nothing to assign there is no replacement value, so the
             # calculated value stands as the new direct one.
             conversion_mode <- if (
-              is.na(incoming_result) && is.na(result_condition)
+              is.na(incoming_result) && is.na(result_condition_id)
             ) {
               "preserve_calculated"
             } else {
@@ -374,7 +370,7 @@ synchronize_discrete_sample_detail <- function(
                 if (identical(conversion_mode, "preserve_calculated")) {
                   NA_integer_
                 } else {
-                  result_condition
+                  result_condition_id
                 },
                 if (identical(conversion_mode, "preserve_calculated")) {
                   NA_real_
@@ -405,7 +401,7 @@ synchronize_discrete_sample_detail <- function(
             con,
             "UPDATE discrete.results
              SET result = NULL,
-                 result_condition = NULL,
+                 result_condition_id = NULL,
                  result_condition_value = NULL
              WHERE result_id = $1",
             params = list(result_ids[[result_row]])
@@ -648,8 +644,14 @@ synchronize_discrete <- function(
     )
   }
 
-  valid_sample_names <- DBI::dbListFields(con, DBI::Id(schema = "discrete", table = "samples"))
-  valid_result_names <- DBI::dbListFields(con, DBI::Id(schema = "discrete", table = "results"))
+  valid_sample_names <- DBI::dbListFields(
+    con,
+    DBI::Id(schema = "discrete", table = "samples")
+  )
+  valid_result_names <- DBI::dbListFields(
+    con,
+    DBI::Id(schema = "discrete", table = "results")
+  )
 
   if (interactive()) {
     pb <- utils::txtProgressBar(min = 0, max = nrow(all_series), style = 3)
@@ -870,6 +872,13 @@ synchronize_discrete <- function(
               next
             }
 
+            remote_depth_height <- if (
+              length(inRemote_sample$depth_height_m) > 0L
+            ) {
+              suppressWarnings(as.numeric(inRemote_sample$depth_height_m[[1]]))
+            } else {
+              NA_real_
+            }
             if (delete && !is.na(inRemote_sample$location_id[[1]])) {
               delete_has_prev <- j > 1 && !is.na(inRemote_datetimes[j - 1])
               delete_has_curr <- !is.na(inRemote_datetimes[j])
@@ -891,22 +900,18 @@ synchronize_discrete <- function(
                       } else {
                         "IS NULL"
                       },
-                      " AND z ",
-                      if (!is.null(inRemote_sample$z)) {
-                        paste0("= ", inRemote_sample$z)
-                      } else {
-                        "IS NULL"
-                      },
+                      " AND depth_height_m IS NOT DISTINCT FROM $1",
                       " AND media_id = ",
                       inRemote_sample$media_id,
-                      " AND sample_type = ",
-                      inRemote_sample$sample_type,
-                      " AND collection_method = ",
-                      inRemote_sample$collection_method,
+                      " AND sample_type_id = ",
+                      inRemote_sample$sample_type_id,
+                      " AND collection_method_id = ",
+                      inRemote_sample$collection_method_id,
                       " AND source_adapter_function = '",
                       source_fx,
                       "' AND no_source_update IS FALSE;"
-                    )
+                    ),
+                    params = list(remote_depth_height)
                   )
                 } else if (j == length(inRemote) && delete_has_prev) {
                   DBI::dbExecute(
@@ -924,22 +929,18 @@ synchronize_discrete <- function(
                       } else {
                         "IS NULL"
                       },
-                      " AND z ",
-                      if (!is.null(inRemote_sample$z)) {
-                        paste0("= ", inRemote_sample$z)
-                      } else {
-                        "IS NULL"
-                      },
+                      " AND depth_height_m IS NOT DISTINCT FROM $1",
                       " AND media_id = ",
                       inRemote_sample$media_id,
-                      " AND sample_type = ",
-                      inRemote_sample$sample_type,
-                      " AND collection_method = ",
-                      inRemote_sample$collection_method,
+                      " AND sample_type_id = ",
+                      inRemote_sample$sample_type_id,
+                      " AND collection_method_id = ",
+                      inRemote_sample$collection_method_id,
                       " AND source_adapter_function = '",
                       source_fx,
                       "' AND no_source_update IS FALSE;"
-                    )
+                    ),
+                    params = list(remote_depth_height)
                   )
                 } else if (delete_has_prev) {
                   DBI::dbExecute(
@@ -957,22 +958,18 @@ synchronize_discrete <- function(
                       } else {
                         "IS NULL"
                       },
-                      " AND z ",
-                      if (!is.null(inRemote_sample$z)) {
-                        paste0("= ", inRemote_sample$z)
-                      } else {
-                        "IS NULL"
-                      },
+                      " AND depth_height_m IS NOT DISTINCT FROM $1",
                       " AND media_id = ",
                       inRemote_sample$media_id,
-                      " AND sample_type = ",
-                      inRemote_sample$sample_type,
-                      " AND collection_method = ",
-                      inRemote_sample$collection_method,
+                      " AND sample_type_id = ",
+                      inRemote_sample$sample_type_id,
+                      " AND collection_method_id = ",
+                      inRemote_sample$collection_method_id,
                       " AND source_adapter_function = '",
                       source_fx,
                       "' AND no_source_update IS FALSE;"
-                    )
+                    ),
+                    params = list(remote_depth_height)
                   )
                 }
               }
@@ -982,18 +979,34 @@ synchronize_discrete <- function(
               next
             }
 
-            prepared <- prepare_discrete_import_results(con, inRemote_sample$media_id[[1]],
-              inRemote_results, result_aggregations, result_components)
+            prepared <- prepare_discrete_import_results(
+              con,
+              inRemote_sample$media_id[[1]],
+              inRemote_results,
+              result_aggregations,
+              result_components
+            )
             if (any(nzchar(prepared$errors))) {
               rejected <- which(nzchar(prepared$errors))
-              warning("For sample_series_id ", sid, ", sample ", j,
-                ", skipped result row(s): ", paste(sprintf("%s (%s)", rejected,
-                  prepared$errors[rejected]), collapse = "; "), call. = FALSE)
+              warning(
+                "For sample_series_id ",
+                sid,
+                ", sample ",
+                j,
+                ", skipped result row(s): ",
+                paste(
+                  sprintf("%s (%s)", rejected, prepared$errors[rejected]),
+                  collapse = "; "
+                ),
+                call. = FALSE
+              )
             }
             inRemote_results <- prepared$results
             result_aggregations <- prepared$result_aggregations
             result_components <- prepared$result_components
-            if (!nrow(inRemote_results)) next
+            if (!nrow(inRemote_results)) {
+              next
+            }
             aggregated_result_rows <- result_aggregations$result_row
             names_inRemote_res <- names(inRemote_results)
 
@@ -1003,13 +1016,6 @@ synchronize_discrete <- function(
             remote_sub_location_id <- suppressWarnings(as.integer(
               inRemote_sample$sub_location_id[[1]]
             ))
-            remote_z <- if (
-              "z" %in% names_inRemote_samp && length(inRemote_sample$z) > 0L
-            ) {
-              suppressWarnings(as.numeric(inRemote_sample$z[[1]]))
-            } else {
-              NA_real_
-            }
             if (is.na(remote_location_id)) {
               inDB_sample <- find_locationless_import_sample(
                 con = con,
@@ -1024,18 +1030,18 @@ synchronize_discrete <- function(
                  WHERE datetime = $1
                    AND location_id = $2
                    AND sub_location_id IS NOT DISTINCT FROM $3
-                   AND z IS NOT DISTINCT FROM $4
+                   AND depth_height_m IS NOT DISTINCT FROM $4
                    AND media_id = $5
-                   AND sample_type = $6
-                   AND collection_method = $7;",
+                   AND sample_type_id = $6
+                   AND collection_method_id = $7;",
                 params = list(
                   as.POSIXct(inRemote_sample$datetime[[1]], tz = "UTC"),
                   remote_location_id,
                   remote_sub_location_id,
-                  remote_z,
+                  remote_depth_height,
                   as.integer(inRemote_sample$media_id[[1]]),
-                  as.integer(inRemote_sample$sample_type[[1]]),
-                  as.integer(inRemote_sample$collection_method[[1]])
+                  as.integer(inRemote_sample$sample_type_id[[1]]),
+                  as.integer(inRemote_sample$collection_method_id[[1]])
                 )
               )
             }
@@ -1065,7 +1071,9 @@ synchronize_discrete <- function(
                 if (is.na(inDB_sample$source_adapter_function[[1]])) {
                   "NULL"
                 } else {
-                  shQuote(as.character(inDB_sample$source_adapter_function[[1]]))
+                  shQuote(as.character(inDB_sample$source_adapter_function[[
+                    1
+                  ]]))
                 },
                 " rather than ",
                 shQuote(as.character(source_fx)),
@@ -1101,170 +1109,253 @@ synchronize_discrete <- function(
               active_result_trans <- dbTransBegin(con)
               DBI::dbExecute(con, "SAVEPOINT synchronize_discrete_results")
               sample_new_results <- sample_updated_results <- 0L
-              tryCatch({
-                inDB_results <- DBI::dbGetQuery(
-                  con,
-                  paste0(
-                    "SELECT r.*, (ra.result_id IS NOT NULL) AS is_aggregated
+              tryCatch(
+                {
+                  inDB_results <- DBI::dbGetQuery(
+                    con,
+                    paste0(
+                      "SELECT r.*, (ra.result_id IS NOT NULL) AS is_aggregated
                      FROM discrete.results r
                      LEFT JOIN discrete.result_aggregations ra USING (result_id)
                      WHERE r.sample_id = ",
-                    inDB_sample$sample_id,
-                    " FOR UPDATE OF r;"
+                      inDB_sample$sample_id,
+                      " FOR UPDATE OF r;"
+                    )
                   )
-                )
 
-                inDB_results$analysis_conditions <- vapply(inDB_results$analysis_conditions,
-                  normalizeAnalysisConditions, character(1))
-                # Rejected source rows are not evidence that stored measurements
-                # disappeared. Keep their parameter variants even with delete=TRUE.
-                rejected_ids <- prepared$rejected_results$parameter_id
-                inDB_results$checked <- inDB_results$parameter_id %in% rejected_ids |
-                  anyNA(rejected_ids)
-                matches <- match_discrete_import_results(inDB_results, inRemote_results, aggregated_result_rows)
-                inDB_results$checked[inDB_results$result_id %in% matches$retained_ids] <- TRUE
-                remote_result_ids <- rep(NA_integer_, nrow(inRemote_results))
-                pending_aggregated_results <- list()
+                  inDB_results$analysis_conditions <- vapply(
+                    inDB_results$analysis_conditions,
+                    normalizeAnalysisConditions,
+                    character(1)
+                  )
+                  # Rejected source rows are not evidence that stored measurements
+                  # disappeared. Keep their parameter variants even with delete=TRUE.
+                  rejected_ids <- prepared$rejected_results$parameter_id
+                  inDB_results$checked <- inDB_results$parameter_id %in%
+                    rejected_ids |
+                    anyNA(rejected_ids)
+                  matches <- match_discrete_import_results(
+                    inDB_results,
+                    inRemote_results,
+                    aggregated_result_rows
+                  )
+                  inDB_results$checked[
+                    inDB_results$result_id %in% matches$retained_ids
+                  ] <- TRUE
+                  remote_result_ids <- rep(NA_integer_, nrow(inRemote_results))
+                  pending_aggregated_results <- list()
 
-                for (k in seq_len(nrow(inRemote_results))) {
-                  sub <- inRemote_results[k, ]
-                  names_inRemote_sub <- names(sub)
-                  is_remote_aggregated <- k %in% aggregated_result_rows
-                  resolved_sub_matrix_state_id <- sub$matrix_state_id
-                  # The complete source batch has already resolved exact matches
-                  # and unambiguous enrichments of historical unknown metadata.
+                  for (k in seq_len(nrow(inRemote_results))) {
+                    sub <- inRemote_results[k, ]
+                    names_inRemote_sub <- names(sub)
+                    is_remote_aggregated <- k %in% aggregated_result_rows
+                    resolved_sub_matrix_state_id <- sub$matrix_state_id
+                    # The complete source batch has already resolved exact matches
+                    # and unambiguous enrichments of historical unknown metadata.
 
-                  if (matches$ambiguous[[k]]) {
-                    warning("Ambiguous historical result for sample_series_id ", sid,
-                      ", sample ", j, ", result row ", k, "; retained for review.", call. = FALSE)
-                    next
-                  }
-                  matched_id <- matches$result_ids[[k]]
-                  inDB_sub <- inDB_results[inDB_results$result_id %in% matched_id, , drop = FALSE]
-                  if (nrow(inDB_sub) == 0) {
-                    # Append new values
-                    sub$result_id <- DBI::dbGetQuery(
-                      con,
-                      "SELECT nextval(
+                    if (matches$ambiguous[[k]]) {
+                      warning(
+                        "Ambiguous historical result for sample_series_id ",
+                        sid,
+                        ", sample ",
+                        j,
+                        ", result row ",
+                        k,
+                        "; retained for review.",
+                        call. = FALSE
+                      )
+                      next
+                    }
+                    matched_id <- matches$result_ids[[k]]
+                    inDB_sub <- inDB_results[
+                      inDB_results$result_id %in% matched_id,
+                      ,
+                      drop = FALSE
+                    ]
+                    if (nrow(inDB_sub) == 0) {
+                      # Append new values
+                      sub$result_id <- DBI::dbGetQuery(
+                        con,
+                        "SELECT nextval(
                          pg_get_serial_sequence(
                            'discrete.results',
                            'result_id'
                          )
                        )::integer AS result_id"
-                    )$result_id[[1]]
-                    remote_result_ids[[k]] <- sub$result_id
-                    sub$sample_id <- inDB_sample$sample_id
-                    sub$matrix_state_id <- resolved_sub_matrix_state_id
-                    if (is_remote_aggregated) {
-                      pending_aggregated_results[[
-                        length(
-                          pending_aggregated_results
-                        ) +
-                          1L
-                      ]] <- sub
-                    } else {
-                      dbAppendTableRLS(con, "discrete.results", sub)
-                    }
-
-                    sample_new_results <- sample_new_results + 1L
-                  } else if (nrow(inDB_sub) == 1) {
-                    remote_result_ids[[k]] <- inDB_sub$result_id[[1]]
-                    if (isTRUE(inDB_sub$no_source_update[[1]])) {
+                      )$result_id[[1]]
+                      remote_result_ids[[k]] <- sub$result_id
+                      sub$sample_id <- inDB_sample$sample_id
+                      sub$matrix_state_id <- resolved_sub_matrix_state_id
                       if (is_remote_aggregated) {
-                        stop(
-                          "Cannot synchronize component values for no_source_update ",
-                          "result_id ",
-                          inDB_sub$result_id[[1]],
-                          "."
+                        pending_aggregated_results[[
+                          length(
+                            pending_aggregated_results
+                          ) +
+                            1L
+                        ]] <- sub
+                      } else {
+                        dbAppendTableRLS(con, "discrete.results", sub)
+                      }
+
+                      sample_new_results <- sample_new_results + 1L
+                    } else if (nrow(inDB_sub) == 1) {
+                      remote_result_ids[[k]] <- inDB_sub$result_id[[1]]
+                      if (isTRUE(inDB_sub$no_source_update[[1]])) {
+                        if (is_remote_aggregated) {
+                          stop(
+                            "Cannot synchronize component values for no_source_update ",
+                            "result_id ",
+                            inDB_sub$result_id[[1]],
+                            "."
+                          )
+                        }
+                        inDB_results[
+                          inDB_results$result_id == inDB_sub$result_id,
+                          "checked"
+                        ] <- TRUE
+                        next
+                      }
+                      # matching result found, check and adjust if necessary
+                      # Check for differences in the results
+                      columns <- setdiff(
+                        intersect(names_inRemote_sub, valid_result_names),
+                        c(
+                          "result_id",
+                          "sample_id",
+                          "analysis_conditions_key",
+                          "created",
+                          "created_by",
+                          "modified",
+                          "modified_by"
                         )
+                      )
+                      if (
+                        is_remote_aggregated ||
+                          isTRUE(inDB_sub$is_aggregated[[1]])
+                      ) {
+                        columns <- setdiff(
+                          columns,
+                          c(
+                            "result",
+                            "result_condition_id",
+                            "result_condition_value"
+                          )
+                        )
+                      }
+                      changed <- columns[
+                        !vapply(
+                          columns,
+                          function(field) {
+                            isTRUE(all.equal(
+                              inDB_sub[[field]],
+                              sub[[field]],
+                              check.attributes = FALSE
+                            ))
+                          },
+                          logical(1)
+                        )
+                      ]
+                      updated_results_flag <- length(changed) > 0L
+                      if (updated_results_flag) {
+                        # Enrich all identity fields in one statement. The chemistry
+                        # trigger must see the complete new representation, rather
+                        # than an intermediate basis/form/endpoint combination.
+                        assignments <- sprintf(
+                          "%s = $%s",
+                          as.character(DBI::dbQuoteIdentifier(
+                            con,
+                            changed
+                          )),
+                          seq_along(changed)
+                        )
+                        DBI::dbExecute(
+                          con,
+                          paste0(
+                            "UPDATE discrete.results SET ",
+                            paste(assignments, collapse = ", "),
+                            " WHERE result_id = $",
+                            length(changed) + 1L
+                          ),
+                          params = c(
+                            unname(lapply(changed, function(field) {
+                              sub[[field]][[1]]
+                            })),
+                            list(inDB_sub$result_id[[1]])
+                          )
+                        )
+                      }
+                      if (updated_results_flag) {
+                        sample_updated_results <- sample_updated_results + 1L
                       }
                       inDB_results[
                         inDB_results$result_id == inDB_sub$result_id,
                         "checked"
-                      ] <- TRUE
-                      next
-                    }
-                    # matching result found, check and adjust if necessary
-                    # Check for differences in the results
-                    columns <- setdiff(intersect(names_inRemote_sub, valid_result_names),
-                      c("result_id", "sample_id", "analysis_conditions_key", "created",
-                        "created_by", "modified", "modified_by"))
-                    if (is_remote_aggregated || isTRUE(inDB_sub$is_aggregated[[1]])) {
-                      columns <- setdiff(columns, c("result", "result_condition", "result_condition_value"))
-                    }
-                    changed <- columns[!vapply(columns, function(field)
-                      isTRUE(all.equal(inDB_sub[[field]], sub[[field]], check.attributes = FALSE)), logical(1))]
-                    updated_results_flag <- length(changed) > 0L
-                    if (updated_results_flag) {
-                      # Enrich all identity fields in one statement. The chemistry
-                      # trigger must see the complete new representation, rather
-                      # than an intermediate basis/form/endpoint combination.
-                      assignments <- sprintf("%s = $%s",
-                        as.character(DBI::dbQuoteIdentifier(con, changed)), seq_along(changed))
-                      DBI::dbExecute(con, paste0("UPDATE discrete.results SET ",
-                        paste(assignments, collapse = ", "), " WHERE result_id = $", length(changed) + 1L),
-                        params = c(unname(lapply(changed, function(field) sub[[field]][[1]])),
-                          list(inDB_sub$result_id[[1]])))
-                    }
-                    if (updated_results_flag) {
-                      sample_updated_results <- sample_updated_results + 1L
-                    }
-                    inDB_results[
-                      inDB_results$result_id == inDB_sub$result_id,
-                      "checked"
-                    ] <- TRUE # result entry will not be deleted from the database
-                  } else {
-                    warning(
-                      "For sample_series_id ",
-                      sid,
-                      ", returned sample ",
-                      j,
-                      " (sample_datetime ",
-                      inRemote_sample$datetime,
-                      ") the source function returned a result that matched more than one result in the database. This should not happen. Skipping this result."
-                    )
-                    inDB_results[
-                      inDB_results$result_id == inDB_sub$result_id,
-                      "checked"
-                    ] <- TRUE # result entry will not be deleted
-                  }
-                }
-                synchronize_discrete_sample_detail(
-                  con = con,
-                  sample_id = inDB_sample$sample_id[[1]],
-                  remote_results = inRemote_results,
-                  result_ids = remote_result_ids,
-                  pending_results = pending_aggregated_results,
-                  sample_qualifiers = sample_qualifiers,
-                  sample_observers = sample_observers,
-                  result_aggregations = result_aggregations,
-                  result_components = result_components
-                )
-                # Remove from the database any results that were not checked if delete is TRUE
-                if (delete) {
-                  to_delete <- inDB_results[
-                    !inDB_results$checked & !inDB_results$no_source_update,
-                    "result_id"
-                  ]
-                  if (length(to_delete) > 0) {
-                    DBI::dbExecute(
-                      con,
-                      paste0(
-                        "DELETE FROM discrete.results WHERE result_id IN (",
-                        paste(to_delete, collapse = ", "),
-                        ") AND no_source_update IS FALSE;"
+                      ] <- TRUE # result entry will not be deleted from the database
+                    } else {
+                      warning(
+                        "For sample_series_id ",
+                        sid,
+                        ", returned sample ",
+                        j,
+                        " (sample_datetime ",
+                        inRemote_sample$datetime,
+                        ") the source function returned a result that matched more than one result in the database. This should not happen. Skipping this result."
                       )
-                    )
+                      inDB_results[
+                        inDB_results$result_id == inDB_sub$result_id,
+                        "checked"
+                      ] <- TRUE # result entry will not be deleted
+                    }
                   }
+                  synchronize_discrete_sample_detail(
+                    con = con,
+                    sample_id = inDB_sample$sample_id[[1]],
+                    remote_results = inRemote_results,
+                    result_ids = remote_result_ids,
+                    pending_results = pending_aggregated_results,
+                    sample_qualifiers = sample_qualifiers,
+                    sample_observers = sample_observers,
+                    result_aggregations = result_aggregations,
+                    result_components = result_components
+                  )
+                  # Remove from the database any results that were not checked if delete is TRUE
+                  if (delete) {
+                    to_delete <- inDB_results[
+                      !inDB_results$checked & !inDB_results$no_source_update,
+                      "result_id"
+                    ]
+                    if (length(to_delete) > 0) {
+                      DBI::dbExecute(
+                        con,
+                        paste0(
+                          "DELETE FROM discrete.results WHERE result_id IN (",
+                          paste(to_delete, collapse = ", "),
+                          ") AND no_source_update IS FALSE;"
+                        )
+                      )
+                    }
+                  }
+                  DBI::dbExecute(
+                    con,
+                    "RELEASE SAVEPOINT synchronize_discrete_results"
+                  )
+                  if (active_result_trans) DBI::dbExecute(con, "COMMIT")
+                },
+                error = function(e) {
+                  DBI::dbExecute(
+                    con,
+                    "ROLLBACK TO SAVEPOINT synchronize_discrete_results"
+                  )
+                  DBI::dbExecute(
+                    con,
+                    "RELEASE SAVEPOINT synchronize_discrete_results"
+                  )
+                  if (active_result_trans) {
+                    DBI::dbExecute(con, "ROLLBACK")
+                  }
+                  stop(e)
                 }
-                DBI::dbExecute(con, "RELEASE SAVEPOINT synchronize_discrete_results")
-                if (active_result_trans) DBI::dbExecute(con, "COMMIT")
-              }, error = function(e) {
-                DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT synchronize_discrete_results")
-                DBI::dbExecute(con, "RELEASE SAVEPOINT synchronize_discrete_results")
-                if (active_result_trans) DBI::dbExecute(con, "ROLLBACK")
-                stop(e)
-              })
+              )
               new_results <- new_results + sample_new_results
               updated_results <- updated_results + sample_updated_results
               sync_records[[length(sync_records) + 1L]] <-
@@ -1306,8 +1397,8 @@ synchronize_discrete <- function(
                 "location_id",
                 "media_id",
                 "datetime",
-                "collection_method",
-                "sample_type",
+                "collection_method_id",
+                "sample_type_id",
                 "external_sample_id"
               )
               if (!all(c(mandatory_samp) %in% names_inRemote_samp)) {
@@ -1373,7 +1464,7 @@ synchronize_discrete <- function(
 
               ## Checks on results ###########
               # Check that the results have the mandatory columns
-              mandatory_res <- c("result", "result_type", "parameter_id")
+              mandatory_res <- c("result", "result_type_id", "parameter_id")
               if (!all(c(mandatory_res) %in% names_inRemote_res)) {
                 # Make an error message stating which column is missing
                 missing <- c(mandatory_res)[

@@ -4,14 +4,12 @@
 \alias{getImportMappingReview}
 \title{Review current import mappings}
 \usage{
-getImportMappingReview(con, source_code = NULL, include_history = FALSE)
+getImportMappingReview(con, source_code = NULL)
 }
 \arguments{
 \item{con}{AquaCache database connection.}
 
 \item{source_code}{Optional source-code filter.}
-
-\item{include_history}{Legacy argument retained for call compatibility.}
 }
 \value{
 A data.frame of current mapping definitions and validation state.

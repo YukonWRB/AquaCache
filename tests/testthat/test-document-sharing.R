@@ -25,8 +25,8 @@ test_that("whole-document sharing includes hidden samples and location restricti
      VALUES ($1,'Document sharing regression',60,-135) RETURNING location_id", params = list(prefix))$location_id
   samples <- integer()
   for (i in 1:2) samples <- c(samples, DBI::dbGetQuery(con,
-    "INSERT INTO discrete.samples(location_id,media_id,datetime,collection_method,sample_type,owner)
-     SELECT $1,media_id,'2026-01-01'::timestamptz+$2::integer*interval '1 hour',collection_method,sample_type,owner
+    "INSERT INTO discrete.samples(location_id,media_id,datetime,collection_method_id,sample_type_id,owner)
+     SELECT $1,media_id,'2026-01-01'::timestamptz+$2::integer*interval '1 hour',collection_method_id,sample_type_id,owner
      FROM discrete.samples ORDER BY sample_id LIMIT 1 RETURNING sample_id", params = list(location, i))$sample_id)
   file <- tempfile(fileext = ".xlsx")
   on.exit(unlink(file), add = TRUE)
@@ -100,7 +100,7 @@ test_that("whole-document sharing includes hidden samples and location restricti
   qc_type <- DBI::dbGetQuery(con,
     "SELECT sample_type_id FROM discrete.sample_types WHERE NOT requires_location ORDER BY sample_type_id LIMIT 1")$sample_type_id
   stopifnot(length(qc_type) == 1L)
-  DBI::dbExecute(con, "UPDATE discrete.samples SET location_id=NULL,sample_type=$1,share_with=ARRAY[$2] WHERE sample_id=$3",
+  DBI::dbExecute(con, "UPDATE discrete.samples SET location_id=NULL,sample_type_id=$1,share_with=ARRAY[$2] WHERE sample_id=$3",
     params = list(qc_type, groups[[1]], samples[[1]]))
   DBI::dbExecute(con, "DELETE FROM discrete.sample_documents WHERE sample_id=$1 AND document_id=$2", params = list(samples[[2]], document))
   expect_identical(sharing(), groups[[1]])

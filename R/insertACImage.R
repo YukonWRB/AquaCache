@@ -329,7 +329,7 @@ insertACImage <- function(
           con,
           "INSERT INTO files.images (
              img_series_id, datetime, fetch_datetime, description, share_with,
-             location_id, latitude, longitude, format, file, image_type,
+             location_id, latitude, longitude, format, file, image_type_id,
              owner, contributor, tags, azimuth_true, elevation_agl_m,
              elevation_msl_m
            )
@@ -353,7 +353,7 @@ insertACImage <- function(
              latitude = EXCLUDED.latitude,
              longitude = EXCLUDED.longitude,
              format = EXCLUDED.format,
-             image_type = EXCLUDED.image_type,
+             image_type_id = EXCLUDED.image_type_id,
              owner = COALESCE(EXCLUDED.owner, files.images.owner),
              contributor = COALESCE(EXCLUDED.contributor, files.images.contributor),
              tags = COALESCE(EXCLUDED.tags, files.images.tags),

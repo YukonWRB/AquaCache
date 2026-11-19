@@ -28,7 +28,9 @@ revise_parameter_catalogue_entry(
   mapping_reporting_basis = NULL,
   mapping_result_speciation = NULL,
   mapping_result_target = NULL,
-  preserve_existing_chemistry = TRUE
+  preserve_existing_chemistry = TRUE,
+  unit_columns = c("liquid_unit_id", "solid_unit_id", "gas_unit_id",
+    "not_applicable_unit_id")
 )
 }
 \arguments{
@@ -83,6 +85,8 @@ references. Catalogue entries are resolved, never created implicitly.}
 
 \item{preserve_existing_chemistry}{Fill only missing analytical IDs when TRUE.
 Defaults to TRUE; use FALSE for an explicit correction of populated IDs.}
+
+\item{unit_columns}{Names of the parameter unit columns in the target schema.}
 }
 \value{
 The target \code{parameter_id}, invisibly.
