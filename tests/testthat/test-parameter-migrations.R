@@ -1,14 +1,16 @@
-# Explicit opt-in: this test inserts fixtures only in the named testdb and rolls
-# back every change. It never applies a schema patch or commits a parameter merge.
+# CI uses its disposable database. Local runs require an explicit dev database
+# name. Every test row is rolled back.
 test_that("parameter merges preserve analytical identity and roll back failures", {
+  ci <- identical(Sys.getenv("CI"), "true")
+  database <- if (ci) "testdb" else Sys.getenv("AQUACACHE_INTEGRATION_DATABASE")
   skip_if(
-    Sys.getenv("AQUACACHE_INTEGRATION_DATABASE") != "testdb",
-    "testdb integration opt-in required"
+    !database %in% c("testdb", "aquacache"),
+    "Explicit dev database opt-in required"
   )
   con <- DBI::dbConnect(
     RPostgres::Postgres(),
-    dbname = "testdb",
-    host = "10.250.12.154",
+    dbname = database,
+    host = if (ci) "127.0.0.1" else "10.250.12.154",
     port = Sys.getenv("aquacachePort", "5432"),
     user = Sys.getenv("aquacacheAdminUser"),
     password = Sys.getenv("aquacacheAdminPass")
@@ -19,14 +21,22 @@ test_that("parameter merges preserve analytical identity and roll back failures"
     "SELECT current_database() AS db, inet_server_addr()::TEXT AS host,
       (SELECT version FROM information.version_info WHERE item = 'Last patch number') AS patch"
   )
-  expect_identical(identity$db, "testdb")
-  expect_identical(identity$host, "10.250.12.154/32")
-  skip_if(identity$patch != "65", "revised Patch 65 required")
+  expect_identical(identity$db, database)
+  expect_identical(
+    identity$host,
+    if (ci) "127.0.0.1/32" else "10.250.12.154/32"
+  )
+  skip_if(as.integer(identity$patch) < 73L, "Patch 73 or later required")
   DBI::dbExecute(con, "BEGIN")
   on.exit(DBI::dbExecute(con, "ROLLBACK"), add = TRUE, after = FALSE)
   unit <- DBI::dbGetQuery(
     con,
     "SELECT min(unit_id) AS id FROM public.units WHERE lower(unit_name) = 'mg/l'"
+  )$id
+  alternate_unit <- DBI::dbGetQuery(
+    con,
+    "SELECT min(unit_id) AS id FROM public.units WHERE unit_id <> $1",
+    params = list(unit)
   )$id
   sample <- DBI::dbGetQuery(
     con,
@@ -77,6 +87,78 @@ test_that("parameter merges preserve analytical identity and roll back failures"
   }
   source_id <- parameter("source")
   target_id <- parameter("target")
+  upsertImportParameterMappings(
+    con,
+    source_code = prefix,
+    mappings = data.frame(
+      code = "source",
+      parameter_id = source_id,
+      matrix_state_id = matrix,
+      result_type_id = 2L
+    ),
+    match_columns = "code"
+  )
+  expect_true(
+    DBI::dbGetQuery(
+      con,
+      "SELECT public.parameter_matrix_state_has_results($1, 'liquid') AS used",
+      params = list(source_id)
+    )$used
+  )
+  DBI::dbExecute(con, "SAVEPOINT mapping_units")
+  expect_error(
+    DBI::dbExecute(
+      con,
+      "UPDATE public.parameters SET liquid_unit_id = $2 WHERE parameter_id = $1",
+      params = list(source_id, alternate_unit)
+    ),
+    "use the reviewed AquaLink unit-change workflow"
+  )
+  DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT mapping_units")
+  DBI::dbGetQuery(
+    con,
+    "WITH units AS (
+       SELECT jsonb_build_object(
+         'liquid_unit_id', liquid_unit_id, 'solid_unit_id', solid_unit_id,
+         'gas_unit_id', gas_unit_id, 'not_applicable_unit_id', not_applicable_unit_id
+       ) AS old FROM public.parameters WHERE parameter_id = $1
+     )
+     SELECT public.begin_parameter_unit_change(
+       $1, old, old || jsonb_build_object('liquid_unit_id', $2::integer), '{}'::jsonb
+     ) FROM units",
+    params = list(source_id, alternate_unit)
+  )
+  expect_equal(
+    DBI::dbExecute(
+      con,
+      "UPDATE public.parameters SET liquid_unit_id = $2 WHERE parameter_id = $1",
+      params = list(source_id, alternate_unit)
+    ),
+    1L
+  )
+  DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT mapping_units")
+  DBI::dbExecute(con, "RELEASE SAVEPOINT mapping_units")
+  DBI::dbExecute(con, "SAVEPOINT mapping_requirements")
+  expect_error(
+    DBI::dbExecute(
+      con,
+      "UPDATE public.parameters SET reporting_basis = TRUE WHERE parameter_id = $1",
+      params = list(source_id)
+    ),
+    "Cannot require reporting_basis"
+  )
+  DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT mapping_requirements")
+  expect_error(
+    DBI::dbExecute(
+      con,
+      "UPDATE public.parameters SET analysis_conditions_required_keys_by_matrix =
+       '{\"liquid\":[\"reference_temperature_kelvin\"]}'::jsonb WHERE parameter_id = $1",
+      params = list(source_id)
+    ),
+    "Active import mappings must satisfy analysis conditions"
+  )
+  DBI::dbExecute(con, "ROLLBACK TO SAVEPOINT mapping_requirements")
+  DBI::dbExecute(con, "RELEASE SAVEPOINT mapping_requirements")
   row_id <- result(source_id)
   before <- DBI::dbGetQuery(
     con,
@@ -142,6 +224,10 @@ test_that("parameter merges preserve analytical identity and roll back failures"
     params = list(row_id)
   )
   expect_identical(after$parameter_id, target_id)
+  expect_identical(
+    getImportParameterMappings(con, source_code = prefix)$parameter_id,
+    target_id
+  )
   retained <- c(
     "result",
     "sample_id",
@@ -252,11 +338,7 @@ test_that("parameter merges preserve analytical identity and roll back failures"
   )
   incompatible_id <- parameter(
     "different units",
-    DBI::dbGetQuery(
-      con,
-      "SELECT min(unit_id) AS id FROM public.units WHERE unit_id <> $1",
-      params = list(unit)
-    )$id
+    alternate_unit
   )
   expect_error(
     migrate_parameter_references(con, incompatible_id, target_id),
@@ -313,7 +395,7 @@ test_that("parameter merges preserve analytical identity and roll back failures"
   expect_identical(
     DBI::dbGetQuery(
       con,
-      "SELECT tgenabled::TEXT AS state FROM pg_trigger WHERE tgname = 'guard_import_mapping_row' AND tgrelid = 'discrete.import_parameter_mappings'::regclass"
+      "SELECT tgenabled::TEXT AS state FROM pg_trigger WHERE tgname = 'validate_active_parameter_mapping' AND tgrelid = 'discrete.import_parameter_mappings'::regclass"
     )$state,
     "O"
   )

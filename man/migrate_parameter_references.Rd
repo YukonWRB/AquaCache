@@ -62,9 +62,6 @@ cannot be supplied together.}
 Rewrite every discovered foreign-key reference to a parameter.
 }
 \details{
-The import mapping row guard is temporarily disabled for this
-operation because this helper is reserved for reviewed catalogue
-corrections that intentionally rewrite published and retired snapshots.
-Ordinary import mapping changes must use draft revisions.
+Direct import mappings are updated with validation triggers enabled.
 }
 \keyword{internal}

@@ -983,43 +983,101 @@ resolveImportResultFlagMapping <- function(
     profile_code = profile_code,
     active = TRUE
   )
-  value_key <- tolower(trimws(as.character(source_flag_value)))
-  column_key <- if (is.null(source_flag_column)) {
-    NA_character_
+  flags <- data.frame(value = source_flag_value, stringsAsFactors = FALSE)
+  names(flags) <- if (
+    is.null(source_flag_column) || is.na(source_flag_column)
+  ) {
+    ""
   } else {
-    tolower(trimws(as.character(source_flag_column)))
+    source_flag_column
   }
-  mapped_columns <- tolower(trimws(as.character(mappings$source_flag_column)))
-  column_hit <- if (is.na(column_key)) {
-    is.na(mappings$source_flag_column) | !nzchar(mapped_columns)
-  } else {
-    is.na(mappings$source_flag_column) |
-      !nzchar(mapped_columns) |
-      mapped_columns == column_key
+  index <- import_mapping_match_result_flags(mappings, flags)
+  mappings[index[!is.na(index)], , drop = FALSE]
+}
+
+# Match a batch against already fetched rules. Column-specific rules beat generic
+# rules within a scope, even when a row has flags in several source columns.
+import_mapping_match_result_flags <- function(mappings, flags) {
+  best <- rep(NA_integer_, nrow(flags))
+  if (!nrow(mappings) || !nrow(flags)) {
+    return(best)
   }
-  hit <- mappings[
-    tolower(trimws(mappings$source_flag_value)) == value_key & column_hit,
-    ,
-    drop = FALSE
-  ]
-  if (!nrow(hit)) {
-    return(hit)
+  mapped_columns <- tolower(trimws(mappings$source_flag_column))
+  generic <- is.na(mapped_columns) | !nzchar(mapped_columns)
+  ranked <- order(
+    -as.integer(mappings$profile_specific),
+    generic,
+    mappings$priority,
+    mappings$import_result_flag_mapping_id
+  )
+  mapped_values <- tolower(trimws(mappings$source_flag_value))
+  best_rank <- rep(Inf, nrow(flags))
+  for (j in seq_along(flags)) {
+    eligible <- which(
+      generic[ranked] |
+        mapped_columns[ranked] == tolower(trimws(names(flags)[[j]]))
+    )
+    values <- tolower(trimws(as.character(flags[[j]])))
+    ranks <- eligible[match(values, mapped_values[ranked[eligible]])]
+    replace <- !is.na(values) &
+      nzchar(values) &
+      !is.na(ranks) &
+      ranks < best_rank
+    best_rank[replace] <- ranks[replace]
+    best[replace] <- ranked[ranks[replace]]
   }
-  exact_column <- !is.na(hit$source_flag_column) &
-    nzchar(trimws(hit$source_flag_column)) &
-    !is.na(column_key) &
-    tolower(trimws(hit$source_flag_column)) == column_key
-  hit <- hit[
-    order(
-      -as.integer(hit$profile_specific),
-      -as.integer(exact_column),
-      hit$priority,
-      hit$import_result_flag_mapping_id
-    ),
-    ,
-    drop = FALSE
-  ]
-  hit[1, , drop = FALSE]
+  best
+}
+
+# Apply value-changing actions after source conversion. The caller handles skip
+# and reject so it can retain a skipped row's identity or report its context.
+import_mapping_apply_result_flag <- function(
+  result,
+  mapping,
+  method_detection_limit = NA_real_
+) {
+  action <- mapping$result_action[[1L]]
+  if (action != "note_only") {
+    condition <- mapping$result_condition_id[[1L]]
+    threshold_source <- mapping$result_condition_value_source[[1L]]
+    threshold <- switch(
+      threshold_source,
+      result = if (is.na(result$result)) {
+        result$result_condition_value
+      } else {
+        result$result
+      },
+      method_detection_limit = method_detection_limit,
+      literal = mapping$result_condition_value_literal[[1L]],
+      none = if (
+        is.na(condition) || identical(condition, result$result_condition_id)
+      ) {
+        result$result_condition_value
+      } else {
+        NA_real_
+      },
+      NA_real_
+    )
+    if (!is.na(condition)) {
+      result$result_condition_id <- condition
+    }
+    result$result_condition_value <- if (is.finite(threshold)) {
+      threshold
+    } else {
+      NA_real_
+    }
+    if (action == "set_result_null") {
+      result$result <- NA_real_
+    }
+  }
+  note <- trimws(mapping$note_template[[1L]])
+  if (!is.na(note) && nzchar(note)) {
+    result$note <- paste(
+      c(result$note[!is.na(result$note) & nzchar(result$note)], note),
+      collapse = "; "
+    )
+  }
+  result
 }
 
 #' Add or update location mappings immediately

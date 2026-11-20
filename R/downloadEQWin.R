@@ -14,6 +14,9 @@
 #' `sample-other`, and unset/default samples (`XX`) to `unknown`. Blank sample
 #' wording in the sample number or comments is mapped to field, trip, or lab
 #' blank sample types when present.
+#' Source-wide result-flag rules match `ResultCode`, `ResultQuality`, or the
+#' leading `<` or `>` in `Result`. Method detection limits come from `LMDL`
+#' and are converted to AquaCache units. EQWin has no reporting limit field.
 #'
 #' @param location EQWin station code from `eqstns.StnCode`.
 #' @param start_datetime Start datetime for `eqsampls.CollectDateTime`.
@@ -177,6 +180,17 @@ downloadEQWin <- function(
   if (identical(mode, "missing_mappings")) {
     return(downloadEQWin_missing_mappings(samples, results, mapping))
   }
+  flag_mappings <- getImportResultFlagMappings(con, source_code = key_source)
+  result_prefix <- substr(trimws(results$Result), 1L, 1L)
+  result_prefix[!result_prefix %in% c("<", ">")] <- NA_character_
+  flag_indices <- import_mapping_match_result_flags(
+    flag_mappings,
+    data.frame(
+      ResultCode = results$ResultCode,
+      ResultQuality = results$ResultQuality,
+      Result = result_prefix
+    )
+  )
 
   defaults <- eqwin_discrete_defaults(
     con = con,
@@ -211,13 +225,18 @@ downloadEQWin <- function(
   out_i <- 0L
   for (i in seq_len(nrow(samples))) {
     sample_row <- samples[i]
-    sample_results <- results[SampleId == sample_row$SampleId[[1]]]
+    sample_indices <- results[
+      SampleId == sample_row$SampleId[[1]],
+      which = TRUE
+    ]
+    sample_results <- results[sample_indices]
     if (nrow(sample_results) == 0) {
       next
     }
 
     result_rows <- vector("list", nrow(sample_results))
     result_i <- 0L
+    skipped_parameter_ids <- integer()
     for (j in seq_len(nrow(sample_results))) {
       source_row <- sample_results[j]
       param_row <- import_mapping_resolve_match(
@@ -231,6 +250,28 @@ downloadEQWin <- function(
         next
       }
 
+      flag_index <- flag_indices[sample_indices[[j]]]
+      if (!is.na(flag_index)) {
+        rule <- flag_mappings[flag_index, , drop = FALSE]
+        if (rule$result_action[[1L]] == "skip_result") {
+          skipped_parameter_ids <- c(
+            skipped_parameter_ids,
+            param_row$parameter_id[[1L]]
+          )
+          next
+        }
+        if (rule$result_action[[1L]] == "reject_row") {
+          stop(
+            "An EQWin result flag rejects SampleId ",
+            source_row$SampleId[[1]],
+            ", ParamCode ",
+            source_row$ParamCode[[1]],
+            ".",
+            call. = FALSE
+          )
+        }
+      }
+
       parsed <- eqwin_parse_result(
         source_row$Result[[1]],
         conversion = param_row$conversion[[1]],
@@ -238,7 +279,10 @@ downloadEQWin <- function(
         below_detection = below_detection,
         above_detection = above_detection
       )
-      if (is.null(parsed)) {
+      if (
+        is.null(parsed) &&
+          (is.na(flag_index) || rule$result_action[[1L]] == "note_only")
+      ) {
         warning(
           "Skipping non-numeric EQWin result for SampleId ",
           source_row$SampleId[[1]],
@@ -247,6 +291,29 @@ downloadEQWin <- function(
           "."
         )
         next
+      }
+      if (is.null(parsed)) {
+        parsed <- list(
+          result = NA_real_,
+          result_condition_id = NA_integer_,
+          result_condition_value = NA_real_
+        )
+      }
+      parsed$note <- eqwin_collapse_note(c(
+        source_row$ResultCode[[1]],
+        source_row$ResultQuality[[1]],
+        source_row$DetailComment[[1]]
+      ))
+      if (!is.na(flag_index)) {
+        parsed <- import_mapping_apply_result_flag(
+          parsed,
+          rule,
+          method_detection_limit = suppressWarnings(as.numeric(source_row$LMDL[[
+            1
+          ]])) *
+            param_row$conversion[[1]] +
+            param_row$result_offset[[1]]
+        )
       }
 
       result_i <- result_i + 1L
@@ -266,24 +333,20 @@ downloadEQWin <- function(
         endpoint_ph = param_row$endpoint_ph[[1]],
         analysis_conditions = param_row$analysis_conditions[[1]],
         matrix_state_id = param_row$matrix_state_id[[1]],
-        note = eqwin_collapse_note(c(
-          source_row$ResultCode[[1]],
-          source_row$ResultQuality[[1]],
-          source_row$DetailComment[[1]]
-        )),
+        note = parsed$note,
         stringsAsFactors = FALSE
       )
     }
 
-    if (result_i == 0L) {
-      next
+    result_rows <- if (result_i > 0L) {
+      eqwin_drop_incomplete_required_targets(
+        con,
+        data.table::rbindlist(result_rows[seq_len(result_i)], fill = TRUE)
+      )
+    } else {
+      data.frame()
     }
-    result_rows <- data.table::rbindlist(
-      result_rows[seq_len(result_i)],
-      fill = TRUE
-    )
-    result_rows <- eqwin_drop_incomplete_required_targets(con, result_rows)
-    if (nrow(result_rows) == 0) {
+    if (!nrow(result_rows) && !length(skipped_parameter_ids)) {
       next
     }
     sample_type_i <- eqwin_sample_type(
@@ -319,6 +382,9 @@ downloadEQWin <- function(
       ),
       results = as.data.frame(result_rows)
     )
+    if (length(skipped_parameter_ids)) {
+      out[[out_i]]$skipped_parameter_ids <- unique(skipped_parameter_ids)
+    }
   }
 
   if (out_i == 0L) {

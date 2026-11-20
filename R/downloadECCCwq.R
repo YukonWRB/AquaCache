@@ -8,6 +8,8 @@
 #' The ECCC laboratory is attached only to results whose active mapping uses
 #' the `lab` result type. Mappings using `field` do not receive laboratory
 #' metadata.
+#' Source-wide result-flag rules match the `FLAG_MARQUEUR` column. For detection
+#' thresholds, use the reported result or a literal value.
 #'
 #' @param location The location code associated with the ECCC monitoring site. Must be a valid location code in the `SITE_NO` field of the ECCC water quality .csv files.
 #' @param file Path (URL) to the ECCC water quality .csv file containing the data to be imported for the specified location.
@@ -212,6 +214,11 @@ downloadECCCwq <- function(
   if (identical(mode, "missing_mappings")) {
     return(downloadECCCwq_missing_mappings(all_results, key))
   }
+  flag_mappings <- getImportResultFlagMappings(con, source_code = key_source)
+  flag_indices <- import_mapping_match_result_flags(
+    flag_mappings,
+    all_results[, "FLAG_MARQUEUR", with = FALSE]
+  )
   result_types <- DBI::dbGetQuery(
     con,
     "SELECT result_type_id, lower(btrim(result_type)) AS result_type_name
@@ -260,7 +267,8 @@ downloadECCCwq <- function(
   # Build the list required by getNewDiscrete
   samples <- list()
   for (i in seq_along(all_samples)) {
-    subset <- all_results[all_results$DATE_TIME_HEURE == all_samples[i], ]
+    sample_indices <- which(all_results$DATE_TIME_HEURE == all_samples[i])
+    subset <- all_results[sample_indices, ]
     sample <- data.frame(
       media_id = media_id,
       datetime = all_samples[i],
@@ -276,6 +284,7 @@ downloadECCCwq <- function(
       # source_adapter_function is added by getNewDiscrete
     )
     results <- data.frame()
+    skipped_parameter_ids <- integer()
     for (j in seq_len(nrow(subset))) {
       var <- subset$VARIABLE[j]
       if (nchar(var) == 0) {
@@ -319,13 +328,39 @@ downloadECCCwq <- function(
         next
       }
 
+      flag_index <- flag_indices[sample_indices[[j]]]
+      if (!is.na(flag_index)) {
+        rule <- flag_mappings[flag_index, , drop = FALSE]
+        if (rule$result_action[[1L]] == "skip_result") {
+          skipped_parameter_ids <- c(
+            skipped_parameter_ids,
+            param_row$parameter_id[[1L]]
+          )
+          next
+        }
+        if (rule$result_action[[1L]] == "reject_row") {
+          stop(
+            "ECCC result flag '",
+            subset$FLAG_MARQUEUR[[j]],
+            "' rejects '",
+            var,
+            "' at station ",
+            location,
+            " on ",
+            all_samples[[i]],
+            ".",
+            call. = FALSE
+          )
+        }
+      }
+
       # Isolate the value and apply conversion
       result_value <- as.numeric(subset$VALUE_VALEUR[j]) *
         as.numeric(param_row$conversion[1]) +
         as.numeric(param_row$result_offset[1])
 
       # Look for '<' or '>' in the FLAG_MARQUEUR to set result_condition_id and result_condition_value
-      flag <- subset$FLAG_MARQUEUR[j]
+      flag <- trimws(subset$FLAG_MARQUEUR[[j]])
       result_condition_value <- NA
       result_condition_id <- NA
       if (!is.na(flag) && flag == "<") {
@@ -350,7 +385,7 @@ downloadECCCwq <- function(
         ]
         result_condition_value <- result_value
         result_value <- NA
-      } else if (!is.na(flag) && flag != "") {
+      } else if (is.na(flag_index) && !is.na(flag) && flag != "") {
         warning(paste0(
           "Unrecognized value for FLAG_MARQUEUR '",
           flag,
@@ -361,6 +396,15 @@ downloadECCCwq <- function(
           " . Skipping this result."
         ))
         next
+      }
+      parsed <- list(
+        result = result_value,
+        result_condition_id = result_condition_id,
+        result_condition_value = result_condition_value,
+        note = NA_character_
+      )
+      if (!is.na(flag_index)) {
+        parsed <- import_mapping_apply_result_flag(parsed, rule)
       }
 
       matrix_state_id <- param_row$matrix_state_id[1]
@@ -384,9 +428,9 @@ downloadECCCwq <- function(
         parameter_id = param_row$parameter_id[1],
         protocol_method_id = param_row$protocol_method_id[1],
         sample_fraction_id = param_row$sample_fraction_id[1],
-        result = result_value,
-        result_condition_id = result_condition_id,
-        result_condition_value = result_condition_value,
+        result = parsed$result,
+        result_condition_id = parsed$result_condition_id,
+        result_condition_value = parsed$result_condition_value,
         result_value_type_id = param_row$result_value_type_id[1],
         reporting_basis_id = param_row$reporting_basis_id[1],
         result_speciation_id = param_row$result_speciation_id[1],
@@ -397,12 +441,16 @@ downloadECCCwq <- function(
         lab_id = result_laboratory,
         matrix_state_id = matrix_state_id,
         matrix_state = matrix_state,
+        note = parsed$note,
         stringsAsFactors = FALSE
       )
       results <- rbind(results, result)
     }
 
     samples[[i]] <- list(sample = sample, results = results)
+    if (length(skipped_parameter_ids)) {
+      samples[[i]]$skipped_parameter_ids <- unique(skipped_parameter_ids)
+    }
   }
 
   return(samples)

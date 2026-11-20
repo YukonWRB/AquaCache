@@ -107,10 +107,7 @@ performed. The entire revision is protected by a savepoint, and the caller
 decides whether to commit or roll back its enclosing transaction. References
 embedded in SQL formulae or JSON payloads are not foreign keys and must be
 reviewed separately before merging parameters.
-This is a reviewed catalogue-migration tool, not the normal import-mapping
-editing workflow. It intentionally rewrites references in published and
-retired mapping snapshots when the source parameter identity was incorrect.
-Such history rewrites should be explicit in a database patch and run inside
-its transaction. Ordinary import mapping changes should use draft revisions.
+Use this helper for reviewed catalogue corrections. Import mappings are
+migrated with active-mapping validation enabled.
 }
 \keyword{internal}

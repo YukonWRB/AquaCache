@@ -51,11 +51,8 @@
 #' decides whether to commit or roll back its enclosing transaction. References
 #' embedded in SQL formulae or JSON payloads are not foreign keys and must be
 #' reviewed separately before merging parameters.
-#' This is a reviewed catalogue-migration tool, not the normal import-mapping
-#' editing workflow. It intentionally rewrites references in published and
-#' retired mapping snapshots when the source parameter identity was incorrect.
-#' Such history rewrites should be explicit in a database patch and run inside
-#' its transaction. Ordinary import mapping changes should use draft revisions.
+#' Use this helper for reviewed catalogue corrections. Import mappings are
+#' migrated with active-mapping validation enabled.
 #' @keywords internal
 revise_parameter_catalogue_entry <- function(
   con,
@@ -82,7 +79,12 @@ revise_parameter_catalogue_entry <- function(
   mapping_result_speciation = NULL,
   mapping_result_target = NULL,
   preserve_existing_chemistry = TRUE,
-  unit_columns = c("liquid_unit_id", "solid_unit_id", "gas_unit_id", "not_applicable_unit_id")
+  unit_columns = c(
+    "liquid_unit_id",
+    "solid_unit_id",
+    "gas_unit_id",
+    "not_applicable_unit_id"
+  )
 ) {
   if (!isTRUE(dbTransCheck(con))) {
     stop("Parameter catalogue revisions must run inside an active transaction.")
@@ -452,10 +454,7 @@ revise_parameter_catalogue_entry <- function(
 #' @param delete_source Whether to delete the source parameter after its
 #'   references move. Defaults to `FALSE`.
 #' @return `TRUE`, invisibly.
-#' @details The import mapping row guard is temporarily disabled for this
-#'   operation because this helper is reserved for reviewed catalogue
-#'   corrections that intentionally rewrite published and retired snapshots.
-#'   Ordinary import mapping changes must use draft revisions.
+#' @details Direct import mappings are updated with validation triggers enabled.
 #' @keywords internal
 migrate_parameter_references <- function(
   con,
@@ -471,7 +470,12 @@ migrate_parameter_references <- function(
   result_speciation_id = NA_integer_,
   result_target_id = NA_integer_,
   preserve_existing_chemistry = TRUE,
-  unit_columns = c("liquid_unit_id", "solid_unit_id", "gas_unit_id", "not_applicable_unit_id")
+  unit_columns = c(
+    "liquid_unit_id",
+    "solid_unit_id",
+    "gas_unit_id",
+    "not_applicable_unit_id"
+  )
 ) {
   coerce_id <- function(value, name, allow_na = FALSE) {
     if (length(value) != 1L || is.na(value)) {
@@ -720,24 +724,6 @@ migrate_parameter_references <- function(
   ) {
     stop("The database does not have the requested analytical dimensions.")
   }
-  has_mapping_rows <- any(
-    references$table_schema == "discrete" &
-      references$table_name == "import_parameter_mappings"
-  )
-  if (has_mapping_rows) {
-    guard <- DBI::dbGetQuery(
-      con,
-      "SELECT tgenabled
-       FROM pg_trigger
-       WHERE tgrelid = 'discrete.import_parameter_mappings'::regclass
-         AND tgname = 'guard_import_mapping_row'
-         AND NOT tgisinternal"
-    )
-    if (nrow(guard) != 1L || guard$tgenabled[[1]] != "O") {
-      stop("The import mapping immutability guard is missing or not enabled.")
-    }
-  }
-
   DBI::dbExecute(con, "SAVEPOINT parameter_reference_migration")
   tryCatch(
     {
@@ -817,14 +803,6 @@ migrate_parameter_references <- function(
             params = list(source_parameter_id, target_parameter_id)
           )
         }
-      }
-
-      if (has_mapping_rows) {
-        DBI::dbExecute(
-          con,
-          "ALTER TABLE discrete.import_parameter_mappings
-           DISABLE TRIGGER guard_import_mapping_row"
-        )
       }
 
       for (i in seq_len(nrow(references))) {
@@ -1108,14 +1086,6 @@ migrate_parameter_references <- function(
             params = list(target_parameter_id, source_parameter_id)
           )
         }
-      }
-
-      if (has_mapping_rows) {
-        DBI::dbExecute(
-          con,
-          "ALTER TABLE discrete.import_parameter_mappings
-           ENABLE TRIGGER guard_import_mapping_row"
-        )
       }
 
       if (delete_source) {

@@ -466,8 +466,8 @@ synchronize_discrete_sample_detail <- function(
 #' `source_adapter_function` and `external_sample_id` identity. Located samples retain
 #' location and collection-context matching because source IDs may legitimately
 #' recur at different locations.
-#' Invalid source result rows are skipped without deleting their stored
-#' counterparts, including with `delete = TRUE`. Compatible enrichment of
+#' Rejected source rows and parameters explicitly skipped by a source flag rule
+#' retain their stored counterparts, including with `delete = TRUE`. Compatible enrichment of
 #' historical unknown metadata preserves `result_id` when the pairing is unique
 #' across the source batch and identifies the same measurement. Recorded,
 #' conflicting chemistry is not treated as enrichment. Ambiguous pairings are
@@ -1128,9 +1128,12 @@ synchronize_discrete <- function(
                     normalizeAnalysisConditions,
                     character(1)
                   )
-                  # Rejected source rows are not evidence that stored measurements
-                  # disappeared. Keep their parameter variants even with delete=TRUE.
-                  rejected_ids <- prepared$rejected_results$parameter_id
+                  # Preserve stored variants for rejected rows and explicitly
+                  # skipped parameters even when delete=TRUE.
+                  rejected_ids <- c(
+                    prepared$rejected_results$parameter_id,
+                    inRemote[[j]][["skipped_parameter_ids"]]
+                  )
                   inDB_results$checked <- inDB_results$parameter_id %in%
                     rejected_ids |
                     anyNA(rejected_ids)
@@ -1229,6 +1232,14 @@ synchronize_discrete <- function(
                           "modified_by"
                         )
                       )
+                      # ECCC only supplies a note when a flag rule writes one.
+                      if (
+                        source_fx == "downloadECCCwq" &&
+                          "note" %in% columns &&
+                          is.na(sub$note[[1L]])
+                      ) {
+                        columns <- setdiff(columns, "note")
+                      }
                       if (
                         is_remote_aggregated ||
                           isTRUE(inDB_sub$is_aggregated[[1]])

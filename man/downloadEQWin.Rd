@@ -80,4 +80,7 @@ split samples (\code{D}) to generic QC samples, incident samples (\code{I}) to
 \code{sample-other}, and unset/default samples (\code{XX}) to \code{unknown}. Blank sample
 wording in the sample number or comments is mapped to field, trip, or lab
 blank sample types when present.
+Source-wide result-flag rules match \code{ResultCode}, \code{ResultQuality}, or the
+leading \code{<} or \code{>} in \code{Result}. Method detection limits come from \code{LMDL}
+and are converted to AquaCache units. EQWin has no reporting limit field.
 }
