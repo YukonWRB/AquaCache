@@ -309,28 +309,20 @@ restore_seed_db <- function(
     )
   }
 
-  # Insert a sample row into spatial.vectors
-  df <- data.frame(
-    feature_name = "sample_feature",
-    description = "This is a sample vector layer.",
-    x = 0,
-    y = 0,
-    stringsAsFactors = FALSE
-  )
-  test_vect <- terra::vect(
-    x = df,
-    geom = c("x", "y"),
-    crs = "EPSG:4326"
-  )
-  insertACVector(
-    con = target_con,
-    geom = test_vect,
-    layer_name = "sample_layer",
-    feature_name_col = "feature_name",
-    description_col = "description",
-    ask = FALSE,
-    overwrite = TRUE
-  )
+  # Seed one point over the existing connection. The geometry trigger calls
+  # PostGIS by name before the restored database has its default search path.
+  DBI::dbWithTransaction(target_con, {
+    DBI::dbExecute(target_con, "SET LOCAL search_path TO spatial, public")
+    DBI::dbExecute(
+      target_con,
+      "INSERT INTO spatial.vectors (layer_name, feature_name, description, geom, attributes)
+       VALUES ('sample_layer', 'sample_feature', 'This is a sample vector layer.',
+               ST_SetSRID(ST_MakePoint(0, 0), 4269), '{}'::jsonb)
+       ON CONFLICT (layer_name, feature_name, geom_type) DO UPDATE
+       SET description = EXCLUDED.description, geom = EXCLUDED.geom,
+           attributes = EXCLUDED.attributes"
+    )
+  })
 
   if (nhn) {
     # Download and insert the NHN basin polygons
