@@ -134,7 +134,7 @@ downloadSnowCourseYG <- function(
         WHERE lower(result_value_type) = 'actual') AS actual_result_id,
        (SELECT result_type_id FROM discrete.result_types
         WHERE lower(result_type) = 'field') AS field_result_type_id,
-       (SELECT protocol_id FROM discrete.protocols_methods
+       (SELECT protocol_method_id FROM discrete.protocols_methods
         WHERE lower(protocol_name) = 'bc snow survey sampling guide')
           AS protocol_method_id"
   )
@@ -383,10 +383,10 @@ downloadSnowCourseYG <- function(
         } else {
           NA_character_
         },
-        sample_type = reference_ids$sample_type_id,
+        sample_type_id = reference_ids$sample_type_id,
         owner = reference_ids$owner_id,
         contributor = reference_ids$contributor_id,
-        collection_method = reference_ids$collection_method_id,
+        collection_method_id = reference_ids$collection_method_id,
         media_id = reference_ids$media_id,
         share_with = paste(share_with, collapse = ","),
         stringsAsFactors = FALSE
@@ -425,13 +425,13 @@ downloadSnowCourseYG <- function(
         result_rows[[result_row]] <- data.frame(
           parameter_id = as.integer(parameter$parameter_id),
           result = mean(source_values[included]) * parameter$multiplier,
-          result_value_type = if (survey_is_estimated) {
+          result_value_type_id = if (survey_is_estimated) {
             reference_ids$estimated_result_id
           } else {
             reference_ids$actual_result_id
           },
-          result_type = reference_ids$field_result_type_id,
-          protocol_method = reference_ids$protocol_method_id
+          result_type_id = reference_ids$field_result_type_id,
+          protocol_method_id = reference_ids$protocol_method_id
         )
         arguments <- list(
           missing_values = "ignore",

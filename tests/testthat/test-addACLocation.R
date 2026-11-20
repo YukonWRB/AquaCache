@@ -39,8 +39,8 @@ test_that("addACLocation keeps per-location sharing groups separate", {
     location_type = c(1L, 1L),
     note = c(NA_character_, NA_character_),
     contact = c(NA_character_, NA_character_),
-    datum_id_from = c(10L, 10L),
-    datum_id_to = c(10L, 10L),
+    from_datum_id = c(10L, 10L),
+    to_datum_id = c(10L, 10L),
     conversion_m = c(0, 0),
     current = c(TRUE, TRUE),
     network = c(NA_integer_, NA_integer_),
@@ -116,8 +116,8 @@ test_that("addACLocation estimates omitted elevations and resolves their datum",
 
   expect_equal(inserted_conversion, list(101L, 10L, 110L, 721.4, TRUE))
   expect_equal(result$elevation_m, 721.4)
-  expect_identical(result$datum_id_from, 10L)
-  expect_identical(result$datum_id_to, 110L)
+  expect_identical(result$from_datum_id, 10L)
+  expect_identical(result$to_datum_id, 110L)
   expect_identical(result$vertical_datum, "CGVD28")
   expect_true(result$elevation_estimated)
 })

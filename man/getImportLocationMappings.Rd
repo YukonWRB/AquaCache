@@ -2,33 +2,31 @@
 % Please edit documentation in R/import_mappings.R
 \name{getImportLocationMappings}
 \alias{getImportLocationMappings}
-\title{List applicable source location mappings}
+\title{List current location mappings}
 \usage{
 getImportLocationMappings(
   con,
   source_code = NULL,
   profile_code = NULL,
   active = TRUE,
-  include_draft = FALSE
+  project_id = NULL
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Optional source-code filter.}
+\item{source_code}{Optional source code.}
 
-\item{profile_code}{Optional profile code. When supplied, both source-wide
-and profile-specific mappings are returned, with profile mappings first.}
+\item{profile_code}{Optional profile code; requires \code{source_code}.}
 
 \item{active}{Optional active filter. Use \code{NULL} for all rows.}
 
-\item{include_draft}{If \code{TRUE}, use the draft instead of the published set
-for any scope that has an open draft. Intended for mapping editors and
-upload previews; import runs should use published mappings.}
+\item{project_id}{Optional project ID. NULL returns all projects; a project ID
+returns that project and project-free fallbacks; NA returns project-free rows.}
 }
 \value{
-A data.frame of typed location mappings.
+A data.frame of current location mappings.
 }
 \description{
-List applicable source location mappings
+List current location mappings
 }

@@ -32,3 +32,10 @@ Modifies the 'qualifiers' table in the database.
 \description{
 Adjust the qualifier of a timeseries in the database
 }
+\details{
+\code{UNK} and \code{UNS} are placeholders and cannot overlap another qualifier.
+Incoming placeholder values are skipped where a specific qualifier already
+exists. Incoming specific values replace overlapping editable placeholders;
+source updates preserve protected placeholder ranges. Different specific
+qualifier types may still overlap.
+}

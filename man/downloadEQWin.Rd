@@ -16,8 +16,8 @@ downloadEQWin(
   tz = "MST",
   unknown_time_local = "12:00:00",
   media_id = NULL,
-  collection_method = NULL,
-  sample_type = NULL,
+  collection_method_id = NULL,
+  sample_type_id = NULL,
   mode = c("data", "missing_mappings")
 )
 }
@@ -54,9 +54,9 @@ stored by EQWin as midnight, which commonly indicates an unknown time.}
 
 \item{media_id}{Optional AquaCache media ID override.}
 
-\item{collection_method}{Optional AquaCache collection method ID override.}
+\item{collection_method_id}{Optional AquaCache collection method ID override.}
 
-\item{sample_type}{Optional AquaCache sample type ID override.}
+\item{sample_type_id}{Optional AquaCache sample type ID override.}
 
 \item{mode}{\code{"data"} returns samples/results for import. \code{"missing_mappings"}
 returns EQWin parameter/unit combinations in the requested data that do not
@@ -80,4 +80,7 @@ split samples (\code{D}) to generic QC samples, incident samples (\code{I}) to
 \code{sample-other}, and unset/default samples (\code{XX}) to \code{unknown}. Blank sample
 wording in the sample number or comments is mapped to field, trip, or lab
 blank sample types when present.
+Source-wide result-flag rules match \code{ResultCode}, \code{ResultQuality}, or the
+leading \code{<} or \code{>} in \code{Result}. Method detection limits come from \code{LMDL}
+and are converted to AquaCache units. EQWin has no reporting limit field.
 }

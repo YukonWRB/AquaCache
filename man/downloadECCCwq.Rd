@@ -49,4 +49,6 @@ Note that ECCC's results are converted to the AquaCache database parameters and 
 The ECCC laboratory is attached only to results whose active mapping uses
 the \code{lab} result type. Mappings using \code{field} do not receive laboratory
 metadata.
+Source-wide result-flag rules match the \code{FLAG_MARQUEUR} column. For detection
+thresholds, use the reported result or a literal value.
 }

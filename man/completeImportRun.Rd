@@ -31,5 +31,6 @@ summary.}
 Invisibly returns \code{import_run_id}.
 }
 \description{
-Complete a discrete import run
+Finalizes a run once. Patch 69 keeps its terminal status, completion times,
+summary, and validation summary immutable. Use a new run for another attempt.
 }

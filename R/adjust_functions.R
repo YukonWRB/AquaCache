@@ -62,13 +62,11 @@ collapse_segments_with_split <- function(
           exist[[value_col]][latest_existing_idx],
           new_segments[[value_col]][first_new_idx]
         ) &&
-        (
-          is.null(protection_col) ||
-            identical(
-              exist[[protection_col]][latest_existing_idx],
-              new_segments[[protection_col]][first_new_idx]
-            )
-        )
+        (is.null(protection_col) ||
+          identical(
+            exist[[protection_col]][latest_existing_idx],
+            new_segments[[protection_col]][first_new_idx]
+          ))
     ) {
       # When appending new data with the same qualifying value, treat the
       # latest existing segment as continuing through the next imported block
@@ -219,9 +217,15 @@ collapse_segments_with_split <- function(
     drop = FALSE
   ]
   if (nrow(remove_rows) > 0) {
-    remove_rows <- remove_rows[
-      ,
-      c(id_col, "timeseries_id", value_col, "start_dt", "end_dt", protection_col),
+    remove_rows <- remove_rows[,
+      c(
+        id_col,
+        "timeseries_id",
+        value_col,
+        "start_dt",
+        "end_dt",
+        protection_col
+      ),
       drop = FALSE
     ]
     remove_rows$timeseries_id <- -1
@@ -256,7 +260,11 @@ build_attribute_segments <- function(data, value_col, id_col, timeseries_id) {
   )
   run_id <- cumsum(new_run)
   starts <- match(unique(run_id), run_id)
-  ends <- vapply(unique(run_id), function(x) max(which(run_id == x)), integer(1))
+  ends <- vapply(
+    unique(run_id),
+    function(x) max(which(run_id == x)),
+    integer(1)
+  )
 
   segments <- data.frame(
     id = NA_integer_,
@@ -270,6 +278,266 @@ build_attribute_segments <- function(data, value_col, id_col, timeseries_id) {
   names(segments)[names(segments) == "id"] <- id_col
   names(segments)[names(segments) == "value"] <- value_col
   segments
+}
+
+#' Reconcile incoming qualifiers with existing placeholder intervals
+#'
+#' Removes conflicting incoming placeholder rows and trims or replaces
+#' overlapping editable `UNK`/`UNS` intervals so placeholder qualifiers do not
+#' overlap more informative qualifiers. Existing specific qualifiers and
+#' protected placeholders take precedence. Other specific qualifier types may
+#' continue to overlap.
+#' @param con An open AquaCache database connection.
+#' @param timeseries_id The continuous timeseries receiving the qualifiers.
+#' @param data Normalized incoming qualifier rows, including `datetime`,
+#'   `qualifier`, `rank`, and `no_source_update` columns.
+#' @param special_type_ids Qualifier type ids for the `UNK` and `UNS`
+#'   placeholder types.
+#' @param source_update Whether the incoming rows come from a source refresh;
+#'   protected existing placeholders are preserved during source updates.
+#' @return The incoming rows that can be safely written after removing rows
+#'   that conflict with existing qualifier intervals.
+#' @noRd
+#' @keywords internal
+reconcile_qualifier_placeholders <- function(
+  con,
+  timeseries_id,
+  data,
+  special_type_ids,
+  source_update
+) {
+  if (!nrow(data) || !length(special_type_ids)) {
+    return(data)
+  }
+
+  min_dt <- min(data$datetime)
+  max_dt <- max(data$datetime)
+  current <- DBI::dbGetQuery(
+    con,
+    "SELECT q.qualifier_id, q.timeseries_id, q.qualifier_type_id,
+            q.start_datetime AS start_dt, q.end_datetime AS end_dt, q.no_source_update
+       FROM continuous.qualifiers q
+      WHERE q.timeseries_id = $1
+        AND q.start_datetime <= $3 AND q.end_datetime >= $2
+      ORDER BY q.start_datetime, q.qualifier_id",
+    params = list(timeseries_id, min_dt, max_dt)
+  )
+  current_special <- current[
+    current$qualifier_type_id %in% special_type_ids,
+    ,
+    drop = FALSE
+  ]
+  current_specific <- current[
+    !current$qualifier_type_id %in% special_type_ids,
+    ,
+    drop = FALSE
+  ]
+  drop <- rep(FALSE, nrow(data))
+
+  # A specific qualifier in the same input row wins over UNK/UNS. If two
+  # placeholders are supplied, retain the first one in source order.
+  for (indices in split(seq_len(nrow(data)), as.character(data$datetime))) {
+    specific <- indices[
+      !data$qualifier[indices] %in% special_type_ids
+    ]
+    placeholders <- indices[
+      data$qualifier[indices] %in% special_type_ids
+    ]
+    if (length(placeholders) && length(specific)) {
+      drop[placeholders] <- TRUE
+    } else if (length(placeholders) > 1L) {
+      keep <- placeholders[which.min(data$rank[placeholders])]
+      drop[setdiff(placeholders, keep)] <- TRUE
+    }
+  }
+
+  # A placeholder never replaces a specific qualifier already stored on the
+  # series. Protected placeholders also block a source update from writing a
+  # more specific value over them.
+  for (i in which(!drop)) {
+    overlaps_specific <- if (data$qualifier[i] %in% special_type_ids) {
+      current_specific$start_dt <= data$datetime[i] &
+        current_specific$end_dt >= data$datetime[i]
+    } else {
+      rep(FALSE, nrow(current_specific))
+    }
+    overlaps_protected_placeholder <- if (source_update) {
+      current_special$qualifier_type_id != data$qualifier[i] &
+        current_special$no_source_update %in% TRUE &
+        current_special$start_dt <= data$datetime[i] &
+        current_special$end_dt >= data$datetime[i]
+    } else {
+      rep(FALSE, nrow(current_special))
+    }
+    if (any(overlaps_specific) || any(overlaps_protected_placeholder)) {
+      drop[i] <- TRUE
+    }
+  }
+  if (any(drop)) {
+    warning(
+      "adjust_qualifier: skipped ",
+      sum(drop),
+      " incoming placeholder or qualifier value(s) that overlap a more informative or protected qualifier."
+    )
+    data <- data[!drop, , drop = FALSE]
+  }
+  if (!nrow(data)) {
+    return(data)
+  }
+
+  # Build the incoming intervals by source rank, matching the normal
+  # qualifier segmenting logic. A code change breaks a run even if the same
+  # code appears again later. Protected special intervals have already caused
+  # overlapping source rows to be removed above.
+  groups <- split(
+    seq_len(nrow(data)),
+    data$rank
+  )
+  incoming_parts <- list()
+  for (indices in groups) {
+    indices <- indices[order(data$datetime[indices])]
+    d <- data[indices, , drop = FALSE]
+    run <- c(
+      TRUE,
+      d$qualifier[-1L] != utils::head(d$qualifier, -1L) |
+        d$no_source_update[-1L] != utils::head(d$no_source_update, -1L)
+    )
+    run_id <- cumsum(run)
+    for (value in unique(run_id)) {
+      rows <- which(run_id == value)
+      incoming_parts[[length(incoming_parts) + 1L]] <- data.frame(
+        qualifier_type_id = d$qualifier[rows[1L]],
+        start_dt = d$datetime[rows[1L]],
+        end_dt = d$datetime[rows[length(rows)]],
+        source_rows = I(list(indices[rows]))
+      )
+    }
+  }
+  incoming <- do.call(rbind, incoming_parts)
+
+  # Input points can form a continuous interval across a gap with no row in
+  # it. Recheck the full intervals so a placeholder cannot bridge a specific
+  # qualifier, and a source update cannot bridge a protected placeholder.
+  segment_conflict <- logical(nrow(incoming))
+  for (i in seq_len(nrow(incoming))) {
+    if (incoming$qualifier_type_id[i] %in% special_type_ids) {
+      segment_conflict[i] <- any(
+        current_specific$start_dt < incoming$end_dt[i] &
+          current_specific$end_dt > incoming$start_dt[i]
+      )
+    }
+    if (source_update && !segment_conflict[i]) {
+      segment_conflict[i] <- any(
+        current_special$qualifier_type_id != incoming$qualifier_type_id[i] &
+          current_special$no_source_update %in% TRUE &
+          current_special$start_dt < incoming$end_dt[i] &
+          current_special$end_dt > incoming$start_dt[i]
+      )
+    }
+  }
+  if (any(segment_conflict)) {
+    conflicting_rows <- unique(unlist(
+      incoming$source_rows[segment_conflict],
+      use.names = FALSE
+    ))
+    warning(
+      "adjust_qualifier: skipped ",
+      length(conflicting_rows),
+      " incoming row(s) whose qualifier interval overlaps a specific or protected placeholder qualifier."
+    )
+    return(reconcile_qualifier_placeholders(
+      con,
+      timeseries_id,
+      data[-conflicting_rows, , drop = FALSE],
+      special_type_ids,
+      source_update
+    ))
+  }
+  if (!nrow(current_special)) {
+    return(data)
+  }
+
+  # Incoming specific qualifiers replace overlapping editable placeholders;
+  # an incoming UNS/UNK also replaces the other placeholder code. Preserve
+  # portions of existing ranges outside the changed intervals.
+  replacements <- list()
+  for (i in seq_len(nrow(current_special))) {
+    old <- current_special[i, , drop = FALSE]
+    cuts <- incoming[
+      incoming$qualifier_type_id != old$qualifier_type_id &
+        incoming$start_dt < old$end_dt &
+        incoming$end_dt > old$start_dt,
+      ,
+      drop = FALSE
+    ]
+    cuts <- cuts[, c("qualifier_type_id", "start_dt", "end_dt"), drop = FALSE]
+    if (source_update && old$no_source_update %in% TRUE) {
+      cuts <- cuts[0, , drop = FALSE]
+    }
+    if (!nrow(cuts)) {
+      replacements[[length(replacements) + 1L]] <- data.frame(
+        qualifier_id = old$qualifier_id,
+        timeseries_id = old$timeseries_id,
+        qualifier_type_id = old$qualifier_type_id,
+        start_dt = old$start_dt,
+        end_dt = old$end_dt,
+        no_source_update = old$no_source_update
+      )
+      next
+    }
+
+    cuts <- cuts[order(cuts$start_dt, cuts$end_dt), , drop = FALSE]
+    cursor <- as.numeric(old$start_dt)
+    old_end <- as.numeric(old$end_dt)
+    kept <- list()
+    for (j in seq_len(nrow(cuts))) {
+      cut_start <- max(cursor, as.numeric(cuts$start_dt[j]))
+      cut_end <- min(old_end, as.numeric(cuts$end_dt[j]))
+      if (cut_start > cursor) {
+        kept[[length(kept) + 1L]] <- c(cursor, cut_start)
+      }
+      cursor <- max(cursor, cut_end)
+      if (cursor >= old_end) {
+        break
+      }
+    }
+    if (cursor < old_end) {
+      kept[[length(kept) + 1L]] <- c(cursor, old_end)
+    }
+    if (length(kept)) {
+      for (j in seq_along(kept)) {
+        replacements[[length(replacements) + 1L]] <- data.frame(
+          qualifier_id = if (j == 1L) old$qualifier_id else NA_integer_,
+          timeseries_id = old$timeseries_id,
+          qualifier_type_id = old$qualifier_type_id,
+          start_dt = as.POSIXct(
+            kept[[j]][1L],
+            origin = "1970-01-01",
+            tz = "UTC"
+          ),
+          end_dt = as.POSIXct(kept[[j]][2L], origin = "1970-01-01", tz = "UTC"),
+          no_source_update = old$no_source_update
+        )
+      }
+    }
+  }
+  proposed_special <- if (length(replacements)) {
+    do.call(rbind, replacements)
+  } else {
+    current_special[0, , drop = FALSE]
+  }
+  reconcile_segment_changes(
+    con = con,
+    table_name = "continuous.qualifiers",
+    id_col = "qualifier_id",
+    value_col = "qualifier_type_id",
+    db_value_col = "qualifier_type_id",
+    existing_state = current_special,
+    proposed_state = proposed_special,
+    protection_col = "no_source_update",
+    source_update = source_update
+  )
+  data
 }
 
 #' @title Clip source-managed segments around protected intervals
@@ -548,7 +816,7 @@ get_sync_delete_ids <- function(
   ids <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT %s FROM %s WHERE timeseries_id = $1 AND start_dt >= $2%s;",
+      "SELECT %s FROM %s WHERE timeseries_id = $1 AND start_datetime >= $2%s;",
       id_col,
       table_name,
       protection_sql
@@ -664,7 +932,7 @@ reconcile_segment_changes <- function(
 
       if (is.null(protection_col)) {
         update_sql <- sprintf(
-          "UPDATE %s SET %s = $1, start_dt = $2, end_dt = $3 WHERE %s = $4;",
+          "UPDATE %s SET %s = $1, start_datetime = $2, end_datetime = $3 WHERE %s = $4;",
           table_name,
           db_value_col,
           id_col
@@ -682,7 +950,7 @@ reconcile_segment_changes <- function(
           ""
         }
         update_sql <- sprintf(
-          "UPDATE %s SET %s = $1, start_dt = $2, end_dt = $3, %s = $4 WHERE %s = $5%s;",
+          "UPDATE %s SET %s = $1, start_datetime = $2, end_datetime = $3, %s = $4 WHERE %s = $5%s;",
           table_name,
           db_value_col,
           protection_col,
@@ -701,7 +969,7 @@ reconcile_segment_changes <- function(
     } else {
       if (is.null(protection_col)) {
         insert_sql <- sprintf(
-          "INSERT INTO %s (timeseries_id, %s, start_dt, end_dt) VALUES ($1, $2, $3, $4);",
+          "INSERT INTO %s (timeseries_id, %s, start_datetime, end_datetime) VALUES ($1, $2, $3, $4);",
           table_name,
           db_value_col
         )
@@ -713,7 +981,7 @@ reconcile_segment_changes <- function(
         )
       } else {
         insert_sql <- sprintf(
-          "INSERT INTO %s (timeseries_id, %s, start_dt, end_dt, %s) VALUES ($1, $2, $3, $4, $5);",
+          "INSERT INTO %s (timeseries_id, %s, start_datetime, end_datetime, %s) VALUES ($1, $2, $3, $4, $5);",
           table_name,
           db_value_col,
           protection_col
@@ -832,21 +1100,21 @@ adjust_grade <- function(
         con,
         sprintf(
           "WITH matched AS (
-          SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt,
+          SELECT grade_id, timeseries_id, grade_type_id, start_datetime AS start_dt, end_datetime AS end_dt,
                  no_source_update
             FROM continuous.grades
           WHERE timeseries_id = %s
             AND (
-              (end_dt   BETWEEN '%s' AND '%s')
-            OR (start_dt BETWEEN '%s' AND '%s')
-            OR (start_dt <= '%s' AND end_dt >= '%s')
+              (end_datetime   BETWEEN '%s' AND '%s')
+            OR (start_datetime BETWEEN '%s' AND '%s')
+            OR (start_datetime <= '%s' AND end_datetime >= '%s')
             )
           ), fallback AS (
-              SELECT grade_id, timeseries_id, grade_type_id, start_dt, end_dt,
+              SELECT grade_id, timeseries_id, grade_type_id, start_datetime AS start_dt, end_datetime AS end_dt,
                      no_source_update
                 FROM continuous.grades
               WHERE timeseries_id = %s
-              ORDER BY end_dt DESC
+              ORDER BY end_datetime DESC
               LIMIT 1
           )
           SELECT * FROM matched
@@ -946,6 +1214,13 @@ adjust_grade <- function(
 #' `no_source_update` are then immutable. Direct/manual calls leave this FALSE
 #' and may set `data$no_source_update` explicitly.
 #'
+#' @details
+#' `UNK` and `UNS` are placeholders and cannot overlap another qualifier.
+#' Incoming placeholder values are skipped where a specific qualifier already
+#' exists. Incoming specific values replace overlapping editable placeholders;
+#' source updates preserve protected placeholder ranges. Different specific
+#' qualifier types may still overlap.
+#'
 #' @return Modifies the 'qualifiers' table in the database.
 #' @export
 
@@ -1029,6 +1304,22 @@ adjust_qualifier <- function(
         "qualifier"
       ] <- unknown_qualifier
 
+      data <- reconcile_qualifier_placeholders(
+        con = con,
+        timeseries_id = timeseries_id,
+        data = data,
+        special_type_ids = qualifier_table$qualifier_type_id[
+          qualifier_table$qualifier_type_code %in% c("UNK", "UNS")
+        ],
+        source_update = source_update
+      )
+      if (!nrow(data)) {
+        if (active) {
+          DBI::dbExecute(con, "COMMIT;")
+        }
+        return(invisible(NULL))
+      }
+
       # Break 'data' into a data.frame for each unique 'rank'
       datalist <- split(data, data$rank)
       sync_delete_ids <- integer()
@@ -1071,23 +1362,23 @@ adjust_qualifier <- function(
           con,
           sprintf(
             "WITH matched AS (
-    SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt,
+    SELECT qualifier_id, timeseries_id, qualifier_type_id, start_datetime AS start_dt, end_datetime AS end_dt,
            no_source_update
       FROM continuous.qualifiers
      WHERE timeseries_id = %s
        AND (
-         (end_dt   BETWEEN '%s' AND '%s')
-      OR (start_dt BETWEEN '%s' AND '%s')
-      OR (start_dt <= '%s' AND end_dt >= '%s')
+         (end_datetime   BETWEEN '%s' AND '%s')
+      OR (start_datetime BETWEEN '%s' AND '%s')
+      OR (start_datetime <= '%s' AND end_datetime >= '%s')
        )
        AND qualifier_type_id = %s
     ), fallback AS (
-        SELECT qualifier_id, timeseries_id, qualifier_type_id, start_dt, end_dt,
+        SELECT qualifier_id, timeseries_id, qualifier_type_id, start_datetime AS start_dt, end_datetime AS end_dt,
                no_source_update
           FROM continuous.qualifiers
          WHERE timeseries_id = %s
            AND qualifier_type_id = %s
-         ORDER BY end_dt DESC
+         ORDER BY end_datetime DESC
          LIMIT 1
     )
     SELECT * FROM matched
@@ -1169,7 +1460,7 @@ adjust_qualifier <- function(
           con,
           paste0(
             "SELECT qualifier_id, timeseries_id, qualifier_type_id,
-                    start_dt, end_dt, no_source_update
+                    start_datetime AS start_dt, end_datetime AS end_dt, no_source_update
                FROM continuous.qualifiers
               WHERE timeseries_id = $1
                 AND qualifier_type_id IN (",
@@ -1399,21 +1690,21 @@ adjust_approval <- function(
         con,
         sprintf(
           "WITH matched AS (
-    SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt,
+    SELECT approval_id, timeseries_id, approval_type_id, start_datetime AS start_dt, end_datetime AS end_dt,
            no_source_update
       FROM continuous.approvals
      WHERE timeseries_id = %s
        AND (
-         (end_dt   BETWEEN '%s' AND '%s')
-      OR (start_dt BETWEEN '%s' AND '%s')
-      OR (start_dt <= '%s' AND end_dt >= '%s')
+         (end_datetime   BETWEEN '%s' AND '%s')
+      OR (start_datetime BETWEEN '%s' AND '%s')
+      OR (start_datetime <= '%s' AND end_datetime >= '%s')
        )
     ), fallback AS (
-        SELECT approval_id, timeseries_id, approval_type_id, start_dt, end_dt,
+        SELECT approval_id, timeseries_id, approval_type_id, start_datetime AS start_dt, end_datetime AS end_dt,
                no_source_update
           FROM continuous.approvals
          WHERE timeseries_id = %s
-         ORDER BY end_dt DESC
+         ORDER BY end_datetime DESC
          LIMIT 1
     )
     SELECT * FROM matched
@@ -1511,14 +1802,14 @@ adjust_approval <- function(
 #' Different notes may overlap. Rows with a `note_id` update that note. Rows
 #' without one reuse an exact existing note or are inserted. When
 #' `delete = TRUE`, stored notes beginning at or after the earliest supplied
-#' `start_dt` are removed unless they are included in `data`, matching the
+#' `start_datetime` are removed unless they are included in `data`, matching the
 #' synchronization boundary used by the other `adjust_*()` helpers.
 #'
 #' @param con A connection to the AquaCache database with write privileges on
 #'   `continuous.notes`.
 #' @param timeseries_id A single integer timeseries identifier.
-#' @param data A data frame with `note`, `start_dt`, and `end_dt` columns.
-#'   `start_datetime`/`end_datetime` are accepted aliases. An optional
+#' @param data A data frame with `note`, `start_datetime`, and `end_datetime` columns.
+#'   An optional
 #'   `note_id` updates an existing row, and optional `no_source_update` values
 #'   control protection from source synchronization.
 #' @param delete Logical. If `TRUE`, remove stored notes beginning at or after
@@ -1555,18 +1846,7 @@ adjust_note <- function(
   }
 
   data <- data.table::as.data.table(data.table::copy(data))
-  aliases <- c(
-    start_datetime = "start_dt",
-    end_datetime = "end_dt"
-  )
-  for (alias in names(aliases)) {
-    target <- aliases[[alias]]
-    if (alias %in% names(data) && !(target %in% names(data))) {
-      data.table::setnames(data, alias, target)
-    }
-  }
-
-  required_columns <- c("note", "start_dt", "end_dt")
+  required_columns <- c("note", "start_datetime", "end_datetime")
   missing_columns <- setdiff(required_columns, names(data))
   if (length(missing_columns) > 0L) {
     stop(
@@ -1587,26 +1867,25 @@ adjust_note <- function(
   if (any(is.na(data$note) | !nzchar(trimws(data$note)))) {
     stop("Every `note` must contain non-blank text.")
   }
-  if (!inherits(data$start_dt, "POSIXt")) {
-    data[, start_dt := as.POSIXct(start_dt, tz = "UTC")]
+  if (!inherits(data$start_datetime, "POSIXt")) {
+    data[, start_datetime := as.POSIXct(start_datetime, tz = "UTC")]
   }
-  if (!inherits(data$end_dt, "POSIXt")) {
-    data[, end_dt := as.POSIXct(end_dt, tz = "UTC")]
+  if (!inherits(data$end_datetime, "POSIXt")) {
+    data[, end_datetime := as.POSIXct(end_datetime, tz = "UTC")]
   }
-  if (anyNA(data$start_dt) || anyNA(data$end_dt)) {
-    stop("`start_dt` and `end_dt` must contain valid datetimes.")
+  if (anyNA(data$start_datetime) || anyNA(data$end_datetime)) {
+    stop("`start_datetime` and `end_datetime` must contain valid datetimes.")
   }
-  if (any(data$start_dt > data$end_dt)) {
-    stop("Every note must have `start_dt <= end_dt`.")
+  if (any(data$start_datetime > data$end_datetime)) {
+    stop("Every note must have `start_datetime <= end_datetime`.")
   }
 
   note_id_numeric <- suppressWarnings(as.numeric(as.character(data$note_id)))
-  invalid_note_id <- !is.na(data$note_id) & (
-    is.na(note_id_numeric) |
+  invalid_note_id <- !is.na(data$note_id) &
+    (is.na(note_id_numeric) |
       note_id_numeric != floor(note_id_numeric) |
       note_id_numeric < 1 |
-      note_id_numeric > .Machine$integer.max
-  )
+      note_id_numeric > .Machine$integer.max)
   if (any(invalid_note_id)) {
     stop("Every non-missing `note_id` must be a positive integer.")
   }
@@ -1620,7 +1899,7 @@ adjust_note <- function(
   if (isTRUE(source_update)) {
     data[, no_source_update := FALSE]
   }
-  data.table::setorder(data, start_dt, end_dt, note_id)
+  data.table::setorder(data, start_datetime, end_datetime, note_id)
 
   active <- dbTransBegin(con)
   tryCatch(
@@ -1637,15 +1916,15 @@ adjust_note <- function(
       existing <- DBI::dbGetQuery(
         con,
         paste0(
-          "SELECT note_id, note, start_dt, end_dt, no_source_update
+          "SELECT note_id, note, start_datetime, end_datetime, no_source_update
              FROM continuous.notes
             WHERE timeseries_id = $1
-              AND (start_dt >= $2",
+              AND (start_datetime >= $2",
           supplied_id_filter,
           ")
-            ORDER BY start_dt, end_dt, note_id"
+            ORDER BY start_datetime, end_datetime, note_id"
         ),
-        params = list(timeseries_id, min(data$start_dt))
+        params = list(timeseries_id, min(data$start_datetime))
       )
       existing <- data.table::as.data.table(existing)
 
@@ -1669,12 +1948,10 @@ adjust_note <- function(
         exact <- existing[
           !(note_id %in% used_ids) &
             note == data$note[[i]] &
-            start_dt == data$start_dt[[i]] &
-            end_dt == data$end_dt[[i]] &
-            (
-              no_source_update == data$no_source_update[[i]] |
-                isTRUE(source_update)
-            ),
+            start_datetime == data$start_datetime[[i]] &
+            end_datetime == data$end_datetime[[i]] &
+            (no_source_update == data$no_source_update[[i]] |
+              isTRUE(source_update)),
           note_id
         ]
         if (length(exact) > 0L) {
@@ -1686,7 +1963,7 @@ adjust_note <- function(
       kept_ids <- data$note_id[!is.na(data$note_id)]
       if (isTRUE(delete)) {
         delete_ids <- existing$note_id[
-          existing$start_dt >= min(data$start_dt) &
+          existing$start_datetime >= min(data$start_datetime) &
             !(existing$note_id %in% kept_ids) &
             (!isTRUE(source_update) | !existing$no_source_update)
         ]
@@ -1710,25 +1987,26 @@ adjust_note <- function(
           previous <- existing[existing$note_id == note_id]
           unchanged <- nrow(previous) == 1L &&
             identical(previous$note[[1L]], data$note[[i]]) &&
-            identical(previous$start_dt[[1L]], data$start_dt[[i]]) &&
-            identical(previous$end_dt[[1L]], data$end_dt[[i]]) &&
+            identical(previous$start_datetime[[1L]], data$start_datetime[[i]]) &&
+            identical(previous$end_datetime[[1L]], data$end_datetime[[i]]) &&
             identical(
               previous$no_source_update[[1L]],
               data$no_source_update[[i]]
             )
-          if (unchanged || (
-            isTRUE(source_update) &&
-              nrow(previous) == 1L &&
-              isTRUE(previous$no_source_update[[1L]])
-          )) {
+          if (
+            unchanged ||
+              (isTRUE(source_update) &&
+                nrow(previous) == 1L &&
+                isTRUE(previous$no_source_update[[1L]]))
+          ) {
             next
           }
 
           updated <- DBI::dbExecute(
             con,
             paste0(
-              "UPDATE continuous.notes SET note = $1, start_dt = $2, ",
-              "end_dt = $3, no_source_update = $4 ",
+              "UPDATE continuous.notes SET note = $1, start_datetime = $2, ",
+              "end_datetime = $3, no_source_update = $4 ",
               "WHERE timeseries_id = $5 AND note_id = $6",
               if (isTRUE(source_update)) {
                 " AND no_source_update IS FALSE"
@@ -1738,8 +2016,8 @@ adjust_note <- function(
             ),
             params = list(
               data$note[[i]],
-              data$start_dt[[i]],
-              data$end_dt[[i]],
+              data$start_datetime[[i]],
+              data$end_datetime[[i]],
               data$no_source_update[[i]],
               timeseries_id,
               note_id
@@ -1754,16 +2032,16 @@ adjust_note <- function(
             "INSERT INTO continuous.notes (
                timeseries_id,
                note,
-               start_dt,
-               end_dt,
+               start_datetime,
+               end_datetime,
                no_source_update
              ) VALUES ($1, $2, $3, $4, $5)
              RETURNING note_id",
             params = list(
               timeseries_id,
               data$note[[i]],
-              data$start_dt[[i]],
-              data$end_dt[[i]],
+              data$start_datetime[[i]],
+              data$end_datetime[[i]],
               data$no_source_update[[i]]
             )
           )
@@ -1860,19 +2138,19 @@ adjust_owner <- function(con, timeseries_id, data, delete = FALSE) {
         con,
         sprintf(
           "WITH matched AS (
-    SELECT owner_id, timeseries_id, organization_id, start_dt, end_dt
+    SELECT owner_id, timeseries_id, organization_id, start_datetime AS start_dt, end_datetime AS end_dt
       FROM continuous.owners
      WHERE timeseries_id = %s
        AND (
-         (end_dt   BETWEEN '%s' AND '%s')
-      OR (start_dt BETWEEN '%s' AND '%s')
-      OR (start_dt <= '%s' AND end_dt >= '%s')
+         (end_datetime   BETWEEN '%s' AND '%s')
+      OR (start_datetime BETWEEN '%s' AND '%s')
+      OR (start_datetime <= '%s' AND end_datetime >= '%s')
        )
     ), fallback AS (
-        SELECT owner_id, timeseries_id, organization_id, start_dt, end_dt
+        SELECT owner_id, timeseries_id, organization_id, start_datetime AS start_dt, end_datetime AS end_dt
           FROM continuous.owners
          WHERE timeseries_id = %s
-         ORDER BY end_dt DESC
+         ORDER BY end_datetime DESC
          LIMIT 1
     )
     SELECT * FROM matched
@@ -2027,19 +2305,19 @@ adjust_contributor <- function(con, timeseries_id, data, delete = FALSE) {
         con,
         sprintf(
           "WITH matched AS (
-    SELECT contributor_id, timeseries_id, organization_id, start_dt, end_dt
+    SELECT contributor_id, timeseries_id, organization_id, start_datetime AS start_dt, end_datetime AS end_dt
       FROM continuous.contributors
      WHERE timeseries_id = %s
        AND (
-         (end_dt   BETWEEN '%s' AND '%s')
-      OR (start_dt BETWEEN '%s' AND '%s')
-      OR (start_dt <= '%s' AND end_dt >= '%s')
+         (end_datetime   BETWEEN '%s' AND '%s')
+      OR (start_datetime BETWEEN '%s' AND '%s')
+      OR (start_datetime <= '%s' AND end_datetime >= '%s')
        )
     ), fallback AS (
-        SELECT contributor_id, timeseries_id, organization_id, start_dt, end_dt
+        SELECT contributor_id, timeseries_id, organization_id, start_datetime AS start_dt, end_datetime AS end_dt
           FROM continuous.contributors
          WHERE timeseries_id = %s
-         ORDER BY end_dt DESC
+         ORDER BY end_datetime DESC
          LIMIT 1
     )
     SELECT * FROM matched
@@ -2205,24 +2483,24 @@ adjust_data_sharing_agreement <- function(
     SELECT timeseries_data_sharing_agreement_id,
            timeseries_id,
            data_sharing_agreement_id,
-           start_dt,
-           end_dt
+           start_datetime AS start_dt,
+           end_datetime AS end_dt
       FROM continuous.timeseries_data_sharing_agreements
      WHERE timeseries_id = %s
        AND (
-         (end_dt   BETWEEN '%s' AND '%s')
-      OR (start_dt BETWEEN '%s' AND '%s')
-      OR (start_dt <= '%s' AND end_dt >= '%s')
+         (end_datetime   BETWEEN '%s' AND '%s')
+      OR (start_datetime BETWEEN '%s' AND '%s')
+      OR (start_datetime <= '%s' AND end_datetime >= '%s')
        )
     ), fallback AS (
         SELECT timeseries_data_sharing_agreement_id,
                timeseries_id,
                data_sharing_agreement_id,
-               start_dt,
-               end_dt
+               start_datetime AS start_dt,
+               end_datetime AS end_dt
           FROM continuous.timeseries_data_sharing_agreements
          WHERE timeseries_id = %s
-         ORDER BY end_dt DESC
+         ORDER BY end_datetime DESC
          LIMIT 1
     )
     SELECT * FROM matched

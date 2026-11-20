@@ -17,7 +17,9 @@ migrate_parameter_references(
   reporting_basis_id = NA_integer_,
   result_speciation_id = NA_integer_,
   result_target_id = NA_integer_,
-  preserve_existing_chemistry = TRUE
+  preserve_existing_chemistry = TRUE,
+  unit_columns = c("liquid_unit_id", "solid_unit_id", "gas_unit_id",
+    "not_applicable_unit_id")
 )
 }
 \arguments{
@@ -50,6 +52,8 @@ NA preserves the column. Legacy descriptors and current analytical IDs
 cannot be supplied together.}
 
 \item{preserve_existing_chemistry}{Fill only missing analytical IDs when TRUE.}
+
+\item{unit_columns}{Names of the parameter unit columns in the target schema.}
 }
 \value{
 \code{TRUE}, invisibly.
@@ -58,9 +62,6 @@ cannot be supplied together.}
 Rewrite every discovered foreign-key reference to a parameter.
 }
 \details{
-The import mapping row guard is temporarily disabled for this
-operation because this helper is reserved for reviewed catalogue
-corrections that intentionally rewrite published and retired snapshots.
-Ordinary import mapping changes must use draft revisions.
+Direct import mappings are updated with validation triggers enabled.
 }
 \keyword{internal}

@@ -1,3 +1,7 @@
+# Skip on CI and CRAN because some of these services don't seem to allow automated processes from accessing their servies, or they can be slow, or they can require a retry, or other random things...
+skip_on_ci()
+skip_on_cran()
+
 test_that("get_elevation validates coordinates", {
   expect_error(get_elevation(-100, 100), "'lat' must be between -90 and 90.")
   expect_error(get_elevation(50, 300), "'lon' must be between -180 and 180.")

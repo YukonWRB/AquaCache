@@ -20,7 +20,7 @@ prepare_discrete_import_results <- function(
   result_components = NULL
 ) {
   results <- as.data.frame(data.table::copy(results))
-  required <- c("parameter_id", "result_type", "result")
+  required <- c("parameter_id", "result_type_id", "result")
   if (!all(required %in% names(results))) {
     stop("Source results require: ", paste(required, collapse = ", "), ".")
   }
@@ -63,8 +63,8 @@ prepare_discrete_import_results <- function(
   errors <- trimws(paste(errors, chemistry))
   aggregated <- seq_len(nrow(results)) %in%
     normalized$result_aggregations$result_row
-  condition <- if ("result_condition" %in% names(results)) {
-    results$result_condition
+  condition <- if ("result_condition_id" %in% names(results)) {
+    results$result_condition_id
   } else {
     rep(NA_integer_, nrow(results))
   }
@@ -140,17 +140,17 @@ match_discrete_import_results <- function(
   remote_results <- as.data.frame(remote_results)
   keys <- c(
     "parameter_id",
-    "result_type",
+    "result_type_id",
     "matrix_state_id",
     "sample_fraction_id",
-    "result_value_type",
+    "result_value_type_id",
     "reporting_basis_id",
     "result_speciation_id",
     "result_target_id",
     "endpoint_mode",
     "endpoint_ph",
-    "protocol_method",
-    "laboratory",
+    "protocol_method_id",
+    "lab_id",
     "analysis_datetime"
   )
   for (field in keys) {
@@ -203,7 +203,7 @@ match_discrete_import_results <- function(
       equal <- if (is.na(new)) is.na(old) else !is.na(old) & old == new
       same <- same & equal
       compatible <- compatible &
-        if (field %in% c("parameter_id", "result_type")) {
+        if (field %in% c("parameter_id", "result_type_id")) {
           equal
         } else {
           is.na(old) | equal
@@ -218,7 +218,7 @@ match_discrete_import_results <- function(
     if (!(i %in% aggregated_result_rows)) {
       measurement_fields <- c(
         "result",
-        "result_condition",
+        "result_condition_id",
         "result_condition_value",
         measurement_fields
       )

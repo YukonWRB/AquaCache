@@ -50,11 +50,19 @@ mock_getnew_db_get_query <- function(
   )
 ) {
   function(con, statement, params = NULL, ...) {
-    if (grepl("to_regclass('public.qc_rule_capabilities')", statement, fixed = TRUE)) {
+    if (
+      grepl(
+        "to_regclass('public.qc_rule_capabilities')",
+        statement,
+        fixed = TRUE
+      )
+    ) {
       return(data.frame(available = FALSE))
     }
-    if (grepl("timeseries_aggregation_methods", statement, fixed = TRUE) &&
-        grepl("to_regclass", statement, fixed = TRUE)) {
+    if (
+      grepl("timeseries_aggregation_methods", statement, fixed = TRUE) &&
+        grepl("to_regclass", statement, fixed = TRUE)
+    ) {
       # This mock has no aggregation-method table; exercise the legacy fallback.
       return(data.frame(available = FALSE))
     }
@@ -1098,18 +1106,24 @@ test_that("getNewContinuous rolls back a failed series write to its savepoint", 
 
   expect_true(AquaCache:::dbTransCheck(con))
   expect_true(isTRUE(captured$called))
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.measurements_continuous
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.measurements_continuous
      WHERE timeseries_id = $1 AND datetime = $2",
-    params = list(tsid, new_datetime)
-  )$n[[1L]], 0L)
-  expect_equal(DBI::dbGetQuery(
-    con,
-    "SELECT count(*) AS n FROM continuous.qualifiers
-     WHERE timeseries_id = $1 AND start_dt <= $2 AND end_dt >= $2",
-    params = list(tsid, new_datetime)
-  )$n[[1L]], 0L)
+      params = list(tsid, new_datetime)
+    )$n[[1L]],
+    0L
+  )
+  expect_equal(
+    DBI::dbGetQuery(
+      con,
+      "SELECT count(*) AS n FROM continuous.qualifiers
+     WHERE timeseries_id = $1 AND start_datetime <= $2 AND end_datetime >= $2",
+      params = list(tsid, new_datetime)
+    )$n[[1L]],
+    0L
+  )
 })
 
 test_that("getNewContinuous passes current source_fx_args to downloadECCCwxMinute", {

@@ -43,8 +43,9 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
     hrs <- as.numeric(hrs)
   }
   if (
-    !is.numeric(hrs) ||
-      !any(hrs %in% c(0, 3, 6, 9, 12, 15, 18, 21))
+    length(hrs) == 0L ||
+      anyNA(hrs) ||
+      !all(hrs %in% c(0, 3, 6, 9, 12, 15, 18, 21))
   ) {
     stop(
       "Parameter 'hrs' must be a numeric vector of integers in c(0, 3, 6, 9, 12, 15, 18, 21)."
@@ -52,24 +53,38 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
   }
 
   # Check if there already exists a temporary file with the required interval, location, start_datetime, and end_datetime.
-  saved_files <- list.files(paste0(tempdir(), "/downloadCaLDAS"))
+  # Listings are already filtered by parameter, hour, and requested date range,
+  # so cache each request separately. A shared cache can silently return files
+  # for an earlier call with different criteria.
+  parameter_key <- paste(sprintf("%02x", utf8ToInt(parameter)), collapse = "")
+  hours_key <- paste(sort(unique(hrs)), collapse = "-")
+  start_date_key <- format(as.Date(start_datetime, tz = "UTC"), "%Y%m%d")
+  cache_dir <- file.path(
+    tempdir(),
+    "downloadCaLDAS",
+    paste(parameter_key, hours_key, start_date_key, sep = "_")
+  )
+  saved_files <- list.files(cache_dir)
   if (length(saved_files) == 0) {
     file_exists <- FALSE
   } else {
     saved_files <- data.frame(
       file = saved_files,
-      datetime = as.POSIXct(saved_files, format = "%Y%m%d%H%M.rds")
+      datetime = as.POSIXct(
+        saved_files,
+        format = "%Y%m%d%H%M.rds",
+        tz = "UTC"
+      )
     )
-    ok <- saved_files[saved_files$datetime > Sys.time() - 10 * 60, ]
+    ok <- saved_files[
+      !is.na(saved_files$datetime) &
+        saved_files$datetime > Sys.time() - 10 * 60,
+    ]
     if (nrow(ok) > 0) {
-      target_file <- saved_files[
-        order(saved_files$datetime, decreasing = TRUE),
+      target_file <- ok[
+        order(ok$datetime, decreasing = TRUE),
       ][1, ]
-      available <- readRDS(paste0(
-        tempdir(),
-        "/downloadCaLDAS/",
-        target_file$file
-      ))
+      available <- readRDS(file.path(cache_dir, target_file$file))
       file_exists <- TRUE
     } else {
       file_exists <- FALSE
@@ -125,7 +140,7 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
           },
           error = function(e) {
             message(paste0(
-              "No CaLDASS raster available for ",
+              "No CaLDAS raster available for ",
               day,
               " at ",
               j,
@@ -136,11 +151,9 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
       }
     }
 
-    suppressWarnings(dir.create(paste0(tempdir(), "/downloadCaLDAS")))
-    name <- gsub(" ", "", Sys.time())
-    name <- gsub("-", "", name)
-    name <- substr(gsub(":", "", name), 1, 12)
-    saveRDS(available, paste0(tempdir(), "/downloadCaLDAS/", name, ".rds"))
+    dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+    name <- format(Sys.time(), "%Y%m%d%H%M", tz = "UTC")
+    saveRDS(available, file.path(cache_dir, paste0(name, ".rds")))
   }
 
   # Now filter by start_datetime
@@ -156,6 +169,7 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
     message("downloadCaLDAS: new rasters available. Downloading...")
     files <- list()
     clipped <- FALSE
+    native_clip <- NULL
     for (i in 1:nrow(available)) {
       file <- list()
       download_url <- available$path[i]
@@ -167,20 +181,62 @@ downloadCaLDAS <- function(parameter, start_datetime, clip = NULL, hrs = c(0)) {
       )
       rast <- terra::rast(tmp)[[1]]
       file[["units"]] <- terra::units(rast) # Units is fetched now because the clip operation seems to remove them.
-      rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
       if (!clipped) {
-        if (!is.null(clip) && identical(clip_spec$type, "provinces")) {
-          clip <- terra::project(clip, rast) # project clip vector to crs of the raster
+        if (identical(clip_spec$type, "bbox")) {
+          # Project a densified WGS84 boundary to the rotated CaLDAS grid.
+          # Projecting the full national raster first can make GDAL choose an
+          # incorrect output extent for this rotated-pole NetCDF.
+          area <- clip_spec$value
+          boundary <- rbind(
+            cbind(seq(area[2L], area[4L], length.out = 101L), area[1L]),
+            cbind(seq(area[2L], area[4L], length.out = 101L), area[3L]),
+            cbind(area[2L], seq(area[3L], area[1L], length.out = 101L)),
+            cbind(area[4L], seq(area[3L], area[1L], length.out = 101L))
+          )
+          native_boundary <- terra::project(
+            boundary,
+            "epsg:4326",
+            terra::crs(rast)
+          )
+          native_clip <- terra::ext(
+            range(native_boundary[, 1L]),
+            range(native_boundary[, 2L])
+          )
+        } else if (identical(clip_spec$type, "provinces")) {
+          native_clip <- terra::project(clip, rast)
         }
-        clipped <- TRUE # So that project doesn't happen after the first iteration
+        clipped <- TRUE
       }
       if (!is.null(clip)) {
-        if (identical(clip_spec$type, "bbox")) {
-          rast <- terra::crop(rast, clip)
-        } else {
-          rast <- terra::mask(rast, clip) # Makes NA values beyond the boundary of clip
+        rast <- terra::crop(rast, native_clip)
+        if (identical(clip_spec$type, "provinces")) {
+          rast <- terra::mask(rast, native_clip) # Makes NA values beyond the boundary of clip
           rast <- terra::trim(rast) # Trims the NA values
         }
+      }
+      if (is.null(clip)) {
+        # The rotated grid spans enough of the globe that projecting it in one
+        # operation can produce an incorrect target extent. Project four
+        # smaller regions and merge them in WGS84 instead.
+        source_extent <- as.vector(terra::ext(rast))
+        x_mid <- mean(source_extent[1:2])
+        y_mid <- mean(source_extent[3:4])
+        tile_extents <- list(
+          terra::ext(source_extent[1L], x_mid, source_extent[3L], y_mid),
+          terra::ext(x_mid, source_extent[2L], source_extent[3L], y_mid),
+          terra::ext(source_extent[1L], x_mid, y_mid, source_extent[4L]),
+          terra::ext(x_mid, source_extent[2L], y_mid, source_extent[4L])
+        )
+        projected_tiles <- lapply(
+          tile_extents,
+          function(x) terra::project(terra::crop(rast, x), "epsg:4326")
+        )
+        rast <- suppressWarnings(do.call(terra::merge, projected_tiles))
+      } else {
+        rast <- terra::project(rast, "epsg:4326") # Project to WGS84 (EPSG:4326)
+      }
+      if (identical(clip_spec$type, "bbox")) {
+        rast <- terra::crop(rast, clip)
       }
       file[["rast"]] <- rast
       # Check which parameter we're dealing with: 6h or 24h, based on if 'parameter' contains 6h or 24h

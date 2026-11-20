@@ -135,7 +135,7 @@ insertACDocument <- function(
     con,
     "WITH inserted AS (
        INSERT INTO files.documents (
-         name, type, description, format, document, share_with,
+         name, document_type_id, description, format, document, share_with,
          authors, url, publish_date, tags
        )
        VALUES (

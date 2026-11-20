@@ -2,8 +2,8 @@
 #'
 #' Adds a new location to the aquacache 'locations' table. You can pass a data.frame with the necessary columns, or provide each parameter separately. Extensive checks are performed to ensure that the location does not already exist, and that all necessary parameters are provided and are valid.
 #'
-#' @param df A data.frame containing the location fields. `datum_id_from`,
-#'   `datum_id_to`, `conversion_m`, and `current` are optional. When
+#' @param df A data.frame containing the location fields. `from_datum_id`,
+#'   `to_datum_id`, `conversion_m`, and `current` are optional. When
 #'   `conversion_m` is missing, [get_elevation()] estimates the elevation from
 #'   `latitude` and `longitude` and the matching datum IDs are populated
 #'   automatically. If this parameter is provided, all other parameters except
@@ -18,15 +18,15 @@
 #' @param location_type A numeric vector of the location type(s) id(s) from table 'location_types'.
 #' @param note A character vector of notes for the location(s) (optional).
 #' @param contact A character vector of the contact(s) for the location(s) (optional).
-#' @param datum_id_from A numeric vector of the datum ID(s) from which the
+#' @param from_datum_id A numeric vector of the datum ID(s) from which the
 #'   location(s) are measured, from `public.datum_list`. When `conversion_m` is
 #'   omitted, this is set to the Assumed Datum ID.
-#' @param datum_id_to A numeric vector of the datum ID(s) to which the
+#' @param to_datum_id A numeric vector of the datum ID(s) to which the
 #'   location(s) are measured, from `public.datum_list`. When `conversion_m` is
 #'   omitted, this is matched to the vertical datum returned by
 #'   [get_elevation()]. A missing datum is added to `public.datum_list`.
 #' @param conversion_m A numeric vector of conversion factors from
-#'   `datum_id_from` to `datum_id_to`. Missing values are estimated with
+#'   `from_datum_id` to `to_datum_id`. Missing values are estimated with
 #'   [get_elevation()].
 #' @param current A logical vector indicating whether the conversion factor(s)
 #'   are current. Missing values default to `TRUE`.
@@ -50,8 +50,8 @@ addACLocation <- function(
   location_type = NA,
   note = NA,
   contact = NA,
-  datum_id_from = NA,
-  datum_id_to = NA,
+  from_datum_id = NA,
+  to_datum_id = NA,
   conversion_m = NA,
   current = NA,
   network = NA,
@@ -67,8 +67,8 @@ addACLocation <- function(
   # longitude = -138.85132
   # share_with = 'public_reader'
   # location_type = 15
-  # datum_id_from = 10
-  # datum_id_to = 35
+  # from_datum_id = 10
+  # to_datum_id = 35
   # conversion_m = 440
   # current = TRUE
   # network = 4
@@ -96,8 +96,8 @@ addACLocation <- function(
         location_type,
         note,
         contact,
-        datum_id_from,
-        datum_id_to,
+        from_datum_id,
+        to_datum_id,
         conversion_m,
         current
       )))
@@ -141,8 +141,8 @@ addACLocation <- function(
       )
     }
     for (column in c(
-      "datum_id_from",
-      "datum_id_to",
+      "from_datum_id",
+      "to_datum_id",
       "conversion_m",
       "current"
     )) {
@@ -161,8 +161,8 @@ addACLocation <- function(
     location_type <- df$location_type
     note <- df$note
     contact <- df$contact
-    datum_id_from <- as.numeric(df$datum_id_from)
-    datum_id_to <- as.numeric(df$datum_id_to)
+    from_datum_id <- as.numeric(df$from_datum_id)
+    to_datum_id <- as.numeric(df$to_datum_id)
     conversion_m <- as.numeric(df$conversion_m)
     current <- df$current
     network <- df$network
@@ -175,8 +175,8 @@ addACLocation <- function(
   # Convert lat/long to numeric, which will result in NAs if the user provided invalid values
   latitude <- as.numeric(latitude)
   longitude <- as.numeric(longitude)
-  datum_id_from <- as.numeric(datum_id_from)
-  datum_id_to <- as.numeric(datum_id_to)
+  from_datum_id <- as.numeric(from_datum_id)
+  to_datum_id <- as.numeric(to_datum_id)
   conversion_m <- as.numeric(conversion_m)
 
   # Begin checks ############################
@@ -191,8 +191,8 @@ addACLocation <- function(
     length(location_type),
     length(note),
     length(contact),
-    length(datum_id_from),
-    length(datum_id_to),
+    length(from_datum_id),
+    length(to_datum_id),
     length(conversion_m),
     length(current),
     length(network),
@@ -265,8 +265,8 @@ addACLocation <- function(
       }
       conversion_m[i] <- details$elevation
       elevation_details[[i]] <- details
-      datum_id_from[i] <- NA_real_
-      datum_id_to[i] <- NA_real_
+      from_datum_id[i] <- NA_real_
+      to_datum_id[i] <- NA_real_
     }
   }
   if (any(automatic_elevation)) {
@@ -290,21 +290,21 @@ addACLocation <- function(
           latitude[i],
           ", ",
           longitude[i],
-          "). Supply conversion_m, datum_id_from, and datum_id_to manually."
+          "). Supply conversion_m, from_datum_id, and to_datum_id manually."
         )
       }
       conversion_m[i] <- details$elevation
       elevation_details[[i]] <- details
       # Elevations returned by get_elevation() describe ground height above an
       # absolute vertical datum, so any caller-supplied datum IDs are replaced.
-      datum_id_from[i] <- NA_real_
-      datum_id_to[i] <- NA_real_
+      from_datum_id[i] <- NA_real_
+      to_datum_id[i] <- NA_real_
     }
   }
 
   manual_elevation <- !automatic_elevation
-  datum_id_from[manual_elevation & is.na(datum_id_from)] <- 10
-  datum_id_to[manual_elevation & is.na(datum_id_to)] <- 10
+  from_datum_id[manual_elevation & is.na(from_datum_id)] <- 10
+  to_datum_id[manual_elevation & is.na(to_datum_id)] <- 10
   current[is.na(current)] <- TRUE
 
   # Check that the location code does not already exist
@@ -379,8 +379,8 @@ addACLocation <- function(
     }
   }
 
-  # Check that datum_id_from and datum_id_to exist in the 'datum_list' table
-  unique_datums <- unique(stats::na.omit(c(datum_id_from, datum_id_to)))
+  # Check that from_datum_id and to_datum_id exist in the 'datum_list' table
+  unique_datums <- unique(stats::na.omit(c(from_datum_id, to_datum_id)))
   if (length(unique_datums) > 1) {
     exists <- DBI::dbGetQuery(
       con,
@@ -434,13 +434,13 @@ addACLocation <- function(
         vertical_datum <- NA_character_
         elevation_source <- NA_character_
         if (automatic_elevation[i]) {
-          datum_id_from[i] <- .match_or_create_location_datum(
+          from_datum_id[i] <- .match_or_create_location_datum(
             con = con,
             datum_name = "ASSUMED DATUM",
             create = FALSE
           )
           vertical_datum <- elevation_details[[i]]$vertical_datum
-          datum_id_to[i] <- .match_or_create_location_datum(
+          to_datum_id[i] <- .match_or_create_location_datum(
             con = con,
             datum_name = vertical_datum,
             create = TRUE
@@ -469,11 +469,11 @@ addACLocation <- function(
         # Add the location's datum information to the 'datums' table ############################
         DBI::dbExecute(
           con,
-          "INSERT INTO public.datum_conversions (location_id, datum_id_from, datum_id_to, conversion_m, current) VALUES ($1, $2, $3, $4, $5);",
+          "INSERT INTO public.datum_conversions (location_id, from_datum_id, to_datum_id, conversion_m, current) VALUES ($1, $2, $3, $4, $5);",
           params = list(
             location_id,
-            datum_id_from[i],
-            datum_id_to[i],
+            from_datum_id[i],
+            to_datum_id[i],
             conversion_m[i],
             current[i]
           )
@@ -513,8 +513,8 @@ addACLocation <- function(
           location_code = location_code[i],
           name = name[i],
           elevation_m = conversion_m[i],
-          datum_id_from = as.integer(datum_id_from[i]),
-          datum_id_to = as.integer(datum_id_to[i]),
+          from_datum_id = as.integer(from_datum_id[i]),
+          to_datum_id = as.integer(to_datum_id[i]),
           vertical_datum = vertical_datum,
           elevation_source = elevation_source,
           elevation_estimated = automatic_elevation[i],

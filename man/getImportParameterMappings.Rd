@@ -2,37 +2,31 @@
 % Please edit documentation in R/import_mappings.R
 \name{getImportParameterMappings}
 \alias{getImportParameterMappings}
-\title{List applicable import parameter mappings}
+\title{List current parameter mappings}
 \usage{
 getImportParameterMappings(
   con,
   source_code = NULL,
   profile_code = NULL,
-  active = TRUE,
-  import_mapping_set_id = NULL,
-  include_draft = FALSE
+  active = TRUE
 )
 }
 \arguments{
-\item{con}{A connection to the AquaCache database.}
+\item{con}{AquaCache database connection.}
 
-\item{source_code}{Optional source-code filter.}
+\item{source_code}{Optional source code.}
 
-\item{profile_code}{Optional profile code. When supplied, the current
-published source mappings and profile overrides are returned.}
+\item{profile_code}{Optional profile code; requires \code{source_code}.}
 
-\item{active}{Optional row-active filter. Use \code{NULL} for all rows.}
-
-\item{import_mapping_set_id}{Optional exact mapping-set revision. When set,
-\code{source_code} and \code{profile_code} are ignored.}
-
-\item{include_draft}{If \code{TRUE}, use the draft instead of the published set
-for any scope that has an open draft. Intended for mapping editors and
-upload previews; import runs should use published mappings.}
+\item{active}{Optional active filter. Use \code{NULL} for all rows.}
 }
 \value{
-A data.frame of typed parameter mappings in resolution order.
+A data.frame of current parameter mappings.
 }
 \description{
-List applicable import parameter mappings
+Returns source-wide mappings and, when requested, the matching profile
+overrides. Profile-specific rows sort before source-wide rows.
+}
+\details{
+Requires AquaCache database Patch 72 or later.
 }

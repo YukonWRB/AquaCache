@@ -13,20 +13,20 @@ test_that("getNewDiscrete inserts composites without updating existing samples",
        (SELECT media_id FROM public.media_types
         WHERE media_type = 'snow' LIMIT 1) AS media_id,
        (SELECT collection_method_id FROM discrete.collection_methods
-        ORDER BY collection_method_id LIMIT 1) AS collection_method,
+        ORDER BY collection_method_id LIMIT 1) AS collection_method_id,
        (SELECT sample_type_id FROM discrete.sample_types
         WHERE NOT requires_location AND requires_sample_group
-        ORDER BY sample_type_id LIMIT 1) AS sample_type,
+        ORDER BY sample_type_id LIMIT 1) AS sample_type_id,
        (SELECT default_owner FROM discrete.sample_series
         ORDER BY sample_series_id LIMIT 1) AS owner,
        (SELECT result_type_id FROM discrete.result_types
-        WHERE result_type = 'field' LIMIT 1) AS result_type,
+        WHERE result_type = 'field' LIMIT 1) AS result_type_id,
        (SELECT parameter_id FROM public.parameters
         WHERE param_name = 'snow water equivalent' LIMIT 1) AS parameter_id,
        (SELECT sample_fraction_id FROM discrete.sample_fractions
         WHERE sample_fraction = 'total' LIMIT 1) AS sample_fraction_id,
        (SELECT result_value_type_id FROM discrete.result_value_types
-        WHERE result_value_type = 'Calculated' LIMIT 1) AS result_value_type,
+        WHERE result_value_type = 'Calculated' LIMIT 1) AS result_value_type_id,
        (SELECT matrix_state_id FROM public.matrix_states
         WHERE matrix_state_code = 'solid' LIMIT 1) AS matrix_state_id"
   )
@@ -77,19 +77,19 @@ test_that("getNewDiscrete inserts composites without updating existing samples",
     location_id = NA_integer_,
     media_id = ids$media_id,
     datetime = as.POSIXct("2030-03-15 15:00:00", tz = "UTC"),
-    collection_method = ids$collection_method,
-    sample_type = ids$sample_type,
+    collection_method_id = ids$collection_method_id,
+    sample_type_id = ids$sample_type_id,
     owner = ids$owner,
     note = "Original existing sample",
     source_adapter_function = "downloadECCCwq",
     external_sample_id = existing_source_id
   )
   direct_result <- data.frame(
-    result_type = ids$result_type,
+    result_type_id = ids$result_type_id,
     parameter_id = ids$parameter_id,
     sample_fraction_id = ids$sample_fraction_id,
     result = 5,
-    result_value_type = ids$result_value_type,
+    result_value_type_id = ids$result_value_type_id,
     matrix_state_id = ids$matrix_state_id
   )
   existing_sample_id <- addNewDiscrete(

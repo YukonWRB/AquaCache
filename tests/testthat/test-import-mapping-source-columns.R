@@ -1,15 +1,15 @@
 test_that("source columns can have the same names as destination metadata", {
   criteria <- list(source.param_name = "Nitrogen", source.unit = "mg/L",
-    source.result_speciation = "nitrate", source.sample_fraction = "dissolved", source.result_type = "lab")
+    source.result_speciation = "nitrate", source.sample_fraction = "dissolved", source.result_type_id = "lab")
   mappings <- data.table::data.table(import_mapping_id = 1L, parameter_id = 42L,
     priority = 50L, profile_specific = FALSE, source_match_size = length(criteria),
     source_match_values = list(criteria))
   source <- list(param_name = "Nitrogen", unit = "mg/L", result_speciation = "nitrate",
-    sample_fraction = "dissolved", result_type = "lab")
+    sample_fraction = "dissolved", result_type_id = "lab")
   expect_equal(AquaCache:::import_mapping_resolve_match(mappings, source)$parameter_id, 42L)
   qualified <- stats::setNames(source, paste0("source.", names(source)))
   expect_equal(AquaCache:::import_mapping_resolve_match(mappings, qualified)$parameter_id, 42L)
-  for (field in c("result_speciation", "sample_fraction", "result_type")) {
+  for (field in c("result_speciation", "sample_fraction", "result_type_id")) {
     changed <- source
     changed[[field]] <- "different"
     expect_null(AquaCache:::import_mapping_resolve_match(mappings, changed))

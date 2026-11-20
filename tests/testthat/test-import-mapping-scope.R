@@ -20,9 +20,10 @@ test_that("profile parameter mappings override source-wide mappings", {
   expect_true(result$profile_specific[[1]])
 })
 
-test_that("source-wide mapping behaviour remains the default", {
+test_that("source-wide mappings rank by match specificity", {
   mappings <- data.table::data.table(
     import_mapping_id = c(1L, 2L),
+    profile_specific = FALSE,
     source_match_values = list(
       list(parameter_code = "AL"),
       list(parameter_code = "AL", unit = "ug/L")

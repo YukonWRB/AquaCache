@@ -11,7 +11,7 @@ test_that("addNewDiscrete inserts a new sample and results", {
     con,
     "SELECT s.*
      FROM discrete.samples s
-     JOIN discrete.sample_types st ON st.sample_type_id = s.sample_type
+     JOIN discrete.sample_types st ON st.sample_type_id = s.sample_type_id
      WHERE st.requires_location
        AND NOT st.requires_sample_group
      LIMIT 1"
@@ -83,7 +83,7 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     con,
     "SELECT s.*
      FROM discrete.samples s
-     JOIN discrete.sample_types st ON st.sample_type_id = s.sample_type
+     JOIN discrete.sample_types st ON st.sample_type_id = s.sample_type_id
      WHERE st.requires_location
        AND NOT st.requires_sample_group
      LIMIT 1"
@@ -92,7 +92,7 @@ test_that("addNewDiscrete maintains a canonical result aggregation", {
     con,
     "SELECT r.*
      FROM discrete.results r
-     JOIN discrete.result_types rt ON rt.result_type_id = r.result_type
+     JOIN discrete.result_types rt ON rt.result_type_id = r.result_type_id
      WHERE r.result IS NOT NULL
        AND lower(rt.result_type) = 'lab'
      LIMIT 1"
@@ -336,7 +336,7 @@ test_that("result aggregation inputs normalize calculation arguments", {
     results = data.frame(
       parameter_id = 1L,
       result = NA_real_,
-      result_type = 1L
+      result_type_id = 1L
     ),
     result_aggregations = data.frame(
       result_row = 1L,
@@ -387,7 +387,7 @@ test_that("result aggregation inputs normalize calculation arguments", {
         result_row = 1L,
         observation_number = 1L,
         result = NA_real_,
-        result_condition = 1L
+        result_condition_id = 1L
       )
     ),
     "Conditions 1 and 2 require result_condition_value"
@@ -416,7 +416,7 @@ test_that("result aggregation inputs accept data.table objects", {
     results = data.table::data.table(
       parameter_id = 1L,
       result = 9,
-      result_type = 1L
+      result_type_id = 1L
     ),
     result_aggregations = data.table::data.table(
       result_row = 1L,
@@ -496,11 +496,11 @@ test_that("result aggregation constraints fail at the responsible statement", {
     suppressWarnings(DBI::dbExecute(
       con,
       "UPDATE discrete.results
-       SET result = NULL, result_condition = NULL
+       SET result = NULL, result_condition_id = NULL
        WHERE result_id = $1",
       params = list(direct_result)
     )),
-    "must have exactly one of result or result_condition"
+    "must have exactly one of result or"
   )
   suppressWarnings(DBI::dbExecute(
     con,
@@ -636,7 +636,7 @@ test_that("discrete visibility inherits from location through composite results"
     con,
     "UPDATE discrete.results
      SET result = NULL,
-         result_condition = NULL,
+         result_condition_id = NULL,
          result_condition_value = NULL,
          share_with = $2::text[]
      WHERE result_id = $1",
@@ -721,7 +721,7 @@ test_that("synchronization replaces and removes result aggregation detail", {
     con,
     "SELECT s.*
      FROM discrete.samples s
-     JOIN discrete.sample_types st ON st.sample_type_id = s.sample_type
+     JOIN discrete.sample_types st ON st.sample_type_id = s.sample_type_id
      WHERE st.requires_location
        AND NOT st.requires_sample_group
      LIMIT 1"
@@ -1171,7 +1171,7 @@ test_that("sample group helpers create and assign idempotently", {
 
 
 test_that("discrete import records retain sample IDs and source input", {
-  sample <- data.frame(location_id = NA_integer_, sample_type = 4L)
+  sample <- data.frame(location_id = NA_integer_, sample_type_id = 4L)
   results <- data.frame(parameter_id = 1L, result = 0)
   groups <- data.frame(group_type = "trip", group_code = "trip-1")
   qualifiers <- data.frame(qualifier_type_id = 2L)
@@ -1262,7 +1262,7 @@ test_that("addNewDiscrete commits a locationless blank with its group", {
   sample$sample_id <- NULL
   sample$location_id <- NA_integer_
   sample$sub_location_id <- NA_integer_
-  sample$sample_type <- blank_type$sample_type_id[[1]]
+  sample$sample_type_id <- blank_type$sample_type_id[[1]]
   sample$datetime <- as.POSIXct(Sys.time(), tz = "UTC") + 86400
   sample$source_adapter_function <- "testthat"
   sample$external_sample_id <- paste0(

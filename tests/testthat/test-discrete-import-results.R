@@ -1,6 +1,6 @@
 test_that("historical chemistry enrichment preserves an unambiguous result identity", {
   stored <- data.frame(result_id = c(101L, 102L), parameter_id = 4L,
-    result_type = 2L, sample_fraction_id = c(5L, 19L), result = c(0.2, 0.3),
+    result_type_id = 2L, sample_fraction_id = c(5L, 19L), result = c(0.2, 0.3),
     reporting_basis_id = NA_integer_, result_speciation_id = NA_integer_)
   remote <- stored[1, setdiff(names(stored), "result_id")]
   remote$reporting_basis_id <- 34L
@@ -17,8 +17,8 @@ test_that("historical chemistry enrichment preserves an unambiguous result ident
 
 test_that("batch matching never lets source order resolve ambiguous unknowns", {
   stored <- data.frame(result_id = 101L, parameter_id = 4L,
-    result_type = 2L, sample_fraction_id = NA_integer_, result = 0.2)
-  remote <- data.frame(parameter_id = 4L, result_type = 2L,
+    result_type_id = 2L, sample_fraction_id = NA_integer_, result = 0.2)
+  remote <- data.frame(parameter_id = 4L, result_type_id = 2L,
     sample_fraction_id = c(5L, 19L), result = 0.2)
   match <- match_discrete_import_results(stored, remote)
   expect_true(all(match$ambiguous))
@@ -31,7 +31,7 @@ test_that("batch matching never lets source order resolve ambiguous unknowns", {
 })
 
 test_that("condition refinement preserves known values and array interpretation", {
-  stored <- data.frame(result_id = 101L, parameter_id = 4L, result_type = 2L, result = 1,
+  stored <- data.frame(result_id = 101L, parameter_id = 4L, result_type_id = 2L, result = 1,
     analysis_conditions = '{"mass_basis":"dry","reference":{"temperature":298.15}}')
   remote <- stored[, setdiff(names(stored), "result_id")]
   remote$analysis_conditions <- I(list(list(reference = list(pressure = 101.325, temperature = 298.15), mass_basis = "dry")))
@@ -52,9 +52,9 @@ test_that("condition refinement preserves known values and array interpretation"
 })
 
 test_that("derived parents can gain metadata without comparing a recomputed value to NULL", {
-  stored <- data.frame(result_id = 101L, parameter_id = 4L, result_type = 2L,
+  stored <- data.frame(result_id = 101L, parameter_id = 4L, result_type_id = 2L,
     result = 10, is_aggregated = TRUE, reporting_basis_id = NA_integer_)
-  remote <- data.frame(parameter_id = 4L, result_type = 2L, result = NA_real_, reporting_basis_id = 3L)
+  remote <- data.frame(parameter_id = 4L, result_type_id = 2L, result = NA_real_, reporting_basis_id = 3L)
   expect_identical(match_discrete_import_results(stored, remote, 1L)$result_ids, 101L)
   expect_true(is.na(match_discrete_import_results(stored, remote)$result_ids))
   empty <- stored[FALSE, ]
@@ -73,11 +73,11 @@ test_that("partial filtering remaps aggregation parents and their components", {
   )
   local_mocked_bindings(dbGetQuery = function(con, statement, ...) {
     if (grepl("AS field", statement, fixed = TRUE)) return(data.frame(
-      field = c("result_type", "matrix_state_id"), id = c(2L, 1L)))
+      field = c("result_type_id", "matrix_state_id"), id = c(2L, 1L)))
     if (grepl("get_parameter_unit_id", statement, fixed = TRUE)) return(data.frame(row_index = c(1L, 3L), valid = TRUE))
     data.frame(result_type_id = 1L)
   }, .package = "DBI")
-  results <- data.frame(parameter_id = 1:3, result_type = 2L, result = c(10, 20, NA_real_))
+  results <- data.frame(parameter_id = 1:3, result_type_id = 2L, result = c(10, 20, NA_real_))
   aggregations <- data.frame(result_row = c(2L, 3L), aggregation_type = "arithmetic_mean")
   components <- data.frame(result_row = c(2L, 3L), observation_number = 1L, result = c(20, 30))
   prepared <- prepare_discrete_import_results(NULL, 1L, results, aggregations, components)
@@ -100,11 +100,11 @@ test_that("a malformed reserved condition does not discard an independent valid 
       parameters = data.frame(parameter_id = 1L), error = FALSE), .package = "AquaCache")
   local_mocked_bindings(dbGetQuery = function(con, statement, ...) {
     if (grepl("AS field", statement, fixed = TRUE)) return(data.frame(
-      field = c("result_type", "matrix_state_id"), id = c(2L, 1L)))
+      field = c("result_type_id", "matrix_state_id"), id = c(2L, 1L)))
     if (grepl("get_parameter_unit_id", statement, fixed = TRUE)) return(data.frame(row_index = 2L, valid = TRUE))
     data.frame(result_type_id = 1L)
   }, .package = "DBI")
-  results <- data.frame(parameter_id = 1L, result_type = 2L, result = c(10,20))
+  results <- data.frame(parameter_id = 1L, result_type_id = 2L, result = c(10,20))
   results$analysis_conditions <- I(list(list(mass_basis = NULL), list(mass_basis = "dry")))
   prepared <- prepare_discrete_import_results(NULL, 1L, results)
   expect_match(prepared$errors[[1]], "mass_basis")
