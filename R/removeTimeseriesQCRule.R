@@ -466,7 +466,7 @@ qc_subtract_qualifier_ranges <- function(start_dt, end_dt, cuts) {
   for (i in seq_along(cut_start)) {
     if (
       !length(merged_start) ||
-        cut_start[[i]] > tail(merged_end, 1L) + epsilon
+        cut_start[[i]] > utils::tail(merged_end, 1L) + epsilon
     ) {
       merged_start <- c(merged_start, cut_start[[i]])
       merged_end <- c(merged_end, cut_end[[i]])
